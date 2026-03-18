@@ -207,8 +207,13 @@
     <span class="badge">NVIDIA NeMo</span>
     <select id="agent-select">
         <option value="auto">🤖 Auto Route</option>
-        <option value="nvidia">⚡ NVIDIA NeMo</option>
+        <option value="sales">💼 Sales</option>
+        <option value="support">🔧 Support</option>
+        <option value="email">📧 Email</option>
+        <option value="sap">📊 SAP</option>
+        <option value="document">📄 Document</option>
         <option value="claude">🧠 Claude</option>
+        <option value="nvidia">⚡ NVIDIA NeMo</option>
     </select>
     <span class="model" id="model-name">auto</span>
 </header>
