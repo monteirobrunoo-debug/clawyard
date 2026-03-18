@@ -82,6 +82,9 @@
     <span class="logo">🐾 ClawYard</span>
     <span class="badge">NVIDIA NeMo</span>
     <div class="user-info">
+        @if(Auth::user()->isAdmin())
+            <a href="/admin/users" style="font-size:12px;color:#ff6666;text-decoration:none;border:1px solid #ff4444;padding:5px 12px;border-radius:8px;">⚙️ Admin</a>
+        @endif
         <span class="user-name">{{ Auth::user()->name }}</span>
         <form method="POST" action="{{ route('logout') }}">
             @csrf
