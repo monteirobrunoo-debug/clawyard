@@ -61,6 +61,56 @@
 
         #agent-select:focus { border-color: #76b900; }
 
+        .icon-btn {
+            width: 48px;
+            height: 48px;
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            font-size: 18px;
+        }
+
+        .icon-btn:hover { border-color: #76b900; }
+        .icon-btn.active { background: #76b900; border-color: #76b900; }
+
+        #image-preview {
+            display: none;
+            position: relative;
+            padding: 8px 24px 0;
+        }
+
+        #image-preview img {
+            height: 80px;
+            border-radius: 8px;
+            border: 1px solid #2a2a2a;
+        }
+
+        #remove-image {
+            position: absolute;
+            top: 4px;
+            left: 88px;
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .recording { animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
         #chat {
             flex: 1;
             overflow-y: auto;
@@ -226,7 +276,15 @@
     </div>
 </div>
 
+<div id="image-preview">
+    <img id="preview-img" src="" alt="preview">
+    <button id="remove-image">✕</button>
+</div>
+
 <div id="input-area">
+    <button class="icon-btn" id="voice-btn" title="Voice input">🎤</button>
+    <button class="icon-btn" id="image-btn" title="Upload image">📎</button>
+    <input type="file" id="image-input" accept="image/*" style="display:none">
     <textarea
         id="message-input"
         placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
@@ -245,7 +303,84 @@
     const input = document.getElementById('message-input');
     const sendBtn = document.getElementById('send-btn');
     const modelName = document.getElementById('model-name');
+    const voiceBtn = document.getElementById('voice-btn');
+    const imageBtn = document.getElementById('image-btn');
+    const imageInput = document.getElementById('image-input');
+    const imagePreview = document.getElementById('image-preview');
+    const previewImg = document.getElementById('preview-img');
+    const removeImage = document.getElementById('remove-image');
+
     const history = [];
+    const sessionId = 'session_' + Date.now();
+    let currentImageB64 = null;
+    let recognition = null;
+    let isRecording = false;
+
+    // Voice Input (Web Speech API)
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'pt-PT';
+
+        recognition.onresult = (e) => {
+            input.value = e.results[0][0].transcript;
+            voiceBtn.classList.remove('active', 'recording');
+            isRecording = false;
+            sendMessage();
+        };
+
+        recognition.onerror = () => {
+            voiceBtn.classList.remove('active', 'recording');
+            isRecording = false;
+        };
+    }
+
+    voiceBtn.addEventListener('click', () => {
+        if (!recognition) { alert('Voice not supported in this browser'); return; }
+        if (isRecording) {
+            recognition.stop();
+            voiceBtn.classList.remove('active', 'recording');
+            isRecording = false;
+        } else {
+            recognition.start();
+            voiceBtn.classList.add('active', 'recording');
+            isRecording = true;
+        }
+    });
+
+    // Image Upload (Multimodal)
+    imageBtn.addEventListener('click', () => imageInput.click());
+
+    imageInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            currentImageB64 = ev.target.result.split(',')[1];
+            previewImg.src = ev.target.result;
+            imagePreview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+    });
+
+    removeImage.addEventListener('click', () => {
+        currentImageB64 = null;
+        imagePreview.style.display = 'none';
+        imageInput.value = '';
+    });
+
+    // Voice Output (Text-to-Speech)
+    function speak(text) {
+        if ('speechSynthesis' in window) {
+            const clean = text.replace(/[#*`]/g, '').substring(0, 300);
+            const utterance = new SpeechSynthesisUtterance(clean);
+            utterance.lang = 'pt-PT';
+            utterance.rate = 1.0;
+            speechSynthesis.speak(utterance);
+        }
+    }
 
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -318,13 +453,26 @@
             const agentSelect = document.getElementById('agent-select');
             const selectedAgent = agentSelect ? agentSelect.value : 'auto';
 
+            const payload = {
+                message: text,
+                agent: selectedAgent,
+                session_id: sessionId,
+            };
+
+            if (currentImageB64) {
+                payload.image = currentImageB64;
+                currentImageB64 = null;
+                imagePreview.style.display = 'none';
+                imageInput.value = '';
+            }
+
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                 },
-                body: JSON.stringify({ message: text, history: history.slice(0, -1), agent: selectedAgent }),
+                body: JSON.stringify(payload),
             });
 
             const data = await res.json();
@@ -333,7 +481,9 @@
             if (data.success) {
                 addMessage('ai', data.reply);
                 history.push({ role: 'assistant', content: data.reply });
-                modelName.textContent = data.model;
+                modelName.textContent = data.model || data.agents?.join(', ') || selectedAgent;
+                // Voice output
+                if (selectedAgent !== 'orchestrator') speak(data.reply);
             } else {
                 addMessage('ai', '❌ Error: ' + data.error);
             }
