@@ -206,6 +206,7 @@
     <span class="logo">🐾 ClawYard</span>
     <span class="badge">NVIDIA NeMo</span>
     <select id="agent-select">
+        <option value="orchestrator">🌐 All Agents</option>
         <option value="auto">🤖 Auto Route</option>
         <option value="sales">💼 Sales</option>
         <option value="support">🔧 Support</option>

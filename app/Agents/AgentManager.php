@@ -5,6 +5,7 @@ namespace App\Agents;
 class AgentManager
 {
     protected array $agents = [];
+    protected OrchestratorAgent $orchestrator;
 
     public function __construct()
     {
@@ -17,16 +18,21 @@ class AgentManager
             'sap'      => new SapAgent(),
             'document' => new DocumentAgent(),
         ];
+
+        $this->orchestrator = new OrchestratorAgent($this->agents);
     }
 
     public function agent(string $name): AgentInterface
     {
+        if ($name === 'orchestrator') {
+            return $this->orchestrator;
+        }
         return $this->agents[$name] ?? $this->agents['claude'];
     }
 
     public function available(): array
     {
-        return array_keys($this->agents);
+        return array_merge(['orchestrator'], array_keys($this->agents));
     }
 
     /**
@@ -66,7 +72,33 @@ class AgentManager
             if (str_contains($lower, $kw)) return $this->agents['document'];
         }
 
-        // Default to Claude for complex queries
         return $this->agents['claude'];
+    }
+
+    public function orchestrate(string $message, array $history = []): array
+    {
+        $agentNames = $this->orchestrator->decideAgents($message);
+        $results    = [];
+
+        foreach ($agentNames as $name) {
+            if (isset($this->agents[$name])) {
+                try {
+                    $reply     = $this->agents[$name]->chat($message, $history);
+                    $results[] = [
+                        'agent' => $name,
+                        'model' => $this->agents[$name]->getModel(),
+                        'reply' => $reply,
+                    ];
+                } catch (\Exception $e) {
+                    $results[] = [
+                        'agent' => $name,
+                        'model' => 'error',
+                        'reply' => 'Error: ' . $e->getMessage(),
+                    ];
+                }
+            }
+        }
+
+        return $results;
     }
 }
