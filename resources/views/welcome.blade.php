@@ -48,6 +48,19 @@
             color: #555;
         }
 
+        #agent-select {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            color: #e5e5e5;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        #agent-select:focus { border-color: #76b900; }
+
         #chat {
             flex: 1;
             overflow-y: auto;
@@ -192,7 +205,12 @@
 <header>
     <span class="logo">🐾 ClawYard</span>
     <span class="badge">NVIDIA NeMo</span>
-    <span class="model" id="model-name">meta/llama-3.1-8b-instruct</span>
+    <select id="agent-select">
+        <option value="auto">🤖 Auto Route</option>
+        <option value="nvidia">⚡ NVIDIA NeMo</option>
+        <option value="claude">🧠 Claude</option>
+    </select>
+    <span class="model" id="model-name">auto</span>
 </header>
 
 <div id="chat">
@@ -291,13 +309,16 @@
         const typing = addTyping();
 
         try {
+            const agentSelect = document.getElementById('agent-select');
+            const selectedAgent = agentSelect ? agentSelect.value : 'auto';
+
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                 },
-                body: JSON.stringify({ message: text, history: history.slice(0, -1) }),
+                body: JSON.stringify({ message: text, history: history.slice(0, -1), agent: selectedAgent }),
             });
 
             const data = await res.json();

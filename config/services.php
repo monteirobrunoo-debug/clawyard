@@ -36,9 +36,20 @@ return [
     ],
 
     'nvidia' => [
-        'api_key' => env('NVIDIA_API_KEY'),
+        'api_key'  => env('NVIDIA_API_KEY'),
         'base_url' => env('NVIDIA_BASE_URL', 'https://integrate.api.nvidia.com/v1'),
-        'model' => env('NVIDIA_MODEL', 'meta/llama-3.1-8b-instruct'),
+        'model'    => env('NVIDIA_MODEL', 'meta/llama-3.1-8b-instruct'),
+    ],
+
+    'anthropic' => [
+        'api_key' => env('ANTHROPIC_API_KEY'),
+        'model'   => env('ANTHROPIC_MODEL', 'claude-sonnet-4-5'),
+    ],
+
+    'whatsapp' => [
+        'token'        => env('META_WHATSAPP_TOKEN'),
+        'phone_id'     => env('META_WHATSAPP_PHONE_ID'),
+        'verify_token' => env('META_WHATSAPP_VERIFY_TOKEN', 'clawyard_webhook_2026'),
     ],
 
 ];

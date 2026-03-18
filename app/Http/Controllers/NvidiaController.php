@@ -2,13 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\NvidiaService;
+use App\Agents\AgentManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class NvidiaController extends Controller
 {
-    public function __construct(protected NvidiaService $nvidia) {}
+    public function __construct(protected AgentManager $agentManager) {}
 
     /**
      * POST /api/chat
@@ -18,10 +18,17 @@ class NvidiaController extends Controller
         $request->validate([
             'message' => 'required|string|max:4096',
             'history' => 'nullable|array',
+            'agent'   => 'nullable|string|in:nvidia,claude,auto',
         ]);
 
         try {
-            $reply = $this->nvidia->chat(
+            $agentName = $request->input('agent', 'auto');
+
+            $agent = $agentName === 'auto'
+                ? $this->agentManager->route($request->input('message'))
+                : $this->agentManager->agent($agentName);
+
+            $reply = $agent->chat(
                 $request->input('message'),
                 $request->input('history', [])
             );
@@ -29,7 +36,8 @@ class NvidiaController extends Controller
             return response()->json([
                 'success' => true,
                 'reply'   => $reply,
-                'model'   => config('services.nvidia.model'),
+                'agent'   => $agent->getName(),
+                'model'   => $agent->getModel(),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -37,5 +45,15 @@ class NvidiaController extends Controller
                 'error'   => $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * GET /api/agents
+     */
+    public function agents(): JsonResponse
+    {
+        return response()->json([
+            'agents' => $this->agentManager->available(),
+        ]);
     }
 }
