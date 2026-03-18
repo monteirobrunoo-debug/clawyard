@@ -253,6 +253,7 @@
 <body>
 
 <header>
+    <a href="/dashboard" style="color:#555;text-decoration:none;font-size:20px;margin-right:4px;">←</a>
     <span class="logo">🐾 ClawYard</span>
     <span class="badge">NVIDIA NeMo</span>
     <select id="agent-select">
@@ -312,6 +313,12 @@
 
     const history = [];
     const sessionId = 'session_' + Date.now();
+
+    // Pre-select agent from URL param
+    const urlAgent = new URLSearchParams(window.location.search).get('agent');
+    if (urlAgent && agentSelect) {
+        agentSelect.value = urlAgent;
+    }
     let currentImageB64 = null;
     let recognition = null;
     let isRecording = false;
