@@ -141,26 +141,27 @@ PROMPT;
 
         foreach ($queries as $q) {
             try {
-                $payload = [
-                    'q' => ['_text_any' => ['patent_title' => $q]],
-                    'f' => ['patent_number','patent_title','patent_abstract','patent_date','inventor_first_name','inventor_last_name'],
-                    'o' => ['per_page' => 3, 'sort' => [['patent_date' => 'desc']]],
-                ];
-
-                $response = $this->httpClient->post('https://search.patentsview.org/api/v1/patent/', [
-                    'headers' => ['X-Api-Key' => $apiKey, 'Content-Type' => 'application/json'],
-                    'json'    => $payload,
+                $response = $this->httpClient->get('https://search.patentsview.org/api/v1/patent/', [
+                    'headers' => [
+                        'X-Api-Key' => $apiKey,
+                        'accept'    => 'application/json',
+                    ],
+                    'query' => [
+                        'q' => json_encode(['_text_any' => ['patent_title' => $q]]),
+                        'f' => json_encode(['patent_id','patent_title','patent_abstract','patent_date']),
+                        'o' => json_encode(['size' => 3]),
+                        's' => json_encode([['patent_date' => 'desc']]),
+                    ],
                 ]);
 
                 $data = json_decode($response->getBody()->getContents(), true);
 
                 foreach ($data['patents'] ?? [] as $p) {
-                    $num     = $p['patent_id']    ?? $p['patent_number'] ?? 'N/A';
-                    $title   = $p['patent_title']  ?? 'N/A';
-                    $date    = $p['patent_date']   ?? 'N/A';
+                    $num      = $p['patent_id']    ?? 'N/A';
+                    $title    = $p['patent_title']  ?? 'N/A';
+                    $date     = $p['patent_date']   ?? 'N/A';
                     $abstract = substr($p['patent_abstract'] ?? '', 0, 250);
-                    $inventor = ($p['inventor_first_name'][0]['inventor_first_name'] ?? '') . ' ' . ($p['inventor_last_name'][0]['inventor_last_name'] ?? '');
-                    $patents[] = "- [US{$num}] {$title} | Inventor: {$inventor} | Date: {$date} | URL: https://patents.google.com/patent/US{$num} | Abstract: {$abstract}...";
+                    $patents[] = "- [US{$num}] {$title} | Date: {$date} | URL: https://patents.google.com/patent/US{$num} | Abstract: {$abstract}...";
                     if (count($patents) >= 8) break 2;
                 }
             } catch (\Throwable $e) {
