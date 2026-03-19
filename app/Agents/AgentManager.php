@@ -18,6 +18,8 @@ class AgentManager
             'sap'      => new SapAgent(),
             'document' => new DocumentAgent(),
             'cyber'    => new CyberAgent(),
+            'aria'     => new AriaAgent(),
+            'quantum'  => new QuantumAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -73,11 +75,19 @@ class AgentManager
             if (str_contains($lower, $kw)) return $this->agents['document'];
         }
 
-        // Cyber keywords
+        // Cyber / ARIA keywords
         $cyberKeywords = ['security', 'hack', 'vulnerability', 'threat', 'attack', 'owasp', 'stride', 'pentest',
-                          'seguranca', 'vulnerabilidade', 'ameaca', 'ataque', 'ciberseguranca', 'firewall', 'breach'];
+                          'seguranca', 'vulnerabilidade', 'ameaca', 'ataque', 'ciberseguranca', 'firewall', 'breach',
+                          'aria', 'ssl', 'certificate', 'exploit', 'malware', 'phishing'];
         foreach ($cyberKeywords as $kw) {
-            if (str_contains($lower, $kw)) return $this->agents['cyber'];
+            if (str_contains($lower, $kw)) return $this->agents['aria'];
+        }
+
+        // Quantum keywords
+        $quantumKeywords = ['quantum', 'qubit', 'arxiv', 'qkd', 'superposition', 'entanglement', 'quantum computing',
+                            'quantum cryptography', 'post-quantum', 'professor', 'quantum leap', 'fisica quantica'];
+        foreach ($quantumKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['quantum'];
         }
 
         return $this->agents['claude'];

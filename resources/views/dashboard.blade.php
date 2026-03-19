@@ -95,7 +95,7 @@
 
 <div class="hero">
     <h1>Escolha o seu Agente</h1>
-    <p>Powered by NVIDIA NeMo + Claude — 9 agentes especializados prontos a ajudar</p>
+    <p>Powered by NVIDIA NeMo + Claude — 11 agentes especializados prontos a ajudar</p>
 </div>
 
 <p class="section-title">Agentes Disponiveis</p>
@@ -104,16 +104,17 @@
 
     @php
     $agents = [
-        ['key' => 'orchestrator', 'name' => 'Todos os Agentes', 'emoji' => '🌐', 'role' => 'Orquestrador — activa multiplos agentes em paralelo'],
-        ['key' => 'sales',        'name' => 'Alex Sales',        'emoji' => '💼', 'role' => 'Vendas — cotacoes, propostas e clientes'],
-        ['key' => 'support',      'name' => 'Marco Tech',        'emoji' => '🔧', 'role' => 'Suporte Tecnico — resolve problemas e avarias'],
-        ['key' => 'email',        'name' => 'Daniel Email',      'emoji' => '📧', 'role' => 'Email — redige e envia emails profissionais'],
-        ['key' => 'sap',          'name' => 'Richard SAP',       'emoji' => '📊', 'role' => 'SAP B1 — consultas de negocio e ERP'],
-        ['key' => 'document',     'name' => 'Comandante Doc',    'emoji' => '📄', 'role' => 'Documentos — analisa PDFs e contratos'],
-        ['key' => 'maritime',     'name' => 'Capitao Porto',     'emoji' => '🚢', 'role' => 'Maritimo — navios, pecas e industria naval'],
-        ['key' => 'claude',       'name' => 'Bruno AI',          'emoji' => '🧠', 'role' => 'Claude — raciocinio avancado e analise complexa'],
-        ['key' => 'nvidia',       'name' => 'Carlos NVIDIA',     'emoji' => '⚡', 'role' => 'NVIDIA NeMo — velocidade e eficiencia maxima'],
-        ['key' => 'cyber',        'name' => 'ARIA Security',      'emoji' => '🔐', 'role' => 'Ciberseguranca — STRIDE, OWASP e threat modelling'],
+        ['key' => 'orchestrator', 'name' => 'Todos os Agentes',        'emoji' => '🌐', 'role' => 'Orquestrador — activa multiplos agentes em paralelo'],
+        ['key' => 'sales',        'name' => 'Marco Sales',             'emoji' => '💼', 'role' => 'Vendas MTU · CAT · MAK · Jenbacher · SKF · Schottel'],
+        ['key' => 'support',      'name' => 'Ana Suporte',             'emoji' => '🔧', 'role' => 'Suporte Tecnico — avarias de motores e sistemas'],
+        ['key' => 'email',        'name' => 'Daniel Email',            'emoji' => '📧', 'role' => 'Email maritimo — armadores, agentes e navios'],
+        ['key' => 'sap',          'name' => 'Richard SAP',             'emoji' => '📊', 'role' => 'SAP B1 — stock, facturas e ERP'],
+        ['key' => 'document',     'name' => 'Comandante Doc',          'emoji' => '📄', 'role' => 'Documentos — analisa PDFs e contratos tecnicos'],
+        ['key' => 'maritime',     'name' => 'Capitao Porto',           'emoji' => '🚢', 'role' => 'Maritimo — portos europeus e concorrentes'],
+        ['key' => 'claude',       'name' => 'Bruno AI',                'emoji' => '🧠', 'role' => 'Claude — raciocinio avancado e analise complexa'],
+        ['key' => 'nvidia',       'name' => 'Carlos NVIDIA',           'emoji' => '⚡', 'role' => 'NVIDIA NeMo — velocidade e eficiencia maxima'],
+        ['key' => 'aria',         'name' => 'ARIA Security',           'emoji' => '🔐', 'role' => 'Ciberseguranca — STRIDE, OWASP, scan diario dos sites'],
+        ['key' => 'quantum',      'name' => 'Prof. Quantum Leap',      'emoji' => '⚛️', 'role' => 'Quantum — analise diaria de papers arXiv sobre quantum'],
     ];
     @endphp
 
