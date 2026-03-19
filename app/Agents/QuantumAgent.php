@@ -196,7 +196,7 @@ MSG;
         $response = $this->client->post('/v1/messages', [
             'json' => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 4000,
+                'max_tokens' => 8000,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -228,7 +228,7 @@ MSG;
             'stream' => true,
             'json'   => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 4000,
+                'max_tokens' => 8000,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,

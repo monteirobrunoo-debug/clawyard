@@ -841,6 +841,14 @@ async function saveAsReport(btn, agentName) {
             headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF },
             body: JSON.stringify({ title, type, content: text }),
         });
+        if (!res.ok) {
+            const errText = await res.text();
+            console.error('Save report failed:', res.status, errText);
+            alert('Erro ao guardar relatório: HTTP ' + res.status + '\n' + errText.substring(0,200));
+            btn.textContent = '❌';
+            setTimeout(() => { btn.textContent = '💾'; btn.classList.remove('saved'); }, 3000);
+            return;
+        }
         const data = await res.json();
         if (data.success) {
             btn.textContent = '✅';
@@ -848,10 +856,13 @@ async function saveAsReport(btn, agentName) {
             btn.title = 'Guardado! Ver em /reports';
             logActivity('💾', 'Relatório guardado: ' + title, 'done');
         } else {
+            console.error('Save report returned success:false', data);
             btn.textContent = '❌';
             setTimeout(() => { btn.textContent = '💾'; btn.classList.remove('saved'); }, 2000);
         }
     } catch(e) {
+        console.error('Save report exception:', e);
+        alert('Erro de rede ao guardar relatório: ' + e.message);
         btn.textContent = '❌';
         setTimeout(() => { btn.textContent = '💾'; }, 2000);
     }
