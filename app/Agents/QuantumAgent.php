@@ -156,7 +156,7 @@ PROMPT;
         return trim($clean);
     }
 
-    protected function isDigestRequest(string $message): bool
+    public function isDigestRequest(string $message): bool
     {
         $lower = strtolower($message);
         foreach ($this->digestKeywords as $kw) {

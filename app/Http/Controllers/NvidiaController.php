@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Agents\AgentManager;
+use App\Agents\QuantumAgent;
 use App\Models\Conversation;
 use App\Models\Document;
+use App\Models\Report;
 use App\Services\RagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -113,6 +115,23 @@ class NvidiaController extends Controller
             );
 
             $agentLog[] = ['icon' => '✅', 'text' => 'Resposta pronta', 'done' => true];
+
+            // Auto-save Report for Quantum digest responses
+            if ($agent instanceof QuantumAgent && $agent->isDigestRequest($message)) {
+                try {
+                    $reportTitle = 'Prof. Quantum Leap — Digest ' . now()->format('d/m/Y H:i');
+                    Report::create([
+                        'title'   => $reportTitle,
+                        'type'    => 'quantum',
+                        'content' => $reply,
+                        'summary' => mb_substr(strip_tags($reply), 0, 300),
+                        'user_id' => auth()->id(),
+                    ]);
+                    $agentLog[] = ['icon' => '📋', 'text' => 'Relatório guardado automaticamente', 'done' => true];
+                } catch (\Throwable $e) {
+                    \Log::warning('NvidiaController: could not auto-save quantum report — ' . $e->getMessage());
+                }
+            }
 
             // Save assistant reply (Memory)
             $conversation->messages()->create([
