@@ -857,14 +857,8 @@ async function saveAsReport(btn, agentName) {
     }
 }
 
-// ── TTS ──
-function speak(text) {
-    if ('speechSynthesis' in window) {
-        const utt = new SpeechSynthesisUtterance(text.replace(/[#*`<>]/g,'').substring(0,300));
-        utt.lang = 'pt-PT';
-        speechSynthesis.speak(utt);
-    }
-}
+// ── TTS (desactivado) ──
+function speak(text) { /* TTS disabled */ }
 
 // ═══════════════════════════════
 //  SEND MESSAGE
