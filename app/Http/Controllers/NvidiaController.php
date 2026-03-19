@@ -22,15 +22,22 @@ class NvidiaController extends Controller
     public function chat(Request $request): JsonResponse
     {
         $request->validate([
-            'message'    => 'required|string|max:4096',
-            'agent'      => 'nullable|string',
-            'session_id' => 'nullable|string',
-            'image'      => 'nullable|string', // base64 image
+            'message'    => 'required|string|min:1|max:4096',
+            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber',
+            'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
+            'image'      => 'nullable|string|max:5242880', // max ~4MB base64
         ]);
 
         $agentName = $request->input('agent', 'auto');
         $message   = $request->input('message');
-        $sessionId = $request->input('session_id', session()->getId());
+
+        // Always bind session to authenticated user — never trust raw client session_id
+        $userId    = auth()->id();
+        $clientSid = $request->input('session_id');
+        $sessionId = $clientSid
+            ? 'u' . $userId . '_' . $clientSid   // prefix with user ID to prevent hijacking
+            : 'u' . $userId . '_' . bin2hex(random_bytes(16));
+
         $imageB64  = $request->input('image');
 
         try {
@@ -126,9 +133,16 @@ class NvidiaController extends Controller
             ]);
 
         } catch (\Exception $e) {
+            // Log full error server-side, never expose to client
+            \Log::error('ClawYard chat error', [
+                'user_id'   => auth()->id(),
+                'agent'     => $agentName,
+                'exception' => $e->getMessage(),
+                'trace'     => $e->getTraceAsString(),
+            ]);
             return response()->json([
                 'success' => false,
-                'error'   => $e->getMessage(),
+                'error'   => 'Erro ao processar a mensagem. Por favor tente novamente.',
             ], 500);
         }
     }
@@ -171,7 +185,11 @@ class NvidiaController extends Controller
      */
     public function history(string $sessionId): JsonResponse
     {
-        $conversation = Conversation::where('session_id', $sessionId)->first();
+        // Bind lookup to authenticated user — prevents session enumeration
+        $userId     = auth()->id();
+        $prefixed   = 'u' . $userId . '_' . $sessionId;
+
+        $conversation = Conversation::where('session_id', $prefixed)->first();
 
         if (!$conversation) {
             return response()->json(['messages' => []]);
@@ -235,6 +253,12 @@ class NvidiaController extends Controller
                 '📧 Enviar resultado por email',
                 '📊 Ver mais detalhes',
                 '🤖 Modo multi-agente',
+            ],
+            'cyber'    => [
+                '🔴 Ver vulnerabilidades críticas',
+                '🛡️ Gerar patch de segurança',
+                '📋 Relatório OWASP completo',
+                '🔒 Verificar autenticação e API',
             ],
         ];
 

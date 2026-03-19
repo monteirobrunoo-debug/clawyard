@@ -113,6 +113,7 @@
         ['key' => 'maritime',     'name' => 'Capitao Porto',     'emoji' => '🚢', 'role' => 'Maritimo — navios, pecas e industria naval'],
         ['key' => 'claude',       'name' => 'Bruno AI',          'emoji' => '🧠', 'role' => 'Claude — raciocinio avancado e analise complexa'],
         ['key' => 'nvidia',       'name' => 'Carlos NVIDIA',     'emoji' => '⚡', 'role' => 'NVIDIA NeMo — velocidade e eficiencia maxima'],
+        ['key' => 'cyber',        'name' => 'ARIA Security',      'emoji' => '🔐', 'role' => 'Ciberseguranca — STRIDE, OWASP e threat modelling'],
     ];
     @endphp
 

@@ -17,6 +17,7 @@ class AgentManager
             'email'    => new EmailAgent(),
             'sap'      => new SapAgent(),
             'document' => new DocumentAgent(),
+            'cyber'    => new CyberAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -70,6 +71,13 @@ class AgentManager
         $docKeywords = ['document', 'pdf', 'contract', 'analyze', 'review', 'documento', 'contrato', 'analisar'];
         foreach ($docKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['document'];
+        }
+
+        // Cyber keywords
+        $cyberKeywords = ['security', 'hack', 'vulnerability', 'threat', 'attack', 'owasp', 'stride', 'pentest',
+                          'seguranca', 'vulnerabilidade', 'ameaca', 'ataque', 'ciberseguranca', 'firewall', 'breach'];
+        foreach ($cyberKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['cyber'];
         }
 
         return $this->agents['claude'];
