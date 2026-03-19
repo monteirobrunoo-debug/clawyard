@@ -861,7 +861,7 @@ async function saveAsReport(btn, agentName) {
 function speak(text) { /* TTS disabled */ }
 
 // ═══════════════════════════════
-//  SEND MESSAGE
+//  SEND MESSAGE  (SSE streaming)
 // ═══════════════════════════════
 async function sendMessage() {
     const text = input.value.trim();
@@ -879,32 +879,40 @@ async function sendMessage() {
 
     // ── Activity log ──
     logActivity('📨', 'Mensagem recebida: "' + text.substring(0,50) + (text.length>50?'…':'') + '"', 'done');
-    const stepRAG    = logActivity('📚', 'A consultar base de conhecimento (RAG)…');
-    const stepAgent  = logActivity('🤖', 'A encaminhar para agente ' + (AGENT_NAMES[selectedAgent]||selectedAgent) + '…');
+    const stepRAG   = logActivity('📚', 'A consultar base de conhecimento (RAG)…');
+    const stepAgent = logActivity('🤖', 'A encaminhar para agente ' + (AGENT_NAMES[selectedAgent]||selectedAgent) + '…');
     setAgentActive(selectedAgent);
     modelBadge.textContent = '⏳ ' + (AGENT_NAMES[selectedAgent]||selectedAgent);
 
     const typing = addTyping(selectedAgent);
 
+    const payload = { message: text, agent: selectedAgent, session_id: SESSION_ID };
+    if (currentImg) {
+        payload.image = currentImg;
+        clearImage();
+        logActivity('🖼️', 'Imagem incluída (multimodal)', 'done');
+    }
+
+    resolveStep(stepRAG);
+
+    // State accumulated across SSE events
+    let metaData     = null;   // from the first 'meta' event
+    let accumulated  = '';     // full reply text built chunk by chunk
+    let streamMsg    = null;   // the AI message DOM element
+    let streamBubble = null;   // the bubble div inside that message
+
     try {
-        const payload = { message: text, agent: selectedAgent, session_id: SESSION_ID };
-        if (currentImg) {
-            payload.image = currentImg;
-            clearImage();
-            logActivity('🖼️', 'Imagem incluída (multimodal)', 'done');
-        }
-
-        resolveStep(stepRAG);
-
-        const res  = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type':'application/json', 'Accept':'application/json', 'X-CSRF-TOKEN': CSRF },
+        const res = await fetch('/api/chat', {
+            method:  'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Accept':        'text/event-stream',
+                'X-CSRF-TOKEN':  CSRF,
+            },
             body: JSON.stringify(payload),
         });
 
-        // Try to parse JSON — if server returns HTML (fatal error), catch that separately
-        let data;
-        if (!res.ok && res.status !== 422) {
+        if (!res.ok) {
             const raw = await res.text();
             typing.remove();
             const snippet = raw.replace(/<[^>]+>/g,'').trim().substring(0,200);
@@ -913,66 +921,168 @@ async function sendMessage() {
             sendBtn.disabled = false; clearAgentActive(); modelBadge.textContent = 'pronto'; input.focus();
             return;
         }
-        data = await res.json();
 
-        typing.remove();
-        resolveStep(stepAgent);
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   lineBuf = '';
 
-        if (data.success) {
-            const agent = data.agent || selectedAgent;
+        // Process one SSE line
+        function handleLine(line) {
+            line = line.trim();
+            if (!line.startsWith('data: ')) return;
+            const raw = line.slice(6);
 
-            // ── Log agent actions ──
-            if (data.agent_log) {
-                data.agent_log.forEach(l => logActivity(l.icon, l.text, 'done'));
-            }
+            if (raw === '[DONE]') return; // handled after loop
 
-            // ── Add response ──
-            addMessage('ai', data.reply, agent);
+            let evt;
+            try { evt = JSON.parse(raw); } catch { return; }
 
-            modelBadge.textContent = data.model || data.agents?.join(', ') || agent;
+            // ── Meta event (first event) ──
+            if (evt.type === 'meta') {
+                metaData = evt;
+                typing.remove();
+                resolveStep(stepAgent);
 
-            // ── Suggestions ──
-            if (data.suggestions) {
-                addSuggestions(data.suggestions, agent);
-            }
+                const agentKey = evt.agent || selectedAgent;
 
-            // ── Autonomous action proposal ──
-            if (data.reply && !data.reply.startsWith('__EMAIL__')) {
-                const replyLower = data.reply.toLowerCase();
-
-                // If sales/support mentions competitors → propose analysis
-                if (replyLower.includes('concorrente') || replyLower.includes('competitor')) {
-                    setTimeout(() => addActionApproval({
-                        icon: '🔍',
-                        title: 'Análise de concorrentes detectada',
-                        description: 'Posso pesquisar automaticamente os concorrentes mencionados na base de dados de portos e enviar-lhe um email com o relatório completo.',
-                        agent: 'email',
-                        prompt: encodeURIComponent('Escreve um email com análise dos concorrentes nos portos europeus para enviar ao CEO'),
-                    }), 800);
+                // Log agent actions
+                if (evt.agent_log) {
+                    evt.agent_log.forEach(l => logActivity(l.icon, l.text, 'done'));
                 }
 
-                // If email mentioned → propose email creation
-                if ((replyLower.includes('proposta') || replyLower.includes('proposal')) && agent !== 'email') {
-                    setTimeout(() => addActionApproval({
-                        icon: '📧',
-                        title: 'Transformar em email profissional?',
-                        description: 'O agente gerou uma proposta. Queres que o Daniel Email a transforme num email profissional pronto a enviar?',
-                        agent: 'email',
-                        prompt: encodeURIComponent('Transforma em email profissional: ' + data.reply.substring(0,300)),
-                    }), 800);
-                }
+                modelBadge.textContent = evt.model || evt.agents?.join(', ') || agentKey;
+
+                // Create the streaming message bubble (empty, will fill with chunks)
+                // Email responses are streamed as plain text then parsed at [DONE]
+                const msgEl = document.createElement('div');
+                msgEl.className = 'message ai';
+
+                const agentEmoji = AGENT_EMOJIS[agentKey] || '🤖';
+                const agentLabel = AGENT_NAMES[agentKey]  || 'ClawYard';
+
+                msgEl.innerHTML = `
+                    <div class="avatar">${agentEmoji}</div>
+                    <div class="msg-col">
+                        <div class="msg-meta">
+                            <span>${agentLabel}</span>
+                            <span class="agent-tag active">${agentEmoji} ${agentLabel}</span>
+                        </div>
+                        <div class="bubble stream-bubble"></div>
+                    </div>`;
+
+                chat.appendChild(msgEl);
+                chat.scrollTop = chat.scrollHeight;
+
+                streamMsg    = msgEl;
+                streamBubble = msgEl.querySelector('.stream-bubble');
+                return;
             }
 
-            // ── TTS ──
-            if (selectedAgent !== 'orchestrator' && !data.reply.startsWith('__EMAIL__')) {
-                speak(data.reply);
+            // ── Error event ──
+            if (evt.error) {
+                if (typing.parentNode) typing.remove();
+                addMessage('ai', '❌ Erro: ' + evt.error);
+                logActivity('❌', 'Erro: ' + evt.error, 'done');
+                return;
             }
-        } else {
-            addMessage('ai', '❌ Erro: ' + (data.error || 'Erro desconhecido'));
-            logActivity('❌', 'Erro: ' + (data.error||''), 'done');
+
+            // ── Chunk event ──
+            if (evt.chunk !== undefined && streamBubble) {
+                accumulated += evt.chunk;
+                // Render markdown incrementally
+                streamBubble.innerHTML = renderMarkdown(accumulated);
+                chat.scrollTop = chat.scrollHeight;
+            }
         }
+
+        // Read the stream
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            lineBuf += decoder.decode(value, { stream: true });
+
+            let nlPos;
+            while ((nlPos = lineBuf.indexOf('\n')) !== -1) {
+                const line = lineBuf.slice(0, nlPos);
+                lineBuf    = lineBuf.slice(nlPos + 1);
+
+                if (line.trim() === 'data: [DONE]') {
+                    // Streaming complete — finalise the message
+                    const agentKey = metaData?.agent || selectedAgent;
+
+                    if (streamMsg && streamBubble) {
+                        // Check if it's an email response (accumulated after DONE)
+                        if (accumulated.startsWith('__EMAIL__')) {
+                            try {
+                                const emailData = JSON.parse(accumulated.replace('__EMAIL__', ''));
+                                // Replace the streaming bubble with a proper email card
+                                const msgCol = streamMsg.querySelector('.msg-col');
+                                msgCol.innerHTML = `
+                                    <div class="msg-meta">
+                                        <span class="agent-tag active">📧 Daniel Email</span>
+                                        <span>email gerado</span>
+                                    </div>
+                                    ${buildEmailCard(emailData)}`;
+                                streamMsg.querySelector('.avatar').textContent = AGENT_EMOJIS['email'];
+                            } catch (e) {
+                                // Fallback: display raw text
+                                streamBubble.innerHTML = renderMarkdown(accumulated.replace('__EMAIL__', ''));
+                            }
+                        } else {
+                            // Final render + add save button
+                            streamBubble.innerHTML = renderMarkdown(accumulated);
+                            const meta = streamMsg.querySelector('.msg-meta');
+                            const saveBtn = document.createElement('button');
+                            saveBtn.className = 'save-report-btn';
+                            saveBtn.title     = 'Guardar como relatório';
+                            saveBtn.textContent = '💾';
+                            saveBtn.onclick   = function() { saveAsReport(this, agentKey); };
+                            meta.appendChild(saveBtn);
+                        }
+                        chat.scrollTop = chat.scrollHeight;
+                    }
+
+                    // Suggestions
+                    if (metaData?.suggestions) {
+                        addSuggestions(metaData.suggestions, agentKey);
+                    }
+
+                    // Autonomous action proposals
+                    if (accumulated && !accumulated.startsWith('__EMAIL__')) {
+                        const replyLower = accumulated.toLowerCase();
+
+                        if (replyLower.includes('concorrente') || replyLower.includes('competitor')) {
+                            setTimeout(() => addActionApproval({
+                                icon: '🔍',
+                                title: 'Análise de concorrentes detectada',
+                                description: 'Posso pesquisar automaticamente os concorrentes mencionados na base de dados de portos e enviar-lhe um email com o relatório completo.',
+                                agent: 'email',
+                                prompt: encodeURIComponent('Escreve um email com análise dos concorrentes nos portos europeus para enviar ao CEO'),
+                            }), 800);
+                        }
+
+                        if ((replyLower.includes('proposta') || replyLower.includes('proposal')) && agentKey !== 'email') {
+                            setTimeout(() => addActionApproval({
+                                icon: '📧',
+                                title: 'Transformar em email profissional?',
+                                description: 'O agente gerou uma proposta. Queres que o Daniel Email a transforme num email profissional pronto a enviar?',
+                                agent: 'email',
+                                prompt: encodeURIComponent('Transforma em email profissional: ' + accumulated.substring(0,300)),
+                            }), 800);
+                        }
+                    }
+
+                    logActivity('✅', 'Resposta pronta', 'done');
+                    continue;
+                }
+
+                handleLine(line);
+            }
+        }
+
     } catch (err) {
-        typing.remove();
+        if (typing.parentNode) typing.remove();
         addMessage('ai', '❌ Erro de ligação. Verifica a configuração da API.');
         logActivity('❌', 'Erro de ligação: ' + err.message, 'done');
     } finally {

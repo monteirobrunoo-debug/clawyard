@@ -16,8 +16,8 @@ Route::post('/whatsapp/webhook', [WhatsAppController::class, 'webhook'])
 // ─── AUTHENTICATED + RATE LIMITED ─────────────────────────────────────────
 Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
 
-    // Chat API (Memory + RAG + Multimodal)
-    Route::post('/chat', [NvidiaController::class, 'chat']);
+    // Chat API — SSE streaming (fixes Cloudflare 504 timeouts)
+    Route::post('/chat', [NvidiaController::class, 'chatStream']);
 
     // Agent list
     Route::get('/agents', [NvidiaController::class, 'agents']);

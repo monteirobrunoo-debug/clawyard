@@ -141,6 +141,17 @@ PROMPT;
         return $this->decideAgents($message);
     }
 
+    /**
+     * Orchestrator does not stream individual chunks — it runs all sub-agents to completion
+     * and delivers the combined reply as a single chunk via the callback.
+     */
+    public function stream(string $message, array $history, callable $onChunk): string
+    {
+        $reply = $this->chat($message, $history);
+        $onChunk($reply);
+        return $reply;
+    }
+
     public function getName(): string { return 'orchestrator'; }
     public function getModel(): string { return 'multi-agent'; }
 }

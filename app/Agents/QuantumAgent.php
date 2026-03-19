@@ -203,6 +203,63 @@ PROMPT;
         }
     }
 
+    public function stream(string $message, array $history, callable $onChunk): string
+    {
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $message],
+        ]);
+
+        $response = $this->client->post('/v1/messages', [
+            'stream' => true,
+            'json'   => [
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
+                'max_tokens' => 4000,
+                'system'     => $this->systemPrompt,
+                'messages'   => $messages,
+                'stream'     => true,
+            ],
+        ]);
+
+        $body = $response->getBody();
+        $full = '';
+        $buf  = '';
+
+        while (!$body->eof()) {
+            $buf .= $body->read(1024);
+            while (($pos = strpos($buf, "\n")) !== false) {
+                $line = substr($buf, 0, $pos);
+                $buf  = substr($buf, $pos + 1);
+                $line = trim($line);
+                if (!str_starts_with($line, 'data: ')) continue;
+                $json = substr($line, 6);
+                if ($json === '[DONE]') break 2;
+                $evt = json_decode($json, true);
+                if (!is_array($evt)) continue;
+                if (($evt['type'] ?? '') === 'content_block_delta'
+                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
+                    $text = $evt['delta']['text'] ?? '';
+                    if ($text !== '') {
+                        $full .= $text;
+                        $onChunk($text);
+                    }
+                }
+            }
+        }
+
+        // Auto-save discoveries if this is a digest request
+        if ($this->isDigestRequest($message)) {
+            try {
+                $this->saveDiscoveriesFromResponse($full);
+            } catch (\Throwable $e) {
+                \Log::warning('QuantumAgent stream: could not save discoveries — ' . $e->getMessage());
+            }
+        }
+
+        // Strip the hidden JSON block before returning
+        $clean = preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $full);
+        return trim($clean);
+    }
+
     public function getName(): string { return 'quantum'; }
     public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-5'); }
 }

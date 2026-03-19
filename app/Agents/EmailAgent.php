@@ -99,6 +99,60 @@ PROMPT;
         return $text;
     }
 
+    public function stream(string $message, array $history, callable $onChunk): string
+    {
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $message],
+        ]);
+
+        $response = $this->client->post('/v1/messages', [
+            'stream' => true,
+            'json'   => [
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
+                'max_tokens' => 2048,
+                'system'     => $this->systemPrompt,
+                'messages'   => $messages,
+                'stream'     => true,
+            ],
+        ]);
+
+        $body = $response->getBody();
+        $full = '';
+        $buf  = '';
+
+        while (!$body->eof()) {
+            $buf .= $body->read(1024);
+            while (($pos = strpos($buf, "\n")) !== false) {
+                $line = substr($buf, 0, $pos);
+                $buf  = substr($buf, $pos + 1);
+                $line = trim($line);
+                if (!str_starts_with($line, 'data: ')) continue;
+                $json = substr($line, 6);
+                if ($json === '[DONE]') break 2;
+                $evt = json_decode($json, true);
+                if (!is_array($evt)) continue;
+                if (($evt['type'] ?? '') === 'content_block_delta'
+                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
+                    $text = $evt['delta']['text'] ?? '';
+                    if ($text !== '') {
+                        $full .= $text;
+                        $onChunk($text);
+                    }
+                }
+            }
+        }
+
+        // Apply the same email-parsing post-processing as chat()
+        if (preg_match('/\{[\s\S]*\}/m', $full, $matches)) {
+            $parsed = json_decode($matches[0], true);
+            if ($parsed && isset($parsed['subject'], $parsed['body'])) {
+                return '__EMAIL__' . json_encode($parsed);
+            }
+        }
+
+        return $full;
+    }
+
     public function getName(): string  { return 'email'; }
     public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-5'); }
 }

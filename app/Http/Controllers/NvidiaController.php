@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Services\RagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class NvidiaController extends Controller
 {
@@ -145,6 +146,176 @@ class NvidiaController extends Controller
                 'error'   => 'Erro ao processar a mensagem. Por favor tente novamente.',
             ], 500);
         }
+    }
+
+    /**
+     * POST /api/chat/stream — SSE streaming chat (fixes Cloudflare 504 timeouts)
+     */
+    public function chatStream(Request $request): StreamedResponse
+    {
+        $request->validate([
+            'message'    => 'required|string|min:1|max:4096',
+            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum',
+            'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
+            'image'      => 'nullable|string|max:5242880',
+        ]);
+
+        $agentName = $request->input('agent', 'auto');
+        $message   = $request->input('message');
+
+        $userId    = auth()->id();
+        $clientSid = $request->input('session_id');
+        $sessionId = $clientSid
+            ? 'u' . $userId . '_' . $clientSid
+            : 'u' . $userId . '_' . bin2hex(random_bytes(16));
+
+        $imageB64 = $request->input('image');
+
+        // Resolve agent and augment message *before* streaming so any validation
+        // errors surface as JSON, not mid-stream garbage.
+        $conversation = Conversation::firstOrCreate(
+            ['session_id' => $sessionId],
+            ['channel' => 'web', 'agent' => $agentName]
+        );
+
+        $history = $conversation->history;
+
+        $augmentedMessage = $this->ragService->augmentMessage($message);
+
+        if ($imageB64) {
+            $augmentedMessage = [
+                ['type' => 'text', 'text' => $augmentedMessage],
+                ['type' => 'image', 'source' => [
+                    'type'       => 'base64',
+                    'media_type' => 'image/jpeg',
+                    'data'       => $imageB64,
+                ]],
+            ];
+        }
+
+        // Save user message before streaming
+        $conversation->messages()->create([
+            'role'    => 'user',
+            'content' => $message,
+        ]);
+
+        // Resolve agent (orchestrator falls back to non-streaming chat())
+        if ($agentName === 'orchestrator') {
+            $results = $this->agentManager->orchestrate(
+                is_array($augmentedMessage) ? $message : $augmentedMessage,
+                $history
+            );
+            $reply = $this->combineReplies($results);
+
+            $conversation->messages()->create([
+                'role'    => 'assistant',
+                'agent'   => 'orchestrator',
+                'content' => $reply,
+            ]);
+
+            // Return as SSE with a single chunk + metadata + DONE
+            return response()->stream(function () use ($reply, $results, $sessionId) {
+                // Send agent_log
+                $meta = [
+                    'type'       => 'meta',
+                    'mode'       => 'orchestrator',
+                    'agents'     => array_column($results, 'agent'),
+                    'session_id' => $sessionId,
+                ];
+                echo 'data: ' . json_encode($meta) . "\n\n";
+                ob_flush(); flush();
+
+                // Single chunk with full reply
+                echo 'data: ' . json_encode(['chunk' => $reply]) . "\n\n";
+                ob_flush(); flush();
+
+                echo "data: [DONE]\n\n";
+                ob_flush(); flush();
+            }, 200, [
+                'Content-Type'      => 'text/event-stream',
+                'Cache-Control'     => 'no-cache',
+                'X-Accel-Buffering' => 'no',
+                'Connection'        => 'keep-alive',
+            ]);
+        }
+
+        $agent = $agentName === 'auto'
+            ? $this->agentManager->route($message)
+            : $this->agentManager->agent($agentName);
+
+        $agentLog = [
+            ['icon' => '🔍', 'text' => 'A analisar a mensagem...', 'done' => true],
+            ['icon' => '📚', 'text' => 'A consultar base de conhecimento (RAG)...', 'done' => true],
+            ['icon' => '🤖', 'text' => 'Agente ' . ucfirst($agent->getName()) . ' a processar...', 'done' => true],
+        ];
+
+        $resolvedAgent    = $agent;
+        $resolvedHistory  = $history;
+        $resolvedMessage  = is_array($augmentedMessage) ? json_encode($augmentedMessage) : $augmentedMessage;
+        $resolvedAgentLog = $agentLog;
+        $suggestions      = $this->getSuggestions($agent->getName(), $message);
+        $agentModel       = $agent->getModel();
+        $agentName_final  = $agent->getName();
+        $conversationRef  = $conversation;
+
+        return response()->stream(function () use (
+            $resolvedAgent, $resolvedMessage, $resolvedHistory,
+            $resolvedAgentLog, $suggestions, $agentModel, $agentName_final,
+            $conversationRef, $sessionId
+        ) {
+            // Send metadata first so the JS can set up the message bubble correctly
+            $meta = [
+                'type'        => 'meta',
+                'mode'        => 'single',
+                'agent'       => $agentName_final,
+                'model'       => $agentModel,
+                'session_id'  => $sessionId,
+                'agent_log'   => $resolvedAgentLog,
+                'suggestions' => $suggestions,
+            ];
+            echo 'data: ' . json_encode($meta) . "\n\n";
+            ob_flush(); flush();
+
+            try {
+                $fullReply = $resolvedAgent->stream(
+                    $resolvedMessage,
+                    $resolvedHistory,
+                    function (string $chunk) {
+                        echo 'data: ' . json_encode(['chunk' => $chunk]) . "\n\n";
+                        ob_flush(); flush();
+                    }
+                );
+            } catch (\Throwable $e) {
+                \Log::error('ClawYard stream error', [
+                    'agent'     => $agentName_final,
+                    'exception' => $e->getMessage(),
+                ]);
+                echo 'data: ' . json_encode(['error' => 'Erro ao processar a mensagem. Por favor tente novamente.']) . "\n\n";
+                ob_flush(); flush();
+                echo "data: [DONE]\n\n";
+                ob_flush(); flush();
+                return;
+            }
+
+            // Save assistant reply after streaming completes
+            try {
+                $conversationRef->messages()->create([
+                    'role'    => 'assistant',
+                    'agent'   => $agentName_final,
+                    'content' => $fullReply,
+                ]);
+            } catch (\Throwable $e) {
+                \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
+            }
+
+            echo "data: [DONE]\n\n";
+            ob_flush(); flush();
+        }, 200, [
+            'Content-Type'      => 'text/event-stream',
+            'Cache-Control'     => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+            'Connection'        => 'keep-alive',
+        ]);
     }
 
     /**
