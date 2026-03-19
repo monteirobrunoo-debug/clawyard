@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -32,6 +33,12 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/reports/{report}', [ReportController::class, 'show'])->name('reports.show');
     Route::get('/reports/{report}/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
     Route::delete('/reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');
+});
+
+// Discoveries — patents & papers tracker
+Route::middleware(['auth'])->group(function () {
+    Route::get('/discoveries', [DiscoveryController::class, 'index'])->name('discoveries');
+    Route::delete('/discoveries/{discovery}', [DiscoveryController::class, 'destroy'])->name('discoveries.destroy');
 });
 
 // Schedules page — visible to all authenticated users

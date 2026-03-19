@@ -82,6 +82,7 @@
     <span class="logo">🐾 ClawYard</span>
     <span class="badge">NVIDIA NeMo</span>
     <div class="user-info">
+        <a href="/discoveries" style="font-size:12px;color:#aaa;text-decoration:none;border:1px solid #333;padding:5px 12px;border-radius:8px;">🔬 Descobertas</a>
         <a href="/reports" style="font-size:12px;color:#aaa;text-decoration:none;border:1px solid #333;padding:5px 12px;border-radius:8px;">📋 Relatórios</a>
         <a href="/schedules" style="font-size:12px;color:#aaa;text-decoration:none;border:1px solid #333;padding:5px 12px;border-radius:8px;">🗓️ Schedule</a>
         @if(Auth::user()->isAdmin())

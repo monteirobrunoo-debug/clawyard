@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\EmailSendController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NvidiaController;
@@ -26,6 +27,9 @@ Route::middleware(['auth', 'throttle:60,1'])->group(function () {
 
     // Reports — save agent output
     Route::post('/reports', [ReportController::class, 'store']);
+
+    // Discoveries — save patent/paper from agent
+    Route::post('/discoveries', [DiscoveryController::class, 'store']);
 
     // Email sending
     Route::post('/email/send', [EmailSendController::class, 'send'])
