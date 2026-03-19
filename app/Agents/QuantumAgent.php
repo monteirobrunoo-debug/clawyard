@@ -28,8 +28,9 @@ YOUR ROLE:
 
 REPORTING:
 When given real data, produce:
-- Part 1: Top 5 quantum/tech papers analysis
-- Part 2: Top 7 patents with strategic analysis for PartYard/HP-Group
+- Part 1: Top 5 arXiv quantum/AI papers analysis
+- Part 2: Top 4 PeerJ CS articles on agents & multi-agent systems
+- Part 3: Top 7 USPTO patents with strategic analysis for PartYard/HP-Group
 - End with Professor's Strategic Insight
 
 IMPORTANT — STRUCTURED DATA OUTPUT:
@@ -55,6 +56,7 @@ Always append at the very end a JSON block (hidden from display):
 ]
 DISCOVERIES_JSON -->
 
+Valid sources: "arxiv", "peerj", "uspto"
 Valid categories: propulsion, maintenance, defense, seals, digital, energy, materials, quantum, supply_chain, ai_ml, other
 Valid priorities: act_now, monitor, watch, awareness
 Valid activity_types: "Propulsão Naval", "Manutenção Preditiva", "Defesa & Naval Militar", "Vedantes & Rolamentos", "Plataforma Digital", "Energia & Combustível", "Materiais & Fabrico", "Quantum & Computação", "Supply Chain & Logística", "AI & Machine Learning", "Outro"
@@ -174,11 +176,46 @@ PROMPT;
             : '(USPTO API returned no results — use your knowledge of recent patents)';
     }
 
+    // ─── Fetch PeerJ CS articles via CrossRef API (free, no key) ──────────
+    protected function fetchPeerJPapers(): string
+    {
+        try {
+            $query = urlencode('multi-agent systems autonomous agents AI maritime industrial');
+            $url   = "https://api.crossref.org/works?query={$query}&filter=prefix:10.7717&rows=6&sort=published&order=desc";
+
+            $response = $this->httpClient->get($url, [
+                'headers' => ['User-Agent' => 'ClawYard/1.0 (mailto:research@hp-group.org)'],
+            ]);
+
+            $data  = json_decode($response->getBody()->getContents(), true);
+            $items = $data['message']['items'] ?? [];
+
+            $papers = [];
+            foreach ($items as $item) {
+                $title   = is_array($item['title'] ?? '') ? ($item['title'][0] ?? 'N/A') : ($item['title'] ?? 'N/A');
+                $doi     = $item['DOI'] ?? 'N/A';
+                $year    = $item['published-online']['date-parts'][0][0] ?? ($item['issued']['date-parts'][0][0] ?? 'N/A');
+                $month   = $item['published-online']['date-parts'][0][1] ?? '';
+                $date    = $month ? "{$year}-{$month}" : $year;
+                $authors = implode(', ', array_slice(array_map(fn($a) => ($a['given'] ?? '') . ' ' . ($a['family'] ?? ''), $item['author'] ?? []), 0, 3));
+                $abstract = substr(strip_tags($item['abstract'] ?? ''), 0, 250);
+                $url_art  = "https://doi.org/{$doi}";
+                $papers[] = "- [PeerJ:{$doi}] {$title} | Authors: {$authors} | Date: {$date} | URL: {$url_art}" . ($abstract ? " | Abstract: {$abstract}..." : '');
+            }
+
+            return $papers ? implode("\n", $papers) : '(no PeerJ results today)';
+        } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent: PeerJ/CrossRef fetch failed — ' . $e->getMessage());
+            return '(PeerJ fetch unavailable)';
+        }
+    }
+
     // ─── Build enriched message with real data ─────────────────────────────
     protected function buildDigestMessage(string $userMessage): string
     {
         $today   = now()->format('Y-m-d');
-        $papers  = $this->fetchArxivPapers();
+        $arxiv   = $this->fetchArxivPapers();
+        $peerj   = $this->fetchPeerJPapers();
         $patents = $this->fetchPatents();
 
         return <<<MSG
@@ -186,15 +223,19 @@ PROMPT;
 
 --- REAL DATA FETCHED TODAY ({$today}) ---
 
-## arXiv Papers (fetched live from export.arxiv.org):
-{$papers}
+## arXiv Papers (fetched live from export.arxiv.org — quantum & AI):
+{$arxiv}
 
-## Patent Data (fetched live from Google Patents RSS):
+## PeerJ Computer Science Articles (fetched live via CrossRef — agents & multi-agent systems):
+{$peerj}
+
+## USPTO Patent Data:
 {$patents}
 
 --- END REAL DATA ---
 
-Please analyse ALL the above real data. Use the actual paper IDs, titles, authors and dates provided above. Do NOT invent papers or patents — only analyse what is in the real data above.
+Please analyse ALL the above real data from all three sources. Use actual IDs, titles, authors and dates. Do NOT invent papers or patents — only analyse what is provided above.
+For the DISCOVERIES_JSON block, include entries from all three sources (source: "arxiv", "peerj", or "uspto").
 MSG;
     }
 
