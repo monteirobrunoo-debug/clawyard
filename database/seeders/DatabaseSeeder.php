@@ -24,5 +24,8 @@ class DatabaseSeeder extends Seeder
 
         // Ensure all existing users have a role
         User::whereNull('role')->update(['role' => 'user', 'is_active' => true]);
+
+        // Load the knowledge base
+        $this->call(KnowledgeBaseSeeder::class);
     }
 }

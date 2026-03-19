@@ -81,6 +81,12 @@ class SetupAdmin extends Command
             $this->line("Fixed {$fixed} users without role → set to 'user'");
         }
 
+        // 4. Load knowledge base
+        $this->line('');
+        $this->info('Loading knowledge base...');
+        \Artisan::call('db:seed', ['--class' => 'KnowledgeBaseSeeder', '--force' => true]);
+        $this->line(\Artisan::output());
+
         $this->line('');
         $this->info('Done! Login com: ' . $email);
 
