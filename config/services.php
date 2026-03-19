@@ -46,6 +46,10 @@ return [
         'model'   => env('ANTHROPIC_MODEL', 'claude-sonnet-4-5'),
     ],
 
+    'patentsview' => [
+        'api_key' => env('PATENTSVIEW_API_KEY'),
+    ],
+
     'whatsapp' => [
         'token'        => env('META_WHATSAPP_TOKEN'),
         'phone_id'     => env('META_WHATSAPP_PHONE_ID'),

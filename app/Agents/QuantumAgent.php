@@ -122,10 +122,55 @@ PROMPT;
         }
     }
 
-    // ─── Patents: use Claude knowledge (Google Patents blocks server requests) ─
+    // ─── Fetch real USPTO patents via PatentsView API ──────────────────────
     protected function fetchPatents(): string
     {
-        return '(Use your training knowledge of recent USPTO/Google Patents filings from 2024-2026 related to marine propulsion, predictive maintenance, bearing seals, thruster systems, and maritime digital platforms. Be specific with real patent numbers if you know them.)';
+        $apiKey = config('services.patentsview.api_key');
+
+        if (!$apiKey) {
+            return '(USPTO PatentsView API key not configured — set PATENTSVIEW_API_KEY in .env. Use your training knowledge of recent USPTO patents from 2024-2026 for marine propulsion, predictive maintenance, bearing seals, thruster systems.)';
+        }
+
+        $queries = [
+            'marine propulsion engine',
+            'predictive maintenance vessel',
+            'bearing seal maritime',
+        ];
+
+        $patents = [];
+
+        foreach ($queries as $q) {
+            try {
+                $payload = [
+                    'q' => ['_text_any' => ['patent_title' => $q]],
+                    'f' => ['patent_number','patent_title','patent_abstract','patent_date','inventor_first_name','inventor_last_name'],
+                    'o' => ['per_page' => 3, 'sort' => [['patent_date' => 'desc']]],
+                ];
+
+                $response = $this->httpClient->post('https://search.patentsview.org/api/v1/patent/', [
+                    'headers' => ['X-Api-Key' => $apiKey, 'Content-Type' => 'application/json'],
+                    'json'    => $payload,
+                ]);
+
+                $data = json_decode($response->getBody()->getContents(), true);
+
+                foreach ($data['patents'] ?? [] as $p) {
+                    $num     = $p['patent_id']    ?? $p['patent_number'] ?? 'N/A';
+                    $title   = $p['patent_title']  ?? 'N/A';
+                    $date    = $p['patent_date']   ?? 'N/A';
+                    $abstract = substr($p['patent_abstract'] ?? '', 0, 250);
+                    $inventor = ($p['inventor_first_name'][0]['inventor_first_name'] ?? '') . ' ' . ($p['inventor_last_name'][0]['inventor_last_name'] ?? '');
+                    $patents[] = "- [US{$num}] {$title} | Inventor: {$inventor} | Date: {$date} | URL: https://patents.google.com/patent/US{$num} | Abstract: {$abstract}...";
+                    if (count($patents) >= 8) break 2;
+                }
+            } catch (\Throwable $e) {
+                \Log::warning("QuantumAgent: USPTO fetch failed for '{$q}' — " . $e->getMessage());
+            }
+        }
+
+        return $patents
+            ? implode("\n", $patents)
+            : '(USPTO API returned no results — use your knowledge of recent patents)';
     }
 
     // ─── Build enriched message with real data ─────────────────────────────
