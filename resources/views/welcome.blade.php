@@ -248,6 +248,51 @@
 
         .empty-state h2 { font-size: 28px; color: #76b900; font-weight: 700; }
         .empty-state p { font-size: 14px; color: #444; }
+
+        /* Email Card */
+        .email-card {
+            background: #111; border: 1px solid #2a2a2a; border-radius: 16px;
+            overflow: hidden; margin-top: 8px; width: 100%;
+        }
+        .email-card-header {
+            background: #0f0f0f; padding: 14px 18px;
+            display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid #1e1e1e;
+        }
+        .email-card-header span { font-size: 12px; font-weight: 700; color: #76b900; }
+        .email-card-header small { font-size: 11px; color: #555; }
+        .email-field { padding: 10px 18px; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; gap: 10px; }
+        .email-field label { font-size: 11px; color: #555; min-width: 50px; font-weight: 600; text-transform: uppercase; }
+        .email-field input {
+            flex: 1; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+            padding: 6px 10px; color: #e5e5e5; font-size: 13px; outline: none;
+        }
+        .email-field input:focus { border-color: #76b900; }
+        .email-body-area {
+            padding: 16px 18px; font-size: 13px; color: #ccc; line-height: 1.7;
+            white-space: pre-wrap; max-height: 280px; overflow-y: auto;
+            border-bottom: 1px solid #1a1a1a;
+        }
+        .email-body-area[contenteditable] { outline: none; }
+        .email-body-area[contenteditable]:focus { background: #131313; }
+        .email-actions {
+            padding: 12px 18px; display: flex; gap: 10px; align-items: center;
+        }
+        .email-send-btn {
+            background: #76b900; color: #000; border: none; padding: 10px 24px;
+            border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .email-send-btn:hover { background: #8fd400; }
+        .email-send-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+        .email-copy-btn {
+            background: none; color: #555; border: 1px solid #2a2a2a;
+            padding: 10px 18px; border-radius: 10px; font-size: 12px; cursor: pointer;
+        }
+        .email-copy-btn:hover { border-color: #555; color: #aaa; }
+        .email-status { font-size: 12px; margin-left: auto; }
+        .email-status.sent { color: #76b900; }
+        .email-status.error { color: #ff4444; }
     </style>
 </head>
 <body>
@@ -410,13 +455,110 @@
 
         const msg = document.createElement('div');
         msg.className = `message ${role}`;
-        msg.innerHTML = `
-            <div class="avatar">${role === 'user' ? 'B' : 'AI'}</div>
-            <div class="bubble">${escapeHtml(text)}</div>
-        `;
+
+        // Check if this is an email response
+        if (role === 'ai' && text.startsWith('__EMAIL__')) {
+            const emailData = JSON.parse(text.replace('__EMAIL__', ''));
+            msg.innerHTML = `
+                <div class="avatar">📧</div>
+                <div style="flex:1;max-width:calc(100% - 48px)">
+                    <div style="font-size:11px;color:#555;margin-bottom:6px">✉️ Daniel Email — Email gerado</div>
+                    ${buildEmailCard(emailData)}
+                </div>
+            `;
+        } else {
+            msg.innerHTML = `
+                <div class="avatar">${role === 'user' ? '{{ substr(Auth::user()->name, 0, 1) }}' : '🤖'}</div>
+                <div class="bubble">${escapeHtml(text)}</div>
+            `;
+        }
+
         chat.appendChild(msg);
         chat.scrollTop = chat.scrollHeight;
         return msg;
+    }
+
+    function buildEmailCard(data) {
+        const id = 'email_' + Date.now();
+        return `
+        <div class="email-card" id="${id}">
+            <div class="email-card-header">
+                <span>📧 Email Draft</span>
+                <small>${data.template || ''} · ${data.language === 'pt' ? '🇵🇹 PT' : data.language === 'es' ? '🇪🇸 ES' : '🇬🇧 EN'}</small>
+            </div>
+            <div class="email-field">
+                <label>Para</label>
+                <input type="email" id="${id}_to" value="${escapeHtml(data.to || '')}" placeholder="destinatario@empresa.com">
+            </div>
+            <div class="email-field">
+                <label>CC</label>
+                <input type="email" id="${id}_cc" placeholder="cc@empresa.com (opcional)">
+            </div>
+            <div class="email-field">
+                <label>Assunto</label>
+                <input type="text" id="${id}_subject" value="${escapeHtml(data.subject || '')}">
+            </div>
+            <div class="email-body-area" id="${id}_body" contenteditable="true">${escapeHtml(data.body || '')}</div>
+            <div class="email-actions">
+                <button class="email-send-btn" onclick="sendEmail('${id}')">
+                    ✈️ Enviar Email
+                </button>
+                <button class="email-copy-btn" onclick="copyEmail('${id}')">📋 Copiar</button>
+                <span class="email-status" id="${id}_status"></span>
+            </div>
+        </div>`;
+    }
+
+    async function sendEmail(id) {
+        const to      = document.getElementById(id + '_to').value.trim();
+        const cc      = document.getElementById(id + '_cc').value.trim();
+        const subject = document.getElementById(id + '_subject').value.trim();
+        const body    = document.getElementById(id + '_body').innerText.trim();
+        const statusEl = document.getElementById(id + '_status');
+        const btn = document.querySelector(`#${id} .email-send-btn`);
+
+        if (!to) { statusEl.textContent = '⚠️ Insira o email do destinatário'; statusEl.className = 'email-status error'; return; }
+        if (!subject) { statusEl.textContent = '⚠️ Insira o assunto'; statusEl.className = 'email-status error'; return; }
+
+        btn.disabled = true;
+        btn.textContent = '⏳ A enviar...';
+        statusEl.textContent = '';
+
+        try {
+            const res = await fetch('/api/email/send', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                },
+                body: JSON.stringify({ to, cc, subject, body }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                statusEl.textContent = '✅ Enviado para ' + to;
+                statusEl.className = 'email-status sent';
+                btn.textContent = '✅ Enviado';
+            } else {
+                statusEl.textContent = '❌ ' + data.error;
+                statusEl.className = 'email-status error';
+                btn.disabled = false;
+                btn.textContent = '✈️ Enviar Email';
+            }
+        } catch (e) {
+            statusEl.textContent = '❌ Erro de ligação';
+            statusEl.className = 'email-status error';
+            btn.disabled = false;
+            btn.textContent = '✈️ Enviar Email';
+        }
+    }
+
+    function copyEmail(id) {
+        const subject = document.getElementById(id + '_subject').value;
+        const body    = document.getElementById(id + '_body').innerText;
+        navigator.clipboard.writeText('Assunto: ' + subject + '\n\n' + body);
+        const btn = document.querySelector(`#${id} .email-copy-btn`);
+        btn.textContent = '✅ Copiado!';
+        setTimeout(() => btn.textContent = '📋 Copiar', 2000);
     }
 
     function addTyping() {

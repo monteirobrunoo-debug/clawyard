@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\EmailController;
 use App\Http\Controllers\NvidiaController;
 use App\Http\Controllers\WhatsAppController;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,10 @@ Route::get('/history/{sessionId}', [NvidiaController::class, 'history']);
 
 // RAG Knowledge Base
 Route::post('/documents', [NvidiaController::class, 'uploadDocument']);
+
+// Email Sending
+Route::post('/email/send', [EmailController::class, 'send']);
+Route::get('/email/preview', [EmailController::class, 'preview']);
 
 // WhatsApp Business Webhook
 Route::get('/whatsapp/webhook', [WhatsAppController::class, 'verify']);
