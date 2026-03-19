@@ -311,6 +311,7 @@
     const previewImg = document.getElementById('preview-img');
     const removeImage = document.getElementById('remove-image');
 
+    const agentSelect = document.getElementById('agent-select');
     const history = [];
     const sessionId = 'session_' + Date.now();
 
@@ -457,7 +458,6 @@
         const typing = addTyping();
 
         try {
-            const agentSelect = document.getElementById('agent-select');
             const selectedAgent = agentSelect ? agentSelect.value : 'auto';
 
             const payload = {

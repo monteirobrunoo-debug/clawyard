@@ -120,8 +120,17 @@
     <a href="/chat?agent={{ $agent['key'] }}" class="agent-card">
         <div class="status-dot"></div>
         <div class="avatar">
-            @if(file_exists(public_path('images/agents/' . $agent['key'] . '.jpg')))
-                <img src="/images/agents/{{ $agent['key'] }}.jpg" alt="{{ $agent['name'] }}">
+            @php
+                $imgPath = null;
+                foreach (['.png', '.jpg', '.jpeg', '.webp'] as $ext) {
+                    if (file_exists(public_path('images/agents/' . $agent['key'] . $ext))) {
+                        $imgPath = '/images/agents/' . $agent['key'] . $ext;
+                        break;
+                    }
+                }
+            @endphp
+            @if($imgPath)
+                <img src="{{ $imgPath }}" alt="{{ $agent['name'] }}">
             @else
                 {{ $agent['emoji'] }}
             @endif
