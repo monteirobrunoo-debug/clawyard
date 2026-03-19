@@ -1,649 +1,835 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>ClawYard — AI Assistant</title>
+    <title>ClawYard — AI Chat</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
-        body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background: #0f0f0f;
-            color: #e5e5e5;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
+        :root {
+            --green: #76b900;
+            --green-hover: #8fd400;
+            --bg: #0a0a0a;
+            --bg2: #111;
+            --bg3: #1a1a1a;
+            --border: #222;
+            --border2: #2a2a2a;
+            --text: #e5e5e5;
+            --muted: #555;
+            --muted2: #444;
         }
 
-        header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 16px 24px;
-            border-bottom: 1px solid #1e1e1e;
-            background: #111;
+        body { font-family: system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+        /* ── HEADER ── */
+        header { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; }
+        .logo { font-size:18px; font-weight:800; color:var(--green); letter-spacing:-0.5px; }
+        .badge { font-size:10px; background:var(--green); color:#000; padding:2px 8px; border-radius:20px; font-weight:700; }
+        .hdr-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+        #agent-select { background:var(--bg3); border:1px solid var(--border2); color:var(--text); padding:5px 10px; border-radius:8px; font-size:12px; cursor:pointer; outline:none; }
+        #agent-select:focus { border-color:var(--green); }
+        #model-badge { font-size:11px; color:var(--muted); background:var(--bg3); padding:3px 10px; border-radius:20px; border:1px solid var(--border); }
+        .back-btn { color:var(--muted); text-decoration:none; font-size:18px; padding:4px; }
+        .back-btn:hover { color:var(--text); }
+
+        /* ── MAIN LAYOUT ── */
+        .main { flex:1; display:flex; overflow:hidden; }
+
+        /* ── SIDEBAR — Agent Activity ── */
+        #activity-panel {
+            width:260px; min-width:260px; border-right:1px solid var(--border);
+            background:var(--bg2); display:flex; flex-direction:column;
+            transition: width 0.3s; overflow:hidden;
         }
+        #activity-panel.collapsed { width:0; min-width:0; border-right:none; }
+        .activity-header { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+        .activity-header span { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+        #activity-log { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:6px; }
+        .activity-step { display:flex; align-items:flex-start; gap:8px; padding:8px 10px; border-radius:8px; font-size:12px; line-height:1.5; color:#aaa; background:var(--bg3); border:1px solid var(--border); animation: fadeIn 0.3s ease; }
+        .activity-step.active { color:var(--green); border-color:var(--green); background:#0f1f00; }
+        .activity-step.done { color:#666; }
+        .activity-step .step-icon { font-size:14px; flex-shrink:0; margin-top:1px; }
+        .activity-step .step-text { flex:1; }
+        .step-spinner { width:12px; height:12px; border:2px solid var(--border2); border-top-color:var(--green); border-radius:50%; animation:spin 0.8s linear infinite; flex-shrink:0; margin-top:3px; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-        header .logo {
-            font-size: 20px;
-            font-weight: 700;
-            color: #76b900;
-            letter-spacing: -0.5px;
-        }
+        /* Agent live status */
+        .agent-live { padding:12px 16px; border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
+        .agent-live .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+        .agent-cards-mini { display:flex; flex-direction:column; gap:4px; }
+        .agent-mini { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; color:var(--muted); }
+        .agent-mini.active { background:var(--bg3); color:var(--text); }
+        .agent-mini .dot-status { width:7px; height:7px; border-radius:50%; background:var(--muted2); flex-shrink:0; }
+        .agent-mini.active .dot-status { background:var(--green); box-shadow:0 0 4px var(--green); animation:pulse-dot 1.5s infinite; }
+        @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-        header .badge {
-            font-size: 11px;
-            background: #76b900;
-            color: #000;
-            padding: 2px 8px;
-            border-radius: 20px;
-            font-weight: 600;
-        }
+        /* ── CHAT AREA ── */
+        .chat-wrap { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+        #chat { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
+        #chat::-webkit-scrollbar { width:4px; }
+        #chat::-webkit-scrollbar-track { background:transparent; }
+        #chat::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
 
-        header .model {
-            margin-left: auto;
-            font-size: 12px;
-            color: #555;
-        }
+        /* ── MESSAGES ── */
+        .message { display:flex; gap:10px; max-width:780px; width:100%; animation:fadeIn 0.2s ease; }
+        .message.user { align-self:flex-end; flex-direction:row-reverse; }
 
-        #agent-select {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            color: #e5e5e5;
-            padding: 4px 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            cursor: pointer;
-            outline: none;
-        }
+        .avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; }
+        .message.user .avatar { background:var(--green); color:#000; }
+        .message.ai .avatar { background:var(--bg3); color:var(--green); border:1px solid var(--border2); font-size:16px; }
 
-        #agent-select:focus { border-color: #76b900; }
+        .msg-col { display:flex; flex-direction:column; gap:4px; max-width:calc(100% - 42px); }
+        .msg-meta { font-size:10px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+        .msg-meta .agent-tag { background:var(--bg3); border:1px solid var(--border2); padding:1px 7px; border-radius:10px; color:#888; }
+        .msg-meta .agent-tag.active { border-color:var(--green); color:var(--green); }
 
-        .icon-btn {
-            width: 48px;
-            height: 48px;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
-            flex-shrink: 0;
-            font-size: 18px;
-        }
+        .bubble { padding:11px 15px; border-radius:14px; font-size:13.5px; line-height:1.65; white-space:pre-wrap; word-break:break-word; }
+        .message.user .bubble { background:var(--green); color:#000; border-bottom-right-radius:4px; font-weight:500; }
+        .message.ai .bubble { background:var(--bg3); color:var(--text); border-bottom-left-radius:4px; border:1px solid var(--border2); }
 
-        .icon-btn:hover { border-color: #76b900; }
-        .icon-btn.active { background: #76b900; border-color: #76b900; }
+        /* Markdown-like styling inside bubble */
+        .bubble strong { font-weight:700; }
+        .bubble em { font-style:italic; color:#aaa; }
+        .bubble code { background:#0f0f0f; border:1px solid var(--border2); border-radius:4px; padding:1px 5px; font-family:monospace; font-size:12px; color:#76b900; }
+        .bubble h2 { font-size:14px; font-weight:700; color:var(--green); margin:8px 0 4px; }
+        .bubble h3 { font-size:13px; font-weight:700; color:#aaa; margin:6px 0 3px; }
+        .bubble ul, .bubble ol { padding-left:18px; margin:4px 0; }
+        .bubble li { margin:2px 0; }
+        .bubble hr { border:none; border-top:1px solid var(--border2); margin:10px 0; }
 
-        #image-preview {
-            display: none;
-            position: relative;
-            padding: 8px 24px 0;
-        }
+        /* Typing indicator */
+        .typing .bubble { padding:14px; }
+        .dot { width:7px; height:7px; background:var(--muted); border-radius:50%; animation:bounce 1.2s infinite; display:inline-block; }
+        .dot:nth-child(2){animation-delay:.2s} .dot:nth-child(3){animation-delay:.4s}
+        @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
 
-        #image-preview img {
-            height: 80px;
-            border-radius: 8px;
-            border: 1px solid #2a2a2a;
-        }
+        /* ── SUGGESTIONS ── */
+        .suggestions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
+        .sugg-btn { background:none; border:1px solid var(--border2); color:#888; padding:5px 12px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; white-space:nowrap; }
+        .sugg-btn:hover { border-color:var(--green); color:var(--green); background:#0f1f00; }
 
-        #remove-image {
-            position: absolute;
-            top: 4px;
-            left: 88px;
-            background: #ff4444;
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        /* ── ACTION APPROVAL CARD ── */
+        .action-card { background:var(--bg2); border:1px solid #ffaa00; border-radius:12px; padding:14px 16px; margin-top:4px; }
+        .action-card-header { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+        .action-card-header .icon { font-size:18px; }
+        .action-card-header h4 { font-size:13px; font-weight:700; color:#ffaa00; }
+        .action-card-body { font-size:12.5px; color:#aaa; line-height:1.6; margin-bottom:12px; }
+        .action-btns { display:flex; gap:8px; }
+        .action-approve { background:var(--green); color:#000; border:none; padding:7px 18px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; }
+        .action-approve:hover { background:var(--green-hover); }
+        .action-reject { background:none; color:var(--muted); border:1px solid var(--border2); padding:7px 18px; border-radius:8px; font-size:12px; cursor:pointer; }
+        .action-reject:hover { border-color:#ff4444; color:#ff4444; }
+        .action-status { font-size:11px; margin-top:6px; }
+        .action-status.approved { color:var(--green); }
+        .action-status.rejected { color:#ff4444; }
 
-        .recording { animation: pulse 1s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        /* ── EMAIL CARD ── */
+        .email-card { background:var(--bg); border:1px solid #1a3300; border-left:3px solid var(--green); border-radius:12px; overflow:hidden; margin-top:4px; }
+        .email-card-header { background:#0a1a00; padding:12px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1a3300; }
+        .email-card-header .ectl { display:flex; align-items:center; gap:8px; }
+        .email-card-header span { font-size:12px; font-weight:700; color:var(--green); }
+        .email-card-header small { font-size:11px; color:var(--muted); }
+        .email-field { padding:8px 16px; border-bottom:1px solid #111; display:flex; align-items:center; gap:10px; }
+        .email-field label { font-size:10px; color:var(--muted); min-width:52px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+        .email-field input { flex:1; background:transparent; border:none; color:var(--text); font-size:13px; outline:none; }
+        .email-field input:focus { color:var(--green); }
+        .email-body-area { padding:14px 16px; font-size:13px; color:#ccc; line-height:1.7; white-space:pre-wrap; max-height:240px; overflow-y:auto; border-bottom:1px solid #111; outline:none; }
+        .email-body-area:focus { background:#050f00; }
+        .email-actions { padding:10px 16px; display:flex; gap:8px; align-items:center; background:#0a1a00; }
+        .email-send-btn { background:var(--green); color:#000; border:none; padding:8px 20px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:6px; }
+        .email-send-btn:hover { background:var(--green-hover); }
+        .email-send-btn:disabled { background:#333; color:#666; cursor:not-allowed; }
+        .email-copy-btn { background:none; color:var(--muted); border:1px solid var(--border2); padding:8px 16px; border-radius:8px; font-size:12px; cursor:pointer; }
+        .email-copy-btn:hover { border-color:var(--muted); color:#aaa; }
+        .email-edit-btn { background:none; color:var(--muted); border:1px solid var(--border2); padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer; }
+        .email-status { font-size:11px; margin-left:auto; }
+        .email-status.sent { color:var(--green); }
+        .email-status.err { color:#ff4444; }
 
-        #chat {
-            flex: 1;
-            overflow-y: auto;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
+        /* ── IMAGE PREVIEW ── */
+        #image-preview { display:none; padding:8px 20px 0; position:relative; }
+        #image-preview img { height:72px; border-radius:8px; border:1px solid var(--border2); }
+        #remove-image { position:absolute; top:4px; left:82px; background:#ff4444; color:#fff; border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; }
 
-        .message {
-            display: flex;
-            gap: 12px;
-            max-width: 800px;
-            width: 100%;
-        }
+        /* ── INPUT AREA ── */
+        #input-area { padding:14px 20px; border-top:1px solid var(--border); background:var(--bg2); display:flex; gap:10px; align-items:flex-end; flex-shrink:0; }
+        .icon-btn { width:44px; height:44px; background:var(--bg3); border:1px solid var(--border2); border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0; font-size:17px; }
+        .icon-btn:hover { border-color:var(--green); }
+        .icon-btn.active { background:var(--green); border-color:var(--green); }
+        .icon-btn.recording { animation:pulse-rec 1s infinite; }
+        @keyframes pulse-rec { 0%,100%{box-shadow:0 0 0 0 rgba(118,185,0,.4)} 50%{box-shadow:0 0 0 6px rgba(118,185,0,0)} }
+        #message-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:12px; padding:11px 15px; color:var(--text); font-size:13.5px; resize:none; outline:none; min-height:44px; max-height:150px; font-family:inherit; line-height:1.5; transition:border-color 0.2s; }
+        #message-input:focus { border-color:var(--green); }
+        #message-input::placeholder { color:#333; }
+        #send-btn { width:44px; height:44px; background:var(--green); border:none; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; }
+        #send-btn:hover { background:var(--green-hover); }
+        #send-btn:disabled { background:#222; cursor:not-allowed; }
+        #send-btn svg { width:18px; height:18px; }
 
-        .message.user { align-self: flex-end; flex-direction: row-reverse; }
+        /* Toggle sidebar btn */
+        #toggle-panel { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:4px; }
+        #toggle-panel:hover { color:var(--text); }
 
-        .avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: 700;
-            flex-shrink: 0;
-        }
-
-        .message.user .avatar { background: #76b900; color: #000; }
-        .message.ai .avatar { background: #1e1e1e; color: #76b900; }
-
-        .bubble {
-            padding: 12px 16px;
-            border-radius: 16px;
-            font-size: 14px;
-            line-height: 1.6;
-            max-width: calc(100% - 48px);
-            white-space: pre-wrap;
-        }
-
-        .message.user .bubble {
-            background: #76b900;
-            color: #000;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message.ai .bubble {
-            background: #1a1a1a;
-            color: #e5e5e5;
-            border-bottom-left-radius: 4px;
-            border: 1px solid #2a2a2a;
-        }
-
-        .typing .bubble {
-            display: flex;
-            gap: 4px;
-            align-items: center;
-            padding: 16px;
-        }
-
-        .dot {
-            width: 8px;
-            height: 8px;
-            background: #555;
-            border-radius: 50%;
-            animation: bounce 1.2s infinite;
-        }
-
-        .dot:nth-child(2) { animation-delay: 0.2s; }
-        .dot:nth-child(3) { animation-delay: 0.4s; }
-
-        @keyframes bounce {
-            0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-6px); }
-        }
-
-        #input-area {
-            padding: 16px 24px;
-            border-top: 1px solid #1e1e1e;
-            background: #111;
-            display: flex;
-            gap: 12px;
-            align-items: flex-end;
-        }
-
-        #message-input {
-            flex: 1;
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 12px;
-            padding: 12px 16px;
-            color: #e5e5e5;
-            font-size: 14px;
-            resize: none;
-            outline: none;
-            min-height: 48px;
-            max-height: 160px;
-            font-family: inherit;
-            line-height: 1.5;
-            transition: border-color 0.2s;
-        }
-
-        #message-input:focus { border-color: #76b900; }
-        #message-input::placeholder { color: #444; }
-
-        #send-btn {
-            width: 48px;
-            height: 48px;
-            background: #76b900;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.2s;
-            flex-shrink: 0;
-        }
-
-        #send-btn:hover { background: #8fd400; }
-        #send-btn:disabled { background: #333; cursor: not-allowed; }
-
-        #send-btn svg { width: 20px; height: 20px; }
-
-        .empty-state {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-        }
-
-        .empty-state h2 { font-size: 28px; color: #76b900; font-weight: 700; }
-        .empty-state p { font-size: 14px; color: #444; }
-
-        /* Email Card */
-        .email-card {
-            background: #111; border: 1px solid #2a2a2a; border-radius: 16px;
-            overflow: hidden; margin-top: 8px; width: 100%;
-        }
-        .email-card-header {
-            background: #0f0f0f; padding: 14px 18px;
-            display: flex; align-items: center; justify-content: space-between;
-            border-bottom: 1px solid #1e1e1e;
-        }
-        .email-card-header span { font-size: 12px; font-weight: 700; color: #76b900; }
-        .email-card-header small { font-size: 11px; color: #555; }
-        .email-field { padding: 10px 18px; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; gap: 10px; }
-        .email-field label { font-size: 11px; color: #555; min-width: 50px; font-weight: 600; text-transform: uppercase; }
-        .email-field input {
-            flex: 1; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
-            padding: 6px 10px; color: #e5e5e5; font-size: 13px; outline: none;
-        }
-        .email-field input:focus { border-color: #76b900; }
-        .email-body-area {
-            padding: 16px 18px; font-size: 13px; color: #ccc; line-height: 1.7;
-            white-space: pre-wrap; max-height: 280px; overflow-y: auto;
-            border-bottom: 1px solid #1a1a1a;
-        }
-        .email-body-area[contenteditable] { outline: none; }
-        .email-body-area[contenteditable]:focus { background: #131313; }
-        .email-actions {
-            padding: 12px 18px; display: flex; gap: 10px; align-items: center;
-        }
-        .email-send-btn {
-            background: #76b900; color: #000; border: none; padding: 10px 24px;
-            border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
-            display: flex; align-items: center; gap: 6px;
-        }
-        .email-send-btn:hover { background: #8fd400; }
-        .email-send-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
-        .email-copy-btn {
-            background: none; color: #555; border: 1px solid #2a2a2a;
-            padding: 10px 18px; border-radius: 10px; font-size: 12px; cursor: pointer;
-        }
-        .email-copy-btn:hover { border-color: #555; color: #aaa; }
-        .email-status { font-size: 12px; margin-left: auto; }
-        .email-status.sent { color: #76b900; }
-        .email-status.error { color: #ff4444; }
+        /* ── EMPTY STATE ── */
+        .empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+        .empty-state h2 { font-size:32px; color:var(--green); font-weight:800; }
+        .empty-state p { font-size:13px; color:var(--muted); }
+        .starter-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:520px; }
+        .starter-chip { background:var(--bg3); border:1px solid var(--border2); color:#888; padding:7px 14px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; }
+        .starter-chip:hover { border-color:var(--green); color:var(--green); background:#0f1f00; }
     </style>
 </head>
 <body>
 
+<!-- ── HEADER ── -->
 <header>
-    <a href="/dashboard" style="color:#555;text-decoration:none;font-size:20px;margin-right:4px;">←</a>
+    <a href="/dashboard" class="back-btn" title="Voltar ao dashboard">←</a>
     <span class="logo">🐾 ClawYard</span>
-    <span class="badge">NVIDIA NeMo</span>
+    <span class="badge">AI</span>
     <select id="agent-select">
-        <option value="orchestrator">🌐 All Agents</option>
         <option value="auto">🤖 Auto Route</option>
-        <option value="sales">💼 Sales</option>
-        <option value="support">🔧 Support</option>
-        <option value="email">📧 Email</option>
-        <option value="sap">📊 SAP</option>
-        <option value="document">📄 Document</option>
-        <option value="claude">🧠 Claude</option>
-        <option value="nvidia">⚡ NVIDIA NeMo</option>
+        <option value="orchestrator">🌐 All Agents</option>
+        <option value="sales">💼 Sales — Marco</option>
+        <option value="support">🔧 Support — Ana</option>
+        <option value="email">📧 Email — Daniel</option>
+        <option value="sap">📊 SAP — Ricardo</option>
+        <option value="document">📄 Document — Sofia</option>
+        <option value="claude">🧠 Claude — Iris</option>
+        <option value="nvidia">⚡ NVIDIA — Nemo</option>
     </select>
-    <span class="model" id="model-name">auto</span>
+    <div class="hdr-right">
+        <span id="model-badge">pronto</span>
+        <button id="toggle-panel" title="Toggle activity panel">⚡</button>
+    </div>
 </header>
 
-<div id="chat">
-    <div class="empty-state" id="empty-state">
-        <h2>ClawYard AI</h2>
-        <p>Powered by NVIDIA NeMo — Start a conversation</p>
+<!-- ── MAIN ── -->
+<div class="main">
+
+    <!-- ── ACTIVITY SIDEBAR ── -->
+    <div id="activity-panel">
+        <div class="activity-header">
+            <span>⚡ Actividade</span>
+            <span id="activity-count" style="font-size:11px;color:var(--green)"></span>
+        </div>
+        <div id="activity-log">
+            <div class="activity-step done">
+                <span class="step-icon">✅</span>
+                <span class="step-text">Sistema iniciado. RAG carregado.</span>
+            </div>
+            <div class="activity-step done">
+                <span class="step-icon">📚</span>
+                <span class="step-text">Base de conhecimento: portos, concorrentes, serviços PartYard.</span>
+            </div>
+        </div>
+        <div class="agent-live">
+            <div class="lbl">Agentes Disponíveis</div>
+            <div class="agent-cards-mini" id="agent-status-list">
+                <div class="agent-mini" data-agent="sales">
+                    <div class="dot-status"></div><span>💼 Marco — Sales</span>
+                </div>
+                <div class="agent-mini" data-agent="support">
+                    <div class="dot-status"></div><span>🔧 Ana — Support</span>
+                </div>
+                <div class="agent-mini" data-agent="email">
+                    <div class="dot-status"></div><span>📧 Daniel — Email</span>
+                </div>
+                <div class="agent-mini" data-agent="sap">
+                    <div class="dot-status"></div><span>📊 Ricardo — SAP</span>
+                </div>
+                <div class="agent-mini" data-agent="document">
+                    <div class="dot-status"></div><span>📄 Sofia — Document</span>
+                </div>
+                <div class="agent-mini" data-agent="claude">
+                    <div class="dot-status"></div><span>🧠 Iris — Claude</span>
+                </div>
+                <div class="agent-mini" data-agent="nvidia">
+                    <div class="dot-status"></div><span>⚡ Nemo — NVIDIA</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── CHAT AREA ── -->
+    <div class="chat-wrap">
+        <div id="chat">
+            <div class="empty-state" id="empty-state">
+                <h2>ClawYard AI</h2>
+                <p>Powered by NVIDIA NeMo + Claude · Portos, Peças, Emails, Análise</p>
+                <div class="starter-chips" id="starter-chips">
+                    <div class="starter-chip" onclick="startChat(this)">🚢 Analisa concorrentes em Sines</div>
+                    <div class="starter-chip" onclick="startChat(this)">📧 Escreve email para armador em Pireu</div>
+                    <div class="starter-chip" onclick="startChat(this)">💰 Proposta comercial para peças MAN</div>
+                    <div class="starter-chip" onclick="startChat(this)">📊 Quais os portos com mais crescimento?</div>
+                    <div class="starter-chip" onclick="startChat(this)">🔧 Suporte técnico para motor Caterpillar</div>
+                    <div class="starter-chip" onclick="startChat(this)">🌍 Cold outreach para agente em Hamburgo</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image preview -->
+        <div id="image-preview">
+            <img id="preview-img" src="" alt="preview">
+            <button id="remove-image">✕</button>
+        </div>
+
+        <!-- ── INPUT ── -->
+        <div id="input-area">
+            <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
+            <button class="icon-btn" id="image-btn" title="Imagem">📎</button>
+            <input type="file" id="image-input" accept="image/*" style="display:none">
+            <textarea
+                id="message-input"
+                placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
+                rows="1"
+            ></textarea>
+            <button id="send-btn" title="Enviar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </div>
     </div>
 </div>
 
-<div id="image-preview">
-    <img id="preview-img" src="" alt="preview">
-    <button id="remove-image">✕</button>
-</div>
-
-<div id="input-area">
-    <button class="icon-btn" id="voice-btn" title="Voice input">🎤</button>
-    <button class="icon-btn" id="image-btn" title="Upload image">📎</button>
-    <input type="file" id="image-input" accept="image/*" style="display:none">
-    <textarea
-        id="message-input"
-        placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
-        rows="1"
-    ></textarea>
-    <button id="send-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-        </svg>
-    </button>
-</div>
-
 <script>
-    const chat = document.getElementById('chat');
-    const input = document.getElementById('message-input');
-    const sendBtn = document.getElementById('send-btn');
-    const modelName = document.getElementById('model-name');
-    const voiceBtn = document.getElementById('voice-btn');
-    const imageBtn = document.getElementById('image-btn');
-    const imageInput = document.getElementById('image-input');
-    const imagePreview = document.getElementById('image-preview');
-    const previewImg = document.getElementById('preview-img');
-    const removeImage = document.getElementById('remove-image');
+/* ═══════════════════════════════════════════════
+   CLAWYARD CHAT ENGINE v2
+   Features: Agent Activity, Suggestions, Autonomous Actions, Email Send
+   ═══════════════════════════════════════════════ */
 
-    const agentSelect = document.getElementById('agent-select');
-    const history = [];
-    const sessionId = 'session_' + Date.now();
+const chat        = document.getElementById('chat');
+const input       = document.getElementById('message-input');
+const sendBtn     = document.getElementById('send-btn');
+const modelBadge  = document.getElementById('model-badge');
+const agentSelect = document.getElementById('agent-select');
+const activityLog = document.getElementById('activity-log');
+const actPanel    = document.getElementById('activity-panel');
 
-    // Pre-select agent from URL param
-    const urlAgent = new URLSearchParams(window.location.search).get('agent');
-    if (urlAgent && agentSelect) {
-        agentSelect.value = urlAgent;
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+const SESSION_ID = 'cyw_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+
+const AGENT_EMOJIS = {
+    auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
+    email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡'
+};
+
+const AGENT_NAMES = {
+    auto:'Auto', orchestrator:'All Agents', sales:'Marco', support:'Ana',
+    email:'Daniel', sap:'Ricardo', document:'Sofia', claude:'Iris', nvidia:'Nemo'
+};
+
+let isRecording  = false;
+let recognition  = null;
+let currentImg   = null;
+let panelOpen    = true;
+let actCount     = 0;
+
+// ── Agent from URL ──
+const urlAgent = new URLSearchParams(window.location.search).get('agent');
+if (urlAgent && agentSelect.querySelector(`option[value="${urlAgent}"]`)) {
+    agentSelect.value = urlAgent;
+}
+
+// ── Toggle activity panel ──
+document.getElementById('toggle-panel').addEventListener('click', () => {
+    panelOpen = !panelOpen;
+    actPanel.classList.toggle('collapsed', !panelOpen);
+});
+
+// ── Voice ──
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'pt-PT';
+    recognition.onresult = (e) => {
+        input.value = e.results[0][0].transcript;
+        stopRecording();
+        sendMessage();
+    };
+    recognition.onerror = stopRecording;
+    recognition.onend   = stopRecording;
+}
+
+function stopRecording() {
+    const btn = document.getElementById('voice-btn');
+    btn.classList.remove('active','recording');
+    isRecording = false;
+}
+
+document.getElementById('voice-btn').addEventListener('click', () => {
+    if (!recognition) { alert('Voz não suportada neste browser'); return; }
+    const btn = document.getElementById('voice-btn');
+    if (isRecording) {
+        recognition.stop();
+    } else {
+        recognition.start();
+        btn.classList.add('active','recording');
+        isRecording = true;
     }
-    let currentImageB64 = null;
-    let recognition = null;
-    let isRecording = false;
+});
 
-    // Voice Input (Web Speech API)
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'pt-PT';
+// ── Image ──
+document.getElementById('image-btn').addEventListener('click', () =>
+    document.getElementById('image-input').click()
+);
 
-        recognition.onresult = (e) => {
-            input.value = e.results[0][0].transcript;
-            voiceBtn.classList.remove('active', 'recording');
-            isRecording = false;
-            sendMessage();
-        };
+document.getElementById('image-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        currentImg = ev.target.result.split(',')[1];
+        document.getElementById('preview-img').src = ev.target.result;
+        document.getElementById('image-preview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+});
 
-        recognition.onerror = () => {
-            voiceBtn.classList.remove('active', 'recording');
-            isRecording = false;
-        };
-    }
+document.getElementById('remove-image').addEventListener('click', clearImage);
+function clearImage() {
+    currentImg = null;
+    document.getElementById('image-preview').style.display = 'none';
+    document.getElementById('image-input').value = '';
+}
 
-    voiceBtn.addEventListener('click', () => {
-        if (!recognition) { alert('Voice not supported in this browser'); return; }
-        if (isRecording) {
-            recognition.stop();
-            voiceBtn.classList.remove('active', 'recording');
-            isRecording = false;
-        } else {
-            recognition.start();
-            voiceBtn.classList.add('active', 'recording');
-            isRecording = true;
-        }
+// ── Input resize ──
+input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+});
+sendBtn.addEventListener('click', sendMessage);
+
+// ── Starter chips ──
+function startChat(el) {
+    input.value = el.textContent.replace(/^[^\s]+\s/, '');
+    document.getElementById('empty-state')?.remove();
+    sendMessage();
+}
+
+// ═══════════════════════════════
+//  ACTIVITY LOG
+// ═══════════════════════════════
+function logActivity(icon, text, state = 'active') {
+    actCount++;
+    document.getElementById('activity-count').textContent = actCount + ' acções';
+
+    const step = document.createElement('div');
+    step.className = 'activity-step ' + state;
+    step.innerHTML = `
+        <span class="step-icon">${icon}</span>
+        <span class="step-text">${esc(text)}</span>
+        ${state === 'active' ? '<div class="step-spinner"></div>' : ''}
+    `;
+    activityLog.appendChild(step);
+    activityLog.scrollTop = activityLog.scrollHeight;
+    return step;
+}
+
+function resolveStep(step, icon = '✅') {
+    step.classList.remove('active');
+    step.classList.add('done');
+    const spinner = step.querySelector('.step-spinner');
+    if (spinner) spinner.remove();
+    step.querySelector('.step-icon').textContent = icon;
+}
+
+function setAgentActive(agentName) {
+    document.querySelectorAll('.agent-mini').forEach(el => {
+        el.classList.toggle('active', el.dataset.agent === agentName);
     });
+}
 
-    // Image Upload (Multimodal)
-    imageBtn.addEventListener('click', () => imageInput.click());
+function clearAgentActive() {
+    document.querySelectorAll('.agent-mini').forEach(el => el.classList.remove('active'));
+}
 
-    imageInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (ev) => {
-            currentImageB64 = ev.target.result.split(',')[1];
-            previewImg.src = ev.target.result;
-            imagePreview.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-    });
+// ═══════════════════════════════
+//  MESSAGE RENDERING
+// ═══════════════════════════════
+function addMessage(role, text, agentName = '') {
+    document.getElementById('empty-state')?.remove();
 
-    removeImage.addEventListener('click', () => {
-        currentImageB64 = null;
-        imagePreview.style.display = 'none';
-        imageInput.value = '';
-    });
+    const msg  = document.createElement('div');
+    msg.className = `message ${role}`;
 
-    // Voice Output (Text-to-Speech)
-    function speak(text) {
-        if ('speechSynthesis' in window) {
-            const clean = text.replace(/[#*`]/g, '').substring(0, 300);
-            const utterance = new SpeechSynthesisUtterance(clean);
-            utterance.lang = 'pt-PT';
-            utterance.rate = 1.0;
-            speechSynthesis.speak(utterance);
-        }
-    }
+    const emoji = role === 'user'
+        ? '{{ substr(Auth::user()->name, 0, 2) }}'
+        : (AGENT_EMOJIS[agentName] || '🤖');
 
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+    const name = role === 'user'
+        ? '{{ Auth::user()->name }}'
+        : (AGENT_NAMES[agentName] || 'ClawYard');
 
-    input.addEventListener('input', () => {
-        input.style.height = 'auto';
-        input.style.height = Math.min(input.scrollHeight, 160) + 'px';
-    });
-
-    sendBtn.addEventListener('click', sendMessage);
-
-    function addMessage(role, text) {
-        const emptyState = document.getElementById('empty-state');
-        if (emptyState) emptyState.remove();
-
-        const msg = document.createElement('div');
-        msg.className = `message ${role}`;
-
-        // Check if this is an email response
-        if (role === 'ai' && text.startsWith('__EMAIL__')) {
-            const emailData = JSON.parse(text.replace('__EMAIL__', ''));
-            msg.innerHTML = `
-                <div class="avatar">📧</div>
-                <div style="flex:1;max-width:calc(100% - 48px)">
-                    <div style="font-size:11px;color:#555;margin-bottom:6px">✉️ Daniel Email — Email gerado</div>
-                    ${buildEmailCard(emailData)}
+    // Email card
+    if (role === 'ai' && text.startsWith('__EMAIL__')) {
+        const emailData = JSON.parse(text.replace('__EMAIL__', ''));
+        msg.innerHTML = `
+            <div class="avatar">${AGENT_EMOJIS['email']}</div>
+            <div class="msg-col" style="max-width:560px">
+                <div class="msg-meta">
+                    <span class="agent-tag active">📧 Daniel Email</span>
+                    <span>email gerado</span>
                 </div>
-            `;
-        } else {
-            msg.innerHTML = `
-                <div class="avatar">${role === 'user' ? '{{ substr(Auth::user()->name, 0, 1) }}' : '🤖'}</div>
-                <div class="bubble">${escapeHtml(text)}</div>
-            `;
-        }
-
+                ${buildEmailCard(emailData)}
+            </div>`;
         chat.appendChild(msg);
         chat.scrollTop = chat.scrollHeight;
         return msg;
     }
 
-    function buildEmailCard(data) {
-        const id = 'email_' + Date.now();
-        return `
-        <div class="email-card" id="${id}">
-            <div class="email-card-header">
-                <span>📧 Email Draft</span>
-                <small>${data.template || ''} · ${data.language === 'pt' ? '🇵🇹 PT' : data.language === 'es' ? '🇪🇸 ES' : '🇬🇧 EN'}</small>
+    msg.innerHTML = `
+        <div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>
+        <div class="msg-col">
+            <div class="msg-meta">
+                <span>${role === 'user' ? '{{ Auth::user()->name }}' : name}</span>
+                ${agentName ? `<span class="agent-tag ${role==='ai'?'active':''}">${AGENT_EMOJIS[agentName]||''} ${AGENT_NAMES[agentName]||agentName}</span>` : ''}
             </div>
-            <div class="email-field">
-                <label>Para</label>
-                <input type="email" id="${id}_to" value="${escapeHtml(data.to || '')}" placeholder="destinatario@empresa.com">
-            </div>
-            <div class="email-field">
-                <label>CC</label>
-                <input type="email" id="${id}_cc" placeholder="cc@empresa.com (opcional)">
-            </div>
-            <div class="email-field">
-                <label>Assunto</label>
-                <input type="text" id="${id}_subject" value="${escapeHtml(data.subject || '')}">
-            </div>
-            <div class="email-body-area" id="${id}_body" contenteditable="true">${escapeHtml(data.body || '')}</div>
-            <div class="email-actions">
-                <button class="email-send-btn" onclick="sendEmail('${id}')">
-                    ✈️ Enviar Email
-                </button>
-                <button class="email-copy-btn" onclick="copyEmail('${id}')">📋 Copiar</button>
-                <span class="email-status" id="${id}_status"></span>
+            <div class="bubble">${role === 'user' ? esc(text) : renderMarkdown(text)}</div>
+        </div>`;
+
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+    return msg;
+}
+
+function addTyping(agentName = '') {
+    const msg = document.createElement('div');
+    msg.className = 'message ai typing';
+    msg.innerHTML = `
+        <div class="avatar">${AGENT_EMOJIS[agentName] || '🤖'}</div>
+        <div class="msg-col">
+            <div class="msg-meta"><span>${AGENT_NAMES[agentName] || 'ClawYard'}</span></div>
+            <div class="bubble" style="display:flex;gap:4px;align-items:center">
+                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
             </div>
         </div>`;
-    }
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+    return msg;
+}
 
-    async function sendEmail(id) {
-        const to      = document.getElementById(id + '_to').value.trim();
-        const cc      = document.getElementById(id + '_cc').value.trim();
-        const subject = document.getElementById(id + '_subject').value.trim();
-        const body    = document.getElementById(id + '_body').innerText.trim();
-        const statusEl = document.getElementById(id + '_status');
-        const btn = document.querySelector(`#${id} .email-send-btn`);
+function addSuggestions(suggestions, agentName) {
+    if (!suggestions || !suggestions.length) return;
+    const row = document.createElement('div');
+    row.className = 'message ai';
+    row.style.paddingLeft = '42px';
+    row.innerHTML = `
+        <div class="suggestions" style="max-width:700px">
+            ${suggestions.map(s => `<button class="sugg-btn" onclick="useSuggestion(this,'${agentName}')">${esc(s)}</button>`).join('')}
+        </div>`;
+    chat.appendChild(row);
+    chat.scrollTop = chat.scrollHeight;
+}
 
-        if (!to) { statusEl.textContent = '⚠️ Insira o email do destinatário'; statusEl.className = 'email-status error'; return; }
-        if (!subject) { statusEl.textContent = '⚠️ Insira o assunto'; statusEl.className = 'email-status error'; return; }
+function useSuggestion(btn, agentName) {
+    const text = btn.textContent;
+    // Remove emoji prefix for input
+    input.value = text.replace(/^[\p{Emoji}\s]+/u, '').trim() || text;
+    // Auto-select the matching agent
+    if (text.includes('email') || text.includes('Email')) agentSelect.value = 'email';
+    btn.closest('.message').remove();
+    sendMessage();
+}
 
-        btn.disabled = true;
-        btn.textContent = '⏳ A enviar...';
-        statusEl.textContent = '';
-
-        try {
-            const res = await fetch('/api/email/send', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                },
-                body: JSON.stringify({ to, cc, subject, body }),
-            });
-            const data = await res.json();
-            if (data.success) {
-                statusEl.textContent = '✅ Enviado para ' + to;
-                statusEl.className = 'email-status sent';
-                btn.textContent = '✅ Enviado';
-            } else {
-                statusEl.textContent = '❌ ' + data.error;
-                statusEl.className = 'email-status error';
-                btn.disabled = false;
-                btn.textContent = '✈️ Enviar Email';
-            }
-        } catch (e) {
-            statusEl.textContent = '❌ Erro de ligação';
-            statusEl.className = 'email-status error';
-            btn.disabled = false;
-            btn.textContent = '✈️ Enviar Email';
-        }
-    }
-
-    function copyEmail(id) {
-        const subject = document.getElementById(id + '_subject').value;
-        const body    = document.getElementById(id + '_body').innerText;
-        navigator.clipboard.writeText('Assunto: ' + subject + '\n\n' + body);
-        const btn = document.querySelector(`#${id} .email-copy-btn`);
-        btn.textContent = '✅ Copiado!';
-        setTimeout(() => btn.textContent = '📋 Copiar', 2000);
-    }
-
-    function addTyping() {
-        const msg = document.createElement('div');
-        msg.className = 'message ai typing';
-        msg.innerHTML = `
-            <div class="avatar">AI</div>
-            <div class="bubble">
-                <div class="dot"></div>
-                <div class="dot"></div>
-                <div class="dot"></div>
+function addActionApproval(action) {
+    const id = 'action_' + Date.now();
+    const msg = document.createElement('div');
+    msg.className = 'message ai';
+    msg.style.paddingLeft = '42px';
+    msg.innerHTML = `
+        <div class="action-card" id="${id}">
+            <div class="action-card-header">
+                <span class="icon">${action.icon || '⚡'}</span>
+                <h4>${esc(action.title)}</h4>
             </div>
-        `;
-        chat.appendChild(msg);
-        chat.scrollTop = chat.scrollHeight;
-        return msg;
-    }
+            <div class="action-card-body">${esc(action.description)}</div>
+            <div class="action-btns">
+                <button class="action-approve" onclick="approveAction('${id}', '${esc(action.prompt || '')}', '${action.agent || 'auto'}')">
+                    ✅ Autorizar
+                </button>
+                <button class="action-reject" onclick="rejectAction('${id}')">
+                    ✕ Recusar
+                </button>
+            </div>
+            <div class="action-status" id="${id}_status"></div>
+        </div>`;
+    chat.appendChild(msg);
+    chat.scrollTop = chat.scrollHeight;
+}
 
-    function escapeHtml(text) {
-        return text
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-    }
+function approveAction(id, prompt, agent) {
+    document.getElementById(id + '_status').textContent = '⏳ A executar...';
+    document.getElementById(id + '_status').className = 'action-status approved';
+    document.querySelector(`#${id} .action-btns`).style.display = 'none';
+    // Switch agent and send
+    if (agent && agentSelect.querySelector(`option[value="${agent}"]`)) agentSelect.value = agent;
+    input.value = decodeURIComponent(prompt);
+    sendMessage();
+}
 
-    async function sendMessage() {
-        const text = input.value.trim();
-        if (!text) return;
+function rejectAction(id) {
+    const s = document.getElementById(id + '_status');
+    s.textContent = '✕ Acção recusada';
+    s.className = 'action-status rejected';
+    document.querySelector(`#${id} .action-btns`).style.display = 'none';
+}
 
-        input.value = '';
-        input.style.height = 'auto';
-        sendBtn.disabled = true;
+// ═══════════════════════════════
+//  EMAIL CARD
+// ═══════════════════════════════
+function buildEmailCard(data) {
+    const id = 'em_' + Date.now();
+    const lang = data.language === 'pt' ? '🇵🇹 PT' : data.language === 'es' ? '🇪🇸 ES' : '🇬🇧 EN';
+    return `
+    <div class="email-card" id="${id}">
+        <div class="email-card-header">
+            <div class="ectl">
+                <span>✉️ Email Draft</span>
+                <small>${data.template || ''} · ${lang}</small>
+            </div>
+        </div>
+        <div class="email-field">
+            <label>Para</label>
+            <input type="email" id="${id}_to" value="${esc(data.to||'')}" placeholder="destinatario@empresa.com">
+        </div>
+        <div class="email-field">
+            <label>CC</label>
+            <input type="email" id="${id}_cc" placeholder="cc@empresa.com">
+        </div>
+        <div class="email-field">
+            <label>Assunto</label>
+            <input type="text" id="${id}_subject" value="${esc(data.subject||'')}">
+        </div>
+        <div class="email-body-area" id="${id}_body" contenteditable="true">${esc(data.body||'')}</div>
+        <div class="email-actions">
+            <button class="email-send-btn" id="${id}_sendbtn" onclick="sendEmail('${id}')">
+                ✈️ Enviar
+            </button>
+            <button class="email-copy-btn" onclick="copyEmail('${id}')">📋 Copiar</button>
+            <button class="email-edit-btn" onclick="editEmail('${id}')">✏️</button>
+            <span class="email-status" id="${id}_status"></span>
+        </div>
+    </div>`;
+}
 
-        addMessage('user', text);
-        history.push({ role: 'user', content: text });
+async function sendEmail(id) {
+    const to      = document.getElementById(id+'_to').value.trim();
+    const cc      = document.getElementById(id+'_cc').value.trim();
+    const subject = document.getElementById(id+'_subject').value.trim();
+    const body    = document.getElementById(id+'_body').innerText.trim();
+    const statusEl = document.getElementById(id+'_status');
+    const btn      = document.getElementById(id+'_sendbtn');
 
-        const typing = addTyping();
+    if (!to) { statusEl.textContent='⚠️ Insira email do destinatário'; statusEl.className='email-status err'; return; }
+    if (!subject) { statusEl.textContent='⚠️ Insira assunto'; statusEl.className='email-status err'; return; }
 
-        try {
-            const selectedAgent = agentSelect ? agentSelect.value : 'auto';
+    btn.disabled = true;
+    btn.textContent = '⏳ A enviar...';
 
-            const payload = {
-                message: text,
-                agent: selectedAgent,
-                session_id: sessionId,
-            };
+    const step = logActivity('📤', 'A enviar email para ' + to + '…');
 
-            if (currentImageB64) {
-                payload.image = currentImageB64;
-                currentImageB64 = null;
-                imagePreview.style.display = 'none';
-                imageInput.value = '';
-            }
-
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                },
-                body: JSON.stringify(payload),
-            });
-
-            const data = await res.json();
-            typing.remove();
-
-            if (data.success) {
-                addMessage('ai', data.reply);
-                history.push({ role: 'assistant', content: data.reply });
-                modelName.textContent = data.model || data.agents?.join(', ') || selectedAgent;
-                // Voice output
-                if (selectedAgent !== 'orchestrator') speak(data.reply);
-            } else {
-                addMessage('ai', '❌ Error: ' + data.error);
-            }
-        } catch (err) {
-            typing.remove();
-            addMessage('ai', '❌ Connection error. Please try again.');
-        } finally {
-            sendBtn.disabled = false;
-            input.focus();
+    try {
+        const res = await fetch('/api/email/send', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: JSON.stringify({ to, cc, subject, body }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            statusEl.textContent = '✅ Enviado para ' + to;
+            statusEl.className = 'email-status sent';
+            btn.textContent = '✅ Enviado';
+            resolveStep(step, '✅');
+            logActivity('✅', 'Email enviado com sucesso para ' + to, 'done');
+        } else {
+            statusEl.textContent = '❌ ' + data.error;
+            statusEl.className = 'email-status err';
+            btn.disabled = false;
+            btn.textContent = '✈️ Enviar';
+            resolveStep(step, '❌');
         }
+    } catch (e) {
+        statusEl.textContent = '❌ Erro de ligação';
+        statusEl.className = 'email-status err';
+        btn.disabled = false;
+        btn.textContent = '✈️ Enviar';
+        resolveStep(step, '❌');
     }
+}
+
+function copyEmail(id) {
+    const subject = document.getElementById(id+'_subject').value;
+    const body    = document.getElementById(id+'_body').innerText;
+    navigator.clipboard.writeText('Assunto: '+subject+'\n\n'+body);
+    const btn = document.querySelector(`#${id} .email-copy-btn`);
+    btn.textContent = '✅ Copiado!';
+    setTimeout(() => btn.textContent = '📋 Copiar', 2000);
+}
+
+function editEmail(id) {
+    const bodyEl = document.getElementById(id+'_body');
+    bodyEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(bodyEl);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+}
+
+// ═══════════════════════════════
+//  MARKDOWN RENDERER
+// ═══════════════════════════════
+function renderMarkdown(text) {
+    return esc(text)
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/`(.+?)`/g, '<code>$1</code>')
+        .replace(/^---$/gm, '<hr>')
+        .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>(\n|$))+/g, (m) => `<ul>${m}</ul>`)
+        .replace(/\n/g, '<br>');
+}
+
+function esc(text) {
+    if (typeof text !== 'string') return '';
+    return text
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+        .replace(/'/g,'&#039;');
+}
+
+// ── TTS ──
+function speak(text) {
+    if ('speechSynthesis' in window) {
+        const utt = new SpeechSynthesisUtterance(text.replace(/[#*`<>]/g,'').substring(0,300));
+        utt.lang = 'pt-PT';
+        speechSynthesis.speak(utt);
+    }
+}
+
+// ═══════════════════════════════
+//  SEND MESSAGE
+// ═══════════════════════════════
+async function sendMessage() {
+    const text = input.value.trim();
+    if (!text || sendBtn.disabled) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.disabled = true;
+
+    const selectedAgent = agentSelect.value;
+    document.getElementById('empty-state')?.remove();
+
+    // ── User message ──
+    addMessage('user', text);
+
+    // ── Activity log ──
+    logActivity('📨', 'Mensagem recebida: "' + text.substring(0,50) + (text.length>50?'…':'') + '"', 'done');
+    const stepRAG    = logActivity('📚', 'A consultar base de conhecimento (RAG)…');
+    const stepAgent  = logActivity('🤖', 'A encaminhar para agente ' + (AGENT_NAMES[selectedAgent]||selectedAgent) + '…');
+    setAgentActive(selectedAgent);
+    modelBadge.textContent = '⏳ ' + (AGENT_NAMES[selectedAgent]||selectedAgent);
+
+    const typing = addTyping(selectedAgent);
+
+    try {
+        const payload = { message: text, agent: selectedAgent, session_id: SESSION_ID };
+        if (currentImg) {
+            payload.image = currentImg;
+            clearImage();
+            logActivity('🖼️', 'Imagem incluída (multimodal)', 'done');
+        }
+
+        resolveStep(stepRAG);
+
+        const res  = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+
+        typing.remove();
+        resolveStep(stepAgent);
+
+        if (data.success) {
+            const agent = data.agent || selectedAgent;
+
+            // ── Log agent actions ──
+            if (data.agent_log) {
+                data.agent_log.forEach(l => logActivity(l.icon, l.text, 'done'));
+            }
+
+            // ── Add response ──
+            addMessage('ai', data.reply, agent);
+
+            modelBadge.textContent = data.model || data.agents?.join(', ') || agent;
+
+            // ── Suggestions ──
+            if (data.suggestions) {
+                addSuggestions(data.suggestions, agent);
+            }
+
+            // ── Autonomous action proposal ──
+            if (data.reply && !data.reply.startsWith('__EMAIL__')) {
+                const replyLower = data.reply.toLowerCase();
+
+                // If sales/support mentions competitors → propose analysis
+                if (replyLower.includes('concorrente') || replyLower.includes('competitor')) {
+                    setTimeout(() => addActionApproval({
+                        icon: '🔍',
+                        title: 'Análise de concorrentes detectada',
+                        description: 'Posso pesquisar automaticamente os concorrentes mencionados na base de dados de portos e enviar-lhe um email com o relatório completo.',
+                        agent: 'email',
+                        prompt: encodeURIComponent('Escreve um email com análise dos concorrentes nos portos europeus para enviar ao CEO'),
+                    }), 800);
+                }
+
+                // If email mentioned → propose email creation
+                if ((replyLower.includes('proposta') || replyLower.includes('proposal')) && agent !== 'email') {
+                    setTimeout(() => addActionApproval({
+                        icon: '📧',
+                        title: 'Transformar em email profissional?',
+                        description: 'O agente gerou uma proposta. Queres que o Daniel Email a transforme num email profissional pronto a enviar?',
+                        agent: 'email',
+                        prompt: encodeURIComponent('Transforma em email profissional: ' + data.reply.substring(0,300)),
+                    }), 800);
+                }
+            }
+
+            // ── TTS ──
+            if (selectedAgent !== 'orchestrator' && !data.reply.startsWith('__EMAIL__')) {
+                speak(data.reply);
+            }
+        } else {
+            addMessage('ai', '❌ Erro: ' + (data.error || 'Erro desconhecido'));
+            logActivity('❌', 'Erro: ' + (data.error||''), 'done');
+        }
+    } catch (err) {
+        typing.remove();
+        addMessage('ai', '❌ Erro de ligação. Verifica a configuração da API.');
+        logActivity('❌', 'Erro de ligação: ' + err.message, 'done');
+    } finally {
+        sendBtn.disabled = false;
+        clearAgentActive();
+        modelBadge.textContent = 'pronto';
+        input.focus();
+    }
+}
 </script>
 
 </body>

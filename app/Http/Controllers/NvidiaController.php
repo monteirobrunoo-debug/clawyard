@@ -94,10 +94,18 @@ class NvidiaController extends Controller
                 ? $this->agentManager->route($message)
                 : $this->agentManager->agent($agentName);
 
+            $agentLog = [
+                ['icon' => '🔍', 'text' => 'A analisar a mensagem...', 'done' => true],
+                ['icon' => '📚', 'text' => 'A consultar base de conhecimento (RAG)...', 'done' => true],
+                ['icon' => '🤖', 'text' => 'Agente ' . ucfirst($agent->getName()) . ' a processar...', 'done' => true],
+            ];
+
             $reply = $agent->chat(
                 is_array($augmentedMessage) ? json_encode($augmentedMessage) : $augmentedMessage,
                 $history
             );
+
+            $agentLog[] = ['icon' => '✅', 'text' => 'Resposta pronta', 'done' => true];
 
             // Save assistant reply (Memory)
             $conversation->messages()->create([
@@ -107,12 +115,14 @@ class NvidiaController extends Controller
             ]);
 
             return response()->json([
-                'success'    => true,
-                'mode'       => 'single',
-                'reply'      => $reply,
-                'agent'      => $agent->getName(),
-                'model'      => $agent->getModel(),
-                'session_id' => $sessionId,
+                'success'      => true,
+                'mode'         => 'single',
+                'reply'        => $reply,
+                'agent'        => $agent->getName(),
+                'model'        => $agent->getModel(),
+                'session_id'   => $sessionId,
+                'agent_log'    => $agentLog,
+                'suggestions'  => $this->getSuggestions($agent->getName(), $message),
             ]);
 
         } catch (\Exception $e) {
@@ -170,6 +180,74 @@ class NvidiaController extends Controller
         return response()->json([
             'messages' => $conversation->messages()->orderBy('created_at')->get(),
         ]);
+    }
+
+    /**
+     * Generate contextual suggestions based on agent and message.
+     */
+    protected function getSuggestions(string $agent, string $message): array
+    {
+        $suggestions = [
+            'email'    => [
+                '📧 Enviar este email agora',
+                '🌍 Traduzir para inglês',
+                '📋 Criar versão formal',
+                '📤 Enviar para outro destinatário',
+            ],
+            'sales'    => [
+                '💰 Gerar proposta comercial completa',
+                '📧 Enviar proposta por email',
+                '🏷️ Ver lista de preços',
+                '📊 Comparar com concorrentes',
+            ],
+            'support'  => [
+                '📄 Ver documentação técnica',
+                '🔧 Abrir ticket de suporte',
+                '📞 Escalar para técnico',
+                '📧 Enviar relatório por email',
+            ],
+            'sap'      => [
+                '📦 Ver stock actual',
+                '🧾 Gerar ordem de compra',
+                '📊 Relatório financeiro',
+                '📧 Enviar relatório SAP',
+            ],
+            'document' => [
+                '📤 Carregar outro documento',
+                '📧 Enviar resumo por email',
+                '🔍 Pesquisar mais documentos',
+                '📋 Exportar análise',
+            ],
+            'maritime' => [
+                '🚢 Ver portos disponíveis',
+                '📊 Analisar concorrentes',
+                '📧 Contactar armador por email',
+                '🗺️ Ver rotas marítimas',
+            ],
+            'claude'   => [
+                '🔄 Reformular resposta',
+                '📧 Criar email com este conteúdo',
+                '📊 Análise mais detalhada',
+                '🌍 Traduzir',
+            ],
+            'nvidia'   => [
+                '🔄 Gerar alternativa',
+                '📧 Enviar resultado por email',
+                '📊 Ver mais detalhes',
+                '🤖 Modo multi-agente',
+            ],
+        ];
+
+        $default = [
+            '📧 Criar email sobre este tema',
+            '📊 Análise mais detalhada',
+            '🔄 Reformular',
+            '🚢 Pesquisar portos relacionados',
+        ];
+
+        $list = $suggestions[$agent] ?? $default;
+        shuffle($list);
+        return array_slice($list, 0, 3);
     }
 
     protected function combineReplies(array $results): string
