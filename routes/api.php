@@ -14,7 +14,7 @@ Route::post('/whatsapp/webhook', [WhatsAppController::class, 'webhook'])
     ->middleware('throttle:120,1');
 
 // ─── AUTHENTICATED + RATE LIMITED ─────────────────────────────────────────
-Route::middleware(['auth', 'throttle:60,1'])->group(function () {
+Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
 
     // Chat API (Memory + RAG + Multimodal)
     Route::post('/chat', [NvidiaController::class, 'chat']);
@@ -38,7 +38,7 @@ Route::middleware(['auth', 'throttle:60,1'])->group(function () {
 });
 
 // ─── ADMIN ONLY ────────────────────────────────────────────────────────────
-Route::middleware(['auth', 'admin', 'throttle:30,1'])->group(function () {
+Route::middleware(['auth:web', 'admin', 'throttle:30,1'])->group(function () {
 
     // RAG document upload — admin only
     Route::post('/documents', [NvidiaController::class, 'uploadDocument']);
