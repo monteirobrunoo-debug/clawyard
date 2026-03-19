@@ -317,6 +317,25 @@ class NvidiaController extends Controller
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
             }
 
+            // Auto-save report for quantum + aria digests (no button needed)
+            if (in_array($agentName_final, ['quantum','aria']) && strlen($fullReply) > 200) {
+                try {
+                    $agentLabel = $agentName_final === 'quantum' ? 'Prof. Quantum Leap' : 'ARIA Security';
+                    $date       = now()->format('d/m/Y H:i');
+                    \App\Models\Report::firstOrCreate(
+                        ['title' => $agentLabel . ' — ' . now()->format('Y-m-d')],
+                        [
+                            'user_id' => auth()->id(),
+                            'type'    => $agentName_final === 'quantum' ? 'quantum' : 'aria',
+                            'content' => $fullReply,
+                            'summary' => substr(strip_tags($fullReply), 0, 300),
+                        ]
+                    );
+                } catch (\Throwable $e) {
+                    \Log::warning('ClawYard: could not auto-save report — ' . $e->getMessage());
+                }
+            }
+
             echo "data: [DONE]\n\n";
             ob_flush(); flush();
         }, 200, [
