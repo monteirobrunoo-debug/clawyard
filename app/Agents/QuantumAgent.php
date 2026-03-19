@@ -142,9 +142,13 @@ PROMPT;
         $data = json_decode($response->getBody()->getContents(), true);
         $text = $data['content'][0]['text'] ?? '';
 
-        // Auto-save discoveries if the message is a digest request
+        // Auto-save discoveries if the message is a digest request (silently — never break chat)
         if ($this->isDigestRequest($message)) {
-            $this->saveDiscoveriesFromResponse($text);
+            try {
+                $this->saveDiscoveriesFromResponse($text);
+            } catch (\Throwable $e) {
+                \Log::warning('QuantumAgent: could not save discoveries — ' . $e->getMessage());
+            }
         }
 
         // Strip the JSON block from the displayed response
