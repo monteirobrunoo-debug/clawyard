@@ -87,50 +87,57 @@
 
     <div class="task-grid">
 
-        <!-- ARIA -->
+        <!-- ARIA 3x -->
         <div class="task-card active">
             <div class="task-icon">🔐</div>
             <div class="task-info">
-                <div class="task-name">ARIA — Daily Security Scan</div>
+                <div class="task-name">ARIA — Security Scan × 3 / dia</div>
                 <div class="task-desc">
-                    Scan diário STRIDE + OWASP Top 10 dos sites do grupo H&P.
+                    Scan STRIDE + OWASP Top 10 três vezes por dia de todos os sites do grupo H&P.
                     Analisa www.partyard.eu, www.hp-group.org e todas as empresas associadas.
                     Reporta vulnerabilidades por severidade com mitigações recomendadas.
                 </div>
                 <div class="task-meta">
-                    <span class="tag green">🟢 Activo</span>
-                    <span class="tag">⏰ Todos os dias às 07:00</span>
-                    <span class="tag blue">STRIDE · OWASP · SSL</span>
-                    <span class="tag">partyard.eu · hp-group.org</span>
+                    <span class="tag green">🟢 Activo × 3</span>
+                    <span class="tag">⏰ 07:00 · 13:00 · 19:00</span>
+                    <span class="tag blue">STRIDE · OWASP · SSL · Headers</span>
+                    <span class="tag">partyard.eu · hp-group.org + subsidiárias</span>
                 </div>
             </div>
             <div class="task-actions">
                 <div class="status-dot"></div>
-                <span style="font-size:11px;color:#555;">Próxima: amanhã 07:00</span>
+                <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+                    <span style="font-size:11px;color:#76b900;">🌅 07:00 manhã</span>
+                    <span style="font-size:11px;color:#76b900;">☀️ 13:00 tarde</span>
+                    <span style="font-size:11px;color:#76b900;">🌆 19:00 noite</span>
+                </div>
             </div>
         </div>
 
-        <!-- QUANTUM LEAP -->
+        <!-- QUANTUM LEAP 3x -->
         <div class="task-card active">
             <div class="task-icon">⚛️</div>
             <div class="task-info">
-                <div class="task-name">Prof. Quantum Leap — Daily Digest</div>
+                <div class="task-name">Prof. Quantum Leap — Digest × 3 / dia</div>
                 <div class="task-desc">
-                    Digest diário de ciência e inovação industrial.
-                    <strong>Parte 1:</strong> Top 5 papers de quantum computing do arXiv.
-                    <strong>Parte 2:</strong> Top 7 patentes USPTO analisadas estrategicamente para PartYard/HP-Group
-                    — oportunidades de licensing, novos produtos, parceiros e ameaças competitivas.
+                    <strong>08:00 Manhã:</strong> Top 5 papers arXiv + Top 7 patentes USPTO para PartYard/HP-Group.<br>
+                    <strong>14:00 Tarde:</strong> Update arXiv + 5 novas patentes (marine propulsion, MTU, CAT, IoT).<br>
+                    <strong>20:00 Noite:</strong> Resumo do dia + Top 1 patente a actuar amanhã + oportunidades para o dia seguinte.
                 </div>
                 <div class="task-meta">
-                    <span class="tag green">🟢 Activo</span>
-                    <span class="tag">⏰ Todos os dias às 08:00</span>
+                    <span class="tag green">🟢 Activo × 3</span>
+                    <span class="tag">⏰ 08:00 · 14:00 · 20:00</span>
                     <span class="tag blue">arXiv · USPTO · patents.google.com</span>
-                    <span class="tag">MTU · CAT · MAK · SKF · Schottel</span>
+                    <span class="tag">MTU · CAT · MAK · SKF · Schottel · Jenbacher</span>
                 </div>
             </div>
             <div class="task-actions">
                 <div class="status-dot"></div>
-                <span style="font-size:11px;color:#555;">Próxima: amanhã 08:00</span>
+                <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;">
+                    <span style="font-size:11px;color:#76b900;">🌅 08:00 manhã</span>
+                    <span style="font-size:11px;color:#76b900;">☀️ 14:00 tarde</span>
+                    <span style="font-size:11px;color:#76b900;">🌆 20:00 noite</span>
+                </div>
             </div>
         </div>
 
