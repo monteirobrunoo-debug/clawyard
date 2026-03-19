@@ -904,10 +904,22 @@ async function sendMessage() {
 
         const res  = await fetch('/api/chat', {
             method: 'POST',
-            headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF },
+            headers: { 'Content-Type':'application/json', 'Accept':'application/json', 'X-CSRF-TOKEN': CSRF },
             body: JSON.stringify(payload),
         });
-        const data = await res.json();
+
+        // Try to parse JSON — if server returns HTML (fatal error), catch that separately
+        let data;
+        if (!res.ok && res.status !== 422) {
+            const raw = await res.text();
+            typing.remove();
+            const snippet = raw.replace(/<[^>]+>/g,'').trim().substring(0,200);
+            addMessage('ai', `❌ Erro HTTP ${res.status}: ${snippet || 'Sem detalhe'}`);
+            logActivity('❌', `HTTP ${res.status}`, 'done');
+            sendBtn.disabled = false; clearAgentActive(); modelBadge.textContent = 'pronto'; input.focus();
+            return;
+        }
+        data = await res.json();
 
         typing.remove();
         resolveStep(stepAgent);
