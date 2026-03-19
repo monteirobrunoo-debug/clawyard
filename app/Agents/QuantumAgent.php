@@ -8,26 +8,10 @@ use GuzzleHttp\Client;
 class QuantumAgent implements AgentInterface
 {
     protected Client $client;
+    protected Client $httpClient;
 
     protected string $systemPrompt = <<<'PROMPT'
-You are Professor Quantum Leap, an expert AI researcher, science communicator, and strategic innovation analyst.
-
-YOUR TWO ROLES:
-
-## ROLE 1 — QUANTUM SCIENCE (arXiv Monitor)
-You specialise in:
-- Quantum computing and quantum algorithms
-- Quantum cryptography and post-quantum security
-- Quantum machine learning and AI
-- Quantum communication and quantum networks
-- Quantum sensing and metrology
-
-Daily you monitor https://arxiv.org/search/?query=quantum&searchtype=all for the latest papers.
-- Rate accessibility: 🟢 Accessible / 🟡 Technical / 🔴 Expert
-- Always link to the PDF: https://arxiv.org/pdf/[ID]
-- Explain with analogies and real-world impact
-
-## ROLE 2 — USPTO PATENT STRATEGIST for PartYard / HP-Group
+You are Professor Quantum Leap, expert AI researcher, science communicator, and strategic innovation analyst for PartYard / HP-Group.
 
 COMPANY CONTEXT:
 PartYard (www.partyard.eu) — marine spare parts, Setúbal Portugal.
@@ -35,32 +19,21 @@ Brands: MTU, Caterpillar, MAK, Jenbacher, SKF SternTube seals, Schottel propulsi
 Certifications: ISO 9001, NCAGE P3527 (NATO), AS:9120.
 HP-Group (www.hp-group.org) — parent group; maritime, defense, industrial, technology.
 
-Daily you scan https://www.uspto.gov/patents/search and https://patents.google.com for new patents in:
-- Marine propulsion and engine components
-- Predictive maintenance / IoT for vessels
-- Maritime digital platforms and supply chain
-- Defense supply chain technology
-- Gas engine improvements
-- Bearing and seal technology
-- Thruster and propulsion systems
-- AI/ML for industrial maintenance
-- 3D printing for marine spare parts
-
-For each patent you assess:
-- Technical relevance to PartYard's brands
-- Business opportunity (license, new product line, partnership, investment)
-- Competitive threat
-- Strategic recommendation
+YOUR ROLE:
+- Analyse REAL data provided to you (arXiv papers and patents fetched today)
+- Rate papers: 🟢 Accessible / 🟡 Technical / 🔴 Expert
+- For patents: assess technical relevance, business opportunity, competitive threat
 - Priority: 🔴 Act now / 🟠 Monitor closely / 🟡 Watch / 🟢 Awareness
+- Think like a CTO + Chief Strategy Officer combined
 
 REPORTING:
-When asked for the daily digest, produce BOTH parts:
-- Part 1: Top 5 quantum papers from arXiv
-- Part 2: Top 7 USPTO patents with strategic analysis for PartYard/HP-Group
-- End with Professor's Strategic Insight (quantum + patents combined)
+When given real data, produce:
+- Part 1: Top 5 quantum/tech papers analysis
+- Part 2: Top 7 patents with strategic analysis for PartYard/HP-Group
+- End with Professor's Strategic Insight
 
 IMPORTANT — STRUCTURED DATA OUTPUT:
-When producing a digest that includes papers or patents, ALWAYS append at the very end a JSON block using exactly this format (hidden from display, used by system to save to database):
+Always append at the very end a JSON block (hidden from display):
 
 <!-- DISCOVERIES_JSON
 [
@@ -78,21 +51,6 @@ When producing a digest that includes papers or patents, ALWAYS append at the ve
     "recommendation": "Strategic recommendation",
     "url": "https://arxiv.org/pdf/2401.12345",
     "published_date": "2026-03-19"
-  },
-  {
-    "source": "uspto",
-    "reference_id": "US12345678",
-    "title": "Patent title",
-    "authors": "Inventor Name",
-    "summary": "Plain language 2-3 sentence summary",
-    "category": "propulsion",
-    "activity_types": ["Propulsão Naval", "Manutenção Preditiva"],
-    "priority": "monitor",
-    "relevance_score": 8,
-    "opportunity": "Licensing opportunity or competitive threat",
-    "recommendation": "Strategic recommendation for PartYard",
-    "url": "https://patents.google.com/patent/US12345678",
-    "published_date": "2026-03-19"
   }
 ]
 DISCOVERIES_JSON -->
@@ -102,14 +60,26 @@ Valid priorities: act_now, monitor, watch, awareness
 Valid activity_types: "Propulsão Naval", "Manutenção Preditiva", "Defesa & Naval Militar", "Vedantes & Rolamentos", "Plataforma Digital", "Energia & Combustível", "Materiais & Fabrico", "Quantum & Computação", "Supply Chain & Logística", "AI & Machine Learning", "Outro"
 
 Respond in the same language as the user (Portuguese, English or Spanish).
-Think like a CTO + Chief Strategy Officer combined.
 PROMPT;
 
-    // Keywords that trigger digest/patent analysis (auto-save discoveries)
     protected array $digestKeywords = [
         'digest', 'patentes', 'patent', 'arxiv', 'uspto', 'papers',
         'descobertas', 'discoveries', 'análise diária', 'daily',
-        'resumos', 'hoje', 'today', 'melhores patentes',
+        'resumos', 'hoje', 'today', 'melhores patentes', 'novas patentes',
+    ];
+
+    protected array $arxivTopics = [
+        'quantum computing',
+        'quantum cryptography',
+        'quantum machine learning',
+    ];
+
+    protected array $patentTopics = [
+        'marine propulsion engine',
+        'predictive maintenance vessel',
+        'maritime digital platform',
+        'bearing seal marine',
+        'thruster propulsion system',
     ];
 
     public function __construct()
@@ -122,12 +92,105 @@ PROMPT;
                 'Content-Type'      => 'application/json',
             ],
         ]);
+
+        $this->httpClient = new Client([
+            'timeout'         => 15,
+            'connect_timeout' => 8,
+            'headers'         => ['User-Agent' => 'ClawYard/1.0 (research@hp-group.org)'],
+        ]);
     }
 
+    // ─── Fetch real arXiv papers ───────────────────────────────────────────
+    protected function fetchArxivPapers(): string
+    {
+        try {
+            $query   = urlencode('quantum computing OR quantum cryptography OR quantum machine learning');
+            $url     = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=8&sortBy=submittedDate&sortOrder=descending";
+            $xml     = $this->httpClient->get($url)->getBody()->getContents();
+            $feed    = simplexml_load_string($xml);
+            if (!$feed) return '(arXiv unavailable)';
+
+            $papers = [];
+            foreach ($feed->entry as $entry) {
+                $id      = basename((string) $entry->id);
+                $authors = implode(', ', array_slice(array_map(fn($a) => (string)$a->name, iterator_to_array($entry->author)), 0, 3));
+                $papers[] = "- [{$id}] " . trim((string) $entry->title) . " | Authors: {$authors} | Published: " . substr((string) $entry->published, 0, 10) . " | URL: https://arxiv.org/abs/{$id} | Abstract: " . substr(trim((string) $entry->summary), 0, 300) . '...';
+            }
+
+            return implode("\n", $papers) ?: '(no arXiv results)';
+        } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent: arXiv fetch failed — ' . $e->getMessage());
+            return '(arXiv fetch error: ' . $e->getMessage() . ')';
+        }
+    }
+
+    // ─── Fetch real patents via Google Patents RSS ─────────────────────────
+    protected function fetchPatents(): string
+    {
+        $allPatents = [];
+
+        foreach (array_slice($this->patentTopics, 0, 3) as $topic) {
+            try {
+                $q    = urlencode($topic);
+                $url  = "https://patents.google.com/rss/query?q={$q}&before=priority:20260320&after=priority:20250101&num=5";
+                $xml  = $this->httpClient->get($url)->getBody()->getContents();
+                $feed = simplexml_load_string($xml);
+                if (!$feed) continue;
+
+                $channel = $feed->channel ?? null;
+                if (!$channel) continue;
+
+                foreach ($channel->item as $item) {
+                    $title = trim((string) $item->title);
+                    $link  = trim((string) $item->link);
+                    $desc  = substr(trim(strip_tags((string) $item->description)), 0, 250);
+                    $date  = trim((string) ($item->pubDate ?? ''));
+                    if ($title && $link) {
+                        $allPatents[] = "- [{$topic}] {$title} | URL: {$link} | Date: {$date} | Abstract: {$desc}...";
+                    }
+                    if (count($allPatents) >= 10) break 2;
+                }
+            } catch (\Throwable $e) {
+                \Log::warning("QuantumAgent: patent fetch failed for '{$topic}' — " . $e->getMessage());
+            }
+        }
+
+        return $allPatents ? implode("\n", array_slice($allPatents, 0, 8)) : '(patent data unavailable — use your knowledge of recent patents)';
+    }
+
+    // ─── Build enriched message with real data ─────────────────────────────
+    protected function buildDigestMessage(string $userMessage): string
+    {
+        $today   = now()->format('Y-m-d');
+        $papers  = $this->fetchArxivPapers();
+        $patents = $this->fetchPatents();
+
+        return <<<MSG
+{$userMessage}
+
+--- REAL DATA FETCHED TODAY ({$today}) ---
+
+## arXiv Papers (fetched live from export.arxiv.org):
+{$papers}
+
+## Patent Data (fetched live from Google Patents RSS):
+{$patents}
+
+--- END REAL DATA ---
+
+Please analyse ALL the above real data. Use the actual paper IDs, titles, authors and dates provided above. Do NOT invent papers or patents — only analyse what is in the real data above.
+MSG;
+    }
+
+    // ─── chat() ────────────────────────────────────────────────────────────
     public function chat(string $message, array $history = []): string
     {
+        $finalMessage = $this->isDigestRequest($message)
+            ? $this->buildDigestMessage($message)
+            : $message;
+
         $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $message],
+            ['role' => 'user', 'content' => $finalMessage],
         ]);
 
         $response = $this->client->post('/v1/messages', [
@@ -142,71 +205,23 @@ PROMPT;
         $data = json_decode($response->getBody()->getContents(), true);
         $text = $data['content'][0]['text'] ?? '';
 
-        // Auto-save discoveries if the message is a digest request (silently — never break chat)
         if ($this->isDigestRequest($message)) {
-            try {
-                $this->saveDiscoveriesFromResponse($text);
-            } catch (\Throwable $e) {
+            try { $this->saveDiscoveriesFromResponse($text); } catch (\Throwable $e) {
                 \Log::warning('QuantumAgent: could not save discoveries — ' . $e->getMessage());
             }
         }
 
-        // Strip the JSON block from the displayed response
-        $clean = preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $text);
-        return trim($clean);
+        return trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $text));
     }
 
-    protected function isDigestRequest(string $message): bool
-    {
-        $lower = strtolower($message);
-        foreach ($this->digestKeywords as $kw) {
-            if (str_contains($lower, $kw)) return true;
-        }
-        return false;
-    }
-
-    protected function saveDiscoveriesFromResponse(string $text): void
-    {
-        // Extract JSON block
-        if (!preg_match('/<!--\s*DISCOVERIES_JSON\s*([\s\S]*?)\s*DISCOVERIES_JSON\s*-->/m', $text, $matches)) {
-            return;
-        }
-
-        $json = trim($matches[1]);
-        $items = json_decode($json, true);
-        if (!is_array($items)) return;
-
-        foreach ($items as $item) {
-            // Skip if already exists (same source + reference_id)
-            if (!empty($item['reference_id'])) {
-                $exists = Discovery::where('source', $item['source'] ?? '')
-                    ->where('reference_id', $item['reference_id'])
-                    ->exists();
-                if ($exists) continue;
-            }
-
-            Discovery::create([
-                'source'          => $item['source']          ?? 'arxiv',
-                'reference_id'    => $item['reference_id']    ?? null,
-                'title'           => $item['title']           ?? 'Sem título',
-                'authors'         => $item['authors']         ?? null,
-                'summary'         => $item['summary']         ?? '',
-                'category'        => $item['category']        ?? 'other',
-                'activity_types'  => $item['activity_types']  ?? [],
-                'priority'        => $item['priority']        ?? 'watch',
-                'relevance_score' => $item['relevance_score'] ?? 5,
-                'opportunity'     => $item['opportunity']     ?? null,
-                'recommendation'  => $item['recommendation']  ?? null,
-                'url'             => $item['url']             ?? null,
-                'published_date'  => $item['published_date']  ?? null,
-            ]);
-        }
-    }
-
+    // ─── stream() ──────────────────────────────────────────────────────────
     public function stream(string $message, array $history, callable $onChunk): string
     {
+        $isDigest     = $this->isDigestRequest($message);
+        $finalMessage = $isDigest ? $this->buildDigestMessage($message) : $message;
+
         $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $message],
+            ['role' => 'user', 'content' => $finalMessage],
         ]);
 
         $response = $this->client->post('/v1/messages', [
@@ -239,25 +254,64 @@ PROMPT;
                     && ($evt['delta']['type'] ?? '') === 'text_delta') {
                     $text = $evt['delta']['text'] ?? '';
                     if ($text !== '') {
+                        // Don't stream the hidden JSON block to the user
                         $full .= $text;
-                        $onChunk($text);
+                        if (!str_contains($full, '<!-- DISCOVERIES_JSON')) {
+                            $onChunk($text);
+                        }
                     }
                 }
             }
         }
 
-        // Auto-save discoveries if this is a digest request
-        if ($this->isDigestRequest($message)) {
-            try {
-                $this->saveDiscoveriesFromResponse($full);
-            } catch (\Throwable $e) {
+        if ($isDigest) {
+            try { $this->saveDiscoveriesFromResponse($full); } catch (\Throwable $e) {
                 \Log::warning('QuantumAgent stream: could not save discoveries — ' . $e->getMessage());
             }
         }
 
-        // Strip the hidden JSON block before returning
-        $clean = preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $full);
-        return trim($clean);
+        return trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $full));
+    }
+
+    // ─── Helpers ───────────────────────────────────────────────────────────
+    protected function isDigestRequest(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->digestKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    protected function saveDiscoveriesFromResponse(string $text): void
+    {
+        if (!preg_match('/<!--\s*DISCOVERIES_JSON\s*([\s\S]*?)\s*DISCOVERIES_JSON\s*-->/m', $text, $matches)) return;
+
+        $items = json_decode(trim($matches[1]), true);
+        if (!is_array($items)) return;
+
+        foreach ($items as $item) {
+            if (!empty($item['reference_id'])) {
+                $exists = Discovery::where('source', $item['source'] ?? '')
+                    ->where('reference_id', $item['reference_id'])->exists();
+                if ($exists) continue;
+            }
+            Discovery::create([
+                'source'          => $item['source']          ?? 'arxiv',
+                'reference_id'    => $item['reference_id']    ?? null,
+                'title'           => $item['title']           ?? 'Sem título',
+                'authors'         => $item['authors']         ?? null,
+                'summary'         => $item['summary']         ?? '',
+                'category'        => $item['category']        ?? 'other',
+                'activity_types'  => $item['activity_types']  ?? [],
+                'priority'        => $item['priority']        ?? 'watch',
+                'relevance_score' => $item['relevance_score'] ?? 5,
+                'opportunity'     => $item['opportunity']     ?? null,
+                'recommendation'  => $item['recommendation']  ?? null,
+                'url'             => $item['url']             ?? null,
+                'published_date'  => $item['published_date']  ?? null,
+            ]);
+        }
     }
 
     public function getName(): string { return 'quantum'; }
