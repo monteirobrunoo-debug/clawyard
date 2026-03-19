@@ -75,7 +75,7 @@ PROMPT;
         return $data['content'][0]['text'] ?? '';
     }
 
-    public function stream(string $message, array $history, callable $onChunk): string
+    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],

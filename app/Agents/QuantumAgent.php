@@ -261,13 +261,18 @@ PROMPT;
         }
     }
 
-    // ─── Build enriched message with real data ─────────────────────────────
+    // ─── Build enriched message (pre-fetched data) ─────────────────────────
     protected function buildDigestMessage(string $userMessage): string
     {
-        $today   = now()->format('Y-m-d');
         $arxiv   = $this->fetchArxivPapers();
         $peerj   = $this->fetchPeerJPapers();
         $patents = $this->fetchPatents();
+        return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj, $patents);
+    }
+
+    protected function buildDigestMessageFromData(string $userMessage, string $arxiv, string $peerj, string $patents): string
+    {
+        $today   = now()->format('Y-m-d');
 
         return <<<MSG
 {$userMessage}
@@ -323,10 +328,21 @@ MSG;
     }
 
     // ─── stream() ──────────────────────────────────────────────────────────
-    public function stream(string $message, array $history, callable $onChunk): string
+    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $isDigest     = $this->isDigestRequest($message);
-        $finalMessage = $isDigest ? $this->buildDigestMessage($message) : $message;
+        $isDigest = $this->isDigestRequest($message);
+
+        if ($isDigest) {
+            if ($heartbeat) $heartbeat('fetching arXiv');
+            $arxiv = $this->fetchArxivPapers();
+            if ($heartbeat) $heartbeat('fetching PeerJ');
+            $peerj = $this->fetchPeerJPapers();
+            if ($heartbeat) $heartbeat('fetching patents');
+            $patents = $this->fetchPatents();
+            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj, $patents);
+        } else {
+            $finalMessage = $message;
+        }
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $finalMessage],

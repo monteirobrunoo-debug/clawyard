@@ -38,7 +38,7 @@ class NvidiaAgent implements AgentInterface
         return $data['choices'][0]['message']['content'] ?? '';
     }
 
-    public function stream(string $message, array $history, callable $onChunk): string
+    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],

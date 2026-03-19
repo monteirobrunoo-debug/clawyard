@@ -278,6 +278,12 @@ class NvidiaController extends Controller
             echo 'data: ' . json_encode($meta) . "\n\n";
             ob_flush(); flush();
 
+            // Heartbeat: keeps Nginx/Cloudflare alive during slow external fetches
+            $heartbeat = function (string $status = '') {
+                echo ': heartbeat' . ($status ? " {$status}" : '') . "\n\n";
+                ob_flush(); flush();
+            };
+
             try {
                 $fullReply = $resolvedAgent->stream(
                     $resolvedMessage,
@@ -285,7 +291,8 @@ class NvidiaController extends Controller
                     function (string $chunk) {
                         echo 'data: ' . json_encode(['chunk' => $chunk]) . "\n\n";
                         ob_flush(); flush();
-                    }
+                    },
+                    $heartbeat
                 );
             } catch (\Throwable $e) {
                 \Log::error('ClawYard stream error', [
