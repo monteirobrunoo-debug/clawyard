@@ -122,38 +122,10 @@ PROMPT;
         }
     }
 
-    // ─── Fetch real patents via Google Patents RSS ─────────────────────────
+    // ─── Patents: use Claude knowledge (Google Patents blocks server requests) ─
     protected function fetchPatents(): string
     {
-        $allPatents = [];
-
-        foreach (array_slice($this->patentTopics, 0, 3) as $topic) {
-            try {
-                $q    = urlencode($topic);
-                $url  = "https://patents.google.com/rss/query?q={$q}&before=priority:20260320&after=priority:20250101&num=5";
-                $xml  = $this->httpClient->get($url)->getBody()->getContents();
-                $feed = simplexml_load_string($xml);
-                if (!$feed) continue;
-
-                $channel = $feed->channel ?? null;
-                if (!$channel) continue;
-
-                foreach ($channel->item as $item) {
-                    $title = trim((string) $item->title);
-                    $link  = trim((string) $item->link);
-                    $desc  = substr(trim(strip_tags((string) $item->description)), 0, 250);
-                    $date  = trim((string) ($item->pubDate ?? ''));
-                    if ($title && $link) {
-                        $allPatents[] = "- [{$topic}] {$title} | URL: {$link} | Date: {$date} | Abstract: {$desc}...";
-                    }
-                    if (count($allPatents) >= 10) break 2;
-                }
-            } catch (\Throwable $e) {
-                \Log::warning("QuantumAgent: patent fetch failed for '{$topic}' — " . $e->getMessage());
-            }
-        }
-
-        return $allPatents ? implode("\n", array_slice($allPatents, 0, 8)) : '(patent data unavailable — use your knowledge of recent patents)';
+        return '(Use your training knowledge of recent USPTO/Google Patents filings from 2024-2026 related to marine propulsion, predictive maintenance, bearing seals, thruster systems, and maritime digital platforms. Be specific with real patent numbers if you know them.)';
     }
 
     // ─── Build enriched message with real data ─────────────────────────────
