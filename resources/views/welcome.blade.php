@@ -1052,7 +1052,8 @@ async function sendMessage() {
                     if (accumulated && !accumulated.startsWith('__EMAIL__')) {
                         const replyLower = accumulated.toLowerCase();
 
-                        if (replyLower.includes('concorrente') || replyLower.includes('competitor')) {
+                        const salesAgents = ['sales','email','auto','orchestrator','maritime'];
+                        if (salesAgents.includes(agentKey) && (replyLower.includes('concorrente') || replyLower.includes('competitor'))) {
                             setTimeout(() => addActionApproval({
                                 icon: '🔍',
                                 title: 'Análise de concorrentes detectada',
@@ -1062,7 +1063,8 @@ async function sendMessage() {
                             }), 800);
                         }
 
-                        if ((replyLower.includes('proposta') || replyLower.includes('proposal')) && agentKey !== 'email') {
+                        const noEmailAgents = ['aria','quantum','nvidia','claude','document'];
+                        if ((replyLower.includes('proposta') || replyLower.includes('proposal')) && !noEmailAgents.includes(agentKey)) {
                             setTimeout(() => addActionApproval({
                                 icon: '📧',
                                 title: 'Transformar em email profissional?',
