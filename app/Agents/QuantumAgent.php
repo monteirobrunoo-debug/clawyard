@@ -100,24 +100,51 @@ PROMPT;
         ]);
     }
 
-    // ─── Fetch real arXiv papers ───────────────────────────────────────────
+    // ─── Fetch arXiv papers + auto-save to discoveries ────────────────────
     protected function fetchArxivPapers(): string
     {
         try {
-            $query   = urlencode('quantum computing OR quantum cryptography OR quantum machine learning');
-            $url     = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=8&sortBy=submittedDate&sortOrder=descending";
-            $xml     = $this->httpClient->get($url)->getBody()->getContents();
-            $feed    = simplexml_load_string($xml);
+            $query = urlencode('quantum computing OR quantum cryptography OR quantum machine learning');
+            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=8&sortBy=submittedDate&sortOrder=descending";
+            $xml   = $this->httpClient->get($url)->getBody()->getContents();
+            $feed  = simplexml_load_string($xml);
             if (!$feed) return '(arXiv unavailable)';
 
-            $papers = [];
+            $lines = [];
             foreach ($feed->entry as $entry) {
-                $id      = basename((string) $entry->id);
-                $authors = implode(', ', array_slice(array_map(fn($a) => (string)$a->name, iterator_to_array($entry->author)), 0, 3));
-                $papers[] = "- [{$id}] " . trim((string) $entry->title) . " | Authors: {$authors} | Published: " . substr((string) $entry->published, 0, 10) . " | URL: https://arxiv.org/abs/{$id} | Abstract: " . substr(trim((string) $entry->summary), 0, 300) . '...';
+                $id       = basename((string) $entry->id);
+                $title    = trim((string) $entry->title);
+                $authors  = implode(', ', array_slice(array_map(fn($a) => (string)$a->name, iterator_to_array($entry->author)), 0, 3));
+                $published = substr((string) $entry->published, 0, 10);
+                $abstract  = trim((string) $entry->summary);
+
+                // Auto-save to discoveries (skip duplicates)
+                try {
+                    if (!Discovery::where('source','arxiv')->where('reference_id',$id)->exists()) {
+                        Discovery::create([
+                            'source'          => 'arxiv',
+                            'reference_id'    => $id,
+                            'title'           => $title,
+                            'authors'         => $authors,
+                            'summary'         => substr($abstract, 0, 500),
+                            'category'        => 'quantum',
+                            'activity_types'  => ['Quantum & Computação', 'AI & Machine Learning'],
+                            'priority'        => 'awareness',
+                            'relevance_score' => 6,
+                            'opportunity'     => 'Potencial aplicação em sistemas digitais PartYard/HP-Group',
+                            'recommendation'  => 'Monitorizar desenvolvimento e avaliar aplicabilidade',
+                            'url'             => "https://arxiv.org/abs/{$id}",
+                            'published_date'  => $published,
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning("QuantumAgent: could not save arXiv discovery {$id} — " . $e->getMessage());
+                }
+
+                $lines[] = "- [{$id}] {$title} | Authors: {$authors} | Published: {$published} | URL: https://arxiv.org/abs/{$id} | Abstract: " . substr($abstract, 0, 300) . '...';
             }
 
-            return implode("\n", $papers) ?: '(no arXiv results)';
+            return implode("\n", $lines) ?: '(no arXiv results)';
         } catch (\Throwable $e) {
             \Log::warning('QuantumAgent: arXiv fetch failed — ' . $e->getMessage());
             return '(arXiv fetch error: ' . $e->getMessage() . ')';
@@ -176,34 +203,58 @@ PROMPT;
             : '(USPTO API returned no results — use your knowledge of recent patents)';
     }
 
-    // ─── Fetch PeerJ CS articles via CrossRef API (free, no key) ──────────
+    // ─── Fetch PeerJ CS via CrossRef + auto-save to discoveries ──────────
     protected function fetchPeerJPapers(): string
     {
         try {
-            $query = urlencode('multi-agent systems autonomous agents AI maritime industrial');
-            $url   = "https://api.crossref.org/works?query={$query}&filter=prefix:10.7717&rows=6&sort=published&order=desc";
-
+            $query    = urlencode('multi-agent systems autonomous agents AI maritime industrial');
+            $url      = "https://api.crossref.org/works?query={$query}&filter=prefix:10.7717&rows=6&sort=published&order=desc";
             $response = $this->httpClient->get($url, [
                 'headers' => ['User-Agent' => 'ClawYard/1.0 (mailto:research@hp-group.org)'],
             ]);
 
             $data  = json_decode($response->getBody()->getContents(), true);
             $items = $data['message']['items'] ?? [];
+            $lines = [];
 
-            $papers = [];
             foreach ($items as $item) {
-                $title   = is_array($item['title'] ?? '') ? ($item['title'][0] ?? 'N/A') : ($item['title'] ?? 'N/A');
-                $doi     = $item['DOI'] ?? 'N/A';
-                $year    = $item['published-online']['date-parts'][0][0] ?? ($item['issued']['date-parts'][0][0] ?? 'N/A');
-                $month   = $item['published-online']['date-parts'][0][1] ?? '';
-                $date    = $month ? "{$year}-{$month}" : $year;
-                $authors = implode(', ', array_slice(array_map(fn($a) => ($a['given'] ?? '') . ' ' . ($a['family'] ?? ''), $item['author'] ?? []), 0, 3));
-                $abstract = substr(strip_tags($item['abstract'] ?? ''), 0, 250);
+                $title    = is_array($item['title'] ?? '') ? ($item['title'][0] ?? 'N/A') : ($item['title'] ?? 'N/A');
+                $doi      = $item['DOI'] ?? 'N/A';
+                $year     = $item['published-online']['date-parts'][0][0] ?? ($item['issued']['date-parts'][0][0] ?? null);
+                $month    = $item['published-online']['date-parts'][0][1] ?? null;
+                $day      = $item['published-online']['date-parts'][0][2] ?? 1;
+                $pubDate  = $year ? "{$year}-" . str_pad($month ?? 1, 2, '0', STR_PAD_LEFT) . "-" . str_pad($day, 2, '0', STR_PAD_LEFT) : null;
+                $authors  = implode(', ', array_slice(array_map(fn($a) => ($a['given'] ?? '') . ' ' . ($a['family'] ?? ''), $item['author'] ?? []), 0, 3));
+                $abstract = substr(strip_tags($item['abstract'] ?? ''), 0, 500);
                 $url_art  = "https://doi.org/{$doi}";
-                $papers[] = "- [PeerJ:{$doi}] {$title} | Authors: {$authors} | Date: {$date} | URL: {$url_art}" . ($abstract ? " | Abstract: {$abstract}..." : '');
+
+                // Auto-save to discoveries
+                try {
+                    if (!Discovery::where('source','peerj')->where('reference_id',$doi)->exists()) {
+                        Discovery::create([
+                            'source'          => 'peerj',
+                            'reference_id'    => $doi,
+                            'title'           => $title,
+                            'authors'         => $authors,
+                            'summary'         => $abstract ?: 'Sem resumo disponível',
+                            'category'        => 'ai_ml',
+                            'activity_types'  => ['AI & Machine Learning', 'Plataforma Digital'],
+                            'priority'        => 'watch',
+                            'relevance_score' => 5,
+                            'opportunity'     => 'Investigação em sistemas multi-agente aplicável ao ClawYard',
+                            'recommendation'  => 'Avaliar aplicabilidade ao sistema de agentes PartYard',
+                            'url'             => $url_art,
+                            'published_date'  => $pubDate,
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning("QuantumAgent: could not save PeerJ discovery {$doi} — " . $e->getMessage());
+                }
+
+                $lines[] = "- [PeerJ:{$doi}] {$title} | Authors: {$authors} | Date: " . ($pubDate ?? 'N/A') . " | URL: {$url_art}" . ($abstract ? " | Abstract: {$abstract}..." : '');
             }
 
-            return $papers ? implode("\n", $papers) : '(no PeerJ results today)';
+            return $lines ? implode("\n", $lines) : '(no PeerJ results today)';
         } catch (\Throwable $e) {
             \Log::warning('QuantumAgent: PeerJ/CrossRef fetch failed — ' . $e->getMessage());
             return '(PeerJ fetch unavailable)';
