@@ -23,40 +23,47 @@ INTERNATIONAL OFFICES: USA, UK, Brazil, Norway
 CERTIFICATIONS: ISO 9001:2015 | NCAGE P3527 (NATO supply) | AS:9120 (aerospace/defense)
 PARTNERSHIPS: COGEMA (since 1959 — historic Iberian maritime supply), SKF Marine
 
-CORE SERVICES:
-1. Marine Spare Parts Supply — Multi-brand sourcing: MAN Energy Solutions, Caterpillar, Wärtsilä, MTU, Cummins, Daihatsu, Yanmar, Volvo Penta, Rolls-Royce
-2. Technical Services — Engine overhauls, maintenance, inspections
-3. Emergency / Urgent Delivery — 24/7 response for vessels in distress or port call
-4. Defense & Naval Supply — NATO-certified, supplies to military vessels and coast guard
-5. Document Analysis — Contract review, technical manuals, regulatory compliance
-6. SAP Business One ERP — Full business management integration
+BRANDS WE SPECIALISE IN (source: www.partyard.eu):
+- MTU — high-performance marine and industrial engines (Series 2000, 4000, 8000, 396)
+- Caterpillar (CAT) — marine propulsion and generator engines (C series, 3500 series)
+- MAK — medium-speed marine diesel engines (M20, M25, M32, M43)
+- Jenbacher — gas engines and cogeneration/power systems (J series)
+- SKF — SternTube seals, shaft seals and marine bearings
+- Schottel — propulsion systems: SRP (Rudder Propeller), STT (Transverse Thruster), STP (Pump Jet)
 
-SPECIALISATIONS:
-- 2-stroke and 4-stroke marine diesel engines
-- Turbochargers (MAN, Wärtsilä, ABB, Mitsubishi)
-- Cylinder heads, pistons, liners, valves, fuel pumps
-- Pumps, compressors, heat exchangers
-- Mooring equipment, deck hardware
-- Safety and life-saving equipment
-- Electrical and automation components
-- Ballast water treatment systems
+CORE SERVICES:
+1. Marine Spare Parts — original and compatible parts for MTU, Caterpillar, MAK, Jenbacher, SKF, Schottel
+2. Technical Services — engine overhauls, maintenance, inspections, field engineering
+3. Emergency / Urgent Delivery — 24/7 response for vessels in distress or at port call
+4. Defense & Naval Supply — NATO-certified (NCAGE P3527), supplies to military vessels and coast guard
+5. Document Analysis — technical manuals, maintenance records, regulatory compliance
+6. SAP Business One ERP — full business management integration
+
+SPECIALISATIONS (parts):
+- MTU: cylinder heads, pistons, liners, injectors, turbochargers, intercoolers, fuel pumps
+- CAT: engine rebuild kits, fuel systems, cooling systems, generator components
+- MAK: main engine spares, fuel injection equipment, turbocharger parts
+- Jenbacher: gas engine parts, ignition systems, valve trains
+- SKF: SternTube seals, lip seals, bearings, shaft alignment services
+- Schottel: propeller blades, seal kits, gearbox components, thruster parts
 
 COMPETITIVE ADVANTAGES:
-- Located in Setúbal — between Lisbon and Sines, Portugal's two largest ports
-- Military supply credentials (NCAGE P3527) rare among regional competitors
-- COGEMA partnership provides deep historical relationships in Iberian shipping
-- International office network (USA, UK, Brazil, Norway) for global sourcing
-- Fast response — typically 24-48h delivery for stock items, 5-7 days for sourced items
+- Located in Setúbal — 40 km from Lisbon, 40 km from Sines (Portugal's largest port)
+- Military supply credentials (NCAGE P3527, AS:9120) — rare among regional competitors
+- COGEMA partnership — deep historical Iberian maritime relationships since 1959
+- H&P Group member — financial and logistics backing
+- International offices: USA, UK, Brazil, Norway — global sourcing network
+- 24-48h delivery for stock items, 5-7 days for sourced items
 - Multi-language team: Portuguese, English, Spanish
 
 TARGET CUSTOMERS:
 - Ship owners (armadores) — bulk carriers, tankers, container vessels, ferries
 - Shipping agents managing vessel port calls
 - Ship managers and technical superintendents
-- Vessel masters / chief engineers
+- Vessel masters / chief engineers requiring urgent parts
 - Port agents and marine surveyors
 - Shipyards (repair and newbuild)
-- Military / coast guard / naval procurement
+- Military / coast guard / naval procurement (NATO-approved)
 TEXT,
             ],
 
@@ -257,16 +264,23 @@ TEXT,
                 'content' => <<<TEXT
 COMPETITOR ANALYSIS FOR CLAWYARD / PARTYARD — MARINE SPARE PARTS EUROPE
 
-TIER 1: OEM GIANTS (compete on brand, warranty, price)
-- Wärtsilä (Finland): marine propulsion, engines, all spare parts, digital service agreements
-- MAN Energy Solutions (Germany): 2-stroke/4-stroke diesel OEM parts, remote diagnostics
-- Rolls-Royce Marine (UK): propulsion, thrusters, deck machinery
-- Caterpillar Marine (USA): marine engines, generators — PartYard IS a Cat specialist
-- Cummins Marine (USA): diesel engines, spares
-- MTU / Rolls-Royce Power Systems: high-speed engines for naval/offshore — PartYard specialises
+PARTYARD BRAND PORTFOLIO (source: www.partyard.eu):
+- MTU — marine/industrial high-speed engines (our primary specialisation)
+- Caterpillar (CAT) — marine propulsion and generator engines
+- MAK — medium-speed marine diesels
+- Jenbacher — gas engines and cogeneration
+- SKF — SternTube seals and marine bearings
+- Schottel — propulsion systems and thrusters
 
-How to beat OEMs: Faster delivery, competitive pricing on compatible parts, personal service,
-multi-brand flexibility (customer doesn't need one supplier per engine brand)
+TIER 1: OEM GIANTS (they compete with us on MTU/CAT aftermarket)
+- Wärtsilä (Finland): marine propulsion, engines, spare parts, service agreements
+- Rolls-Royce Marine (UK): propulsion, thrusters, deck machinery — overlaps Schottel territory
+- Caterpillar Marine dealer network: OEM parts but higher price and slower for non-critical
+- MTU authorised dealers: OEM pricing, limited flexibility
+- Schottel service centres: authorised but expensive, limited coverage in Portugal/Iberia
+
+How to beat OEMs: faster delivery from Setúbal, competitive pricing on compatible parts,
+personal service, multi-brand coverage (one call for MTU + Schottel + SKF)
 
 TIER 2: GLOBAL DISTRIBUTION (biggest direct threat)
 - Wilhelmsen Ship Services (Norway): LARGEST global ship services network; presence at ALL
