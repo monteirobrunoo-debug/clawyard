@@ -25,6 +25,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+// Schedules page — visible to all authenticated users
+Route::get('/schedules', function () {
+    return view('admin.schedules');
+})->middleware(['auth'])->name('schedules');
+
 // Admin Portal
 Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/users', [AdminController::class, 'users'])->name('admin.users');
@@ -34,6 +39,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::delete('/users/{user}', [AdminController::class, 'deleteUser'])->name('admin.users.delete');
     Route::get('/conversations', [AdminController::class, 'conversations'])->name('admin.conversations');
     Route::get('/conversations/{conversation}', [AdminController::class, 'conversation'])->name('admin.conversation');
+    Route::get('/schedules', function () { return view('admin.schedules'); })->name('admin.schedules');
 });
 
 require __DIR__.'/auth.php';
