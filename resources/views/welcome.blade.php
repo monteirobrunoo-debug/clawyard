@@ -180,6 +180,11 @@
         .starter-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:520px; }
         .starter-chip { background:var(--bg3); border:1px solid var(--border2); color:#888; padding:7px 14px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; }
         .starter-chip:hover { border-color:var(--green); color:var(--green); background:#0f1f00; }
+
+        /* Save report button */
+        .save-report-btn { background:none; border:none; cursor:pointer; font-size:13px; margin-left:6px; opacity:0.4; transition:opacity .2s; padding:0; }
+        .save-report-btn:hover { opacity:1; }
+        .save-report-btn.saved { opacity:1; }
     </style>
 </head>
 <body>
@@ -204,6 +209,7 @@
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
+        <a href="/reports" title="Relatórios" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">📋 Reports</a>
         <a href="/schedules" title="Tarefas Agendadas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🗓️ Schedule</a>
         @if(Auth::user()->isAdmin())
         <a href="/admin/users" title="Admin" style="background:var(--bg3);border:1px solid #ff4444;color:#ff6666;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">⚙️ Admin</a>
@@ -591,12 +597,14 @@ function addMessage(role, text, agentName = '') {
         return msg;
     }
 
+    const saveBtn = role === 'ai' ? `<button class="save-report-btn" onclick="saveAsReport(this,'${agentName}')" title="Guardar como relatório">💾</button>` : '';
     msg.innerHTML = `
         <div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>
         <div class="msg-col">
             <div class="msg-meta">
                 <span>${role === 'user' ? '{{ Auth::user()->name }}' : name}</span>
                 ${agentName ? `<span class="agent-tag ${role==='ai'?'active':''}">${AGENT_EMOJIS[agentName]||''} ${AGENT_NAMES[agentName]||agentName}</span>` : ''}
+                ${saveBtn}
             </div>
             <div class="bubble">${role === 'user' ? esc(text) : renderMarkdown(text)}</div>
         </div>`;
@@ -813,6 +821,39 @@ function esc(text) {
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
         .replace(/'/g,'&#039;');
+}
+
+// ═══════════════════════════════
+//  SAVE AS REPORT
+// ═══════════════════════════════
+async function saveAsReport(btn, agentName) {
+    const bubble = btn.closest('.msg-col').querySelector('.bubble');
+    const text   = bubble.innerText || bubble.textContent;
+    const type   = ['aria','quantum','market'].includes(agentName) ? agentName : 'custom';
+    const date   = new Date().toLocaleDateString('pt-PT', {day:'2-digit',month:'long',year:'numeric'});
+    const title  = (AGENT_NAMES[agentName]||agentName) + ' — ' + date;
+
+    btn.textContent = '⏳';
+    try {
+        const res = await fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: JSON.stringify({ title, type, content: text }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            btn.textContent = '✅';
+            btn.classList.add('saved');
+            btn.title = 'Guardado! Ver em /reports';
+            logActivity('💾', 'Relatório guardado: ' + title, 'done');
+        } else {
+            btn.textContent = '❌';
+            setTimeout(() => { btn.textContent = '💾'; btn.classList.remove('saved'); }, 2000);
+        }
+    } catch(e) {
+        btn.textContent = '❌';
+        setTimeout(() => { btn.textContent = '💾'; }, 2000);
+    }
 }
 
 // ── TTS ──

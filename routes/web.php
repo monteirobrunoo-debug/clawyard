@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,6 +24,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
+
+// Reports — visible to all authenticated users
+Route::middleware(['auth'])->group(function () {
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports');
+    Route::get('/reports/{report}', [ReportController::class, 'show'])->name('reports.show');
+    Route::get('/reports/{report}/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
+    Route::delete('/reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');
 });
 
 // Schedules page — visible to all authenticated users

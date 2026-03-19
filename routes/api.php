@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\EmailSendController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NvidiaController;
 use App\Http\Controllers\WhatsAppController;
 use Illuminate\Support\Facades\Route;
@@ -22,6 +23,9 @@ Route::middleware(['auth', 'throttle:60,1'])->group(function () {
 
     // Conversation history — only own sessions
     Route::get('/history/{sessionId}', [NvidiaController::class, 'history']);
+
+    // Reports — save agent output
+    Route::post('/reports', [ReportController::class, 'store']);
 
     // Email sending
     Route::post('/email/send', [EmailSendController::class, 'send'])
