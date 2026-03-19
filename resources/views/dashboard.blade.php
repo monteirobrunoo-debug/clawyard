@@ -109,7 +109,7 @@
     $agents = [
         ['key' => 'orchestrator', 'name' => 'Todos os Agentes',        'emoji' => '🌐', 'role' => 'Orquestrador — activa multiplos agentes em paralelo'],
         ['key' => 'sales',        'name' => 'Marco Sales',             'emoji' => '💼', 'role' => 'Vendas MTU · CAT · MAK · Jenbacher · SKF · Schottel'],
-        ['key' => 'support',      'name' => 'Ana Suporte',             'emoji' => '🔧', 'role' => 'Suporte Tecnico — avarias de motores e sistemas'],
+        ['key' => 'support',      'name' => 'Marcus Suporte',             'emoji' => '🔧', 'role' => 'Suporte Tecnico — avarias de motores e sistemas'],
         ['key' => 'email',        'name' => 'Daniel Email',            'emoji' => '📧', 'role' => 'Email maritimo — armadores, agentes e navios'],
         ['key' => 'sap',          'name' => 'Richard SAP',             'emoji' => '📊', 'role' => 'SAP B1 — stock, facturas e ERP'],
         ['key' => 'document',     'name' => 'Comandante Doc',          'emoji' => '📄', 'role' => 'Documentos — analisa PDFs e contratos tecnicos'],

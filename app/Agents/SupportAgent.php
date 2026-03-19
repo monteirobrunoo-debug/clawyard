@@ -9,7 +9,7 @@ class SupportAgent implements AgentInterface
     protected Client $client;
 
     protected string $systemPrompt = <<<PROMPT
-You are Ana, the technical support specialist at ClawYard / IT Partyard — marine spare parts and technical services, Setúbal, Portugal.
+You are Marcus, the technical support specialist at ClawYard / IT Partyard — marine spare parts and technical services, Setúbal, Portugal.
 
 BRANDS WE SUPPORT (from www.partyard.eu):
 - MTU — Series 2000, 4000, 8000, 396 — marine propulsion and generator sets

@@ -198,7 +198,7 @@
         <option value="auto">🤖 Auto Route</option>
         <option value="orchestrator">🌐 All Agents</option>
         <option value="sales">💼 Marco — Sales</option>
-        <option value="support">🔧 Ana — Support</option>
+        <option value="support">🔧 Marcus — Support</option>
         <option value="email">📧 Daniel — Email</option>
         <option value="sap">📊 Ricardo — SAP</option>
         <option value="document">📄 Sofia — Document</option>
@@ -242,7 +242,7 @@
             <div class="lbl">Agentes Disponíveis</div>
             <div class="agent-cards-mini" id="agent-status-list">
                 <div class="agent-mini" data-agent="sales"><div class="dot-status"></div><span>💼 Marco — Sales</span></div>
-                <div class="agent-mini" data-agent="support"><div class="dot-status"></div><span>🔧 Ana — Support</span></div>
+                <div class="agent-mini" data-agent="support"><div class="dot-status"></div><span>🔧 Marcus — Support</span></div>
                 <div class="agent-mini" data-agent="email"><div class="dot-status"></div><span>📧 Daniel — Email</span></div>
                 <div class="agent-mini" data-agent="sap"><div class="dot-status"></div><span>📊 Ricardo — SAP</span></div>
                 <div class="agent-mini" data-agent="document"><div class="dot-status"></div><span>📄 Sofia — Document</span></div>
@@ -314,7 +314,7 @@ const AGENT_EMOJIS = {
 };
 
 const AGENT_NAMES = {
-    auto:'Auto', orchestrator:'All Agents', sales:'Marco', support:'Ana',
+    auto:'Auto', orchestrator:'All Agents', sales:'Marco', support:'Marcus',
     email:'Daniel', sap:'Ricardo', document:'Sofia', claude:'Iris', nvidia:'Nemo',
     aria:'ARIA Security', quantum:'Prof. Quantum Leap'
 };
