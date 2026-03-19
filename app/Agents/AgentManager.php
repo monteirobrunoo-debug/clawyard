@@ -83,9 +83,11 @@ class AgentManager
             if (str_contains($lower, $kw)) return $this->agents['aria'];
         }
 
-        // Quantum keywords
+        // Quantum + Patent keywords
         $quantumKeywords = ['quantum', 'qubit', 'arxiv', 'qkd', 'superposition', 'entanglement', 'quantum computing',
-                            'quantum cryptography', 'post-quantum', 'professor', 'quantum leap', 'fisica quantica'];
+                            'quantum cryptography', 'post-quantum', 'professor', 'quantum leap', 'fisica quantica',
+                            'patent', 'patente', 'uspto', 'invention', 'invencao', 'intellectual property',
+                            'propriedade intelectual', 'innovation', 'inovacao', 'license', 'licenca'];
         foreach ($quantumKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['quantum'];
         }

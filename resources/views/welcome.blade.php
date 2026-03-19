@@ -389,12 +389,12 @@ const AGENT_CHIPS = {
         '🔐 Quais os riscos de cibersegurança para uma empresa marítima?',
     ],
     quantum: [
-        '⚛️ Mostra os papers de quantum computing de hoje no arXiv',
+        '⚛️ Faz o digest completo de hoje: papers arXiv + patentes USPTO para PartYard',
+        '🏛️ Quais as 7 melhores patentes novas para a PartYard crescer?',
         '⚛️ Explica o que é superposição quântica de forma simples',
-        '⚛️ Qual o estado actual da computação quântica em 2026?',
+        '🏛️ Há patentes recentes sobre manutenção preditiva para motores marítimos?',
         '⚛️ Como a criptografia quântica pode proteger comunicações navais?',
-        '⚛️ Quais os últimos avanços em quantum machine learning?',
-        '⚛️ Explica o algoritmo de Shor e o impacto na criptografia actual',
+        '🏛️ Analisa patentes de propulsão Schottel e o que a HP-Group pode fazer',
     ],
 };
 
