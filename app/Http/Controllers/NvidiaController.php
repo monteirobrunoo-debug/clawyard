@@ -23,7 +23,7 @@ class NvidiaController extends Controller
     {
         $request->validate([
             'message'    => 'required|string|min:1|max:4096',
-            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber',
+            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum',
             'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
             'image'      => 'nullable|string|max:5242880', // max ~4MB base64
         ]);
@@ -260,6 +260,18 @@ class NvidiaController extends Controller
                 '📋 Relatório OWASP completo',
                 '🔒 Verificar autenticação e API',
             ],
+            'aria'     => [
+                '🔐 Scan STRIDE completo ao partyard.eu',
+                '🛡️ Relatório OWASP Top 10',
+                '🔒 Verificar certificados SSL',
+                '📋 Gerar threat model da API',
+            ],
+            'quantum'  => [
+                '⚛️ Ver papers de quantum de hoje',
+                '🏛️ Top 7 patentes USPTO para PartYard',
+                '💡 Professor\'s strategic insight',
+                '🔬 Analisar paper específico do arXiv',
+            ],
         ];
 
         $default = [
@@ -286,6 +298,8 @@ class NvidiaController extends Controller
             'stock'    => '📦 Stock',
             'claude'   => '🧠 Claude',
             'nvidia'   => '⚡ NVIDIA',
+            'aria'     => '🔐 ARIA Security',
+            'quantum'  => '⚛️ Prof. Quantum Leap',
         ];
 
         if (count($results) === 1) {
