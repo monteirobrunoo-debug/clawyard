@@ -12,7 +12,7 @@ class AdminController extends Controller
     // Users list
     public function users(Request $request)
     {
-        $query = User::withCount('conversations')->latest();
+        $query = User::latest();
 
         if ($search = $request->input('search')) {
             $query->where('name', 'like', "%{$search}%")

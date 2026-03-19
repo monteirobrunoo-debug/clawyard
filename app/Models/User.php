@@ -29,9 +29,9 @@ class User extends Authenticatable
     public function isManager(): bool   { return in_array($this->role, ['admin', 'manager']); }
     public function isGuest(): bool     { return $this->role === 'guest'; }
 
-    public function conversations()
+    public function conversationCount(): int
     {
-        return $this->hasMany(Conversation::class, 'session_id', 'id');
+        return \App\Models\Conversation::where('session_id', 'like', 'u' . $this->id . '_%')->count();
     }
 
     public function getRoleBadgeAttribute(): string
