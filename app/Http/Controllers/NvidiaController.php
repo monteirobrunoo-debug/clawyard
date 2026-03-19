@@ -153,6 +153,8 @@ class NvidiaController extends Controller
      */
     public function chatStream(Request $request): StreamedResponse
     {
+        set_time_limit(300); // 5 minutes for long Quantum/ARIA responses
+
         $request->validate([
             'message'    => 'required|string|min:1|max:4096',
             'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum',

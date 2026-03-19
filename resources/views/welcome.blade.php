@@ -1096,8 +1096,10 @@ async function sendMessage() {
 
     } catch (err) {
         if (typing.parentNode) typing.remove();
-        addMessage('ai', '❌ Erro de ligação. Verifica a configuração da API.');
-        logActivity('❌', 'Erro de ligação: ' + err.message, 'done');
+        const errMsg = err?.message || String(err);
+        addMessage('ai', '❌ Erro: ' + errMsg);
+        logActivity('❌', 'Erro: ' + errMsg, 'done');
+        console.error('sendMessage error:', err);
     } finally {
         sendBtn.disabled = false;
         clearAgentActive();

@@ -76,10 +76,7 @@ PROMPT;
 
     protected array $patentTopics = [
         'marine propulsion engine',
-        'predictive maintenance vessel',
-        'maritime digital platform',
-        'bearing seal marine',
-        'thruster propulsion system',
+        'maritime bearing seal thruster',
     ];
 
     public function __construct()
@@ -94,9 +91,10 @@ PROMPT;
         ]);
 
         $this->httpClient = new Client([
-            'timeout'         => 15,
-            'connect_timeout' => 8,
-            'headers'         => ['User-Agent' => 'ClawYard/1.0 (research@hp-group.org)'],
+            'timeout'         => 10,
+            'connect_timeout' => 5,
+            'verify'          => false,
+            'headers'         => ['User-Agent' => 'Mozilla/5.0 (compatible; ClawYardBot/1.0)'],
         ]);
     }
 
