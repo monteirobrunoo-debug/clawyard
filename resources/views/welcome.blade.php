@@ -192,16 +192,19 @@
     <select id="agent-select">
         <option value="auto">🤖 Auto Route</option>
         <option value="orchestrator">🌐 All Agents</option>
-        <option value="sales">💼 Sales — Marco</option>
-        <option value="support">🔧 Support — Ana</option>
-        <option value="email">📧 Email — Daniel</option>
-        <option value="sap">📊 SAP — Ricardo</option>
-        <option value="document">📄 Document — Sofia</option>
-        <option value="claude">🧠 Claude — Iris</option>
-        <option value="nvidia">⚡ NVIDIA — Nemo</option>
+        <option value="sales">💼 Marco — Sales</option>
+        <option value="support">🔧 Ana — Support</option>
+        <option value="email">📧 Daniel — Email</option>
+        <option value="sap">📊 Ricardo — SAP</option>
+        <option value="document">📄 Sofia — Document</option>
+        <option value="claude">🧠 Iris — Claude</option>
+        <option value="nvidia">⚡ Nemo — NVIDIA</option>
+        <option value="aria">🔐 ARIA — Security</option>
+        <option value="quantum">⚛️ Prof. Quantum Leap</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
+        <a href="/admin/schedules" title="Tarefas agendadas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;" id="schedule-btn">🗓️ Schedule</a>
         <button id="toggle-panel" title="Toggle activity panel">⚡</button>
     </div>
 </header>
@@ -228,27 +231,15 @@
         <div class="agent-live">
             <div class="lbl">Agentes Disponíveis</div>
             <div class="agent-cards-mini" id="agent-status-list">
-                <div class="agent-mini" data-agent="sales">
-                    <div class="dot-status"></div><span>💼 Marco — Sales</span>
-                </div>
-                <div class="agent-mini" data-agent="support">
-                    <div class="dot-status"></div><span>🔧 Ana — Support</span>
-                </div>
-                <div class="agent-mini" data-agent="email">
-                    <div class="dot-status"></div><span>📧 Daniel — Email</span>
-                </div>
-                <div class="agent-mini" data-agent="sap">
-                    <div class="dot-status"></div><span>📊 Ricardo — SAP</span>
-                </div>
-                <div class="agent-mini" data-agent="document">
-                    <div class="dot-status"></div><span>📄 Sofia — Document</span>
-                </div>
-                <div class="agent-mini" data-agent="claude">
-                    <div class="dot-status"></div><span>🧠 Iris — Claude</span>
-                </div>
-                <div class="agent-mini" data-agent="nvidia">
-                    <div class="dot-status"></div><span>⚡ Nemo — NVIDIA</span>
-                </div>
+                <div class="agent-mini" data-agent="sales"><div class="dot-status"></div><span>💼 Marco — Sales</span></div>
+                <div class="agent-mini" data-agent="support"><div class="dot-status"></div><span>🔧 Ana — Support</span></div>
+                <div class="agent-mini" data-agent="email"><div class="dot-status"></div><span>📧 Daniel — Email</span></div>
+                <div class="agent-mini" data-agent="sap"><div class="dot-status"></div><span>📊 Ricardo — SAP</span></div>
+                <div class="agent-mini" data-agent="document"><div class="dot-status"></div><span>📄 Sofia — Document</span></div>
+                <div class="agent-mini" data-agent="claude"><div class="dot-status"></div><span>🧠 Iris — Claude</span></div>
+                <div class="agent-mini" data-agent="nvidia"><div class="dot-status"></div><span>⚡ Nemo — NVIDIA</span></div>
+                <div class="agent-mini" data-agent="aria"><div class="dot-status"></div><span>🔐 ARIA — Security</span></div>
+                <div class="agent-mini" data-agent="quantum"><div class="dot-status"></div><span>⚛️ Prof. Quantum Leap</span></div>
             </div>
         </div>
     </div>
@@ -259,14 +250,7 @@
             <div class="empty-state" id="empty-state">
                 <h2>ClawYard AI</h2>
                 <p>Powered by NVIDIA NeMo + Claude · Portos, Peças, Emails, Análise</p>
-                <div class="starter-chips" id="starter-chips">
-                    <div class="starter-chip" onclick="startChat(this)">🚢 Analisa concorrentes em Sines</div>
-                    <div class="starter-chip" onclick="startChat(this)">📧 Escreve email para armador em Pireu</div>
-                    <div class="starter-chip" onclick="startChat(this)">💰 Proposta comercial para peças MAN</div>
-                    <div class="starter-chip" onclick="startChat(this)">📊 Quais os portos com mais crescimento?</div>
-                    <div class="starter-chip" onclick="startChat(this)">🔧 Suporte técnico para motor Caterpillar</div>
-                    <div class="starter-chip" onclick="startChat(this)">🌍 Cold outreach para agente em Hamburgo</div>
-                </div>
+                <div class="starter-chips" id="starter-chips"></div>
             </div>
         </div>
 
@@ -315,13 +299,128 @@ const SESSION_ID = 'cyw_' + Date.now() + '_' + Math.random().toString(36).substr
 
 const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
-    email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡'
+    email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
+    aria:'🔐', quantum:'⚛️'
 };
 
 const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco', support:'Ana',
-    email:'Daniel', sap:'Ricardo', document:'Sofia', claude:'Iris', nvidia:'Nemo'
+    email:'Daniel', sap:'Ricardo', document:'Sofia', claude:'Iris', nvidia:'Nemo',
+    aria:'ARIA Security', quantum:'Prof. Quantum Leap'
 };
+
+const AGENT_CHIPS = {
+    auto: [
+        '🚢 Analisa concorrentes no porto de Sines',
+        '📧 Escreve email para armador em Pireu',
+        '🔧 Motor MTU com problema de pressão de óleo',
+        '📊 Quais os portos europeus com mais crescimento?',
+        '⚛️ O que são qubits e como funcionam?',
+        '🔐 Faz scan de segurança ao partyard.eu',
+    ],
+    orchestrator: [
+        '🌐 Analisa o mercado de peças MTU em Roterdão e gera email para agente local',
+        '🌐 Avalia concorrentes em Algeciras e propõe estratégia de cold outreach',
+        '🌐 Suporte técnico ao motor CAT 3516 com proposta comercial e email ao armador',
+        '🌐 Análise de portos no Mediterrâneo com lista de contactos a abordar',
+    ],
+    sales: [
+        '💼 Tenho um motor MTU Série 4000 — preciso de pistões e camisas',
+        '💼 Cotação urgente: selos SKF SternTube para navio em Sines',
+        '💼 Quero uma proposta para revisão completa de um MAK M32',
+        '💼 Preciso de peças Schottel SRP para tug em Lisboa',
+        '💼 Qual o prazo de entrega para turbo Caterpillar 3516?',
+        '💼 Jenbacher J620 — qual a disponibilidade de kits de válvulas?',
+    ],
+    support: [
+        '🔧 MTU 12V4000 — alarm HT coolant temp alta, código F0203',
+        '🔧 CAT 3516B — consumo excessivo de óleo após revisão, o que verificar?',
+        '🔧 MAK M25 — vibração anormal no 3º cilindro em carga alta',
+        '🔧 Schottel SRP — vedante de proa com fuga, como proceder?',
+        '🔧 SKF SternTube — folga axial fora de spec, valores de referência?',
+        '🔧 Jenbacher J320 — falha de ignição intermitente no cilindro 6',
+    ],
+    email: [
+        '📧 Cold outreach em inglês para shipping agent em Hamburgo — peças MTU',
+        '📧 Proposta comercial em espanhol para armador em Algeciras',
+        '📧 Follow-up de cotação para navio em Roterdão — Caterpillar C32',
+        '📧 Email urgente para agente em Pireu: temos selos SKF em stock',
+        '📧 Apresentação PartYard Defense para agente naval em Lisboa',
+        '📧 Email de parceria para agente marítimo em Barcelona — peças MAK',
+    ],
+    sap: [
+        '📊 Mostra o stock actual de peças MTU Série 2000',
+        '📊 Qual o estado da encomenda #PY-2025-0847?',
+        '📊 Clientes com facturas em atraso há mais de 30 dias',
+        '📊 Relatório de vendas por marca — MTU vs Caterpillar Q1 2026',
+        '📊 Cria uma cotação SAP para o cliente Navios do Tejo Lda',
+        '📊 Quanto stock temos de kits de pistões CAT 3516?',
+    ],
+    document: [
+        '📄 Analisa este manual técnico MTU e lista os intervalos de manutenção',
+        '📄 Extrai as especificações técnicas do contrato de fornecimento anexo',
+        '📄 Verifica se este certificado ISO está dentro da validade',
+        '📄 Compara duas propostas técnicas e diz qual é mais vantajosa',
+        '📄 Resume este relatório de inspeção do navio em 5 pontos',
+        '📄 Traduz este documento técnico do inglês para português',
+    ],
+    claude: [
+        '🧠 Qual a melhor estratégia para expandir para o mercado grego?',
+        '🧠 Analisa os riscos de entrar no mercado de peças para navios militares',
+        '🧠 Compara os modelos de negócio da Wilhelmsen e da PartYard',
+        '🧠 Escreve um plano de negócio para abrir escritório em Roterdão',
+        '🧠 Quais as tendências da indústria naval até 2030?',
+        '🧠 Como posicionar a PartYard Defense face à concorrência NATO?',
+    ],
+    nvidia: [
+        '⚡ Gera 10 subject lines para cold email a armadores gregos',
+        '⚡ Cria uma descrição de produto para peças MTU Série 4000',
+        '⚡ Optimiza este texto de proposta comercial para maior impacto',
+        '⚡ Gera FAQ técnico sobre manutenção de motores MAK',
+        '⚡ Cria post LinkedIn sobre as peças Schottel da PartYard',
+        '⚡ Traduz catálogo técnico Caterpillar para espanhol',
+    ],
+    aria: [
+        '🔐 Faz scan de segurança completo ao partyard.eu com STRIDE',
+        '🔐 Analisa o hp-group.org e lista vulnerabilidades OWASP',
+        '🔐 O ClawYard tem proteção contra SQL Injection?',
+        '🔐 Verifica certificados SSL dos sites do grupo H&P',
+        '🔐 Gera threat model para a API do ClawYard',
+        '🔐 Quais os riscos de cibersegurança para uma empresa marítima?',
+    ],
+    quantum: [
+        '⚛️ Mostra os papers de quantum computing de hoje no arXiv',
+        '⚛️ Explica o que é superposição quântica de forma simples',
+        '⚛️ Qual o estado actual da computação quântica em 2026?',
+        '⚛️ Como a criptografia quântica pode proteger comunicações navais?',
+        '⚛️ Quais os últimos avanços em quantum machine learning?',
+        '⚛️ Explica o algoritmo de Shor e o impacto na criptografia actual',
+    ],
+};
+
+function renderStarterChips(agent) {
+    const chips = AGENT_CHIPS[agent] || AGENT_CHIPS['auto'];
+    const container = document.getElementById('starter-chips');
+    if (!container) return;
+    container.innerHTML = chips.map(c =>
+        `<div class="starter-chip" onclick="startChat(this)">${c}</div>`
+    ).join('');
+}
+
+// Init chips on page load
+renderStarterChips(agentSelect.value || 'auto');
+
+// Update chips when agent changes
+agentSelect.addEventListener('change', () => {
+    renderStarterChips(agentSelect.value);
+    const agentName = AGENT_NAMES[agentSelect.value] || agentSelect.value;
+    const emptyState = document.getElementById('empty-state');
+    if (emptyState) {
+        emptyState.querySelector('p').textContent =
+            'A falar com ' + AGENT_EMOJIS[agentSelect.value] + ' ' + agentName +
+            ' · Escolhe um exemplo ou escreve a tua pergunta';
+    }
+});
 
 let isRecording  = false;
 let recognition  = null;
@@ -411,7 +510,9 @@ sendBtn.addEventListener('click', sendMessage);
 
 // ── Starter chips ──
 function startChat(el) {
-    input.value = el.textContent.replace(/^[^\s]+\s/, '');
+    // Strip leading emoji + space, keep the actual question
+    input.value = el.textContent.replace(/^[\p{Emoji}\s]+/u, '').trim();
+    if (!input.value) input.value = el.textContent.trim();
     document.getElementById('empty-state')?.remove();
     sendMessage();
 }
