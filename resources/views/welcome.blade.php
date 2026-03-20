@@ -206,6 +206,8 @@
         <option value="nvidia">⚡ Carlos NVIDIA</option>
         <option value="aria">🔐 ARIA Security</option>
         <option value="quantum">⚛️ Prof. Quantum Leap</option>
+        <option value="finance">💰 Dr. Luís Financeiro</option>
+        <option value="research">🔍 Marina Research</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -252,6 +254,8 @@
                 <div class="agent-mini" data-agent="nvidia"><div class="dot-status"></div><span>⚡ Carlos NVIDIA</span></div>
                 <div class="agent-mini" data-agent="aria"><div class="dot-status"></div><span>🔐 ARIA Security</span></div>
                 <div class="agent-mini" data-agent="quantum"><div class="dot-status"></div><span>⚛️ Prof. Quantum Leap</span></div>
+                <div class="agent-mini" data-agent="finance"><div class="dot-status"></div><span>💰 Dr. Luís Financeiro</span></div>
+                <div class="agent-mini" data-agent="research"><div class="dot-status"></div><span>🔍 Marina Research</span></div>
             </div>
         </div>
     </div>
@@ -317,13 +321,13 @@ const SESSION_ID = 'cyw_' + Date.now() + '_' + Math.random().toString(36).substr
 const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
-    aria:'🔐', quantum:'⚛️'
+    aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍'
 };
 
 const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
     email:'Daniel Email', sap:'Richard SAP', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
-    aria:'ARIA Security', quantum:'Prof. Quantum Leap'
+    aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research'
 };
 
 const AGENT_CHIPS = {
@@ -412,6 +416,22 @@ const AGENT_CHIPS = {
         '🏛️ Há patentes recentes sobre manutenção preditiva para motores marítimos?',
         '⚛️ Como a criptografia quântica pode proteger comunicações navais?',
         '🏛️ Analisa patentes de propulsão Schottel e o que a HP-Group pode fazer',
+    ],
+    finance: [
+        '💰 Analisa a rentabilidade da PartYard por linha de produto (marine vs defense)',
+        '💰 Quais os benefícios fiscais disponíveis para a PartYard em Portugal? (RFAI, SIFIDE)',
+        '💰 Faz uma análise de rácios financeiros com base no balanço da empresa',
+        '💰 Como estruturar uma carta de crédito documentário para fornecedor MTU?',
+        '💰 Qual o impacto fiscal de abrir uma subsidiária em Noruega ou Brasil?',
+        '💰 Revê o plano de cash flow e identifica riscos de tesouraria para Q2 2026',
+    ],
+    research: [
+        '🔍 Analisa o website partyard.eu e lista as 10 melhorias mais urgentes',
+        '🔍 Compara a PartYard com a Wärtsilä Parts — posicionamento e preços',
+        '🔍 Quais os concorrentes mais fortes no mercado de peças MTU na Europa?',
+        '🔍 Que palavras-chave SEO a PartYard deveria atacar em inglês e português?',
+        '🔍 Faz um benchmark do site partyard.eu vs melhores práticas do setor',
+        '🔍 Qual a estratégia digital para a PartYard crescer no mercado escandinavo?',
     ],
 };
 
