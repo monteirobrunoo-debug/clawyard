@@ -98,7 +98,7 @@
 
 <div class="hero">
     <h1>Escolha o seu Agente</h1>
-    <p>Powered by NVIDIA NeMo + Claude — 11 agentes especializados prontos a ajudar</p>
+    <p>Powered by NVIDIA NeMo + Claude — 13 agentes especializados prontos a ajudar</p>
 </div>
 
 <p class="section-title">Agentes Disponiveis</p>
@@ -118,6 +118,8 @@
         ['key' => 'nvidia',       'name' => 'Carlos NVIDIA',           'emoji' => '⚡', 'role' => 'NVIDIA NeMo — velocidade e eficiencia maxima'],
         ['key' => 'aria',         'name' => 'ARIA Security',           'emoji' => '🔐', 'role' => 'Ciberseguranca — STRIDE, OWASP, scan diario dos sites'],
         ['key' => 'quantum',      'name' => 'Prof. Quantum Leap',      'emoji' => '⚛️', 'role' => 'Quantum — analise diaria de papers arXiv sobre quantum'],
+        ['key' => 'finance',      'name' => 'Dr. Luís Financeiro',     'emoji' => '💰', 'role' => 'ROC · TOC · PhD Gestão Bancária — Contabilidade, Auditoria e Fiscalidade'],
+        ['key' => 'research',     'name' => 'Marina Research',         'emoji' => '🔍', 'role' => 'Inteligência competitiva — benchmarking, mercado e melhorias do site'],
     ];
     @endphp
 

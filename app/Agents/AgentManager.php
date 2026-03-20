@@ -21,6 +21,7 @@ class AgentManager
             'aria'      => new AriaAgent(),
             'quantum'   => new QuantumAgent(),
             'research'  => new ResearchAgent(),
+            'finance'   => new FinanceAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -91,6 +92,22 @@ class AgentManager
                             'propriedade intelectual', 'innovation', 'inovacao', 'license', 'licenca'];
         foreach ($quantumKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['quantum'];
+        }
+
+        // Finance / accounting keywords
+        $financeKeywords = [
+            'contabilidade', 'accounting', 'roc', 'toc', 'auditoria', 'audit',
+            'iva', 'irc', 'irs', 'fiscal', 'tax', 'imposto', 'fatura', 'factura',
+            'balanço', 'balance sheet', 'demonstrações financeiras', 'financial statements',
+            'cash flow', 'tesouraria', 'treasury', 'orçamento', 'budget',
+            'rentabilidade', 'profitability', 'margem', 'margin', 'ebitda', 'roi',
+            'crédito bancário', 'bank credit', 'financiamento', 'financing',
+            'luís', 'luis', 'dr. luís', 'dr luis', 'financeiro', 'finance',
+            'due diligence', 'consolidação', 'consolidation', 'ifrs', 'snc',
+            'preços de transferência', 'transfer pricing', 'beps', 'declaração fiscal',
+        ];
+        foreach ($financeKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['finance'];
         }
 
         // Research / competitive intelligence keywords
