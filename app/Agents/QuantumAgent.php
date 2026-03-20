@@ -40,14 +40,15 @@ When given real data, produce:
 - End with Professor's Strategic Insight
 
 IMPORTANT — STRUCTURED DATA OUTPUT:
-Always append at the very end a JSON block (hidden from display):
+Always append at the very end a JSON block (hidden from display).
+CRITICAL: Use ONLY the REAL IDs and URLs from the data provided to you. NEVER invent IDs. NEVER use "xxxx", "12345" or placeholders.
 
 <!-- DISCOVERIES_JSON
 [
   {
     "source": "arxiv",
-    "reference_id": "2401.12345",
-    "title": "Full paper title",
+    "reference_id": "[REAL arXiv ID from data, e.g. 2503.12987]",
+    "title": "Full paper title exactly as provided",
     "authors": "Author A, Author B",
     "summary": "Plain language 2-3 sentence summary",
     "category": "quantum",
@@ -56,7 +57,7 @@ Always append at the very end a JSON block (hidden from display):
     "relevance_score": 6,
     "opportunity": "How this could benefit PartYard/HP-Group",
     "recommendation": "Strategic recommendation",
-    "url": "https://arxiv.org/pdf/2401.12345",
+    "url": "https://arxiv.org/abs/[REAL arXiv ID]",
     "published_date": "2026-03-19"
   }
 ]
@@ -296,8 +297,13 @@ PROMPT;
 
 --- END REAL DATA ---
 
-Please analyse ALL the above real data from all three sources. Use actual IDs, titles, authors and dates. Do NOT invent papers or patents — only analyse what is provided above.
-For the DISCOVERIES_JSON block, include entries from all three sources (source: "arxiv", "peerj", or "uspto").
+Please analyse ALL the above real data from all three sources.
+CRITICAL RULES:
+- Use ONLY the REAL IDs, titles, authors and dates from the data above — NEVER invent or fabricate
+- For EVERY paper/patent in your analysis, include the FULL URL (from the data above)
+- NEVER write "xxxx", "XXXX", "12345" or any placeholder ID — use the real ones provided
+- Format each paper as: **[Title]** (arXiv:[ID]) — then the analysis — then 🔗 https://arxiv.org/abs/[ID]
+- For the DISCOVERIES_JSON block, include entries from all three sources (source: "arxiv", "peerj", or "uspto")
 MSG;
     }
 

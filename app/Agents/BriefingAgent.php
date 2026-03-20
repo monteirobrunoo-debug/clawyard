@@ -75,9 +75,12 @@ OUTPUT FORMAT (strictly follow this structure):
 
 ## ⚛️ DESCOBERTAS CIENTÍFICAS & TECNOLÓGICAS
 [Top findings from Quantum/arXiv/PeerJ. For each, specify which HP-Group company benefits:]
-**[Título]** | Empresa: [PartYard Marine / PartYard Military / SETQ / Viridis / Grupo]
+**[Título]** | ID: [source:reference_id EXACTO fornecido nos dados] | Empresa: [PartYard Marine / PartYard Military / SETQ / Viridis / Grupo]
+- 🔗 Link: [URL COMPLETO fornecido nos dados — OBRIGATÓRIO]
 - Relevância: [what it means]
 - Acção recomendada: [specific next step]
+
+REGRA CRÍTICA: NUNCA inventes IDs, nunca uses "xxxx", "12345" ou placeholders. Usa APENAS os IDs e URLs reais fornecidos no pacote de inteligência acima. Se não há URL, escreve "URL não disponível".
 
 ---
 
@@ -154,8 +157,11 @@ PROMPT;
         if ($discoveries->isNotEmpty()) {
             $lines = ["## DISCOVERIES FROM TODAY ({$discoveries->count()} items):"];
             foreach ($discoveries as $d) {
-                $lines[] = "- [{$d->source}] {$d->title} | Priority: {$d->priority} | Score: {$d->relevance_score}/10 | {$d->summary}";
-                if ($d->opportunity) $lines[] = "  → Opportunity: {$d->opportunity}";
+                $id  = $d->reference_id ?? '';
+                $url = $d->url ?? ($id ? "https://arxiv.org/abs/{$id}" : '');
+                $lines[] = "- [{$d->source}:{$id}] {$d->title} | Priority: {$d->priority} | Score: {$d->relevance_score}/10 | {$d->summary}";
+                if ($url)              $lines[] = "  → Link: {$url}";
+                if ($d->opportunity)   $lines[] = "  → Opportunity: {$d->opportunity}";
                 if ($d->recommendation) $lines[] = "  → Recommendation: {$d->recommendation}";
             }
             $sections[] = implode("\n", $lines);
@@ -166,7 +172,10 @@ PROMPT;
             if ($discoveries->isNotEmpty()) {
                 $lines = ["## RECENT DISCOVERIES (last 3 days, {$discoveries->count()} items):"];
                 foreach ($discoveries as $d) {
-                    $lines[] = "- [{$d->source}] {$d->title} | {$d->summary}";
+                    $id  = $d->reference_id ?? '';
+                    $url = $d->url ?? ($id ? "https://arxiv.org/abs/{$id}" : '');
+                    $lines[] = "- [{$d->source}:{$id}] {$d->title} | {$d->summary}";
+                    if ($url) $lines[] = "  → Link: {$url}";
                 }
                 $sections[] = implode("\n", $lines);
             }
