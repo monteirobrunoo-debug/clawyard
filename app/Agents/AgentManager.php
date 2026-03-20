@@ -10,16 +10,17 @@ class AgentManager
     public function __construct()
     {
         $this->agents = [
-            'nvidia'   => new NvidiaAgent(),
-            'claude'   => new ClaudeAgent(),
-            'sales'    => new SalesAgent(),
-            'support'  => new SupportAgent(),
-            'email'    => new EmailAgent(),
-            'sap'      => new SapAgent(),
-            'document' => new DocumentAgent(),
-            'cyber'    => new CyberAgent(),
-            'aria'     => new AriaAgent(),
-            'quantum'  => new QuantumAgent(),
+            'nvidia'    => new NvidiaAgent(),
+            'claude'    => new ClaudeAgent(),
+            'sales'     => new SalesAgent(),
+            'support'   => new SupportAgent(),
+            'email'     => new EmailAgent(),
+            'sap'       => new SapAgent(),
+            'document'  => new DocumentAgent(),
+            'cyber'     => new CyberAgent(),
+            'aria'      => new AriaAgent(),
+            'quantum'   => new QuantumAgent(),
+            'research'  => new ResearchAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -90,6 +91,18 @@ class AgentManager
                             'propriedade intelectual', 'innovation', 'inovacao', 'license', 'licenca'];
         foreach ($quantumKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['quantum'];
+        }
+
+        // Research / competitive intelligence keywords
+        $researchKeywords = [
+            'website', 'partyard.eu', 'concorrente', 'competitor', 'benchmark',
+            'melhorias do site', 'site melhorias', 'website improvements', 'website analysis',
+            'análise do site', 'analise do site', 'seo', 'google ranking', 'mercado marítimo',
+            'market analysis', 'competitive analysis', 'marina', 'research agent',
+            'posição no mercado', 'estratégia digital', 'digital strategy',
+        ];
+        foreach ($researchKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['research'];
         }
 
         return $this->agents['claude'];

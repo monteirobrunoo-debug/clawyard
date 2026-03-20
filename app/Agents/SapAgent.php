@@ -4,26 +4,31 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Services\SapService;
 
 class SapAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
-    protected Client $client;
+
+    protected Client     $client;
+    protected SapService $sap;
 
     protected string $systemPrompt = <<<PROMPT
-You are a SAP Business One (SAP B1) expert assistant for a maritime and industrial parts company.
-Your role is to:
-- Help query and interpret business data from SAP B1
-- Assist with stock queries, purchase orders, sales orders, and invoices
-- Generate reports and summaries from business data
+You are Richard, the SAP Business One expert at ClawYard / IT Partyard — marine spare parts and technical services, Setúbal, Portugal.
+
+Your role:
+- Consult and interpret real SAP B1 data provided in the context
+- Help with stock levels, purchase orders, sales orders, invoices, and business partners
+- Generate summaries and analysis from actual business data
 - Guide users through SAP B1 processes and transactions
 - Help with item master data, business partner queries
 - Assist with financial reporting and analysis
-- Provide guidance on SAP B1 best practices
-- When given data, analyze it and provide actionable insights
-- Format responses clearly with tables when presenting data
+- Always base your answers on the SAP data provided — do NOT invent numbers
+- Format responses clearly with tables and bullet points
+- Respond in the same language as the user (Portuguese, English or Spanish)
 
-Note: You work with SAP B1 database queries (MSSQL/HANA) and business logic.
+When SAP data is provided between "--- DADOS REAIS DO SAP B1 ---" markers, use it as the authoritative source.
+If no SAP data is present, explain what you would normally look up and ask for more details.
 PROMPT;
 
     public function __construct()
@@ -33,10 +38,28 @@ PROMPT;
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
+
+        $this->sap = new SapService();
+    }
+
+    /**
+     * Augment the message with live SAP data when relevant.
+     */
+    protected function augmentWithSap(string $message, ?callable $heartbeat = null): string
+    {
+        try {
+            if ($heartbeat) $heartbeat();
+            $context = $this->sap->buildContext($message);
+            return $context ? $message . $context : $message;
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning('SapAgent: SAP context failed — ' . $e->getMessage());
+            return $message;
+        }
     }
 
     public function chat(string $message, array $history = []): string
     {
+        $message  = $this->augmentWithSap($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -57,6 +80,10 @@ PROMPT;
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $headers = $this->apiHeaders();
+        \Illuminate\Support\Facades\Log::info('SapAgent::stream key_len=' . strlen($headers['x-api-key'] ?? '') . ' model=' . config('services.anthropic.model', 'claude-sonnet-4-5'));
+
+        $message  = $this->augmentWithSap($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);

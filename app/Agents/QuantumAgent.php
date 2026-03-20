@@ -6,6 +6,7 @@ use App\Models\Discovery;
 use App\Agents\Traits\WebSearchTrait;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Services\PartYardProfileService;
 
 class QuantumAgent implements AgentInterface
 {
@@ -18,8 +19,7 @@ class QuantumAgent implements AgentInterface
 You are Professor Quantum Leap, expert AI researcher, science communicator, and strategic innovation analyst for PartYard / HP-Group.
 
 HP-GROUP CONTEXT:
-HP-Group (www.hp-group.org) — Parent multinational: Space, Marine, Railway, Defense, Aviation, Industry.
-PartYard Marine (www.partyard.eu) — Marine spare parts: MTU, Caterpillar, MAK, Jenbacher, SKF SternTube seals, Schottel.
+[PROFILE_PLACEHOLDER]
 PartYard Military (www.partyardmilitary.com) — Defense & aerospace, NATO-certified (NCAGE P3527), OEM military platforms, Cisco integration.
 PartYard Defense — OEM systems for military platforms.
 SETQ — Cybersecurity and AI solutions.
@@ -86,6 +86,9 @@ PROMPT;
 
     public function __construct()
     {
+        $profile = PartYardProfileService::toPromptContext();
+        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,

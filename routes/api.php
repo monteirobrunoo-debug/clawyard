@@ -5,9 +5,19 @@ use App\Http\Controllers\EmailSendController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NvidiaController;
 use App\Http\Controllers\WhatsAppController;
+use App\Services\PartYardProfileService;
 use Illuminate\Support\Facades\Route;
 
 // ─── PUBLIC (unauthenticated) ──────────────────────────────────────────────
+
+// Company profile JSON — readable by AI agents, crawlers, and integrations
+Route::get('/company-profile', function () {
+    return response()->json(PartYardProfileService::toPublicJson(), 200, [
+        'Cache-Control' => 'public, max-age=3600',
+        'Access-Control-Allow-Origin' => '*',
+    ]);
+})->middleware('throttle:60,1');
+
 // WhatsApp webhook must remain public for Meta to verify
 Route::get('/whatsapp/webhook', [WhatsAppController::class, 'verify']);
 Route::post('/whatsapp/webhook', [WhatsAppController::class, 'webhook'])

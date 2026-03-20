@@ -6,6 +6,7 @@ use App\Models\Discovery;
 use App\Models\Report;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Services\PartYardProfileService;
 
 class BriefingAgent implements AgentInterface
 {
@@ -207,8 +208,12 @@ PROMPT;
             }
         }
 
-        if (empty($sections)) {
-            return "No intelligence data available for today. Please generate a Quantum digest first, then run the briefing.";
+        // Always prepend the live company profile
+        $profile = PartYardProfileService::toPromptContext();
+        array_unshift($sections, "## COMPANY PROFILE (reference for all analysis):\n{$profile}");
+
+        if (count($sections) <= 1) {
+            $sections[] = "No intelligence data available for today. Please generate a Quantum digest first, then run the briefing.";
         }
 
         $date = now()->format('d/m/Y H:i');

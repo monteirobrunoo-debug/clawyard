@@ -54,6 +54,15 @@ return [
         'api_key' => env('TAVILY_API_KEY'),
     ],
 
+    'deploy_token' => env('DEPLOY_TOKEN', ''),
+
+    'sap' => [
+        'base_url' => env('SAP_B1_URL', 'https://sld.partyard.privatcloud.biz/b1s/v1'),
+        'company'  => env('SAP_B1_COMPANY', 'PARTYARD'),
+        'username' => env('SAP_B1_USER', ''),
+        'password' => env('SAP_B1_PASSWORD', ''),
+    ],
+
     'whatsapp' => [
         'token'        => env('META_WHATSAPP_TOKEN'),
         'phone_id'     => env('META_WHATSAPP_PHONE_ID'),
