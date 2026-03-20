@@ -298,8 +298,13 @@ class NvidiaController extends Controller
                 \Log::error('ClawYard stream error', [
                     'agent'     => $agentName_final,
                     'exception' => $e->getMessage(),
+                    'file'      => $e->getFile(),
+                    'line'      => $e->getLine(),
                 ]);
-                echo 'data: ' . json_encode(['error' => 'Erro ao processar a mensagem. Por favor tente novamente.']) . "\n\n";
+                $errMsg = app()->environment('production')
+                    ? 'Erro ao processar: ' . $e->getMessage()
+                    : $e->getMessage();
+                echo 'data: ' . json_encode(['error' => $errMsg]) . "\n\n";
                 ob_flush(); flush();
                 echo "data: [DONE]\n\n";
                 ob_flush(); flush();

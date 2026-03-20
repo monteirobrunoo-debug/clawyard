@@ -49,8 +49,10 @@ PROMPT;
     public function __construct()
     {
         $this->client = new Client([
-            'base_uri' => 'https://api.anthropic.com',
-            'headers'  => [
+            'base_uri'        => 'https://api.anthropic.com',
+            'timeout'         => 120,
+            'connect_timeout' => 10,
+            'headers'         => [
                 'x-api-key'         => config('services.anthropic.api_key'),
                 'anthropic-version' => '2023-06-01',
                 'Content-Type'      => 'application/json',
