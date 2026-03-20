@@ -36,7 +36,6 @@ REPORTING:
 When given real data, produce:
 - Part 1: Top 5 arXiv quantum/AI papers analysis
 - Part 2: Top 4 PeerJ CS articles on agents & multi-agent systems
-- Part 3: Top 7 USPTO patents with strategic analysis for PartYard/HP-Group
 - End with Professor's Strategic Insight
 
 IMPORTANT — STRUCTURED DATA OUTPUT:
@@ -63,7 +62,7 @@ CRITICAL: Use ONLY the REAL IDs and URLs from the data provided to you. NEVER in
 ]
 DISCOVERIES_JSON -->
 
-Valid sources: "arxiv", "peerj", "uspto"
+Valid sources: "arxiv", "peerj"
 Valid categories: propulsion, maintenance, defense, seals, digital, energy, materials, quantum, supply_chain, ai_ml, other
 Valid priorities: act_now, monitor, watch, awareness
 Valid activity_types: "Propulsão Naval", "Manutenção Preditiva", "Defesa & Naval Militar", "Vedantes & Rolamentos", "Plataforma Digital", "Energia & Combustível", "Materiais & Fabrico", "Quantum & Computação", "Supply Chain & Logística", "AI & Machine Learning", "Outro"
@@ -271,15 +270,14 @@ PROMPT;
     // ─── Build enriched message (pre-fetched data) ─────────────────────────
     protected function buildDigestMessage(string $userMessage): string
     {
-        $arxiv   = $this->fetchArxivPapers();
-        $peerj   = $this->fetchPeerJPapers();
-        $patents = $this->fetchPatents();
-        return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj, $patents);
+        $arxiv = $this->fetchArxivPapers();
+        $peerj = $this->fetchPeerJPapers();
+        return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj);
     }
 
-    protected function buildDigestMessageFromData(string $userMessage, string $arxiv, string $peerj, string $patents): string
+    protected function buildDigestMessageFromData(string $userMessage, string $arxiv, string $peerj): string
     {
-        $today   = now()->format('Y-m-d');
+        $today = now()->format('Y-m-d');
 
         return <<<MSG
 {$userMessage}
@@ -292,18 +290,16 @@ PROMPT;
 ## PeerJ Computer Science Articles (fetched live via CrossRef — agents & multi-agent systems):
 {$peerj}
 
-## USPTO Patent Data:
-{$patents}
-
 --- END REAL DATA ---
 
-Please analyse ALL the above real data from all three sources.
+Please analyse ALL the above real data from both sources.
 CRITICAL RULES:
 - Use ONLY the REAL IDs, titles, authors and dates from the data above — NEVER invent or fabricate
-- For EVERY paper/patent in your analysis, include the FULL URL (from the data above)
+- For EVERY paper in your analysis, include the FULL URL (from the data above)
 - NEVER write "xxxx", "XXXX", "12345" or any placeholder ID — use the real ones provided
 - Format each paper as: **[Title]** (arXiv:[ID]) — then the analysis — then 🔗 https://arxiv.org/abs/[ID]
-- For the DISCOVERIES_JSON block, include entries from all three sources (source: "arxiv", "peerj", or "uspto")
+- For the DISCOVERIES_JSON block, include entries from both sources (source: "arxiv" or "peerj" only)
+- DO NOT analyse patents — no USPTO, no patent numbers, no patent links
 MSG;
     }
 
@@ -349,9 +345,7 @@ MSG;
             $arxiv = $this->fetchArxivPapers();
             if ($heartbeat) $heartbeat('fetching PeerJ');
             $peerj = $this->fetchPeerJPapers();
-            if ($heartbeat) $heartbeat('fetching patents');
-            $patents = $this->fetchPatents();
-            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj, $patents);
+            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj);
         } else {
             $finalMessage = $message;
             $finalMessage = $this->augmentWithWebSearch($finalMessage, $heartbeat);

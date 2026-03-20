@@ -148,7 +148,7 @@ PROMPT;
         $today    = now()->startOfDay();
         $sections = [];
 
-        // 1. Today's discoveries (arXiv, PeerJ, USPTO)
+        // 1. Today's discoveries (arXiv, PeerJ)
         $discoveries = Discovery::where('created_at', '>=', $today)
             ->orderBy('relevance_score', 'desc')
             ->limit(20)
