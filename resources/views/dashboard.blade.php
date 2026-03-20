@@ -121,6 +121,17 @@
     ];
     @endphp
 
+    {{-- Briefing Executivo — card especial que vai para /briefing --}}
+    <a href="/briefing" class="agent-card" style="border-color:#002244;background:linear-gradient(135deg,#001a2a,#0a0a0a)">
+        <div class="status-dot" style="background:#00aaff;box-shadow:0 0 6px #00aaff"></div>
+        <div class="avatar" style="background:#001a2a;border:2px solid #002244;overflow:hidden">
+            <img src="/images/agents/briefing.png" alt="Renato" style="width:100%;height:100%;object-fit:cover">
+        </div>
+        <div class="agent-name" style="color:#00aaff">Estratega Renato</div>
+        <div class="agent-role">Briefing executivo — reúne Quantum, ARIA, Sales e todos os agentes num plano de acção com PDF</div>
+        <div class="talk-btn" style="background:#002244;color:#00aaff;border:1px solid #004488">Gerar Briefing →</div>
+    </a>
+
     @foreach($agents as $agent)
     <a href="/chat?agent={{ $agent['key'] }}" class="agent-card">
         <div class="status-dot"></div>

@@ -3,9 +3,11 @@
 namespace App\Agents;
 
 use GuzzleHttp\Client;
+use App\Agents\Traits\WebSearchTrait;
 
 class ClaudeAgent implements AgentInterface
 {
+    use WebSearchTrait;
     protected Client $client;
 
     public function __construct()
@@ -22,6 +24,7 @@ class ClaudeAgent implements AgentInterface
 
     public function chat(string $message, array $history = []): string
     {
+        $message = $this->augmentWithWebSearch($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -40,6 +43,7 @@ class ClaudeAgent implements AgentInterface
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $message = $this->augmentWithWebSearch($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);

@@ -197,20 +197,22 @@
     <select id="agent-select">
         <option value="auto">🤖 Auto Route</option>
         <option value="orchestrator">🌐 All Agents</option>
-        <option value="sales">💼 Marco — Sales</option>
-        <option value="support">🔧 Marcus — Support</option>
-        <option value="email">📧 Daniel — Email</option>
-        <option value="sap">📊 Ricardo — SAP</option>
-        <option value="document">📄 Sofia — Document</option>
-        <option value="claude">🧠 Iris — Claude</option>
-        <option value="nvidia">⚡ Nemo — NVIDIA</option>
-        <option value="aria">🔐 ARIA — Security</option>
+        <option value="sales">💼 Marco Sales</option>
+        <option value="support">🔧 Marcus Suporte</option>
+        <option value="email">📧 Daniel Email</option>
+        <option value="sap">📊 Richard SAP</option>
+        <option value="document">📄 Comandante Doc</option>
+        <option value="claude">🧠 Bruno AI</option>
+        <option value="nvidia">⚡ Carlos NVIDIA</option>
+        <option value="aria">🔐 ARIA Security</option>
         <option value="quantum">⚛️ Prof. Quantum Leap</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
         <a href="/discoveries" title="Descobertas & Patentes" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🔬 Descobertas</a>
         <a href="/reports" title="Relatórios" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">📋 Reports</a>
+        <a href="/conversations" title="Histórico de Conversas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">💬 Histórico</a>
+        <a href="/briefing" title="Briefing Executivo Diário" style="background:#0d1a00;border:1px solid #1e3300;color:#76b900;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:700;">📊 Briefing</a>
         <a href="/schedules" title="Tarefas Agendadas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🗓️ Schedule</a>
         @if(Auth::user()->isAdmin())
         <a href="/admin/users" title="Admin" style="background:var(--bg3);border:1px solid #ff4444;color:#ff6666;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">⚙️ Admin</a>
@@ -241,14 +243,14 @@
         <div class="agent-live">
             <div class="lbl">Agentes Disponíveis</div>
             <div class="agent-cards-mini" id="agent-status-list">
-                <div class="agent-mini" data-agent="sales"><div class="dot-status"></div><span>💼 Marco — Sales</span></div>
-                <div class="agent-mini" data-agent="support"><div class="dot-status"></div><span>🔧 Marcus — Support</span></div>
-                <div class="agent-mini" data-agent="email"><div class="dot-status"></div><span>📧 Daniel — Email</span></div>
-                <div class="agent-mini" data-agent="sap"><div class="dot-status"></div><span>📊 Ricardo — SAP</span></div>
-                <div class="agent-mini" data-agent="document"><div class="dot-status"></div><span>📄 Sofia — Document</span></div>
-                <div class="agent-mini" data-agent="claude"><div class="dot-status"></div><span>🧠 Iris — Claude</span></div>
-                <div class="agent-mini" data-agent="nvidia"><div class="dot-status"></div><span>⚡ Nemo — NVIDIA</span></div>
-                <div class="agent-mini" data-agent="aria"><div class="dot-status"></div><span>🔐 ARIA — Security</span></div>
+                <div class="agent-mini" data-agent="sales"><div class="dot-status"></div><span>💼 Marco Sales</span></div>
+                <div class="agent-mini" data-agent="support"><div class="dot-status"></div><span>🔧 Marcus Suporte</span></div>
+                <div class="agent-mini" data-agent="email"><div class="dot-status"></div><span>📧 Daniel Email</span></div>
+                <div class="agent-mini" data-agent="sap"><div class="dot-status"></div><span>📊 Richard SAP</span></div>
+                <div class="agent-mini" data-agent="document"><div class="dot-status"></div><span>📄 Comandante Doc</span></div>
+                <div class="agent-mini" data-agent="claude"><div class="dot-status"></div><span>🧠 Bruno AI</span></div>
+                <div class="agent-mini" data-agent="nvidia"><div class="dot-status"></div><span>⚡ Carlos NVIDIA</span></div>
+                <div class="agent-mini" data-agent="aria"><div class="dot-status"></div><span>🔐 ARIA Security</span></div>
                 <div class="agent-mini" data-agent="quantum"><div class="dot-status"></div><span>⚛️ Prof. Quantum Leap</span></div>
             </div>
         </div>
@@ -314,8 +316,8 @@ const AGENT_EMOJIS = {
 };
 
 const AGENT_NAMES = {
-    auto:'Auto', orchestrator:'All Agents', sales:'Marco', support:'Marcus',
-    email:'Daniel', sap:'Ricardo', document:'Sofia', claude:'Iris', nvidia:'Nemo',
+    auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
+    email:'Daniel Email', sap:'Richard SAP', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
     aria:'ARIA Security', quantum:'Prof. Quantum Leap'
 };
 

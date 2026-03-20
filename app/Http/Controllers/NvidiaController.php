@@ -263,7 +263,7 @@ class NvidiaController extends Controller
         return response()->stream(function () use (
             $resolvedAgent, $resolvedMessage, $resolvedHistory,
             $resolvedAgentLog, $suggestions, $agentModel, $agentName_final,
-            $conversationRef, $sessionId
+            $conversationRef, $sessionId, $userId
         ) {
             // Send metadata first so the JS can set up the message bubble correctly
             $meta = [
@@ -317,20 +317,30 @@ class NvidiaController extends Controller
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
             }
 
-            // Auto-save report for quantum + aria digests (no button needed)
-            if (in_array($agentName_final, ['quantum','aria']) && strlen($fullReply) > 200) {
+            // Auto-save report for all agents (responses > 150 chars)
+            if (strlen($fullReply) > 150) {
                 try {
-                    $agentLabel = $agentName_final === 'quantum' ? 'Prof. Quantum Leap' : 'ARIA Security';
-                    $date       = now()->format('d/m/Y H:i');
-                    \App\Models\Report::firstOrCreate(
-                        ['title' => $agentLabel . ' — ' . now()->format('Y-m-d')],
-                        [
-                            'user_id' => auth()->id(),
-                            'type'    => $agentName_final === 'quantum' ? 'quantum' : 'aria',
-                            'content' => $fullReply,
-                            'summary' => substr(strip_tags($fullReply), 0, 300),
-                        ]
-                    );
+                    $agentLabels = [
+                        'quantum'      => 'Prof. Quantum Leap',
+                        'aria'         => 'ARIA Security',
+                        'sales'        => 'Sales Agent',
+                        'email'        => 'Email Agent',
+                        'support'      => 'Marcus Suporte',
+                        'orchestrator' => 'Orchestrator',
+                        'auto'         => 'Auto Agent',
+                    ];
+                    $agentLabel = $agentLabels[$agentName_final] ?? ucfirst($agentName_final);
+                    $validTypes = ['quantum','aria','market','sales','email','support','orchestrator','custom'];
+                    $type       = in_array($agentName_final, $validTypes) ? $agentName_final : 'custom';
+                    // Title includes session so same agent can have multiple reports per day
+                    $title = $agentLabel . ' — ' . now()->format('Y-m-d H:i');
+                    \App\Models\Report::create([
+                        'title'   => $title,
+                        'user_id' => $userId,
+                        'type'    => $type,
+                        'content' => $fullReply,
+                        'summary' => substr(strip_tags($fullReply), 0, 300),
+                    ]);
                 } catch (\Throwable $e) {
                     \Log::warning('ClawYard: could not auto-save report — ' . $e->getMessage());
                 }

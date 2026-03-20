@@ -50,6 +50,10 @@ return [
         'api_key' => env('PATENTSVIEW_API_KEY'),
     ],
 
+    'tavily' => [
+        'api_key' => env('TAVILY_API_KEY'),
+    ],
+
     'whatsapp' => [
         'token'        => env('META_WHATSAPP_TOKEN'),
         'phone_id'     => env('META_WHATSAPP_PHONE_ID'),

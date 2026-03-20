@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\BriefingController;
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
@@ -33,6 +35,22 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/reports/{report}', [ReportController::class, 'show'])->name('reports.show');
     Route::get('/reports/{report}/pdf', [ReportController::class, 'pdf'])->name('reports.pdf');
     Route::delete('/reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');
+});
+
+// Daily Executive Briefing
+Route::middleware(['auth'])->group(function () {
+    Route::get('/briefing', [BriefingController::class, 'index'])->name('briefing');
+    Route::get('/briefing/stream', [BriefingController::class, 'stream'])->name('briefing.stream');
+    Route::get('/briefing/latest/pdf', [BriefingController::class, 'latestPdf'])->name('briefing.latest.pdf');
+    Route::get('/briefing/{report}/pdf', [BriefingController::class, 'pdf'])->name('briefing.pdf');
+});
+
+// Conversations — history & PDF export
+Route::middleware(['auth'])->group(function () {
+    Route::get('/conversations', [ConversationController::class, 'index'])->name('conversations');
+    Route::get('/conversations/{conversation}', [ConversationController::class, 'show'])->name('conversations.show');
+    Route::get('/conversations/{conversation}/pdf', [ConversationController::class, 'pdf'])->name('conversations.pdf');
+    Route::delete('/conversations/{conversation}', [ConversationController::class, 'destroy'])->name('conversations.destroy');
 });
 
 // Discoveries — patents & papers tracker

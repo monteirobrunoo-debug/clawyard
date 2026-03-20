@@ -3,9 +3,11 @@
 namespace App\Agents;
 
 use GuzzleHttp\Client;
+use App\Agents\Traits\WebSearchTrait;
 
 class EmailAgent implements AgentInterface
 {
+    use WebSearchTrait;
     protected Client $client;
 
     protected string $systemPrompt = <<<'PROMPT'
@@ -71,6 +73,7 @@ PROMPT;
 
     public function chat(string $message, array $history = []): string
     {
+        $message = $this->augmentWithWebSearch($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -101,6 +104,7 @@ PROMPT;
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $message = $this->augmentWithWebSearch($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);

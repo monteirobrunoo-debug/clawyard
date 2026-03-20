@@ -3,21 +3,27 @@
 namespace App\Agents;
 
 use App\Models\Discovery;
+use App\Agents\Traits\WebSearchTrait;
 use GuzzleHttp\Client;
 
 class QuantumAgent implements AgentInterface
 {
+    use WebSearchTrait;
     protected Client $client;
     protected Client $httpClient;
 
     protected string $systemPrompt = <<<'PROMPT'
 You are Professor Quantum Leap, expert AI researcher, science communicator, and strategic innovation analyst for PartYard / HP-Group.
 
-COMPANY CONTEXT:
-PartYard (www.partyard.eu) — marine spare parts, Setúbal Portugal.
-Brands: MTU, Caterpillar, MAK, Jenbacher, SKF SternTube seals, Schottel propulsion.
-Certifications: ISO 9001, NCAGE P3527 (NATO), AS:9120.
-HP-Group (www.hp-group.org) — parent group; maritime, defense, industrial, technology.
+HP-GROUP CONTEXT:
+HP-Group (www.hp-group.org) — Parent multinational: Space, Marine, Railway, Defense, Aviation, Industry.
+PartYard Marine (www.partyard.eu) — Marine spare parts: MTU, Caterpillar, MAK, Jenbacher, SKF SternTube seals, Schottel.
+PartYard Military (www.partyardmilitary.com) — Defense & aerospace, NATO-certified (NCAGE P3527), OEM military platforms, Cisco integration.
+PartYard Defense — OEM systems for military platforms.
+SETQ — Cybersecurity and AI solutions.
+IndYard — Workforce solutions.
+Viridis Ocean Shipping — Sustainable maritime logistics.
+Certifications: ISO 9001:2015, AS:9120, NCAGE P3527 (NATO).
 
 YOUR ROLE:
 - Analyse REAL data provided to you (arXiv papers and patents fetched today)
@@ -93,8 +99,8 @@ PROMPT;
         ]);
 
         $this->httpClient = new Client([
-            'timeout'         => 10,
-            'connect_timeout' => 5,
+            'timeout'         => 6,
+            'connect_timeout' => 4,
             'verify'          => false,
             'headers'         => ['User-Agent' => 'Mozilla/5.0 (compatible; ClawYardBot/1.0)'],
         ]);
@@ -105,7 +111,7 @@ PROMPT;
     {
         try {
             $query = urlencode('quantum computing OR quantum cryptography OR quantum machine learning');
-            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=8&sortBy=submittedDate&sortOrder=descending";
+            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=5&sortBy=submittedDate&sortOrder=descending";
             $xml   = $this->httpClient->get($url)->getBody()->getContents();
             $feed  = simplexml_load_string($xml);
             if (!$feed) return '(arXiv unavailable)';
@@ -191,7 +197,7 @@ PROMPT;
                     $date     = $p['patent_date']   ?? 'N/A';
                     $abstract = substr($p['patent_abstract'] ?? '', 0, 250);
                     $patents[] = "- [US{$num}] {$title} | Date: {$date} | URL: https://patents.google.com/patent/US{$num} | Abstract: {$abstract}...";
-                    if (count($patents) >= 8) break 2;
+                    if (count($patents) >= 5) break 2;
                 }
             } catch (\Throwable $e) {
                 \Log::warning("QuantumAgent: USPTO fetch failed for '{$q}' — " . $e->getMessage());
@@ -208,7 +214,7 @@ PROMPT;
     {
         try {
             $query    = urlencode('multi-agent systems autonomous agents AI maritime industrial');
-            $url      = "https://api.crossref.org/works?query={$query}&filter=prefix:10.7717&rows=6&sort=published&order=desc";
+            $url      = "https://api.crossref.org/works?query={$query}&filter=prefix:10.7717&rows=4&sort=published&order=desc";
             $response = $this->httpClient->get($url, [
                 'headers' => ['User-Agent' => 'ClawYard/1.0 (mailto:research@hp-group.org)'],
             ]);
@@ -342,6 +348,7 @@ MSG;
             $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj, $patents);
         } else {
             $finalMessage = $message;
+            $finalMessage = $this->augmentWithWebSearch($finalMessage, $heartbeat);
         }
 
         $messages = array_merge($history, [
@@ -359,9 +366,10 @@ MSG;
             ],
         ]);
 
-        $body = $response->getBody();
-        $full = '';
-        $buf  = '';
+        $body        = $response->getBody();
+        $full        = '';
+        $buf         = '';
+        $lastBeat    = time();
 
         while (!$body->eof()) {
             $buf .= $body->read(1024);
@@ -385,6 +393,11 @@ MSG;
                         }
                     }
                 }
+            }
+            // Heartbeat every 10s during Claude streaming to keep Nginx alive
+            if ($heartbeat && (time() - $lastBeat) >= 10) {
+                $heartbeat('streaming');
+                $lastBeat = time();
             }
         }
 
