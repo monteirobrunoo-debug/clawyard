@@ -35,7 +35,7 @@ YOUR ROLE:
 
 REPORTING:
 When given real data, produce:
-- Part 1: Top 5 arXiv quantum/AI papers analysis
+- Part 1: Top 10 arXiv quantum/AI papers analysis
 - Part 2: Top 4 PeerJ CS articles on agents & multi-agent systems
 - End with Professor's Strategic Insight
 
@@ -104,7 +104,7 @@ PROMPT;
     {
         try {
             $query = urlencode('quantum computing OR quantum cryptography OR quantum machine learning');
-            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=5&sortBy=submittedDate&sortOrder=descending";
+            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=10&sortBy=submittedDate&sortOrder=descending";
             $xml   = $this->httpClient->get($url)->getBody()->getContents();
             $feed  = simplexml_load_string($xml);
             if (!$feed) return '(arXiv unavailable)';
