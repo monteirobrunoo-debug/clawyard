@@ -26,9 +26,8 @@ Viridis Ocean Shipping — Sustainable maritime logistics.
 Certifications: ISO 9001:2015, AS:9120, NCAGE P3527 (NATO).
 
 YOUR ROLE:
-- Analyse REAL data provided to you (arXiv papers and patents fetched today)
+- Analyse REAL data provided to you (arXiv papers and PeerJ articles fetched today)
 - Rate papers: 🟢 Accessible / 🟡 Technical / 🔴 Expert
-- For patents: assess technical relevance, business opportunity, competitive threat
 - Priority: 🔴 Act now / 🟠 Monitor closely / 🟡 Watch / 🟢 Awareness
 - Think like a CTO + Chief Strategy Officer combined
 
@@ -80,11 +79,6 @@ PROMPT;
         'quantum computing',
         'quantum cryptography',
         'quantum machine learning',
-    ];
-
-    protected array $patentTopics = [
-        'marine propulsion engine',
-        'maritime bearing seal thruster',
     ];
 
     public function __construct()
@@ -155,58 +149,6 @@ PROMPT;
             \Log::warning('QuantumAgent: arXiv fetch failed — ' . $e->getMessage());
             return '(arXiv fetch error: ' . $e->getMessage() . ')';
         }
-    }
-
-    // ─── Fetch real USPTO patents via PatentsView API ──────────────────────
-    protected function fetchPatents(): string
-    {
-        $apiKey = config('services.patentsview.api_key');
-
-        if (!$apiKey) {
-            return '(USPTO PatentsView API key not configured — set PATENTSVIEW_API_KEY in .env. Use your training knowledge of recent USPTO patents from 2024-2026 for marine propulsion, predictive maintenance, bearing seals, thruster systems.)';
-        }
-
-        $queries = [
-            'marine propulsion engine',
-            'predictive maintenance vessel',
-            'bearing seal maritime',
-        ];
-
-        $patents = [];
-
-        foreach ($queries as $q) {
-            try {
-                $response = $this->httpClient->get('https://search.patentsview.org/api/v1/patent/', [
-                    'headers' => [
-                        'X-Api-Key' => $apiKey,
-                        'accept'    => 'application/json',
-                    ],
-                    'query' => [
-                        'q' => json_encode(['_text_any' => ['patent_title' => $q]]),
-                        'f' => json_encode(['patent_id','patent_title','patent_abstract','patent_date']),
-                        'o' => json_encode(['size' => 3]),
-                        's' => json_encode([['patent_date' => 'desc']]),
-                    ],
-                ]);
-
-                $data = json_decode($response->getBody()->getContents(), true);
-
-                foreach ($data['patents'] ?? [] as $p) {
-                    $num      = $p['patent_id']    ?? 'N/A';
-                    $title    = $p['patent_title']  ?? 'N/A';
-                    $date     = $p['patent_date']   ?? 'N/A';
-                    $abstract = substr($p['patent_abstract'] ?? '', 0, 250);
-                    $patents[] = "- [US{$num}] {$title} | Date: {$date} | URL: https://patents.google.com/patent/US{$num} | Abstract: {$abstract}...";
-                    if (count($patents) >= 5) break 2;
-                }
-            } catch (\Throwable $e) {
-                \Log::warning("QuantumAgent: USPTO fetch failed for '{$q}' — " . $e->getMessage());
-            }
-        }
-
-        return $patents
-            ? implode("\n", $patents)
-            : '(USPTO API returned no results — use your knowledge of recent patents)';
     }
 
     // ─── Fetch PeerJ CS via CrossRef + auto-save to discoveries ──────────
