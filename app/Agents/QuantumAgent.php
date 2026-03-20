@@ -243,8 +243,8 @@ CRITICAL RULES — READ EVERY RULE CAREFULLY:
 - Use ONLY the REAL IDs, titles, authors and dates from the data above — NEVER invent or fabricate
 - For EVERY paper in your analysis, include the FULL URL (from the data above)
 - NEVER write "xxxx", "XXXX", "12345", "xxxxx" or ANY placeholder — use ONLY the real values from the data
-- Format each arXiv paper as: **[Title]** (arXiv:[REAL_ID]) — analysis — 🔗 https://arxiv.org/abs/[REAL_ID]
-- Format each PeerJ paper as: **[Title]** (DOI:[EXACT_DOI_FROM_EXACT_DOI_FIELD]) — analysis — 🔗 [FULL_URL_FROM_FULL_URL_FIELD]
+- Format each arXiv paper as: **[Title]** (arXiv:[REAL_ID] | 📅 [Published date from data]) — analysis — 🔗 https://arxiv.org/abs/[REAL_ID]
+- Format each PeerJ paper as: **[Title]** (DOI:[EXACT_DOI_FROM_EXACT_DOI_FIELD] | 📅 [Date from data]) — analysis — 🔗 [FULL_URL_FROM_FULL_URL_FIELD]
 - The PeerJ EXACT_DOI field above IS the real DOI — copy it character-for-character, do NOT substitute or approximate
 - If you cannot find the EXACT_DOI for a PeerJ paper in the data above, DO NOT mention that paper at all
 - For the DISCOVERIES_JSON block, include entries from both sources (source: "arxiv" or "peerj" only)
