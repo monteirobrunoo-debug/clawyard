@@ -133,13 +133,19 @@ PROMPT;
     public function __construct()
     {
         $this->client = new Client([
-            'base_uri' => 'https://api.anthropic.com',
-            'headers'  => [
-                'x-api-key'         => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type'      => 'application/json',
-            ],
+            'base_uri'        => 'https://api.anthropic.com',
+            'timeout'         => 120,
+            'connect_timeout' => 10,
         ]);
+    }
+
+    protected function apiHeaders(): array
+    {
+        return [
+            'x-api-key'         => config('services.anthropic.api_key'),
+            'anthropic-version' => '2023-06-01',
+            'Content-Type'      => 'application/json',
+        ];
     }
 
     // ─── Gather all today's intelligence from DB ───────────────────────────
@@ -231,8 +237,9 @@ PROMPT;
         $messages = [['role' => 'user', 'content' => $prompt]];
 
         $response = $this->client->post('/v1/messages', [
-            'stream' => true,
-            'json'   => [
+            'headers' => $this->apiHeaders(),
+            'stream'  => true,
+            'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
                 'max_tokens' => 6000,
                 'system'     => $this->systemPrompt,

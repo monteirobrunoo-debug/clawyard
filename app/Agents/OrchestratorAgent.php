@@ -35,13 +35,19 @@ PROMPT;
     {
         $this->agents = $agents;
         $this->client = new Client([
-            'base_uri' => 'https://api.anthropic.com',
-            'headers'  => [
-                'x-api-key'         => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type'      => 'application/json',
-            ],
+            'base_uri'        => 'https://api.anthropic.com',
+            'timeout'         => 120,
+            'connect_timeout' => 10,
         ]);
+    }
+
+    protected function apiHeaders(): array
+    {
+        return [
+            'x-api-key'         => config('services.anthropic.api_key'),
+            'anthropic-version' => '2023-06-01',
+            'Content-Type'      => 'application/json',
+        ];
     }
 
     /**
@@ -51,7 +57,8 @@ PROMPT;
     {
         try {
             $response = $this->client->post('/v1/messages', [
-                'json' => [
+                'headers' => $this->apiHeaders(),
+                'json'    => [
                     'model'      => 'claude-haiku-20240307',
                     'max_tokens' => 100,
                     'system'     => $this->systemPrompt,

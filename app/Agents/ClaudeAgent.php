@@ -13,13 +13,19 @@ class ClaudeAgent implements AgentInterface
     public function __construct()
     {
         $this->client = new Client([
-            'base_uri' => 'https://api.anthropic.com',
-            'headers'  => [
-                'x-api-key'         => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type'      => 'application/json',
-            ],
+            'base_uri'        => 'https://api.anthropic.com',
+            'timeout'         => 120,
+            'connect_timeout' => 10,
         ]);
+    }
+
+    protected function apiHeaders(): array
+    {
+        return [
+            'x-api-key'         => config('services.anthropic.api_key'),
+            'anthropic-version' => '2023-06-01',
+            'Content-Type'      => 'application/json',
+        ];
     }
 
     public function chat(string $message, array $history = []): string
@@ -30,7 +36,8 @@ class ClaudeAgent implements AgentInterface
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'json' => [
+            'headers' => $this->apiHeaders(),
+            'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
                 'max_tokens' => 1024,
                 'messages'   => $messages,
@@ -49,8 +56,9 @@ class ClaudeAgent implements AgentInterface
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'stream' => true,
-            'json'   => [
+            'headers' => $this->apiHeaders(),
+            'stream'  => true,
+            'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
                 'max_tokens' => 1024,
                 'messages'   => $messages,
