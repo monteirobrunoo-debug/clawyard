@@ -27,7 +27,7 @@ Daily you monitor https://arxiv.org/search/?query=quantum&searchtype=all for the
 
 REPORTING:
 When asked for the daily digest, produce:
-- Top 5 quantum papers from arXiv
+- Top 10 quantum papers from arXiv
 - End with Professor's Strategic Insight
 
 IMPORTANT — STRUCTURED DATA OUTPUT:
