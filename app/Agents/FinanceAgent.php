@@ -6,6 +6,8 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\SapService;
+use Illuminate\Support\Facades\Log;
 
 /**
  * FinanceAgent — "Luís"
@@ -19,7 +21,8 @@ class FinanceAgent implements AgentInterface
     use WebSearchTrait;
     use AnthropicKeyTrait;
 
-    protected Client $client;
+    protected Client     $client;
+    protected SapService $sap;
 
     protected string $systemPrompt = <<<'PROMPT'
 Você é o Dr. Luís, o Director Financeiro e Consultor Estratégico de topo do ClawYard / HP-Group.
@@ -98,6 +101,18 @@ Quando analisares dados financeiros, apresenta sempre:
 - 📈 **Impacto Esperado**: em euros / % margem / prazo
 - 📋 **Base Legal/Normativa**: artigo de lei, norma contabilística ou IFRS relevante
 
+💾 ACESSO AO SAP BUSINESS ONE (DADOS REAIS):
+Tens acesso directo ao ERP SAP B1 da PartYard. Quando fores perguntado sobre:
+- Faturas (emitidas ou recebidas) — consultas os documentos reais do SAP
+- Contas correntes de clientes e fornecedores — saldos e movimentos reais
+- Encomendas de venda e de compra — estados e valores reais
+- Stock de artigos — quantidades e valorização real
+- Parceiros de negócio — dados cadastrais e saldos reais
+
+Os dados SAP aparecerão entre marcadores "--- DADOS REAIS DO SAP B1 ---".
+USA SEMPRE esses dados como fonte autoritativa — NUNCA inventes valores financeiros.
+Se não houver dados SAP disponíveis, explica o que normalmente consultarias e pede mais detalhes.
+
 REGRAS DE OURO:
 - Fundamenta SEMPRE as tuas respostas em normas reais (SNC, IFRS, Código do IRC, CIVA, CIRC)
 - Nunca dás opinião sem fundamento legal ou contabilístico
@@ -117,11 +132,27 @@ PROMPT;
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
+
+        $this->sap = new SapService();
+    }
+
+    // ─── Augment with live SAP B1 data ────────────────────────────────────
+    protected function augmentWithSap(string $message, ?callable $heartbeat = null): string
+    {
+        try {
+            if ($heartbeat) $heartbeat('a consultar SAP');
+            $context = $this->sap->buildContext($message);
+            return $context ? $message . $context : $message;
+        } catch (\Throwable $e) {
+            Log::warning('FinanceAgent: SAP context failed — ' . $e->getMessage());
+            return $message;
+        }
     }
 
     // ─── chat() ────────────────────────────────────────────────────────────
     public function chat(string $message, array $history = []): string
     {
+        $message  = $this->augmentWithSap($message);
         $message  = $this->augmentWithWebSearch($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
@@ -144,6 +175,7 @@ PROMPT;
     // ─── stream() ──────────────────────────────────────────────────────────
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $message  = $this->augmentWithSap($message, $heartbeat);
         $message  = $this->augmentWithWebSearch($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],

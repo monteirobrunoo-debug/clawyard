@@ -256,8 +256,8 @@ class SapService
             }
         }
 
-        // --- Purchase orders ---
-        if (preg_match('/compra|purchase|fornecedor|supplier|PO /i', $message)) {
+        // --- Purchase orders (extended: accounts payable terms) ---
+        if (preg_match('/compra|purchase|fornecedor|supplier|PO |conta.a.pagar|accounts.payable|pagamento|payment|despesa|custo|cost/i', $message)) {
             $pos = $this->getOpenPurchaseOrders(5);
             if ($pos) {
                 $rows      = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €{$o['DocTotal']}", $pos);
@@ -265,8 +265,8 @@ class SapService
             }
         }
 
-        // --- Invoices ---
-        if (preg_match('/fatura|invoice|factura|recibo/i', $message)) {
+        // --- Invoices (extended: finance/accounting terms) ---
+        if (preg_match('/fatura|invoice|factura|recibo|conta.a.receber|accounts.receivable|faturação|billing|receita|revenue|cobrar|cobrança/i', $message)) {
             $invoices = $this->getRecentInvoices(5);
             if ($invoices) {
                 $rows      = array_map(fn($i) => "  • #{$i['DocNum']} — {$i['CardName']} | {$i['DocDate']} | €{$i['DocTotal']}", $invoices);
@@ -274,8 +274,8 @@ class SapService
             }
         }
 
-        // --- Business partner ---
-        if (preg_match('/cliente|client|fornecedor|supplier|parceiro|partner|empresa/i', $message)) {
+        // --- Business partner (extended: financial/audit terms) ---
+        if (preg_match('/cliente|client|fornecedor|supplier|parceiro|partner|empresa|devedor|debtor|credor|creditor|saldo.de|conta.corrente|current.account/i', $message)) {
             if (preg_match('/(?:cliente|client|fornecedor|supplier|parceiro|partner|empresa)\s+["\']?([A-Za-zÀ-ú\s]{3,30})["\']?/i', $message, $m)) {
                 $bps = $this->searchBusinessPartners(trim($m[1]), 3);
                 if ($bps) {
