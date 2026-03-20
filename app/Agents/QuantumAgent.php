@@ -5,10 +5,12 @@ namespace App\Agents;
 use App\Models\Discovery;
 use App\Agents\Traits\WebSearchTrait;
 use GuzzleHttp\Client;
+use App\Agents\Traits\AnthropicKeyTrait;
 
 class QuantumAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use AnthropicKeyTrait;
     protected Client $client;
     protected Client $httpClient;
 
@@ -95,15 +97,6 @@ PROMPT;
             'verify'          => false,
             'headers'         => ['User-Agent' => 'Mozilla/5.0 (compatible; ClawYardBot/1.0)'],
         ]);
-    }
-
-    protected function apiHeaders(): array
-    {
-        return [
-            'x-api-key'         => config('services.anthropic.api_key'),
-            'anthropic-version' => '2023-06-01',
-            'Content-Type'      => 'application/json',
-        ];
     }
 
     // ─── Fetch arXiv papers + auto-save to discoveries ────────────────────

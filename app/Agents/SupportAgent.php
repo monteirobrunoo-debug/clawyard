@@ -3,11 +3,13 @@
 namespace App\Agents;
 
 use GuzzleHttp\Client;
+use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 
 class SupportAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use AnthropicKeyTrait;
     protected Client $client;
 
     protected string $systemPrompt = <<<PROMPT
@@ -38,15 +40,6 @@ PROMPT;
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
-    }
-
-    protected function apiHeaders(): array
-    {
-        return [
-            'x-api-key'         => config('services.anthropic.api_key'),
-            'anthropic-version' => '2023-06-01',
-            'Content-Type'      => 'application/json',
-        ];
     }
 
     public function chat(string $message, array $history = []): string

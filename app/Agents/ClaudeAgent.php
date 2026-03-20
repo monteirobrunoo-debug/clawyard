@@ -3,11 +3,13 @@
 namespace App\Agents;
 
 use GuzzleHttp\Client;
+use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 
 class ClaudeAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use AnthropicKeyTrait;
     protected Client $client;
 
     public function __construct()
@@ -17,15 +19,6 @@ class ClaudeAgent implements AgentInterface
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
-    }
-
-    protected function apiHeaders(): array
-    {
-        return [
-            'x-api-key'         => config('services.anthropic.api_key'),
-            'anthropic-version' => '2023-06-01',
-            'Content-Type'      => 'application/json',
-        ];
     }
 
     public function chat(string $message, array $history = []): string
