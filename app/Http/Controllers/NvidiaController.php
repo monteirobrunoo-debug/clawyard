@@ -24,7 +24,7 @@ class NvidiaController extends Controller
     {
         $request->validate([
             'message'    => 'required|string|min:1|max:4096',
-            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum',
+            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum,finance,research',
             'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
             'image'      => 'nullable|string|max:5242880', // max ~4MB base64
         ]);
@@ -157,7 +157,7 @@ class NvidiaController extends Controller
 
         $request->validate([
             'message'    => 'required|string|min:1|max:20000',
-            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum',
+            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum,finance,research',
             'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
             'image'      => 'nullable|string|max:10485760',
             'file_b64'   => 'nullable|string|max:20971520',
