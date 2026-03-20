@@ -268,15 +268,20 @@
 
         <!-- Image preview -->
         <div id="image-preview">
-            <img id="preview-img" src="" alt="preview">
+            <img id="preview-img" src="" alt="preview" style="display:none">
+            <div id="file-preview-info" style="display:none;align-items:center;gap:8px;padding:6px 10px;background:#1a1a1a;border-radius:8px;font-size:13px;color:#ccc">
+                <span id="file-preview-icon" style="font-size:20px"></span>
+                <span id="file-preview-name" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+                <span id="file-preview-size" style="color:#666;font-size:11px"></span>
+            </div>
             <button id="remove-image">✕</button>
         </div>
 
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
-            <button class="icon-btn" id="image-btn" title="Imagem">📎</button>
-            <input type="file" id="image-input" accept="image/*" style="display:none">
+            <button class="icon-btn" id="image-btn" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)">📎</button>
+            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none">
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -437,6 +442,7 @@ agentSelect.addEventListener('change', () => {
 let isRecording  = false;
 let recognition  = null;
 let currentImg   = null;
+let currentFile  = null; // { name, type, b64, text } for non-image files
 let panelOpen    = true;
 let actCount     = 0;
 
@@ -486,7 +492,21 @@ document.getElementById('voice-btn').addEventListener('click', () => {
     }
 });
 
-// ── Image ──
+// ── File / Image attachment ──
+const FILE_ICONS = {
+    'pdf':'📄', 'doc':'📝', 'docx':'📝', 'txt':'📃', 'csv':'📊',
+    'xlsx':'📊', 'xls':'📊', 'pptx':'📑', 'md':'📃'
+};
+function getFileIcon(name) {
+    const ext = name.split('.').pop().toLowerCase();
+    return FILE_ICONS[ext] || '📎';
+}
+function humanSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+    return (bytes/1048576).toFixed(1) + ' MB';
+}
+
 document.getElementById('image-btn').addEventListener('click', () =>
     document.getElementById('image-input').click()
 );
@@ -494,19 +514,54 @@ document.getElementById('image-btn').addEventListener('click', () =>
 document.getElementById('image-input').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        currentImg = ev.target.result.split(',')[1];
-        document.getElementById('preview-img').src = ev.target.result;
-        document.getElementById('image-preview').style.display = 'block';
-    };
-    reader.readAsDataURL(file);
+
+    const isImage = file.type.startsWith('image/');
+    const reader  = new FileReader();
+
+    if (isImage) {
+        reader.onload = (ev) => {
+            currentImg  = ev.target.result.split(',')[1];
+            currentFile = null;
+            document.getElementById('preview-img').src = ev.target.result;
+            document.getElementById('preview-img').style.display = 'block';
+            document.getElementById('file-preview-info').style.display = 'none';
+            document.getElementById('image-preview').style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+    } else {
+        // Non-image: read as base64 for PDF, or text for txt/csv/md
+        const ext = file.name.split('.').pop().toLowerCase();
+        const readAsText = ['txt','csv','md'].includes(ext);
+
+        reader.onload = (ev) => {
+            currentImg  = null;
+            currentFile = {
+                name:  file.name,
+                type:  file.type || 'application/octet-stream',
+                ext:   ext,
+                b64:   readAsText ? null : ev.target.result.split(',')[1],
+                text:  readAsText ? ev.target.result : null,
+                size:  humanSize(file.size),
+            };
+            document.getElementById('preview-img').style.display = 'none';
+            document.getElementById('file-preview-icon').textContent = getFileIcon(file.name);
+            document.getElementById('file-preview-name').textContent = file.name;
+            document.getElementById('file-preview-size').textContent = humanSize(file.size);
+            document.getElementById('file-preview-info').style.display = 'flex';
+            document.getElementById('image-preview').style.display = 'flex';
+        };
+        if (readAsText) reader.readAsText(file);
+        else            reader.readAsDataURL(file);
+    }
 });
 
 document.getElementById('remove-image').addEventListener('click', clearImage);
 function clearImage() {
-    currentImg = null;
+    currentImg  = null;
+    currentFile = null;
     document.getElementById('image-preview').style.display = 'none';
+    document.getElementById('preview-img').style.display = 'none';
+    document.getElementById('file-preview-info').style.display = 'none';
     document.getElementById('image-input').value = '';
 }
 
@@ -904,6 +959,23 @@ async function sendMessage() {
         payload.image = currentImg;
         clearImage();
         logActivity('🖼️', 'Imagem incluída (multimodal)', 'done');
+    } else if (currentFile) {
+        const f = currentFile;
+        if (f.text !== null) {
+            // Plain text files: append content directly to message
+            payload.message += `\n\n---\n**Ficheiro anexado: ${f.name}**\n\`\`\`\n${f.text.substring(0, 8000)}\n\`\`\``;
+        } else if (f.ext === 'pdf') {
+            payload.file_b64  = f.b64;
+            payload.file_type = 'application/pdf';
+            payload.file_name = f.name;
+        } else {
+            // Other binary files: send as base64 with type
+            payload.file_b64  = f.b64;
+            payload.file_type = f.type;
+            payload.file_name = f.name;
+        }
+        clearImage();
+        logActivity('📎', `Ficheiro incluído: ${f.name} (${f.size})`, 'done');
     }
 
     resolveStep(stepRAG);

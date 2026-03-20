@@ -156,10 +156,13 @@ class NvidiaController extends Controller
         set_time_limit(300); // 5 minutes for long Quantum/ARIA responses
 
         $request->validate([
-            'message'    => 'required|string|min:1|max:4096',
+            'message'    => 'required|string|min:1|max:20000',
             'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum',
             'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
-            'image'      => 'nullable|string|max:5242880',
+            'image'      => 'nullable|string|max:10485760',
+            'file_b64'   => 'nullable|string|max:20971520',
+            'file_type'  => 'nullable|string|max:100',
+            'file_name'  => 'nullable|string|max:255',
         ]);
 
         $agentName = $request->input('agent', 'auto');
@@ -171,7 +174,10 @@ class NvidiaController extends Controller
             ? 'u' . $userId . '_' . $clientSid
             : 'u' . $userId . '_' . bin2hex(random_bytes(16));
 
-        $imageB64 = $request->input('image');
+        $imageB64  = $request->input('image');
+        $fileB64   = $request->input('file_b64');
+        $fileType  = $request->input('file_type', 'application/octet-stream');
+        $fileName  = $request->input('file_name', 'ficheiro');
 
         // Resolve agent and augment message *before* streaming so any validation
         // errors surface as JSON, not mid-stream garbage.
@@ -185,6 +191,7 @@ class NvidiaController extends Controller
         $augmentedMessage = $this->ragService->augmentMessage($message);
 
         if ($imageB64) {
+            // Image attachment (vision)
             $augmentedMessage = [
                 ['type' => 'text', 'text' => $augmentedMessage],
                 ['type' => 'image', 'source' => [
@@ -193,6 +200,19 @@ class NvidiaController extends Controller
                     'data'       => $imageB64,
                 ]],
             ];
+        } elseif ($fileB64 && str_contains($fileType, 'pdf')) {
+            // PDF document — Claude supports native PDF processing
+            $augmentedMessage = [
+                ['type' => 'text',     'text'   => $augmentedMessage],
+                ['type' => 'document', 'source' => [
+                    'type'       => 'base64',
+                    'media_type' => 'application/pdf',
+                    'data'       => $fileB64,
+                ]],
+            ];
+        } elseif ($fileB64) {
+            // Other binary file — append note to message
+            $augmentedMessage = $augmentedMessage . "\n\n[Ficheiro binário anexado: {$fileName} ({$fileType}) — não é possível processar este formato directamente]";
         }
 
         // Save user message before streaming
