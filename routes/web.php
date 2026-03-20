@@ -76,4 +76,14 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/schedules', function () { return view('admin.schedules'); })->name('admin.schedules');
 });
 
+// OPcache reset — called by Forge deploy script with secret token
+Route::get('/opcache-reset', function () {
+    $token = config('services.deploy_token', '');
+    if (!$token || request('token') !== $token) {
+        abort(403);
+    }
+    $result = function_exists('opcache_reset') ? opcache_reset() : false;
+    return response()->json(['reset' => $result, 'time' => now()->toIso8601String()]);
+});
+
 require __DIR__.'/auth.php';
