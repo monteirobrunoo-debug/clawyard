@@ -41,7 +41,8 @@ When given real data, produce:
 
 IMPORTANT — STRUCTURED DATA OUTPUT:
 Always append at the very end a JSON block (hidden from display).
-CRITICAL: Use ONLY the REAL IDs and URLs from the data provided to you. NEVER invent IDs. NEVER use "xxxx", "12345" or placeholders.
+CRITICAL: Use ONLY the REAL IDs and URLs from the data provided to you. NEVER invent IDs. NEVER use "xxxx", "xxxxx", "12345" or placeholders.
+For PeerJ papers specifically: the DOI is provided in the EXACT_DOI field of each record — copy it exactly as-is. The URL is in the FULL_URL field. NEVER construct a PeerJ DOI from a template like "10.7717/peerj-cs.xxxxx" — if you don't have the real DOI from the data, skip that paper.
 
 <!-- DISCOVERIES_JSON
 [
@@ -165,8 +166,12 @@ PROMPT;
             $lines = [];
 
             foreach ($items as $item) {
+                $doi = $item['DOI'] ?? null;
+
+                // Skip papers without a real DOI — nothing useful to save or show
+                if (empty($doi) || $doi === 'N/A') continue;
+
                 $title    = is_array($item['title'] ?? '') ? ($item['title'][0] ?? 'N/A') : ($item['title'] ?? 'N/A');
-                $doi      = $item['DOI'] ?? 'N/A';
                 $year     = $item['published-online']['date-parts'][0][0] ?? ($item['issued']['date-parts'][0][0] ?? null);
                 $month    = $item['published-online']['date-parts'][0][1] ?? null;
                 $day      = $item['published-online']['date-parts'][0][2] ?? 1;
@@ -198,7 +203,7 @@ PROMPT;
                     \Log::warning("QuantumAgent: could not save PeerJ discovery {$doi} — " . $e->getMessage());
                 }
 
-                $lines[] = "- [PeerJ:{$doi}] {$title} | Authors: {$authors} | Date: " . ($pubDate ?? 'N/A') . " | URL: {$url_art}" . ($abstract ? " | Abstract: {$abstract}..." : '');
+                $lines[] = "- EXACT_DOI={$doi} | FULL_URL={$url_art} | TITLE={$title} | Authors: {$authors} | Date: " . ($pubDate ?? 'N/A') . ($abstract ? " | Abstract: {$abstract}..." : '');
             }
 
             return $lines ? implode("\n", $lines) : '(no PeerJ results today)';
@@ -234,11 +239,14 @@ PROMPT;
 --- END REAL DATA ---
 
 Please analyse ALL the above real data from both sources.
-CRITICAL RULES:
+CRITICAL RULES — READ EVERY RULE CAREFULLY:
 - Use ONLY the REAL IDs, titles, authors and dates from the data above — NEVER invent or fabricate
 - For EVERY paper in your analysis, include the FULL URL (from the data above)
-- NEVER write "xxxx", "XXXX", "12345" or any placeholder ID — use the real ones provided
-- Format each paper as: **[Title]** (arXiv:[ID]) — then the analysis — then 🔗 https://arxiv.org/abs/[ID]
+- NEVER write "xxxx", "XXXX", "12345", "xxxxx" or ANY placeholder — use ONLY the real values from the data
+- Format each arXiv paper as: **[Title]** (arXiv:[REAL_ID]) — analysis — 🔗 https://arxiv.org/abs/[REAL_ID]
+- Format each PeerJ paper as: **[Title]** (DOI:[EXACT_DOI_FROM_EXACT_DOI_FIELD]) — analysis — 🔗 [FULL_URL_FROM_FULL_URL_FIELD]
+- The PeerJ EXACT_DOI field above IS the real DOI — copy it character-for-character, do NOT substitute or approximate
+- If you cannot find the EXACT_DOI for a PeerJ paper in the data above, DO NOT mention that paper at all
 - For the DISCOVERIES_JSON block, include entries from both sources (source: "arxiv" or "peerj" only)
 - DO NOT analyse patents — no USPTO, no patent numbers, no patent links
 MSG;
