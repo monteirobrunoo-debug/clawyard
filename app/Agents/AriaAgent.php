@@ -52,12 +52,16 @@ PROMPT;
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,
             'connect_timeout' => 10,
-            'headers'         => [
-                'x-api-key'         => config('services.anthropic.api_key'),
-                'anthropic-version' => '2023-06-01',
-                'Content-Type'      => 'application/json',
-            ],
         ]);
+    }
+
+    protected function apiHeaders(): array
+    {
+        return [
+            'x-api-key'         => config('services.anthropic.api_key'),
+            'anthropic-version' => '2023-06-01',
+            'Content-Type'      => 'application/json',
+        ];
     }
 
     public function chat(string $message, array $history = []): string
@@ -68,9 +72,10 @@ PROMPT;
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'json' => [
+            'headers' => $this->apiHeaders(),
+            'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 2048,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -88,10 +93,11 @@ PROMPT;
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'stream' => true,
-            'json'   => [
+            'stream'  => true,
+            'headers' => $this->apiHeaders(),
+            'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 2048,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
