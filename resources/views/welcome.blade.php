@@ -185,6 +185,121 @@
         .save-report-btn { background:none; border:none; cursor:pointer; font-size:13px; margin-left:6px; opacity:0.4; transition:opacity .2s; padding:0; }
         .save-report-btn:hover { opacity:1; }
         .save-report-btn.saved { opacity:1; }
+
+        /* ══════════════════════════════════════
+           MOBILE — max-width: 768px
+           Focus: agent select visible, input usable
+           ══════════════════════════════════════ */
+        @media (max-width: 768px) {
+
+            /* Fix iOS/Android viewport height (browser bar issue) */
+            body { height: 100dvh; height: -webkit-fill-available; }
+
+            /* ── HEADER: compacto numa linha ── */
+            header {
+                padding: 8px 12px;
+                gap: 8px;
+                flex-wrap: nowrap;
+                min-height: 52px;
+            }
+
+            /* Esconde badge "AI" e botão toggle panel */
+            .badge { display: none; }
+            #toggle-panel { display: none; }
+            #model-badge { display: none; }
+
+            /* Logo mais pequeno */
+            .logo { font-size: 15px; }
+
+            /* Select de agente: ocupa o espaço disponível, fonte legível */
+            #agent-select {
+                flex: 1;
+                min-width: 0;
+                font-size: 13px;
+                padding: 7px 8px;
+                max-width: 100%;
+            }
+
+            /* Esconde todos os links de navegação no header */
+            .hdr-right {
+                display: none;
+            }
+
+            /* ── SIDEBAR: escondida automaticamente em mobile ── */
+            #activity-panel {
+                width: 0 !important;
+                min-width: 0 !important;
+                border-right: none !important;
+                overflow: hidden !important;
+            }
+
+            /* ── CHAT: padding mais pequeno para ganhar espaço ── */
+            #chat {
+                padding: 12px;
+                gap: 10px;
+            }
+
+            /* Mensagens: largura total em mobile */
+            .message {
+                max-width: 100%;
+            }
+
+            /* Avatar mais pequeno */
+            .avatar { width: 26px; height: 26px; font-size: 11px; }
+
+            /* Bubble: fonte legível, sem overflow */
+            .bubble {
+                font-size: 14px;
+                padding: 10px 13px;
+                max-width: calc(100vw - 80px);
+            }
+
+            /* ── INPUT AREA: uma linha limpa ── */
+            #input-area {
+                padding: 8px 10px;
+                gap: 7px;
+                flex-shrink: 0; /* nunca encolhe — fica sempre visível */
+            }
+
+            /* Botões de voz e anexo: mais pequenos */
+            .icon-btn {
+                width: 38px;
+                height: 38px;
+                font-size: 15px;
+                border-radius: 8px;
+                flex-shrink: 0;
+            }
+
+            /* Textarea: altura mínima menor para não tomar demasiado espaço */
+            #message-input {
+                font-size: 16px; /* 16px evita zoom automático no iOS */
+                min-height: 38px;
+                max-height: 110px;
+                padding: 9px 12px;
+                border-radius: 10px;
+            }
+
+            /* Botão enviar */
+            #send-btn {
+                width: 38px;
+                height: 38px;
+                border-radius: 8px;
+                flex-shrink: 0;
+            }
+            #send-btn svg { width: 16px; height: 16px; }
+
+            /* ── EMPTY STATE: mais compacto ── */
+            .empty-state h2 { font-size: 22px; }
+            .empty-state p { font-size: 12px; text-align: center; padding: 0 16px; }
+            .starter-chips { padding: 0 8px; gap: 6px; }
+            .starter-chip { font-size: 12px; padding: 6px 12px; }
+
+            /* ── EMAIL CARD: scroll horizontal evitado ── */
+            .email-body-area { max-height: 160px; font-size: 13px; }
+
+            /* ── TABELA dentro de bubble: scroll horizontal ── */
+            .bubble table { display: block; overflow-x: auto; white-space: nowrap; }
+        }
     </style>
 </head>
 <body>
