@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>ClawYard — AI Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -19,9 +22,10 @@
             --text: #e5e5e5;
             --muted: #555;
             --muted2: #444;
+            --agent-color: #76b900;
         }
 
-        body { font-family: system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 
         /* ── HEADER ── */
         header { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; }
@@ -90,15 +94,34 @@
         .message.user .bubble { background:var(--green); color:#000; border-bottom-right-radius:4px; font-weight:500; }
         .message.ai .bubble { background:var(--bg3); color:var(--text); border-bottom-left-radius:4px; border:1px solid var(--border2); }
 
+        /* Agent color left border on AI bubbles */
+        .message.ai .bubble { border-left: 3px solid var(--agent-color); }
+
         /* Markdown-like styling inside bubble */
         .bubble strong { font-weight:700; }
         .bubble em { font-style:italic; color:#aaa; }
-        .bubble code { background:#0f0f0f; border:1px solid var(--border2); border-radius:4px; padding:1px 5px; font-family:monospace; font-size:12px; color:#76b900; }
+        .bubble code { background:#0f0f0f; border:1px solid var(--border2); border-radius:4px; padding:1px 5px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#76b900; }
         .bubble h2 { font-size:14px; font-weight:700; color:var(--green); margin:8px 0 4px; }
         .bubble h3 { font-size:13px; font-weight:700; color:#aaa; margin:6px 0 3px; }
         .bubble ul, .bubble ol { padding-left:18px; margin:4px 0; }
         .bubble li { margin:2px 0; }
         .bubble hr { border:none; border-top:1px solid var(--border2); margin:10px 0; }
+
+        /* Code blocks (fenced ```) */
+        .bubble pre.code-block { background:#0d0d0d; border:1px solid var(--border2); border-radius:8px; overflow:hidden; margin:8px 0; }
+        .bubble pre.code-block .code-lang { display:block; padding:4px 12px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); background:#111; border-bottom:1px solid var(--border2); }
+        .bubble pre.code-block code { display:block; padding:12px; font-size:12px; line-height:1.6; overflow-x:auto; color:#e5e5e5; background:transparent; border:none; border-radius:0; }
+
+        /* Tables */
+        .bubble .table-wrap { overflow-x:auto; margin:8px 0; }
+        .bubble .md-table { border-collapse:collapse; width:100%; font-size:12.5px; }
+        .bubble .md-table th { background:#111; color:var(--green); font-weight:700; padding:7px 12px; border:1px solid var(--border2); text-align:left; white-space:nowrap; }
+        .bubble .md-table td { padding:6px 12px; border:1px solid var(--border2); color:#ccc; }
+        .bubble .md-table tr:nth-child(even) td { background:#0f0f0f; }
+
+        /* Streaming cursor */
+        .stream-cursor { display:inline-block; color:var(--agent-color); font-weight:700; animation:blink-cur 0.7s steps(1) infinite; margin-left:1px; }
+        @keyframes blink-cur { 0%,100%{opacity:1} 50%{opacity:0} }
 
         /* Typing indicator */
         .typing .bubble { padding:14px; }
@@ -165,8 +188,9 @@
         #message-input:focus { border-color:var(--green); }
         #message-input::placeholder { color:#333; }
         #send-btn { width:44px; height:44px; background:var(--green); border:none; border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.2s; flex-shrink:0; }
-        #send-btn:hover { background:var(--green-hover); }
-        #send-btn:disabled { background:#222; cursor:not-allowed; }
+        #send-btn:hover { background:var(--green-hover); transform:scale(1.05); }
+        #send-btn:active { transform:scale(0.93); }
+        #send-btn:disabled { background:#222; cursor:not-allowed; transform:none; }
         #send-btn svg { width:18px; height:18px; }
 
         /* Toggle sidebar btn */
@@ -174,12 +198,15 @@
         #toggle-panel:hover { color:var(--text); }
 
         /* ── EMPTY STATE ── */
-        .empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
-        .empty-state h2 { font-size:32px; color:var(--green); font-weight:800; }
-        .empty-state p { font-size:13px; color:var(--muted); }
-        .starter-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:520px; }
+        .empty-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:20px; }
+        .empty-state-hero { display:flex; flex-direction:column; align-items:center; gap:8px; }
+        .empty-state-avatar { font-size:52px; line-height:1; filter:drop-shadow(0 0 20px var(--agent-color)); transition:filter 0.4s; }
+        .empty-state h2 { font-size:28px; color:var(--text); font-weight:800; letter-spacing:-0.5px; }
+        .empty-state h2 span { color:var(--agent-color); }
+        .empty-state p { font-size:13px; color:var(--muted); text-align:center; max-width:400px; line-height:1.5; }
+        .starter-chips { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; max-width:540px; }
         .starter-chip { background:var(--bg3); border:1px solid var(--border2); color:#888; padding:7px 14px; border-radius:20px; font-size:12px; cursor:pointer; transition:all 0.15s; }
-        .starter-chip:hover { border-color:var(--green); color:var(--green); background:#0f1f00; }
+        .starter-chip:hover { border-color:var(--agent-color); color:var(--agent-color); background:#0f0f0f; }
 
         /* Save report button */
         .save-report-btn { background:none; border:none; cursor:pointer; font-size:13px; margin-left:6px; opacity:0.4; transition:opacity .2s; padding:0; }
@@ -379,8 +406,11 @@
     <div class="chat-wrap">
         <div id="chat">
             <div class="empty-state" id="empty-state">
-                <h2>ClawYard AI</h2>
-                <p>Powered by NVIDIA NeMo + Claude · Portos, Peças, Emails, Análise</p>
+                <div class="empty-state-hero">
+                    <div class="empty-state-avatar" id="empty-avatar">🤖</div>
+                    <h2 id="empty-title">ClawYard <span>AI</span></h2>
+                    <p id="empty-desc">Routing inteligente — vai ao agente certo automaticamente</p>
+                </div>
                 <div class="starter-chips" id="starter-chips"></div>
             </div>
         </div>
@@ -443,6 +473,30 @@ const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
     email:'Daniel Email', sap:'Richard SAP', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
     aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research'
+};
+
+const AGENT_COLORS = {
+    auto:'#76b900', orchestrator:'#76b900',
+    sales:'#3b82f6', support:'#f59e0b', email:'#8b5cf6',
+    sap:'#06b6d4', document:'#94a3b8', claude:'#a855f7',
+    nvidia:'#76b900', aria:'#ef4444', quantum:'#22d3ee',
+    finance:'#10b981', research:'#f97316'
+};
+
+const AGENT_DESCRIPTIONS = {
+    auto: 'Routing inteligente — vai ao agente certo automaticamente',
+    orchestrator: 'Colaboração entre todos os agentes em simultâneo',
+    sales: 'Cotações, peças, disponibilidade e propostas comerciais',
+    support: 'Diagnóstico técnico, avarias, manutenção e reparação',
+    email: 'Emails profissionais em PT/EN/ES prontos a enviar',
+    sap: 'Acesso directo ao ERP SAP B1 — stock, faturas, encomendas',
+    document: 'Análise de documentos, contratos e certificados técnicos',
+    claude: 'Análise estratégica, pesquisa avançada e consultoria',
+    nvidia: 'Geração de texto, marketing e copywriting com NVIDIA NeMo',
+    aria: 'Cibersegurança, STRIDE, OWASP e monitorização de sites',
+    quantum: 'Digest científico diário: papers arXiv + patentes USPTO',
+    finance: 'Contabilidade, fiscalidade, SAP financeiro e análise ROI',
+    research: 'Pesquisa de mercado, concorrência e análise de websites',
 };
 
 const AGENT_CHIPS = {
@@ -550,6 +604,11 @@ const AGENT_CHIPS = {
     ],
 };
 
+function applyAgentColor(agent) {
+    const color = AGENT_COLORS[agent] || '#76b900';
+    document.documentElement.style.setProperty('--agent-color', color);
+}
+
 function renderStarterChips(agent) {
     const chips = AGENT_CHIPS[agent] || AGENT_CHIPS['auto'];
     const container = document.getElementById('starter-chips');
@@ -559,19 +618,31 @@ function renderStarterChips(agent) {
     ).join('');
 }
 
-// Init chips on page load
-renderStarterChips(agentSelect.value || 'auto');
-
-// Update chips when agent changes
-agentSelect.addEventListener('change', () => {
-    renderStarterChips(agentSelect.value);
-    const agentName = AGENT_NAMES[agentSelect.value] || agentSelect.value;
+function updateEmptyState(agent) {
     const emptyState = document.getElementById('empty-state');
-    if (emptyState) {
-        emptyState.querySelector('p').textContent =
-            'A falar com ' + AGENT_EMOJIS[agentSelect.value] + ' ' + agentName +
-            ' · Escolhe um exemplo ou escreve a tua pergunta';
-    }
+    if (!emptyState) return;
+    const avatarEl = document.getElementById('empty-avatar');
+    const titleEl  = document.getElementById('empty-title');
+    const descEl   = document.getElementById('empty-desc');
+    const emoji = AGENT_EMOJIS[agent] || '🤖';
+    const name  = AGENT_NAMES[agent]  || 'ClawYard';
+    const desc  = AGENT_DESCRIPTIONS[agent] || 'Escolhe um exemplo ou escreve a tua pergunta';
+    if (avatarEl) avatarEl.textContent = emoji;
+    if (titleEl)  titleEl.innerHTML = `<span>${name}</span>`;
+    if (descEl)   descEl.textContent = desc;
+}
+
+// Init on page load
+renderStarterChips(agentSelect.value || 'auto');
+applyAgentColor(agentSelect.value || 'auto');
+updateEmptyState(agentSelect.value || 'auto');
+
+// Update when agent changes
+agentSelect.addEventListener('change', () => {
+    const agent = agentSelect.value;
+    renderStarterChips(agent);
+    applyAgentColor(agent);
+    updateEmptyState(agent);
 });
 
 let isRecording  = false;
@@ -996,16 +1067,73 @@ function editEmail(id) {
 //  MARKDOWN RENDERER
 // ═══════════════════════════════
 function renderMarkdown(text) {
-    return esc(text)
+    if (typeof text !== 'string') return '';
+
+    // 1. Protect fenced code blocks from esc()
+    const codeBlocks = [];
+    text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+        const safeCode = code.trim()
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const langBadge = lang ? `<span class="code-lang">${lang}</span>` : '';
+        const idx = codeBlocks.length;
+        codeBlocks.push(`<pre class="code-block">${langBadge}<code>${safeCode}</code></pre>`);
+        return `\x00CB${idx}\x00`;
+    });
+
+    // 2. Protect inline code
+    const inlineCodes = [];
+    text = text.replace(/`([^`\n]+)`/g, (_, code) => {
+        const safeCode = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        const idx = inlineCodes.length;
+        inlineCodes.push(`<code>${safeCode}</code>`);
+        return `\x00IC${idx}\x00`;
+    });
+
+    // 3. Escape HTML
+    let html = esc(text);
+
+    // 4. Restore inline codes
+    inlineCodes.forEach((code, i) => { html = html.replace(`\x00IC${i}\x00`, code); });
+
+    // 5. Parse markdown tables (lines with | delimiters)
+    html = html.replace(/((?:\|[^\n]+\|\n?){2,})/g, (block) => {
+        const rows = block.trim().split('\n');
+        if (rows.length < 2) return block;
+        const isSep = (r) => /^\|[\s\-:|]+\|$/.test(r.trim());
+        let out = '<div class="table-wrap"><table class="md-table">';
+        let tbody = false;
+        rows.forEach((row, i) => {
+            if (isSep(row)) { if (!tbody) { out += '<tbody>'; tbody = true; } return; }
+            const cells = row.trim().split('|').slice(1, -1);
+            if (i === 0) {
+                out += '<thead><tr>' + cells.map(c => `<th>${c.trim()}</th>`).join('') + '</tr></thead>';
+            } else {
+                if (!tbody) { out += '<tbody>'; tbody = true; }
+                out += '<tr>' + cells.map(c => `<td>${c.trim()}</td>`).join('') + '</tr>';
+            }
+        });
+        if (tbody) out += '</tbody>';
+        out += '</table></div>';
+        return out;
+    });
+
+    // 6. Headings, bold, italic, hr, lists
+    html = html
         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
         .replace(/^### (.+)$/gm, '<h3>$1</h3>')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*(.+?)\*/g, '<em>$1</em>')
-        .replace(/`(.+?)`/g, '<code>$1</code>')
         .replace(/^---$/gm, '<hr>')
         .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>(\n|$))+/g, (m) => `<ul>${m}</ul>`)
-        .replace(/\n/g, '<br>');
+        .replace(/(<li>.*<\/li>(\n|$))+/g, m => `<ul>${m}</ul>`);
+
+    // 7. Newlines to <br>
+    html = html.replace(/\n/g, '<br>');
+
+    // 8. Restore code blocks
+    codeBlocks.forEach((block, i) => { html = html.replace(`\x00CB${i}\x00`, block); });
+
+    return html;
 }
 
 function esc(text) {
@@ -1165,6 +1293,9 @@ async function sendMessage() {
 
                 const agentKey = evt.agent || selectedAgent;
 
+                // Apply agent color
+                applyAgentColor(agentKey);
+
                 // Log agent actions
                 if (evt.agent_log) {
                     evt.agent_log.forEach(l => logActivity(l.icon, l.text, 'done'));
@@ -1209,8 +1340,8 @@ async function sendMessage() {
             // ── Chunk event ──
             if (evt.chunk !== undefined && streamBubble) {
                 accumulated += evt.chunk;
-                // Render markdown incrementally
-                streamBubble.innerHTML = renderMarkdown(accumulated);
+                // Render markdown incrementally with streaming cursor
+                streamBubble.innerHTML = renderMarkdown(accumulated) + '<span class="stream-cursor">▌</span>';
                 chat.scrollTop = chat.scrollHeight;
             }
         }
