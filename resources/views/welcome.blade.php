@@ -1358,8 +1358,13 @@ async function sendMessage() {
             // ── Chunk event ──
             if (evt.chunk !== undefined && streamBubble) {
                 accumulated += evt.chunk;
-                // Render markdown incrementally with streaming cursor
-                streamBubble.innerHTML = renderMarkdown(accumulated) + '<span class="stream-cursor">▌</span>';
+                // Strip hidden DISCOVERIES_JSON block before rendering
+                // (QuantumAgent sends it as an HTML comment; strip it so the
+                //  user never sees partial JSON during streaming)
+                const displayText = accumulated.replace(
+                    /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
+                );
+                streamBubble.innerHTML = renderMarkdown(displayText) + '<span class="stream-cursor">▌</span>';
                 chat.scrollTop = chat.scrollHeight;
             }
         }
@@ -1399,8 +1404,11 @@ async function sendMessage() {
                                 streamBubble.innerHTML = renderMarkdown(accumulated.replace('__EMAIL__', ''));
                             }
                         } else {
-                            // Final render + add save button
-                            streamBubble.innerHTML = renderMarkdown(accumulated);
+                            // Final render + add save button (strip hidden QuantumAgent JSON block)
+                            const finalDisplay = accumulated.replace(
+                                /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
+                            ).trim();
+                            streamBubble.innerHTML = renderMarkdown(finalDisplay);
                             const meta = streamMsg.querySelector('.msg-meta');
                             const saveBtn = document.createElement('button');
                             saveBtn.className = 'save-report-btn';

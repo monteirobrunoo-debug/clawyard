@@ -309,10 +309,13 @@ MSG;
         $isDigest = $this->isDigestRequest($message);
 
         if ($isDigest) {
-            if ($heartbeat) $heartbeat('fetching arXiv');
+            // Send keep-alive heartbeats before/during each slow HTTP fetch
+            // to prevent Nginx fastcgi_read_timeout (60s default) from killing the SSE
+            if ($heartbeat) $heartbeat('a pesquisar arXiv');
             $arxiv = $this->fetchArxivPapers();
-            if ($heartbeat) $heartbeat('fetching PeerJ');
+            if ($heartbeat) $heartbeat('a pesquisar PeerJ / CrossRef');
             $peerj = $this->fetchPeerJPapers();
+            if ($heartbeat) $heartbeat('a construir análise');
             $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj);
         } else {
             $finalMessage = $message;
@@ -355,11 +358,12 @@ MSG;
                     && ($evt['delta']['type'] ?? '') === 'text_delta') {
                     $text = $evt['delta']['text'] ?? '';
                     if ($text !== '') {
-                        // Don't stream the hidden JSON block to the user
+                        // Stream ALL chunks to client without filtering.
+                        // The DISCOVERIES_JSON HTML-comment block is stripped
+                        // on the frontend in renderMarkdown() so users never see it.
+                        // Filtering here caused 30-60s silence that dropped connections.
                         $full .= $text;
-                        if (!str_contains($full, '<!-- DISCOVERIES_JSON')) {
-                            $onChunk($text);
-                        }
+                        $onChunk($text);
                     }
                 }
             }
