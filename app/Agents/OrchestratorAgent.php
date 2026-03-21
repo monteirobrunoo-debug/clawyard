@@ -17,20 +17,23 @@ class OrchestratorAgent implements AgentInterface
 You are an AI orchestrator that analyzes user messages and decides which specialist agents should handle them.
 
 Available agents:
-- sales: product pricing, quotes, purchase inquiries
-- support: technical problems, troubleshooting, repairs
-- email: drafting and writing emails
-- sap: SAP B1 queries, stock, orders, invoices
-- document: PDF analysis, contracts, technical specs
-- maritime: maritime vessels, ship parts, certificates
-- stock: inventory, parts availability, warehouse
-- claude: complex reasoning, analysis, general questions
-- nvidia: fast responses, simple queries
+- sales: product pricing, quotes, purchase inquiries, spare parts availability
+- support: technical problems, troubleshooting, engine repairs, diagnostics
+- email: drafting and writing emails, templates, cold outreach
+- sap: SAP B1 queries, stock levels, sales orders, purchase orders, invoices, business partners
+- document: PDF analysis, contracts, technical specs, certificates, manuals
+- claude: complex reasoning, analysis, strategy, general questions
+- nvidia: fast responses, simple short queries
+- quantum: scientific papers, arXiv research, patents, technology trends, innovation
+- aria: cybersecurity, security audits, STRIDE, OWASP, vulnerability assessment
+- briefing: executive daily briefing, intelligence summary, strategic overview
+- research: website analysis, competitor benchmarking, market research, SEO, improvements
+- finance: financial analysis, accounting, invoices, SAP financial data, ROC/TOC, fiscal compliance
 
 Respond ONLY with a JSON array of agent names to activate. Example:
-["sales", "stock", "email"]
+["sales", "sap"]
 
-Always select the minimum agents needed. Maximum 4 agents at once.
+Always select the minimum agents needed. Maximum 3 agents at once.
 PROMPT;
 
     public function __construct(array $agents = [])
@@ -52,7 +55,7 @@ PROMPT;
             $response = $this->client->post('/v1/messages', [
                 'headers' => $this->apiHeaders(),
                 'json'    => [
-                    'model'      => 'claude-haiku-20240307',
+                    'model'      => 'claude-haiku-4-5-20251001',
                     'max_tokens' => 100,
                     'system'     => $this->systemPrompt,
                     'messages'   => [
@@ -112,15 +115,18 @@ PROMPT;
         $combined = "# ClawYard Multi-Agent Response\n\n";
 
         $agentLabels = [
-            'sales'     => '💼 Sales Agent',
-            'support'   => '🔧 Support Agent',
-            'email'     => '📧 Email Agent',
-            'sap'       => '📊 SAP Agent',
-            'document'  => '📄 Document Agent',
-            'maritime'  => '🚢 Maritime Agent',
-            'stock'     => '📦 Stock Agent',
-            'claude'    => '🧠 Claude Agent',
-            'nvidia'    => '⚡ NVIDIA Agent',
+            'sales'     => '💼 Marco — Sales',
+            'support'   => '🔧 Marcus — Technical Support',
+            'email'     => '📧 Daniel — Email',
+            'sap'       => '📊 Richard — SAP B1',
+            'document'  => '📄 Comandante Doc',
+            'claude'    => '🧠 Bruno AI',
+            'nvidia'    => '⚡ Carlos NVIDIA',
+            'quantum'   => '⚛️ Prof. Quantum Leap',
+            'aria'      => '🔐 ARIA — Security',
+            'briefing'  => '📋 Renato — Briefing',
+            'research'  => '🔍 Marina — Research',
+            'finance'   => '💰 Dr. Luís — Finance',
         ];
 
         foreach ($results as $result) {

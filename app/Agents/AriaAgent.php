@@ -6,12 +6,28 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use Illuminate\Support\Facades\Log;
 
 class AriaAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
     protected Client $client;
+    protected Client $httpClient;
+
+    // Sites to monitor for live checks
+    protected array $monitoredSites = [
+        'https://www.partyard.eu',
+        'https://www.partyardmilitary.com',
+        'https://www.hp-group.org',
+    ];
+
+    // Only web-search for CVE/exploit/news questions
+    protected array $webSearchKeywords = [
+        'cve', 'exploit', 'vulnerability', 'vulnerabilidade', 'patch', 'atualização',
+        'breach', 'hack', 'ransomware', 'news', 'notícia', 'novo ataque', 'new attack',
+        'zero-day', '0-day', 'malware', 'phishing',
+    ];
 
     protected string $systemPrompt = <<<'PROMPT'
 You are ARIA (Advanced Risk Intelligence Analyst), elite cybersecurity AI specialist embedded in ClawYard / HP-Group.
@@ -75,11 +91,84 @@ PROMPT;
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
+
+        $this->httpClient = new Client([
+            'timeout'         => 8,
+            'connect_timeout' => 5,
+            'verify'          => false,
+            'allow_redirects' => true,
+            'headers'         => ['User-Agent' => 'AriaSecurityScanner/1.0 (ClawYard)'],
+        ]);
+    }
+
+    protected function needsWebSearch(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->webSearchKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    // ─── Live HTTP/SSL site check ──────────────────────────────────────────
+    protected function checkLiveSites(): string
+    {
+        $lines   = ["## LIVE SITE SECURITY CHECK — " . now()->format('d/m/Y H:i')];
+        $targets = $this->monitoredSites;
+
+        // Also add SAP endpoint
+        $targets[] = 'https://sld.partyard.privatcloud.biz/b1s/v1';
+
+        foreach ($targets as $site) {
+            try {
+                $start    = microtime(true);
+                $response = $this->httpClient->get($site);
+                $ms       = round((microtime(true) - $start) * 1000);
+                $status   = $response->getStatusCode();
+                $headers  = $response->getHeaders();
+
+                $csp     = isset($headers['Content-Security-Policy']) ? '✅' : '❌ MISSING';
+                $hsts    = isset($headers['Strict-Transport-Security']) ? '✅' : '❌ MISSING';
+                $xframe  = isset($headers['X-Frame-Options']) ? '✅' : '❌ MISSING';
+                $xctype  = isset($headers['X-Content-Type-Options']) ? '✅' : '❌ MISSING';
+
+                $lines[] = "\n### {$site}";
+                $lines[] = "- Status: {$status} | Response: {$ms}ms";
+                $lines[] = "- Content-Security-Policy: {$csp}";
+                $lines[] = "- Strict-Transport-Security (HSTS): {$hsts}";
+                $lines[] = "- X-Frame-Options: {$xframe}";
+                $lines[] = "- X-Content-Type-Options: {$xctype}";
+            } catch (\Throwable $e) {
+                $lines[] = "\n### {$site}";
+                $lines[] = "- 🔴 UNREACHABLE: " . $e->getMessage();
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
+    protected function augmentMessage(string $message, ?callable $heartbeat = null): string
+    {
+        // Always include a live site scan
+        try {
+            if ($heartbeat) $heartbeat('a verificar sites em tempo real');
+            $scanData = $this->checkLiveSites();
+            $message  .= "\n\n" . $scanData;
+        } catch (\Throwable $e) {
+            Log::warning('AriaAgent: live site check failed — ' . $e->getMessage());
+        }
+
+        // Only web-search for CVE/exploit/news queries
+        if ($this->needsWebSearch($message)) {
+            $message = $this->augmentWithWebSearch($message, $heartbeat);
+        }
+
+        return $message;
     }
 
     public function chat(string $message, array $history = []): string
     {
-        $message = $this->augmentWithWebSearch($message);
+        $message  = $this->augmentMessage($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -100,7 +189,7 @@ PROMPT;
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $message = $this->augmentWithWebSearch($message, $heartbeat);
+        $message  = $this->augmentMessage($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);

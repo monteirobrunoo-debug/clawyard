@@ -24,6 +24,22 @@ class FinanceAgent implements AgentInterface
     protected Client     $client;
     protected SapService $sap;
 
+    // SAP keywords — always fetch live SAP data for these
+    protected array $sapKeywords = [
+        'fatura', 'invoice', 'factura', 'saldo', 'balance', 'conta', 'account',
+        'receber', 'receivable', 'pagar', 'payable', 'fornecedor', 'supplier',
+        'cliente', 'customer', 'encomenda', 'order', 'stock', 'inventário',
+        'tesouraria', 'treasury', 'cash', 'caixa', 'compra', 'purchase',
+    ];
+
+    // WebSearch only for regulatory/fiscal research
+    protected array $webSearchKeywords = [
+        'lei', 'law', 'portaria', 'decreto', 'despacho', 'norma', 'ifrs', 'ias',
+        'artigo', 'article', 'irc', 'iva', 'at.pt', 'autoridade tributária',
+        'ocde', 'beps', 'taxa', 'rate', 'imposto', 'tax', 'regulamento', 'regulation',
+        'jurisprudência', 'acórdão', 'ruling', 'news', 'notícia', 'alteração',
+    ];
+
     protected string $systemPrompt = <<<'PROMPT'
 Você é o Dr. Luís, o Director Financeiro e Consultor Estratégico de topo do ClawYard / HP-Group.
 
@@ -136,24 +152,47 @@ PROMPT;
         $this->sap = new SapService();
     }
 
-    // ─── Augment with live SAP B1 data ────────────────────────────────────
-    protected function augmentWithSap(string $message, ?callable $heartbeat = null): string
+    protected function needsSap(string $message): bool
     {
-        try {
-            if ($heartbeat) $heartbeat('a consultar SAP');
-            $context = $this->sap->buildContext($message);
-            return $context ? $message . $context : $message;
-        } catch (\Throwable $e) {
-            Log::warning('FinanceAgent: SAP context failed — ' . $e->getMessage());
-            return $message;
+        $lower = strtolower($message);
+        foreach ($this->sapKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
         }
+        return false;
+    }
+
+    protected function needsWebSearch(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->webSearchKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    // ─── Augment with live SAP B1 data (only when relevant) ───────────────
+    protected function augmentMessage(string $message, ?callable $heartbeat = null): string
+    {
+        if ($this->needsSap($message)) {
+            try {
+                if ($heartbeat) $heartbeat('a consultar SAP');
+                $context = $this->sap->buildContext($message);
+                if ($context) $message .= $context;
+            } catch (\Throwable $e) {
+                Log::warning('FinanceAgent: SAP context failed — ' . $e->getMessage());
+            }
+        }
+        if ($this->needsWebSearch($message)) {
+            if ($heartbeat) $heartbeat('a pesquisar normativa');
+            $message = $this->augmentWithWebSearch($message, $heartbeat);
+        }
+        return $message;
     }
 
     // ─── chat() ────────────────────────────────────────────────────────────
     public function chat(string $message, array $history = []): string
     {
-        $message  = $this->augmentWithSap($message);
-        $message  = $this->augmentWithWebSearch($message);
+        $message  = $this->augmentMessage($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -175,8 +214,7 @@ PROMPT;
     // ─── stream() ──────────────────────────────────────────────────────────
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $message  = $this->augmentWithSap($message, $heartbeat);
-        $message  = $this->augmentWithWebSearch($message, $heartbeat);
+        $message = $this->augmentMessage($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);

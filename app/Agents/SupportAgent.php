@@ -6,12 +6,27 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\SapService;
+use Illuminate\Support\Facades\Log;
 
 class SupportAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
-    protected Client $client;
+    protected Client     $client;
+    protected SapService $sap;
+
+    // Only web-search for specific fault codes or bulletins
+    protected array $webSearchKeywords = [
+        'fault code', 'código de avaria', 'error code', 'bulletin', 'boletim',
+        'service manual', 'technical notice', 'tsb', 'recall', 'upgrade',
+    ];
+
+    // SAP lookup to check if recommended part is in stock
+    protected array $sapKeywords = [
+        'peça', 'part', 'referência', 'reference', 'stock', 'disponível',
+        'available', 'encomenda', 'order', 'substituição', 'replacement',
+    ];
 
     protected string $systemPrompt = <<<'PROMPT'
 You are Marcus, the Technical Support Specialist at PartYard Marine (www.partyard.eu) — marine spare parts and engineering services, Setúbal, Portugal.
@@ -53,11 +68,48 @@ PROMPT;
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
+
+        $this->sap = new SapService();
+    }
+
+    protected function needsWebSearch(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->webSearchKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    protected function needsSap(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->sapKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    protected function augmentMessage(string $message, ?callable $heartbeat = null): string
+    {
+        if ($this->needsSap($message)) {
+            try {
+                if ($heartbeat) $heartbeat('a verificar stock no SAP');
+                $context = $this->sap->buildContext($message);
+                if ($context) $message .= $context;
+            } catch (\Throwable $e) {
+                Log::warning('SupportAgent: SAP context failed — ' . $e->getMessage());
+            }
+        }
+        if ($this->needsWebSearch($message)) {
+            $message = $this->augmentWithWebSearch($message, $heartbeat);
+        }
+        return $message;
     }
 
     public function chat(string $message, array $history = []): string
     {
-        $message = $this->augmentWithWebSearch($message);
+        $message = $this->augmentMessage($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -66,7 +118,7 @@ PROMPT;
             'headers' => $this->apiHeaders(),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 1024,
+                'max_tokens' => 3096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -78,7 +130,7 @@ PROMPT;
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $message = $this->augmentWithWebSearch($message, $heartbeat);
+        $message = $this->augmentMessage($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -88,7 +140,7 @@ PROMPT;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 1024,
+                'max_tokens' => 3096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,

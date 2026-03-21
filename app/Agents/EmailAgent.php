@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Services\PartYardProfileService;
 
 class EmailAgent implements AgentInterface
 {
@@ -13,27 +14,34 @@ class EmailAgent implements AgentInterface
     protected Client $client;
 
     protected string $systemPrompt = <<<'PROMPT'
-You are Daniel Email, an expert maritime business email writer for ClawYard / IT Partyard — a company specialising in marine spare parts, ship equipment, and technical services, based in Setúbal, Portugal.
+You are Daniel, the expert maritime business email writer for PartYard Marine / HP-Group.
 
-BRANDS WE REPRESENT (from www.partyard.eu):
+COMPANY PROFILE:
+[PROFILE_PLACEHOLDER]
+
+BRANDS WE REPRESENT:
 - MTU — marine and industrial engines
 - Caterpillar (CAT) — marine propulsion and generator engines
 - MAK — medium-speed marine diesel engines
 - Jenbacher — gas engines and cogeneration systems
+- Cummins — marine diesel engines
+- Wärtsilä — propulsion systems
+- MAN — 2 and 4 stroke marine engines
 - SKF — SternTube seals and marine bearings
 - Schottel — propulsion systems and thrusters
 
-COMPANY CREDENTIALS TO REFERENCE IN EMAILS:
+COMPANY CREDENTIALS TO USE IN EMAILS:
 - ISO 9001:2015 | NCAGE P3527 (NATO supplier) | AS:9120
 - Offices in Portugal, USA, UK, Brazil, Norway
 - COGEMA partner (since 1959)
 - PartYard Defense division for military/naval vessels
+- Emergency spare parts delivery worldwide in 24–72h
 
-Your clients include: ship owners (armadores), shipping agents, ship managers, vessel masters/captains, port agents, maritime procurement officers, and shipyards.
+Your clients: ship owners, shipping agents, ship managers, captains, port agents, maritime procurement officers, shipyards, NATO procurement.
 
-You write professional emails in English, Portuguese, or Spanish depending on what the user asks.
+Write professional emails in the language requested (English, Portuguese, or Spanish).
 
-AVAILABLE TEMPLATES (use when requested):
+AVAILABLE TEMPLATES:
 1. **Quote Request** — Request price for spare parts/equipment
 2. **Parts Availability** — Inform a client about available parts/stock
 3. **Commercial Proposal** — Full sales proposal with services offered
@@ -42,27 +50,40 @@ AVAILABLE TEMPLATES (use when requested):
 6. **Cold Outreach** — First contact to a new shipping company
 7. **Port Call Notice** — Notify of vessel arrival and service availability
 8. **Urgent Delivery** — Urgent spare parts delivery offer
-9. **Partnership Request** — Propose business collaboration with a shipping agent
+9. **Partnership Request** — Propose business collaboration
 10. **Invoice / Payment** — Payment reminder or invoice follow-up
+11. **Warranty Claim** — Warranty or defect notification to supplier/OEM
+12. **NATO Procurement** — Formal supply offer for NATO/defense procurement
+13. **COGEMA Partner** — Communication referencing COGEMA partnership
+14. **Customs & Shipping** — Incoterms, customs clearance coordination
 
 ALWAYS return your response in this exact JSON format:
 {
   "subject": "Clear, professional email subject",
   "to": "recipient@example.com (if mentioned, else leave empty)",
+  "cc": "",
+  "bcc": "",
+  "reply_to": "",
   "body": "Full professional email body with proper greeting and signature",
   "template": "which template was used",
-  "language": "en/pt/es"
+  "language": "en/pt/es",
+  "suggestions": ["Optional: 1-2 tips to improve this email"]
 }
 
-Include a proper signature at the end of every email:
+Include a proper signature at the end of every email body:
 ---
-ClawYard Maritime | IT Partyard
-Marine Spare Parts & Technical Services
-Email: info@clawyard.com | Web: clawyard.com
+PartYard Marine | HP-Group
+Marine Spare Parts & Engineering Services
+📍 Setúbal, Portugal | Global Offices: USA · UK · Brazil · Norway
+🌐 www.partyard.eu | ✉️ info@partyard.eu
+ISO 9001:2015 | AS:9120 | NATO NCAGE P3527
 PROMPT;
 
     public function __construct()
     {
+        $profile = PartYardProfileService::toPromptContext();
+        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,
@@ -70,9 +91,20 @@ PROMPT;
         ]);
     }
 
+    protected function parseEmailJson(string $text): ?string
+    {
+        if (preg_match('/\{[\s\S]*\}/m', $text, $matches)) {
+            $parsed = json_decode($matches[0], true);
+            if ($parsed && isset($parsed['subject'], $parsed['body'])) {
+                return '__EMAIL__' . json_encode($parsed);
+            }
+        }
+        return null;
+    }
+
     public function chat(string $message, array $history = []): string
     {
-        $message = $this->augmentWithWebSearch($message);
+        $message  = $this->augmentWithWebSearch($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -90,21 +122,12 @@ PROMPT;
         $data = json_decode($response->getBody()->getContents(), true);
         $text = $data['content'][0]['text'] ?? '';
 
-        // Try to parse JSON from response
-        if (preg_match('/\{[\s\S]*\}/m', $text, $matches)) {
-            $parsed = json_decode($matches[0], true);
-            if ($parsed && isset($parsed['subject'], $parsed['body'])) {
-                // Return special marker so the frontend knows this is an email
-                return '__EMAIL__' . json_encode($parsed);
-            }
-        }
-
-        return $text;
+        return $this->parseEmailJson($text) ?? $text;
     }
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $message = $this->augmentWithWebSearch($message, $heartbeat);
+        $message  = $this->augmentWithWebSearch($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -141,21 +164,18 @@ PROMPT;
                     $text = $evt['delta']['text'] ?? '';
                     if ($text !== '') {
                         $full .= $text;
-                        $onChunk($text);
+                        // Buffer JSON — only stream a progress indicator, not the raw JSON
+                        if (!str_contains($full, '{')) {
+                            $onChunk($text);
+                        }
                     }
                 }
             }
         }
 
-        // Apply the same email-parsing post-processing as chat()
-        if (preg_match('/\{[\s\S]*\}/m', $full, $matches)) {
-            $parsed = json_decode($matches[0], true);
-            if ($parsed && isset($parsed['subject'], $parsed['body'])) {
-                return '__EMAIL__' . json_encode($parsed);
-            }
-        }
-
-        return $full;
+        // Post-process: if it's a valid email JSON, return the special marker
+        $parsed = $this->parseEmailJson($full);
+        return $parsed ?? $full;
     }
 
     public function getName(): string  { return 'email'; }

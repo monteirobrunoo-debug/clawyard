@@ -6,12 +6,27 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\SapService;
+use Illuminate\Support\Facades\Log;
 
 class SalesAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
-    protected Client $client;
+    protected Client     $client;
+    protected SapService $sap;
+
+    // Only search the web for price/market/competitor questions
+    protected array $webSearchKeywords = [
+        'preço', 'price', 'concorrente', 'competitor', 'mercado', 'market',
+        'tendência', 'trend', 'alternativa', 'alternative', 'oferta', 'offer',
+    ];
+
+    // SAP lookup for stock/availability questions
+    protected array $sapKeywords = [
+        'stock', 'disponível', 'available', 'inventário', 'inventory',
+        'armazém', 'warehouse', 'quantidade', 'quantity', 'em stock',
+    ];
 
     protected string $systemPrompt = <<<'PROMPT'
 You are Marco, the Sales Specialist for PartYard Marine (www.partyard.eu) — NATO-certified marine spare parts and fleet logistics company.
@@ -53,7 +68,6 @@ PROMPT;
 
     public function __construct()
     {
-        // Inject live PartYard profile into system prompt
         $profile = PartYardProfileService::toPromptContext();
         $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
 
@@ -62,11 +76,48 @@ PROMPT;
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
+
+        $this->sap = new SapService();
+    }
+
+    protected function needsWebSearch(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->webSearchKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    protected function needsSap(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->sapKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    protected function augmentMessage(string $message, ?callable $heartbeat = null): string
+    {
+        if ($this->needsSap($message)) {
+            try {
+                if ($heartbeat) $heartbeat('a verificar stock no SAP');
+                $context = $this->sap->buildContext($message);
+                if ($context) $message .= $context;
+            } catch (\Throwable $e) {
+                Log::warning('SalesAgent: SAP context failed — ' . $e->getMessage());
+            }
+        }
+        if ($this->needsWebSearch($message)) {
+            $message = $this->augmentWithWebSearch($message, $heartbeat);
+        }
+        return $message;
     }
 
     public function chat(string $message, array $history = []): string
     {
-        $message = $this->augmentWithWebSearch($message);
+        $message = $this->augmentMessage($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -75,7 +126,7 @@ PROMPT;
             'headers' => $this->apiHeaders(),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 1024,
+                'max_tokens' => 2048,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -87,7 +138,7 @@ PROMPT;
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $message = $this->augmentWithWebSearch($message, $heartbeat);
+        $message = $this->augmentMessage($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -97,7 +148,7 @@ PROMPT;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 1024,
+                'max_tokens' => 2048,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,

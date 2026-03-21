@@ -3,6 +3,7 @@
 namespace App\Agents;
 
 use App\Models\Discovery;
+use App\Models\Report;
 use App\Agents\Traits\WebSearchTrait;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
@@ -82,6 +83,10 @@ PROMPT;
         'quantum computing',
         'quantum cryptography',
         'quantum machine learning',
+        'autonomous vessel maritime',
+        'marine propulsion AI',
+        'naval defense technology',
+        'predictive maintenance industrial',
     ];
 
     public function __construct()
@@ -107,8 +112,12 @@ PROMPT;
     protected function fetchArxivPapers(): string
     {
         try {
-            $query = urlencode('quantum computing OR quantum cryptography OR quantum machine learning');
-            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=10&sortBy=submittedDate&sortOrder=descending";
+            $query = urlencode(
+                'quantum computing OR quantum cryptography OR quantum machine learning ' .
+                'OR autonomous vessel OR marine propulsion AI OR naval defense technology OR predictive maintenance industrial'
+            );
+            $year  = now()->year;
+            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=12&sortBy=submittedDate&sortOrder=descending";
             $xml   = $this->httpClient->get($url)->getBody()->getContents();
             $feed  = simplexml_load_string($xml);
             if (!$feed) return '(arXiv unavailable)';
@@ -359,6 +368,7 @@ MSG;
             try { $this->saveDiscoveriesFromResponse($full); } catch (\Throwable $e) {
                 \Log::warning('QuantumAgent stream: could not save discoveries — ' . $e->getMessage());
             }
+            $this->saveDigestReport($full);
         }
 
         return trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $full));
@@ -402,6 +412,21 @@ MSG;
                 'url'             => $item['url']             ?? null,
                 'published_date'  => $item['published_date']  ?? null,
             ]);
+        }
+    }
+
+    // ─── Save digest output as a Report so BriefingAgent can use it ──────
+    protected function saveDigestReport(string $fullText): void
+    {
+        try {
+            $clean = trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $fullText));
+            Report::create([
+                'type'    => 'quantum_digest',
+                'title'   => 'Prof. Quantum Digest — ' . now()->format('d/m/Y'),
+                'content' => $clean,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent: could not save digest report — ' . $e->getMessage());
         }
     }
 

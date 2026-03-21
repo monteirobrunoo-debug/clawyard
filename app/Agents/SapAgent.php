@@ -4,17 +4,23 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\WebSearchTrait;
 use App\Services\SapService;
+use App\Services\PartYardProfileService;
+use Illuminate\Support\Facades\Log;
 
 class SapAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use WebSearchTrait;
 
     protected Client     $client;
     protected SapService $sap;
 
     protected string $systemPrompt = <<<PROMPT
-You are Richard, the SAP Business One expert at ClawYard / IT Partyard — marine spare parts and technical services, Setúbal, Portugal.
+You are Richard, the SAP Business One expert at ClawYard / PartYard — marine spare parts and technical services, Setúbal, Portugal.
+
+[PROFILE_PLACEHOLDER]
 
 Your role:
 - Consult and interpret real SAP B1 data provided in the context
@@ -31,8 +37,17 @@ When SAP data is provided between "--- DADOS REAIS DO SAP B1 ---" markers, use i
 If no SAP data is present, explain what you would normally look up and ask for more details.
 PROMPT;
 
+    // Keywords that justify a live web search alongside SAP data
+    protected array $webSearchKeywords = [
+        'mercado', 'market', 'preço', 'price', 'concorrente', 'competitor',
+        'tendência', 'trend', 'notícia', 'news', 'câmbio', 'exchange rate',
+    ];
+
     public function __construct()
     {
+        $profile = PartYardProfileService::toPromptContext();
+        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,
@@ -42,17 +57,23 @@ PROMPT;
         $this->sap = new SapService();
     }
 
-    /**
-     * Augment the message with live SAP data when relevant.
-     */
+    protected function needsWebSearch(string $message): bool
+    {
+        $lower = strtolower($message);
+        foreach ($this->webSearchKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
     protected function augmentWithSap(string $message, ?callable $heartbeat = null): string
     {
         try {
-            if ($heartbeat) $heartbeat();
+            if ($heartbeat) $heartbeat('a consultar SAP');
             $context = $this->sap->buildContext($message);
             return $context ? $message . $context : $message;
-        } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::warning('SapAgent: SAP context failed — ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::warning('SapAgent: SAP context failed — ' . $e->getMessage());
             return $message;
         }
     }
@@ -60,6 +81,9 @@ PROMPT;
     public function chat(string $message, array $history = []): string
     {
         $message  = $this->augmentWithSap($message);
+        if ($this->needsWebSearch($message)) {
+            $message = $this->augmentWithWebSearch($message);
+        }
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -68,7 +92,7 @@ PROMPT;
             'headers' => $this->apiHeaders(),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 2048,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -80,10 +104,10 @@ PROMPT;
 
     public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $headers = $this->apiHeaders();
-        \Illuminate\Support\Facades\Log::info('SapAgent::stream key_len=' . strlen($headers['x-api-key'] ?? '') . ' model=' . config('services.anthropic.model', 'claude-sonnet-4-5'));
-
-        $message  = $this->augmentWithSap($message, $heartbeat);
+        $message = $this->augmentWithSap($message, $heartbeat);
+        if ($this->needsWebSearch($message)) {
+            $message = $this->augmentWithWebSearch($message, $heartbeat);
+        }
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -93,16 +117,17 @@ PROMPT;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 2048,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
         ]);
 
-        $body = $response->getBody();
-        $full = '';
-        $buf  = '';
+        $body     = $response->getBody();
+        $full     = '';
+        $buf      = '';
+        $lastBeat = time();
 
         while (!$body->eof()) {
             $buf .= $body->read(1024);
@@ -123,6 +148,10 @@ PROMPT;
                         $onChunk($text);
                     }
                 }
+            }
+            if ($heartbeat && (time() - $lastBeat) >= 10) {
+                $heartbeat('a processar');
+                $lastBeat = time();
             }
         }
 

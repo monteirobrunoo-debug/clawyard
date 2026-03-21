@@ -6,12 +6,16 @@ use App\Models\Discovery;
 use App\Models\Report;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\SapService;
 
 class BriefingAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
-    protected Client $client;
+    use WebSearchTrait;
+    protected Client     $client;
+    protected SapService $sap;
 
     protected string $systemPrompt = <<<'PROMPT'
 You are the **Strategic Briefing Commander** for the HP-Group of companies.
@@ -55,12 +59,10 @@ SUBSIDIARY COMPANIES:
 ═══════════════════════════════════════════════════════
 YOUR MISSION:
 ═══════════════════════════════════════════════════════
+You receive a full intelligence package from all active agents for today.
 Analyse all intelligence for the ENTIRE HP-Group portfolio.
 Each finding must be mapped to one or more relevant companies.
 Think like a Group CEO + CTO + Chief Strategy Officer combined.
-
-YOUR MISSION:
-You receive a full intelligence package from all active agents for today.
 Your job is to produce a single, complete, executive daily briefing in structured format.
 
 OUTPUT FORMAT (strictly follow this structure):
@@ -140,6 +142,8 @@ PROMPT;
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
+
+        $this->sap = new SapService();
     }
 
     // ─── Gather all today's intelligence from DB ───────────────────────────
@@ -208,6 +212,27 @@ PROMPT;
             }
         }
 
+        // 3. SAP financial snapshot
+        try {
+            $sapContext = $this->sap->buildContext('faturas stock encomendas compras clientes');
+            if ($sapContext) {
+                $sections[] = "## SITUAÇÃO FINANCEIRA E OPERACIONAL (SAP B1 — dados em tempo real):\n" . trim($sapContext);
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('BriefingAgent: SAP snapshot failed — ' . $e->getMessage());
+        }
+
+        // 4. Live market news via web search
+        try {
+            $newsQuery = 'PartYard marine spare parts MTU Caterpillar MAK maritime news ' . now()->format('Y');
+            $newsResult = $this->augmentWithWebSearch($newsQuery);
+            if ($newsResult && $newsResult !== $newsQuery) {
+                $sections[] = "## NOTÍCIAS DE MERCADO (pesquisa live):\n" . substr($newsResult, strlen($newsQuery));
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('BriefingAgent: web search failed — ' . $e->getMessage());
+        }
+
         // Always prepend the live company profile
         $profile = PartYardProfileService::toPromptContext();
         array_unshift($sections, "## COMPANY PROFILE (reference for all analysis):\n{$profile}");
@@ -239,7 +264,7 @@ PROMPT;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 6000,
+                'max_tokens' => 8000,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
