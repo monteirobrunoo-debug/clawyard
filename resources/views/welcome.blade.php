@@ -1270,8 +1270,16 @@ async function sendMessage() {
         if (!res.ok) {
             const raw = await res.text();
             typing.remove();
-            const snippet = raw.replace(/<[^>]+>/g,'').trim().substring(0,200);
-            addMessage('ai', `❌ Erro HTTP ${res.status}: ${snippet || 'Sem detalhe'}`);
+            let errMsg;
+            if (res.status === 413) {
+                errMsg = '❌ Ficheiro demasiado grande para o servidor. Tenta um ficheiro mais pequeno (< 1 MB) ou pede ao admin para aumentar o limite do Nginx (client_max_body_size 50M).';
+            } else if (res.status === 422) {
+                errMsg = '❌ Dados inválidos: ' + (raw.replace(/<[^>]+>/g,'').trim().substring(0,200) || 'Verifica o tamanho do ficheiro.');
+            } else {
+                const snippet = raw.replace(/<[^>]+>/g,'').trim().substring(0,200);
+                errMsg = `❌ Erro HTTP ${res.status}: ${snippet || 'Sem detalhe'}`;
+            }
+            addMessage('ai', errMsg);
             logActivity('❌', `HTTP ${res.status}`, 'done');
             sendBtn.disabled = false; clearAgentActive(); modelBadge.textContent = 'pronto'; input.focus();
             return;
