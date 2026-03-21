@@ -77,7 +77,7 @@ PROMPT;
     /**
      * Run multiple agents in parallel and combine their responses.
      */
-    public function chat(string $message, array $history = []): string
+    public function chat(string|array $message, array $history = []): string
     {
         $agentNames = $this->decideAgents($message);
         $results    = [];
@@ -151,7 +151,7 @@ PROMPT;
      * Orchestrator does not stream individual chunks — it runs all sub-agents to completion
      * and delivers the combined reply as a single chunk via the callback.
      */
-    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $reply = $this->chat($message, $history);
         $onChunk($reply);
