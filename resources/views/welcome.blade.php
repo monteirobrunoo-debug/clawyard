@@ -713,9 +713,12 @@ function humanSize(bytes) {
     return (bytes/1048576).toFixed(1) + ' MB';
 }
 
-document.getElementById('image-btn').addEventListener('click', () =>
-    document.getElementById('image-input').click()
-);
+document.getElementById('image-btn').addEventListener('click', () => {
+    // Reset the value first so selecting the same file again always fires 'change'
+    const inp = document.getElementById('image-input');
+    inp.value = '';
+    inp.click();
+});
 
 document.getElementById('image-input').addEventListener('change', fileInputChangeHandler);
 
@@ -726,12 +729,7 @@ function clearImage() {
     document.getElementById('image-preview').style.display = 'none';
     document.getElementById('preview-img').style.display = 'none';
     document.getElementById('file-preview-info').style.display = 'none';
-    // Replace the input element so the change event fires even if the same file is selected again
-    const old = document.getElementById('image-input');
-    const fresh = old.cloneNode(false);
-    old.parentNode.replaceChild(fresh, old);
-    fresh.addEventListener('change', fileInputChangeHandler);
-    document.getElementById('image-btn').onclick = () => fresh.click();
+    document.getElementById('image-input').value = '';
 }
 
 function fileInputChangeHandler(e) {
