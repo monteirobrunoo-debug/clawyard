@@ -74,9 +74,15 @@ Respond in the same language as the user (Portuguese, English or Spanish).
 PROMPT;
 
     protected array $digestKeywords = [
-        'digest', 'patentes', 'patent', 'arxiv', 'uspto', 'papers',
+        'digest', 'patentes', 'patent', 'arxiv', 'peerj', 'crossref', 'papers',
         'descobertas', 'discoveries', 'análise diária', 'daily',
         'resumos', 'hoje', 'today', 'melhores patentes', 'novas patentes',
+        // broader portal/research triggers
+        'portal', 'portais', 'científico', 'cientifico', 'pesquisa científica',
+        'research', 'publicações', 'publicacoes', 'artigos', 'artigo',
+        'novas publicações', 'últimas publicações', 'latest papers',
+        'quantum news', 'novidades', 'novidade', 'novos papers',
+        'vai ao', 'busca nos', 'procura nos', 'faz a pesquisa',
     ];
 
     protected array $arxivTopics = [
@@ -101,8 +107,8 @@ PROMPT;
         ]);
 
         $this->httpClient = new Client([
-            'timeout'         => 6,
-            'connect_timeout' => 4,
+            'timeout'         => 20,
+            'connect_timeout' => 8,
             'verify'          => false,
             'headers'         => ['User-Agent' => 'Mozilla/5.0 (compatible; ClawYardBot/1.0)'],
         ]);
@@ -226,14 +232,14 @@ PROMPT;
     }
 
     // ─── Build enriched message (pre-fetched data) ─────────────────────────
-    protected function buildDigestMessage(string $userMessage): string
+    protected function buildDigestMessage(string|array $userMessage): string
     {
         $arxiv = $this->fetchArxivPapers();
         $peerj = $this->fetchPeerJPapers();
         return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj);
     }
 
-    protected function buildDigestMessageFromData(string $userMessage, string $arxiv, string $peerj): string
+    protected function buildDigestMessageFromData(string|array $userMessage, string $arxiv, string $peerj): string
     {
         $today = now()->format('Y-m-d');
 
@@ -375,9 +381,14 @@ MSG;
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────
-    protected function isDigestRequest(string $message): bool
+    protected function isDigestRequest(string|array $message): bool
     {
-        $lower = strtolower($message);
+        // Extract text from multimodal array (e.g. message with attached file)
+        $text = is_array($message)
+            ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
+            : $message;
+
+        $lower = strtolower($text);
         foreach ($this->digestKeywords as $kw) {
             if (str_contains($lower, $kw)) return true;
         }
