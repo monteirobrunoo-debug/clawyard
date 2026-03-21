@@ -159,9 +159,7 @@ PROMPT;
         }
 
         // Only web-search for CVE/exploit/news queries
-        if ($this->needsWebSearch($message)) {
-            $message = $this->augmentWithWebSearch($message, $heartbeat);
-        }
+        $message = $this->augmentWithWebSearch($message, $heartbeat);
 
         return $message;
     }

@@ -81,9 +81,7 @@ PROMPT;
     public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentWithSap($message);
-        if ($this->needsWebSearch($message)) {
-            $message = $this->augmentWithWebSearch($message);
-        }
+        $message = $this->augmentWithWebSearch($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -105,9 +103,7 @@ PROMPT;
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $message = $this->augmentWithSap($message, $heartbeat);
-        if ($this->needsWebSearch($message)) {
-            $message = $this->augmentWithWebSearch($message, $heartbeat);
-        }
+        $message = $this->augmentWithWebSearch($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);

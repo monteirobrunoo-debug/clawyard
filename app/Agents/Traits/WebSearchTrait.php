@@ -77,11 +77,11 @@ trait WebSearchTrait
     }
 
     /**
-     * Augment message with web search results
+     * Augment message with web search results — always searches (no keyword gate)
      */
     protected function augmentWithWebSearch(string $message, ?callable $heartbeat = null): string
     {
-        if (!$this->needsWebSearch($message)) return $message;
+        if (!(new WebSearchService())->isAvailable()) return $message;
 
         try {
             if ($heartbeat) $heartbeat('searching web');

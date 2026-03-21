@@ -109,9 +109,7 @@ PROMPT;
                 Log::warning('SalesAgent: SAP context failed — ' . $e->getMessage());
             }
         }
-        if ($this->needsWebSearch($message)) {
-            $message = $this->augmentWithWebSearch($message, $heartbeat);
-        }
+        $message = $this->augmentWithWebSearch($message, $heartbeat);
         return $message;
     }
 
