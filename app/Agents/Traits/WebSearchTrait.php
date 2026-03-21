@@ -12,6 +12,35 @@ trait WebSearchTrait
     // This avoids the PHP 8.4 fatal error for conflicting trait/class property definitions.
 
     /**
+     * Append a string suffix to a string|array message.
+     * For arrays the suffix is added to the text block; the rest (PDF/image) is kept intact.
+     */
+    protected function appendToMessage(string|array $message, string $suffix): string|array
+    {
+        if (is_string($message)) return $message . $suffix;
+
+        $result = $message;
+        foreach ($result as $i => $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $result[$i]['text'] = ($block['text'] ?? '') . $suffix;
+                return $result;
+            }
+        }
+        // No text block found — create one
+        return array_merge([['type' => 'text', 'text' => $suffix]], $message);
+    }
+
+    /**
+     * Extract the plain-text content from a string|array message.
+     * Used for keyword matching, SAP context queries, etc.
+     */
+    protected function messageText(string|array $message): string
+    {
+        if (is_string($message)) return $message;
+        return implode(' ', array_map(fn($b) => $b['text'] ?? '', $message));
+    }
+
+    /**
      * Default keywords — used when the class does not define $webSearchKeywords.
      */
     private function defaultWebSearchKeywords(): array
@@ -36,11 +65,14 @@ trait WebSearchTrait
     /**
      * Check if the message likely needs a web search
      */
-    protected function needsWebSearch(string $message): bool
+    protected function needsWebSearch(string|array $message): bool
     {
         if (!(new WebSearchService())->isAvailable()) return false;
 
-        $lower = strtolower($message);
+        $text  = is_array($message)
+            ? implode(' ', array_map(fn($b) => $b['text'] ?? '', $message))
+            : $message;
+        $lower = strtolower($text);
 
         // Explicit trigger: starts with "web:" or "search:"
         if (str_starts_with($lower, 'web:') || str_starts_with($lower, 'search:') || str_starts_with($lower, 'pesquisa:')) {
@@ -59,10 +91,13 @@ trait WebSearchTrait
     }
 
     /**
-     * Extract search query from message
+     * Extract search query from message (accepts string or multimodal array)
      */
-    protected function extractSearchQuery(string $message): string
+    protected function extractSearchQuery(string|array $message): string
     {
+        $message = is_array($message)
+            ? implode(' ', array_map(fn($b) => $b['text'] ?? '', $message))
+            : $message;
         $lower = strtolower($message);
 
         // Explicit prefix: "web: query" or "search: query"
@@ -77,25 +112,58 @@ trait WebSearchTrait
     }
 
     /**
-     * Augment message with web search results — always searches (no keyword gate)
+     * Augment message with web search results — always searches (no keyword gate).
+     * Accepts string OR multimodal array (e.g. [{type:text,...},{type:document,...}]).
+     * When an array is passed the search query is extracted from the first text block
+     * and the results are appended to that text block; the rest (PDF/image) is preserved.
+     *
+     * @param  string|array $message
+     * @return string|array  same type as input
      */
-    protected function augmentWithWebSearch(string $message, ?callable $heartbeat = null): string
+    protected function augmentWithWebSearch(string|array $message, ?callable $heartbeat = null): string|array
     {
         if (!(new WebSearchService())->isAvailable()) return $message;
+
+        // --- extract plain-text portion for the query -------------------------
+        $isArray   = is_array($message);
+        $textIndex = 0; // which array entry holds the text block (default: 0)
+
+        if ($isArray) {
+            // Find first block with type==='text'
+            $textPart = '';
+            foreach ($message as $i => $block) {
+                if (($block['type'] ?? '') === 'text') {
+                    $textPart  = $block['text'] ?? '';
+                    $textIndex = $i;
+                    break;
+                }
+            }
+        } else {
+            $textPart = $message;
+        }
+        // ----------------------------------------------------------------------
 
         try {
             if ($heartbeat) $heartbeat('searching web');
 
             $searcher = new WebSearchService();
-            $query    = $this->extractSearchQuery($message);
+            $query    = $this->extractSearchQuery($textPart);
             $results  = $searcher->search($query, 5);
 
             if (str_starts_with($results, '(')) {
-                // Error or unavailable — return original
+                // Error or unavailable — return original unchanged
                 return $message;
             }
 
-            return $message . "\n\n---\n**WEB SEARCH RESULTS** (searched: \"{$query}\"):\n{$results}\n---\n\nPlease use the above web search results to answer accurately. Cite sources when relevant.";
+            $suffix = "\n\n---\n**WEB SEARCH RESULTS** (searched: \"{$query}\"):\n{$results}\n---\n\nPlease use the above web search results to answer accurately. Cite sources when relevant.";
+
+            if ($isArray) {
+                // Append suffix to the text block, leave other blocks intact
+                $message[$textIndex]['text'] = $textPart . $suffix;
+                return $message;
+            }
+
+            return $message . $suffix;
 
         } catch (\Throwable $e) {
             \Log::warning('WebSearchTrait: search failed — ' . $e->getMessage());

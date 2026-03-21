@@ -101,8 +101,9 @@ PROMPT;
         ]);
     }
 
-    protected function needsWebSearch(string $message): bool
+    protected function needsWebSearch(string|array $message): bool
     {
+        $message = $this->messageText($message);
         $lower = strtolower($message);
         foreach ($this->webSearchKeywords as $kw) {
             if (str_contains($lower, $kw)) return true;
@@ -147,13 +148,13 @@ PROMPT;
         return implode("\n", $lines);
     }
 
-    protected function augmentMessage(string $message, ?callable $heartbeat = null): string
+    protected function augmentMessage(string|array $message, ?callable $heartbeat = null): string|array
     {
         // Always include a live site scan
         try {
             if ($heartbeat) $heartbeat('a verificar sites em tempo real');
             $scanData = $this->checkLiveSites();
-            $message  .= "\n\n" . $scanData;
+            $message  = $this->appendToMessage($message, "\n\n" . $scanData);
         } catch (\Throwable $e) {
             Log::warning('AriaAgent: live site check failed — ' . $e->getMessage());
         }

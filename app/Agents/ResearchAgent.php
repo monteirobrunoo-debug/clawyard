@@ -98,8 +98,9 @@ PROMPT;
         'otimizar', 'optimize', 'digitalizar', 'digitalize', 'estratégia', 'strategy',
     ];
 
-    protected function isResearchRequest(string $message): bool
+    protected function isResearchRequest(string|array $message): bool
     {
+        $message = $this->messageText($message);
         $lower = strtolower($message);
         foreach ($this->researchKeywords as $kw) {
             if (str_contains($lower, $kw)) return true;
@@ -108,7 +109,7 @@ PROMPT;
     }
 
     // ─── Build enriched message with PartYard profile context ─────────────
-    protected function buildResearchMessage(string $message, ?callable $heartbeat = null): string
+    protected function buildResearchMessage(string|array $message, ?callable $heartbeat = null): string|array
     {
         if (!$this->isResearchRequest($message)) {
             return $this->augmentWithWebSearch($message, $heartbeat);
@@ -117,10 +118,10 @@ PROMPT;
         if ($heartbeat) $heartbeat('gathering company profile');
         $profile = PartYardProfileService::toPromptContext();
 
-        $augmented = $message . "\n\n--- COMPANY PROFILE FOR CONTEXT ---\n{$profile}\n--- END PROFILE ---";
+        $augmented = $this->appendToMessage($message, "\n\n--- COMPANY PROFILE FOR CONTEXT ---\n{$profile}\n--- END PROFILE ---");
 
         // Also do a web search if it's a competitor or market question
-        $lower = strtolower($message);
+        $lower = strtolower($this->messageText($message));
         $webKeywords = ['concorrente', 'competitor', 'mercado', 'market', 'pricing', 'preço', 'trend', 'tendência'];
         foreach ($webKeywords as $kw) {
             if (str_contains($lower, $kw)) {

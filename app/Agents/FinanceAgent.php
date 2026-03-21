@@ -152,8 +152,9 @@ PROMPT;
         $this->sap = new SapService();
     }
 
-    protected function needsSap(string $message): bool
+    protected function needsSap(string|array $message): bool
     {
+        $message = $this->messageText($message);
         $lower = strtolower($message);
         foreach ($this->sapKeywords as $kw) {
             if (str_contains($lower, $kw)) return true;
@@ -161,8 +162,9 @@ PROMPT;
         return false;
     }
 
-    protected function needsWebSearch(string $message): bool
+    protected function needsWebSearch(string|array $message): bool
     {
+        $message = $this->messageText($message);
         $lower = strtolower($message);
         foreach ($this->webSearchKeywords as $kw) {
             if (str_contains($lower, $kw)) return true;
@@ -171,13 +173,13 @@ PROMPT;
     }
 
     // ─── Augment with live SAP B1 data (only when relevant) ───────────────
-    protected function augmentMessage(string $message, ?callable $heartbeat = null): string
+    protected function augmentMessage(string|array $message, ?callable $heartbeat = null): string|array
     {
         if ($this->needsSap($message)) {
             try {
                 if ($heartbeat) $heartbeat('a consultar SAP');
-                $context = $this->sap->buildContext($message);
-                if ($context) $message .= $context;
+                $context = $this->sap->buildContext($this->messageText($message));
+                if ($context) $message = $this->appendToMessage($message, $context);
             } catch (\Throwable $e) {
                 Log::warning('FinanceAgent: SAP context failed — ' . $e->getMessage());
             }

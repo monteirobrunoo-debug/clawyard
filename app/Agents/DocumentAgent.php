@@ -84,8 +84,9 @@ PROMPT;
         ]);
     }
 
-    protected function needsWebSearch(string $message): bool
+    protected function needsWebSearch(string|array $message): bool
     {
+        $message = $this->messageText($message);
         $lower = strtolower($message);
         foreach ($this->webSearchKeywords as $kw) {
             if (str_contains($lower, $kw)) return true;

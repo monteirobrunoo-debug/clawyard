@@ -57,8 +57,9 @@ PROMPT;
         $this->sap = new SapService();
     }
 
-    protected function needsWebSearch(string $message): bool
+    protected function needsWebSearch(string|array $message): bool
     {
+        $message = $this->messageText($message);
         $lower = strtolower($message);
         foreach ($this->webSearchKeywords as $kw) {
             if (str_contains($lower, $kw)) return true;
@@ -66,12 +67,12 @@ PROMPT;
         return false;
     }
 
-    protected function augmentWithSap(string $message, ?callable $heartbeat = null): string
+    protected function augmentWithSap(string|array $message, ?callable $heartbeat = null): string|array
     {
         try {
             if ($heartbeat) $heartbeat('a consultar SAP');
-            $context = $this->sap->buildContext($message);
-            return $context ? $message . $context : $message;
+            $context = $this->sap->buildContext($this->messageText($message));
+            return $context ? $this->appendToMessage($message, $context) : $message;
         } catch (\Throwable $e) {
             Log::warning('SapAgent: SAP context failed — ' . $e->getMessage());
             return $message;
