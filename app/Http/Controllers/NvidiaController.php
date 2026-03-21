@@ -153,8 +153,10 @@ class NvidiaController extends Controller
             'message'    => 'required|string|min:1|max:20000',
             'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum,finance,research',
             'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
-            'image'      => 'nullable|string|max:10485760',   // ~7.5MB binary
-            'file_b64'   => 'nullable|string|max:41943040',   // ~30MB binary (PDF/Excel/Word)
+            'image'      => 'nullable|string|max:10485760',     // base64 image (vision)
+            'file'       => 'nullable|file|max:30720',           // multipart binary upload (30 MB)
+            // Legacy base64 fields kept for backward compatibility
+            'file_b64'   => 'nullable|string|max:41943040',
             'file_type'  => 'nullable|string|max:200',
             'file_name'  => 'nullable|string|max:255',
         ]);
@@ -169,9 +171,16 @@ class NvidiaController extends Controller
             : 'u' . $userId . '_' . bin2hex(random_bytes(16));
 
         $imageB64  = $request->input('image');
-        $fileB64   = $request->input('file_b64');
-        $fileType  = $request->input('file_type', 'application/octet-stream');
-        $fileName  = $request->input('file_name', 'ficheiro');
+
+        // Prefer multipart file upload; fall back to legacy base64
+        $uploadedFile = $request->file('file');
+        $fileB64   = $uploadedFile ? null : $request->input('file_b64');
+        $fileType  = $uploadedFile
+            ? ($uploadedFile->getMimeType() ?: $uploadedFile->getClientOriginalExtension())
+            : $request->input('file_type', 'application/octet-stream');
+        $fileName  = $uploadedFile
+            ? $uploadedFile->getClientOriginalName()
+            : $request->input('file_name', 'ficheiro');
 
         // Resolve agent and augment message *before* streaming so any validation
         // errors surface as JSON, not mid-stream garbage.
@@ -184,6 +193,15 @@ class NvidiaController extends Controller
 
         $augmentedMessage = $this->ragService->augmentMessage($message);
 
+        // Resolve the file path — either from multipart upload or legacy base64
+        $filePath = null;
+        if ($uploadedFile) {
+            $filePath = $uploadedFile->getRealPath();
+        } elseif ($fileB64) {
+            $filePath = tempnam(sys_get_temp_dir(), 'upl_');
+            file_put_contents($filePath, base64_decode($fileB64));
+        }
+
         if ($imageB64) {
             // Image attachment (vision)
             $augmentedMessage = [
@@ -194,20 +212,21 @@ class NvidiaController extends Controller
                     'data'       => $imageB64,
                 ]],
             ];
-        } elseif ($fileB64 && str_contains($fileType, 'pdf')) {
-            // PDF — Claude native document processing
+        } elseif ($filePath && preg_match('/pdf/i', $fileType . $fileName)) {
+            // PDF — Claude native document processing (send raw bytes as base64)
+            $pdfB64 = base64_encode(file_get_contents($filePath));
             $augmentedMessage = [
                 ['type' => 'text',     'text'   => $augmentedMessage],
                 ['type' => 'document', 'source' => [
                     'type'       => 'base64',
                     'media_type' => 'application/pdf',
-                    'data'       => $fileB64,
+                    'data'       => $pdfB64,
                 ]],
             ];
-        } elseif ($fileB64 && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
+            if (!$uploadedFile) @unlink($filePath); // clean up temp file from legacy base64
+        } elseif ($filePath && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
             // Excel XLSX — extract text directly from ZIP XML (no ext-gd required)
-            $tmp = tempnam(sys_get_temp_dir(), 'xlsx_');
-            file_put_contents($tmp, base64_decode($fileB64));
+            $tmp = $filePath;
             try {
                 $zip = new \ZipArchive();
                 if ($zip->open($tmp) === true) {
@@ -251,12 +270,11 @@ class NvidiaController extends Controller
                 \Log::warning("Excel parse failed ({$fileName}): " . $e->getMessage());
                 $augmentedMessage .= "\n\n[Excel: erro ao processar — " . $e->getMessage() . "]";
             } finally {
-                @unlink($tmp);
+                if (!$uploadedFile) @unlink($tmp); // only clean up temp files we created
             }
-        } elseif ($fileB64 && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
+        } elseif ($filePath && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
             // Word DOCX — extract text from ZIP XML (no external library needed)
-            $tmp = tempnam(sys_get_temp_dir(), 'docx_');
-            file_put_contents($tmp, base64_decode($fileB64));
+            $tmp = $filePath;
             try {
                 $zip = new \ZipArchive();
                 if ($zip->open($tmp) === true) {
@@ -274,10 +292,11 @@ class NvidiaController extends Controller
                 \Log::warning("Word parse failed ({$fileName}): " . $e->getMessage());
                 $augmentedMessage .= "\n\n[Word: erro ao processar — " . $e->getMessage() . "]";
             } finally {
-                @unlink($tmp);
+                if (!$uploadedFile) @unlink($tmp);
             }
-        } elseif ($fileB64) {
+        } elseif ($filePath) {
             // Other binary file — unsupported
+            if (!$uploadedFile) @unlink($filePath);
             $augmentedMessage .= "\n\n[Ficheiro binário: {$fileName} ({$fileType}) — formato não suportado para análise]";
         }
 

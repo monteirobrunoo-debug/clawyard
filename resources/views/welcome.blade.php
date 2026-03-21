@@ -735,29 +735,32 @@ document.getElementById('image-input').addEventListener('change', (e) => {
         };
         reader.readAsDataURL(file);
     } else {
-        // Non-image: read as base64 for PDF, or text for txt/csv/md
+        // Non-image: store raw File for multipart upload; read text for txt/csv/md
         const ext = file.name.split('.').pop().toLowerCase();
         const readAsText = ['txt','csv','md'].includes(ext);
 
-        reader.onload = (ev) => {
-            currentImg  = null;
-            currentFile = {
-                name:  file.name,
-                type:  file.type || 'application/octet-stream',
-                ext:   ext,
-                b64:   readAsText ? null : ev.target.result.split(',')[1],
-                text:  readAsText ? ev.target.result : null,
-                size:  humanSize(file.size),
-            };
-            document.getElementById('preview-img').style.display = 'none';
-            document.getElementById('file-preview-icon').textContent = getFileIcon(file.name);
-            document.getElementById('file-preview-name').textContent = file.name;
-            document.getElementById('file-preview-size').textContent = humanSize(file.size);
-            document.getElementById('file-preview-info').style.display = 'flex';
-            document.getElementById('image-preview').style.display = 'flex';
+        currentImg  = null;
+        // Store raw File object — binary files sent as multipart (no base64 overhead)
+        currentFile = {
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            ext:  ext,
+            raw:  readAsText ? null : file,  // raw File for multipart upload
+            text: null,
+            size: humanSize(file.size),
         };
-        if (readAsText) reader.readAsText(file);
-        else            reader.readAsDataURL(file);
+
+        document.getElementById('preview-img').style.display = 'none';
+        document.getElementById('file-preview-icon').textContent = getFileIcon(file.name);
+        document.getElementById('file-preview-name').textContent = file.name;
+        document.getElementById('file-preview-size').textContent = humanSize(file.size);
+        document.getElementById('file-preview-info').style.display = 'flex';
+        document.getElementById('image-preview').style.display = 'flex';
+
+        if (readAsText) {
+            reader.onload = (ev) => { currentFile.text = ev.target.result; };
+            reader.readAsText(file);
+        }
     }
 });
 
@@ -1217,28 +1220,47 @@ async function sendMessage() {
 
     const typing = addTyping(selectedAgent);
 
-    const payload = { message: text, agent: selectedAgent, session_id: SESSION_ID };
+    const jsonPayload = { message: text, agent: selectedAgent, session_id: SESSION_ID };
+    let   requestBody, requestHeaders;
+    let   usingFormData = false;
+
     if (currentImg) {
-        payload.image = currentImg;
+        jsonPayload.image = currentImg;
         clearImage();
         logActivity('🖼️', 'Imagem incluída (multimodal)', 'done');
     } else if (currentFile) {
         const f = currentFile;
         if (f.text !== null) {
-            // Plain text files: append content directly to message
-            payload.message += `\n\n---\n**Ficheiro anexado: ${f.name}**\n\`\`\`\n${f.text.substring(0, 15000)}\n\`\`\``;
-        } else if (f.ext === 'pdf') {
-            payload.file_b64  = f.b64;
-            payload.file_type = 'application/pdf';
-            payload.file_name = f.name;
-        } else {
-            // Other binary files (Excel, Word, etc.): send as base64 with type
-            payload.file_b64  = f.b64;
-            payload.file_type = f.type || ('application/' + f.ext);
-            payload.file_name = f.name;
+            // Plain text files: append content directly to message (no size issue)
+            jsonPayload.message += `\n\n---\n**Ficheiro anexado: ${f.name}**\n\`\`\`\n${f.text.substring(0, 15000)}\n\`\`\``;
+        } else if (f.raw) {
+            // Binary files (PDF, Excel, Word…): use multipart/form-data
+            // This avoids the 33% base64 overhead and PHP post_max_size issues
+            usingFormData = true;
+            const fd = new FormData();
+            fd.append('message',    jsonPayload.message);
+            fd.append('agent',      jsonPayload.agent);
+            fd.append('session_id', jsonPayload.session_id);
+            fd.append('file',       f.raw, f.name);
+            requestBody = fd;
+            // Do NOT set Content-Type — browser sets it with the correct boundary
         }
         clearImage();
         logActivity('📎', `Ficheiro incluído: ${f.name} (${f.size})`, 'done');
+    }
+
+    if (!usingFormData) {
+        requestBody    = JSON.stringify(jsonPayload);
+        requestHeaders = {
+            'Content-Type': 'application/json',
+            'Accept':       'text/event-stream',
+            'X-CSRF-TOKEN': CSRF,
+        };
+    } else {
+        requestHeaders = {
+            'Accept':       'text/event-stream',
+            'X-CSRF-TOKEN': CSRF,
+        };
     }
 
     resolveStep(stepRAG);
@@ -1252,12 +1274,8 @@ async function sendMessage() {
     try {
         const res = await fetch('/api/chat', {
             method:  'POST',
-            headers: {
-                'Content-Type':  'application/json',
-                'Accept':        'text/event-stream',
-                'X-CSRF-TOKEN':  CSRF,
-            },
-            body: JSON.stringify(payload),
+            headers: requestHeaders,
+            body:    requestBody,
         });
 
         if (!res.ok) {
