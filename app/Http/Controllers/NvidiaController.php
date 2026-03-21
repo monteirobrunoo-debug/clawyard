@@ -205,35 +205,56 @@ class NvidiaController extends Controller
                 ]],
             ];
         } elseif ($fileB64 && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
-            // Excel — convert to text via PhpSpreadsheet
+            // Excel XLSX — extract text directly from ZIP XML (no ext-gd required)
             $tmp = tempnam(sys_get_temp_dir(), 'xlsx_');
             file_put_contents($tmp, base64_decode($fileB64));
             try {
-                $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmp);
-                $text = '';
-                foreach ($spreadsheet->getAllSheets() as $sheet) {
-                    $text .= "\n## Folha: {$sheet->getTitle()}\n";
-                    foreach ($sheet->getRowIterator() as $row) {
+                $zip = new \ZipArchive();
+                if ($zip->open($tmp) === true) {
+                    // Load shared strings (cell values stored by index)
+                    $sharedStrings = [];
+                    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+                    if ($ssXml) {
+                        $ssXml = preg_replace('/<r>.*?<\/r>/s', '', $ssXml); // keep only <t> nodes
+                        preg_match_all('/<t[^>]*>(.*?)<\/t>/s', $ssXml, $m);
+                        $sharedStrings = array_map('html_entity_decode', $m[1]);
+                    }
+                    // Parse sheet1 (main sheet)
+                    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
+                    $zip->close();
+                    $text  = '';
+                    $lines = [];
+                    preg_match_all('/<row[^>]*>(.*?)<\/row>/s', $sheetXml, $rows);
+                    foreach ($rows[1] as $rowXml) {
                         $cells = [];
-                        $ci = $row->getCellIterator();
-                        $ci->setIterateOnlyExistingCells(true);
-                        foreach ($ci as $cell) {
-                            $cells[] = $cell->getFormattedValue();
+                        preg_match_all('/<c [^>]*t="s"[^>]*>.*?<v>(\d+)<\/v>.*?<\/c>/s', $rowXml, $strCells);
+                        preg_match_all('/<c [^>]*>.*?<v>([^<]*)<\/v>.*?<\/c>/s', $rowXml, $numCells);
+                        // Rebuild cells in column order
+                        preg_match_all('/<c r="([A-Z]+)\d+"([^>]*)>(.*?)<\/c>/s', $rowXml, $allCells, PREG_SET_ORDER);
+                        foreach ($allCells as $cell) {
+                            $isStr = str_contains($cell[2], 't="s"');
+                            preg_match('/<v>([^<]*)<\/v>/', $cell[3], $vMatch);
+                            $val = $vMatch[1] ?? '';
+                            if ($isStr) $val = $sharedStrings[(int)$val] ?? $val;
+                            $cells[] = $val;
                         }
-                        if (array_filter($cells)) {
-                            $text .= implode(' | ', $cells) . "\n";
+                        if (array_filter($cells, fn($c) => $c !== '')) {
+                            $lines[] = implode(' | ', $cells);
                         }
                     }
+                    $text = implode("\n", $lines);
+                    $augmentedMessage .= "\n\n---\n**Ficheiro Excel: {$fileName}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
+                } else {
+                    $augmentedMessage .= "\n\n[Excel: não foi possível abrir o ficheiro]";
                 }
-                $augmentedMessage .= "\n\n---\n**Ficheiro Excel: {$fileName}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
             } catch (\Throwable $e) {
                 \Log::warning("Excel parse failed ({$fileName}): " . $e->getMessage());
-                $augmentedMessage .= "\n\n[Excel: não foi possível processar — " . $e->getMessage() . "]";
+                $augmentedMessage .= "\n\n[Excel: erro ao processar — " . $e->getMessage() . "]";
             } finally {
                 @unlink($tmp);
             }
         } elseif ($fileB64 && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
-            // Word DOCX — extract text from XML (no external rendering needed)
+            // Word DOCX — extract text from ZIP XML (no external library needed)
             $tmp = tempnam(sys_get_temp_dir(), 'docx_');
             file_put_contents($tmp, base64_decode($fileB64));
             try {
@@ -241,7 +262,6 @@ class NvidiaController extends Controller
                 if ($zip->open($tmp) === true) {
                     $xml = $zip->getFromName('word/document.xml') ?: '';
                     $zip->close();
-                    // Paragraph breaks before stripping tags
                     $xml  = str_replace(['</w:p>', '</w:tr>', '<w:br/>'], ["\n", "\n", "\n"], $xml);
                     $text = strip_tags($xml);
                     $text = preg_replace('/[ \t]+/', ' ', $text);
