@@ -717,7 +717,24 @@ document.getElementById('image-btn').addEventListener('click', () =>
     document.getElementById('image-input').click()
 );
 
-document.getElementById('image-input').addEventListener('change', (e) => {
+document.getElementById('image-input').addEventListener('change', fileInputChangeHandler);
+
+document.getElementById('remove-image').addEventListener('click', clearImage);
+function clearImage() {
+    currentImg  = null;
+    currentFile = null;
+    document.getElementById('image-preview').style.display = 'none';
+    document.getElementById('preview-img').style.display = 'none';
+    document.getElementById('file-preview-info').style.display = 'none';
+    // Replace the input element so the change event fires even if the same file is selected again
+    const old = document.getElementById('image-input');
+    const fresh = old.cloneNode(false);
+    old.parentNode.replaceChild(fresh, old);
+    fresh.addEventListener('change', fileInputChangeHandler);
+    document.getElementById('image-btn').onclick = () => fresh.click();
+}
+
+function fileInputChangeHandler(e) {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -735,14 +752,11 @@ document.getElementById('image-input').addEventListener('change', (e) => {
         };
         reader.readAsDataURL(file);
     } else {
-        // Non-image: read as base64 (PDF/Excel/Word) or plain text (txt/csv/md)
         const ext = file.name.split('.').pop().toLowerCase();
         const readAsText = ['txt','csv','md'].includes(ext);
 
-        // Warn if file is too large (>15MB binary → ~20MB base64)
         if (!readAsText && file.size > 15 * 1024 * 1024) {
             alert(`Ficheiro muito grande (${humanSize(file.size)}). Máximo recomendado: 15 MB.`);
-            document.getElementById('image-input').value = '';
             return;
         }
 
@@ -766,16 +780,6 @@ document.getElementById('image-input').addEventListener('change', (e) => {
         if (readAsText) reader.readAsText(file);
         else            reader.readAsDataURL(file);
     }
-});
-
-document.getElementById('remove-image').addEventListener('click', clearImage);
-function clearImage() {
-    currentImg  = null;
-    currentFile = null;
-    document.getElementById('image-preview').style.display = 'none';
-    document.getElementById('preview-img').style.display = 'none';
-    document.getElementById('file-preview-info').style.display = 'none';
-    document.getElementById('image-input').value = '';
 }
 
 // ── Input resize ──
