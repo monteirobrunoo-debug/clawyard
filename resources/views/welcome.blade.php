@@ -1226,15 +1226,15 @@ async function sendMessage() {
         const f = currentFile;
         if (f.text !== null) {
             // Plain text files: append content directly to message
-            payload.message += `\n\n---\n**Ficheiro anexado: ${f.name}**\n\`\`\`\n${f.text.substring(0, 8000)}\n\`\`\``;
+            payload.message += `\n\n---\n**Ficheiro anexado: ${f.name}**\n\`\`\`\n${f.text.substring(0, 15000)}\n\`\`\``;
         } else if (f.ext === 'pdf') {
             payload.file_b64  = f.b64;
             payload.file_type = 'application/pdf';
             payload.file_name = f.name;
         } else {
-            // Other binary files: send as base64 with type
+            // Other binary files (Excel, Word, etc.): send as base64 with type
             payload.file_b64  = f.b64;
-            payload.file_type = f.type;
+            payload.file_type = f.type || ('application/' + f.ext);
             payload.file_name = f.name;
         }
         clearImage();

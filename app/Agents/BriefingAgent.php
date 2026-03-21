@@ -246,7 +246,7 @@ PROMPT;
     }
 
     // ─── stream() ──────────────────────────────────────────────────────────
-    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         if ($heartbeat) $heartbeat('gathering intelligence');
 
@@ -306,7 +306,7 @@ PROMPT;
     }
 
     // ─── chat() ────────────────────────────────────────────────────────────
-    public function chat(string $message, array $history = []): string
+    public function chat(string|array $message, array $history = []): string
     {
         $full = '';
         $this->stream($message, $history, function ($chunk) use (&$full) {

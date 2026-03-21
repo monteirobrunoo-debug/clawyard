@@ -78,7 +78,7 @@ PROMPT;
         }
     }
 
-    public function chat(string $message, array $history = []): string
+    public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentWithSap($message);
         if ($this->needsWebSearch($message)) {
@@ -102,7 +102,7 @@ PROMPT;
         return $data['content'][0]['text'] ?? '';
     }
 
-    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $message = $this->augmentWithSap($message, $heartbeat);
         if ($this->needsWebSearch($message)) {

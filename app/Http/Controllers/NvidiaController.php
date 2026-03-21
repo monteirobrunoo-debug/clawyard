@@ -74,10 +74,7 @@ class NvidiaController extends Controller
 
             // Multi-agent orchestration mode
             if ($agentName === 'orchestrator') {
-                $results = $this->agentManager->orchestrate(
-                    is_array($augmentedMessage) ? $message : $augmentedMessage,
-                    $history
-                );
+                $results = $this->agentManager->orchestrate($message, $history);
 
                 $reply = $this->combineReplies($results);
 
@@ -108,10 +105,7 @@ class NvidiaController extends Controller
                 ['icon' => '🤖', 'text' => 'Agente ' . ucfirst($agent->getName()) . ' a processar...', 'done' => true],
             ];
 
-            $reply = $agent->chat(
-                is_array($augmentedMessage) ? json_encode($augmentedMessage) : $augmentedMessage,
-                $history
-            );
+            $reply = $agent->chat($augmentedMessage, $history);
 
             $agentLog[] = ['icon' => '✅', 'text' => 'Resposta pronta', 'done' => true];
 
@@ -159,9 +153,9 @@ class NvidiaController extends Controller
             'message'    => 'required|string|min:1|max:20000',
             'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum,finance,research',
             'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
-            'image'      => 'nullable|string|max:10485760',
-            'file_b64'   => 'nullable|string|max:20971520',
-            'file_type'  => 'nullable|string|max:100',
+            'image'      => 'nullable|string|max:10485760',   // ~7.5MB binary
+            'file_b64'   => 'nullable|string|max:41943040',   // ~30MB binary (PDF/Excel/Word)
+            'file_type'  => 'nullable|string|max:200',
             'file_name'  => 'nullable|string|max:255',
         ]);
 
@@ -201,7 +195,7 @@ class NvidiaController extends Controller
                 ]],
             ];
         } elseif ($fileB64 && str_contains($fileType, 'pdf')) {
-            // PDF document — Claude supports native PDF processing
+            // PDF — Claude native document processing
             $augmentedMessage = [
                 ['type' => 'text',     'text'   => $augmentedMessage],
                 ['type' => 'document', 'source' => [
@@ -210,9 +204,61 @@ class NvidiaController extends Controller
                     'data'       => $fileB64,
                 ]],
             ];
+        } elseif ($fileB64 && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
+            // Excel — convert to text via PhpSpreadsheet
+            $tmp = tempnam(sys_get_temp_dir(), 'xlsx_');
+            file_put_contents($tmp, base64_decode($fileB64));
+            try {
+                $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmp);
+                $text = '';
+                foreach ($spreadsheet->getAllSheets() as $sheet) {
+                    $text .= "\n## Folha: {$sheet->getTitle()}\n";
+                    foreach ($sheet->getRowIterator() as $row) {
+                        $cells = [];
+                        $ci = $row->getCellIterator();
+                        $ci->setIterateOnlyExistingCells(true);
+                        foreach ($ci as $cell) {
+                            $cells[] = $cell->getFormattedValue();
+                        }
+                        if (array_filter($cells)) {
+                            $text .= implode(' | ', $cells) . "\n";
+                        }
+                    }
+                }
+                $augmentedMessage .= "\n\n---\n**Ficheiro Excel: {$fileName}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
+            } catch (\Throwable $e) {
+                \Log::warning("Excel parse failed ({$fileName}): " . $e->getMessage());
+                $augmentedMessage .= "\n\n[Excel: não foi possível processar — " . $e->getMessage() . "]";
+            } finally {
+                @unlink($tmp);
+            }
+        } elseif ($fileB64 && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
+            // Word DOCX — extract text from XML (no external rendering needed)
+            $tmp = tempnam(sys_get_temp_dir(), 'docx_');
+            file_put_contents($tmp, base64_decode($fileB64));
+            try {
+                $zip = new \ZipArchive();
+                if ($zip->open($tmp) === true) {
+                    $xml = $zip->getFromName('word/document.xml') ?: '';
+                    $zip->close();
+                    // Paragraph breaks before stripping tags
+                    $xml  = str_replace(['</w:p>', '</w:tr>', '<w:br/>'], ["\n", "\n", "\n"], $xml);
+                    $text = strip_tags($xml);
+                    $text = preg_replace('/[ \t]+/', ' ', $text);
+                    $text = preg_replace('/\n{3,}/', "\n\n", trim($text));
+                    $augmentedMessage .= "\n\n---\n**Ficheiro Word: {$fileName}**\n" . substr($text, 0, 15000);
+                } else {
+                    $augmentedMessage .= "\n\n[Word: não foi possível abrir o ficheiro]";
+                }
+            } catch (\Throwable $e) {
+                \Log::warning("Word parse failed ({$fileName}): " . $e->getMessage());
+                $augmentedMessage .= "\n\n[Word: erro ao processar — " . $e->getMessage() . "]";
+            } finally {
+                @unlink($tmp);
+            }
         } elseif ($fileB64) {
-            // Other binary file — append note to message
-            $augmentedMessage = $augmentedMessage . "\n\n[Ficheiro binário anexado: {$fileName} ({$fileType}) — não é possível processar este formato directamente]";
+            // Other binary file — unsupported
+            $augmentedMessage .= "\n\n[Ficheiro binário: {$fileName} ({$fileType}) — formato não suportado para análise]";
         }
 
         // Save user message before streaming
@@ -273,7 +319,7 @@ class NvidiaController extends Controller
 
         $resolvedAgent    = $agent;
         $resolvedHistory  = $history;
-        $resolvedMessage  = is_array($augmentedMessage) ? json_encode($augmentedMessage) : $augmentedMessage;
+        $resolvedMessage  = $augmentedMessage; // pass array as-is for multimodal (PDF/image)
         $resolvedAgentLog = $agentLog;
         $suggestions      = $this->getSuggestions($agent->getName(), $message);
         $agentModel       = $agent->getModel();

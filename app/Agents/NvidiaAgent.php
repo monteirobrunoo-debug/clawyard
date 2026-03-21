@@ -19,7 +19,7 @@ class NvidiaAgent implements AgentInterface
         ]);
     }
 
-    public function chat(string $message, array $history = []): string
+    public function chat(string|array $message, array $history = []): string
     {
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
@@ -38,7 +38,7 @@ class NvidiaAgent implements AgentInterface
         return $data['choices'][0]['message']['content'] ?? '';
     }
 
-    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],

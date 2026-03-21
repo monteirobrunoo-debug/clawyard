@@ -102,7 +102,7 @@ PROMPT;
         return null;
     }
 
-    public function chat(string $message, array $history = []): string
+    public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentWithWebSearch($message);
         $messages = array_merge($history, [
@@ -125,7 +125,7 @@ PROMPT;
         return $this->parseEmailJson($text) ?? $text;
     }
 
-    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $message  = $this->augmentWithWebSearch($message, $heartbeat);
         $messages = array_merge($history, [

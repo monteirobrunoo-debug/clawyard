@@ -93,7 +93,7 @@ PROMPT;
         return false;
     }
 
-    public function chat(string $message, array $history = []): string
+    public function chat(string|array $message, array $history = []): string
     {
         if ($this->needsWebSearch($message)) {
             $message = $this->augmentWithWebSearch($message);
@@ -117,7 +117,7 @@ PROMPT;
         return $data['content'][0]['text'] ?? '';
     }
 
-    public function stream(string $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         if ($this->needsWebSearch($message)) {
             if ($heartbeat) $heartbeat('a pesquisar normas');
