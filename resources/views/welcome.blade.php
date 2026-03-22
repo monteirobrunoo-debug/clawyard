@@ -647,7 +647,20 @@ function updateEmptyState(agent) {
     if (descEl)   descEl.textContent = desc;
 }
 
-// Init on page load
+let isRecording  = false;
+let recognition  = null;
+let currentImg   = null;
+let currentFile  = null; // { name, type, b64, text } for non-image files
+let panelOpen    = true;
+let actCount     = 0;
+
+// ── Agent from URL — must run BEFORE init so chips/colors reflect the right agent
+const urlAgent = new URLSearchParams(window.location.search).get('agent');
+if (urlAgent && agentSelect.querySelector(`option[value="${urlAgent}"]`)) {
+    agentSelect.value = urlAgent;
+}
+
+// Init on page load (after URL agent is applied)
 renderStarterChips(agentSelect.value || 'auto');
 applyAgentColor(agentSelect.value || 'auto');
 updateEmptyState(agentSelect.value || 'auto');
@@ -659,19 +672,6 @@ agentSelect.addEventListener('change', () => {
     applyAgentColor(agent);
     updateEmptyState(agent);
 });
-
-let isRecording  = false;
-let recognition  = null;
-let currentImg   = null;
-let currentFile  = null; // { name, type, b64, text } for non-image files
-let panelOpen    = true;
-let actCount     = 0;
-
-// ── Agent from URL ──
-const urlAgent = new URLSearchParams(window.location.search).get('agent');
-if (urlAgent && agentSelect.querySelector(`option[value="${urlAgent}"]`)) {
-    agentSelect.value = urlAgent;
-}
 
 // ── Toggle activity panel ──
 document.getElementById('toggle-panel').addEventListener('click', () => {
