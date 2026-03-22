@@ -1272,8 +1272,22 @@ function speak(text) { /* TTS disabled */ }
 //  SEND MESSAGE  (SSE streaming)
 // ═══════════════════════════════
 async function sendMessage() {
-    const text = input.value.trim();
-    if (!text || sendBtn.disabled) return;
+    let text = input.value.trim();
+
+    // Allow send with no text if a file/image is attached
+    const hasAttachment = !!(currentImg || currentFile);
+    if (!text && !hasAttachment) return;
+    if (sendBtn.disabled) return;
+
+    // Default prompt when only a file is attached (no text typed)
+    if (!text && hasAttachment) {
+        const ext = currentFile?.ext || '';
+        if (['pdf'].includes(ext))                              text = 'Analisa este documento PDF.';
+        else if (['xlsx','xls','csv'].includes(ext))           text = 'Analisa este ficheiro Excel/CSV.';
+        else if (['doc','docx'].includes(ext))                  text = 'Analisa este documento Word.';
+        else if (currentImg)                                    text = 'O que vês nesta imagem?';
+        else                                                    text = 'Analisa este ficheiro.';
+    }
 
     input.value = '';
     input.style.height = 'auto';
