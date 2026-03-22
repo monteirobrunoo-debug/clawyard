@@ -201,20 +201,21 @@ class NvidiaController extends Controller
                     'data'       => $imageB64,
                 ]],
             ];
-        } elseif ($filePath && preg_match('/pdf/i', $fileType . $fileName)) {
-            // PDF — Claude native document processing (send raw bytes as base64)
-            $pdfB64 = base64_encode(file_get_contents($filePath));
+        } elseif ($fileB64 && preg_match('/pdf/i', $fileType . $fileName)) {
+            // PDF — Claude native document processing (use original base64 directly)
+            \Log::info("ClawYard: PDF attached [{$fileName}] " . round(strlen($fileB64) * 0.75 / 1024) . ' KB');
             $augmentedMessage = [
                 ['type' => 'text',     'text'   => $augmentedMessage],
                 ['type' => 'document', 'source' => [
                     'type'       => 'base64',
                     'media_type' => 'application/pdf',
-                    'data'       => $pdfB64,
+                    'data'       => $fileB64,
                 ]],
             ];
             @unlink($filePath); // clean up temp file
         } elseif ($filePath && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
             // Excel XLSX — extract text directly from ZIP XML (no ext-gd required)
+            \Log::info("ClawYard: Excel attached [{$fileName}] " . round(filesize($filePath) / 1024) . ' KB');
             $tmp = $filePath;
             try {
                 $zip = new \ZipArchive();
@@ -263,6 +264,7 @@ class NvidiaController extends Controller
             }
         } elseif ($filePath && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
             // Word DOCX — extract text from ZIP XML (no external library needed)
+            \Log::info("ClawYard: Word attached [{$fileName}] " . round(filesize($filePath) / 1024) . ' KB');
             $tmp = $filePath;
             try {
                 $zip = new \ZipArchive();
