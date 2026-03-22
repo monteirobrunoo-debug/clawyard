@@ -177,6 +177,15 @@
         #image-preview img { height:72px; border-radius:8px; border:1px solid var(--border2); }
         #remove-image { position:absolute; top:4px; left:82px; background:#ff4444; color:#fff; border:none; border-radius:50%; width:18px; height:18px; cursor:pointer; font-size:11px; display:flex; align-items:center; justify-content:center; }
 
+        /* ── DRAG & DROP OVERLAY ── */
+        #drop-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:9999; align-items:center; justify-content:center; flex-direction:column; gap:16px; pointer-events:none; }
+        #drop-overlay.active { display:flex; }
+        #drop-overlay .drop-box { border:3px dashed var(--agent-color,#76b900); border-radius:24px; padding:60px 80px; text-align:center; animation:drop-pulse 1s ease-in-out infinite alternate; }
+        #drop-overlay .drop-icon { font-size:64px; display:block; margin-bottom:12px; }
+        #drop-overlay .drop-text { font-size:22px; font-weight:700; color:var(--agent-color,#76b900); }
+        #drop-overlay .drop-sub  { font-size:13px; color:#888; margin-top:6px; }
+        @keyframes drop-pulse { from{box-shadow:0 0 0 0 color-mix(in srgb,var(--agent-color,#76b900) 30%,transparent)} to{box-shadow:0 0 40px 4px color-mix(in srgb,var(--agent-color,#76b900) 20%,transparent)} }
+
         /* ── INPUT AREA ── */
         #input-area { padding:14px 20px; border-top:1px solid var(--border); background:var(--bg2); display:flex; gap:10px; align-items:flex-end; flex-shrink:0; }
         .icon-btn { width:44px; height:44px; background:var(--bg3); border:1px solid var(--border2); border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0; font-size:17px; }
@@ -399,6 +408,15 @@
                 <div class="agent-mini" data-agent="finance"><div class="dot-status"></div><span>💰 Dr. Luís Financeiro</span></div>
                 <div class="agent-mini" data-agent="research"><div class="dot-status"></div><span>🔍 Marina Research</span></div>
             </div>
+        </div>
+    </div>
+
+    <!-- ── DRAG & DROP OVERLAY ── -->
+    <div id="drop-overlay">
+        <div class="drop-box">
+            <span class="drop-icon">📎</span>
+            <div class="drop-text">Larga aqui para anexar</div>
+            <div class="drop-sub">PDF · Excel · Word · Imagem · TXT · CSV</div>
         </div>
     </div>
 
@@ -794,6 +812,41 @@ function fileInputChangeHandler(e) {
         else            reader.readAsDataURL(file);
     }
 }
+
+// ── Drag & Drop file attach (works for ALL agents including Luis) ──────────
+(function () {
+    const overlay   = document.getElementById('drop-overlay');
+    let dragCounter = 0; // track nested dragenter/dragleave
+
+    // Show overlay when dragging a file over the window
+    document.addEventListener('dragenter', (e) => {
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault();
+        dragCounter++;
+        overlay.classList.add('active');
+    });
+    document.addEventListener('dragleave', (e) => {
+        dragCounter--;
+        if (dragCounter <= 0) { dragCounter = 0; overlay.classList.remove('active'); }
+    });
+    document.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault(); // allow drop
+    });
+    document.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        overlay.classList.remove('active');
+        const file = e.dataTransfer?.files?.[0];
+        if (file) processDroppedFile(file);
+    });
+
+    function processDroppedFile(file) {
+        // Reuse the same handler as the file input
+        const fakeEvent = { target: { files: [file] } };
+        fileInputChangeHandler(fakeEvent);
+    }
+})();
 
 // ── Input resize ──
 input.addEventListener('keydown', (e) => {
