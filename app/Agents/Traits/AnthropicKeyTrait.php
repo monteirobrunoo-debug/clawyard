@@ -34,12 +34,33 @@ trait AnthropicKeyTrait
         return '';
     }
 
-    protected function apiHeaders(): array
+    protected function apiHeaders(bool $withPdf = false): array
     {
-        return [
+        $headers = [
             'x-api-key'         => self::getAnthropicKey(),
             'anthropic-version' => '2023-06-01',
             'Content-Type'      => 'application/json',
         ];
+        // Enable PDF document blocks (required for file_type=application/pdf)
+        if ($withPdf) {
+            $headers['anthropic-beta'] = 'pdfs-2024-09-25';
+        }
+        return $headers;
+    }
+
+    /**
+     * Detect if message contains a PDF document block and return headers accordingly.
+     */
+    protected function headersForMessage(string|array $message): array
+    {
+        if (is_array($message)) {
+            foreach ($message as $block) {
+                if (($block['type'] ?? '') === 'document'
+                    && str_contains($block['source']['media_type'] ?? '', 'pdf')) {
+                    return $this->apiHeaders(true);
+                }
+            }
+        }
+        return $this->apiHeaders();
     }
 }

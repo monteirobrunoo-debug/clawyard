@@ -260,7 +260,7 @@ PROMPT;
         $messages = [['role' => 'user', 'content' => $prompt]];
 
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->apiHeaders(),
+            'headers' => $this->headersForMessage($prompt),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),

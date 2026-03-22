@@ -447,8 +447,8 @@
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
-            <button class="icon-btn" id="image-btn" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)">📎</button>
-            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none">
+            <label class="icon-btn" id="image-btn" for="image-input" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)" style="cursor:pointer">📎</label>
+            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none" onclick="this.value=''"  >
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -746,13 +746,8 @@ function humanSize(bytes) {
     return (bytes/1048576).toFixed(1) + ' MB';
 }
 
-document.getElementById('image-btn').addEventListener('click', () => {
-    // Reset the value first so selecting the same file again always fires 'change'
-    const inp = document.getElementById('image-input');
-    inp.value = '';
-    inp.click();
-});
-
+// image-btn is a <label for="image-input"> — clicks handled natively by browser
+// onclick="this.value=''" on the input ensures re-selecting same file always fires 'change'
 document.getElementById('image-input').addEventListener('change', fileInputChangeHandler);
 
 document.getElementById('remove-image').addEventListener('click', clearImage);

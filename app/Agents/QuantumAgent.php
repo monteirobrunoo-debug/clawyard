@@ -282,7 +282,7 @@ MSG;
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->apiHeaders(),
+            'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
                 'max_tokens' => 8000,
@@ -327,7 +327,7 @@ MSG;
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->apiHeaders(),
+            'headers' => $this->headersForMessage($finalMessage),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
