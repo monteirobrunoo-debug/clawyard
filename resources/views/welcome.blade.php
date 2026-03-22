@@ -447,13 +447,8 @@
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
-            <label class="icon-btn" id="image-btn" for="image-input"
-                   onclick="document.getElementById('image-input').value=''"
-                   title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)"
-                   style="cursor:pointer">📎</label>
-            <input type="file" id="image-input"
-                   accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md"
-                   style="display:none">
+            <button class="icon-btn" id="image-btn" type="button" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)">📎</button>
+            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -751,8 +746,12 @@ function humanSize(bytes) {
     return (bytes/1048576).toFixed(1) + ' MB';
 }
 
-// image-btn is a <label for="image-input"> — clicks handled natively by browser
-// onclick="this.value=''" on the input ensures re-selecting same file always fires 'change'
+// image-btn click → open hidden file input (position:absolute;opacity:0 so Chrome allows it)
+document.getElementById('image-btn').addEventListener('click', function() {
+    var inp = document.getElementById('image-input');
+    inp.value = '';   // reset so same file can be re-selected
+    inp.click();
+});
 document.getElementById('image-input').addEventListener('change', fileInputChangeHandler);
 
 document.getElementById('remove-image').addEventListener('click', clearImage);
