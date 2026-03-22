@@ -447,8 +447,13 @@
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
-            <label class="icon-btn" id="image-btn" for="image-input" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)" style="cursor:pointer">📎</label>
-            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none" onclick="this.value=''"  >
+            <label class="icon-btn" id="image-btn" for="image-input"
+                   onclick="document.getElementById('image-input').value=''"
+                   title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)"
+                   style="cursor:pointer">📎</label>
+            <input type="file" id="image-input"
+                   accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md"
+                   style="display:none">
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
