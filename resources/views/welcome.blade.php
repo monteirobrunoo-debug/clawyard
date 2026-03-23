@@ -359,6 +359,7 @@
         <option value="quantum">⚛️ Prof. Quantum Leap</option>
         <option value="finance">💰 Dr. Luís Financeiro</option>
         <option value="research">🔍 Marina Research</option>
+        <option value="capitao">⚓ Capitão Porto</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -490,7 +491,8 @@ const AGENT_EMOJIS = {
 const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
     email:'Daniel Email', sap:'Richard SAP', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
-    aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research'
+    aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research',
+    capitao:'Capitão Porto'
 };
 
 const AGENT_COLORS = {
@@ -498,7 +500,8 @@ const AGENT_COLORS = {
     sales:'#3b82f6', support:'#f59e0b', email:'#8b5cf6',
     sap:'#06b6d4', document:'#94a3b8', claude:'#a855f7',
     nvidia:'#76b900', aria:'#ef4444', quantum:'#22d3ee',
-    finance:'#10b981', research:'#f97316'
+    finance:'#10b981', research:'#f97316',
+    capitao:'#0ea5e9'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -515,6 +518,7 @@ const AGENT_DESCRIPTIONS = {
     quantum: 'Digest científico diário: papers arXiv + patentes USPTO',
     finance: 'Contabilidade, fiscalidade, SAP financeiro e análise ROI',
     research: 'Pesquisa de mercado, concorrência e análise de websites',
+    capitao: 'Operações portuárias, escalas, documentação e logística marítima',
 };
 
 const AGENT_CHIPS = {
@@ -634,6 +638,15 @@ const AGENT_CHIPS = {
         '🔍 Estratégia de palavras-chave SEO para PartYard em PT/EN/ES/GR',
         '🔍 Análise de presença digital de armadores gregos — oportunidades de contacto',
         '🔍 Estratégia de entrada no mercado escandinavo — canais, parceiros e timing',
+    ],
+    // ── Capitão Porto ─────────────────────────────────────────────────────
+    capitao: [
+        '⚓ Navio em Sines com motor MTU avariado — procedimento urgente de entrega de peças a bordo',
+        '⚓ Plano de escala completo para cargueiro em Setúbal — documentação APSS e timeline',
+        '⚓ Como desalfandegar Ship Spares isentos de IVA num porto português — passo a passo',
+        '⚓ Calcular laytime e demurrage para bulk carrier com 48h de atraso no Terminal de Sines',
+        '⚓ Documentação completa para exportação de peças via sea freight para Pireu (Grécia)',
+        '⚓ Inspeção Port State Control (Paris MOU) amanhã — checklist de preparação para o Chief',
     ],
 };
 

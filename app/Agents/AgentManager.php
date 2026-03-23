@@ -22,6 +22,7 @@ class AgentManager
             'quantum'   => new QuantumAgent(),
             'research'  => new ResearchAgent(),
             'finance'   => new FinanceAgent(),
+            'capitao'   => new CapitaoAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
