@@ -69,4 +69,9 @@ return [
         'verify_token' => env('META_WHATSAPP_VERIFY_TOKEN', 'clawyard_webhook_2026'),
     ],
 
+    'epo' => [
+        'consumer_key'    => env('EPO_CONSUMER_KEY'),
+        'consumer_secret' => env('EPO_CONSUMER_SECRET'),
+    ],
+
 ];

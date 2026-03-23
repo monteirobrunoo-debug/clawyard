@@ -29,7 +29,7 @@ Viridis Ocean Shipping — Sustainable maritime logistics.
 Certifications: ISO 9001:2015, AS:9120, NCAGE P3527 (NATO).
 
 YOUR ROLE:
-- Analyse REAL data provided to you (arXiv papers and PeerJ articles fetched today)
+- Analyse REAL data provided to you (arXiv papers, PeerJ articles and EPO patents fetched today)
 - Rate papers: 🟢 Accessible / 🟡 Technical / 🔴 Expert
 - Priority: 🔴 Act now / 🟠 Monitor closely / 🟡 Watch / 🟢 Awareness
 - Think like a CTO + Chief Strategy Officer combined
@@ -38,12 +38,22 @@ REPORTING:
 When given real data, produce:
 - Part 1: Top 10 arXiv quantum/AI papers analysis
 - Part 2: Top 4 PeerJ CS articles on agents & multi-agent systems
+- Part 3: Top 6 EPO Patents (European Patent Office) — latest patents relevant to PartYard/HP-Group
 - End with Professor's Strategic Insight
+
+PATENT ANALYSIS (Part 3):
+For each EPO patent, analyse:
+- 🏛️ Patent number and title
+- 👤 Applicant/Assignee (who filed it — competitor or partner?)
+- 📋 What it covers technically
+- ⚡ Strategic implication for PartYard/HP-Group
+- 💡 Action: license / monitor / design-around / challenge?
 
 IMPORTANT — STRUCTURED DATA OUTPUT:
 Always append at the very end a JSON block (hidden from display).
 CRITICAL: Use ONLY the REAL IDs and URLs from the data provided to you. NEVER invent IDs. NEVER use "xxxx", "xxxxx", "12345" or placeholders.
 For PeerJ papers specifically: the DOI is provided in the EXACT_DOI field of each record — copy it exactly as-is. The URL is in the FULL_URL field. NEVER construct a PeerJ DOI from a template like "10.7717/peerj-cs.xxxxx" — if you don't have the real DOI from the data, skip that paper.
+For EPO patents: use ONLY the REAL patent number from the EPO_NUMBER field. URL must be https://worldwide.espacenet.com/patent/search?q=pn%3D[EPO_NUMBER]
 
 <!-- DISCOVERIES_JSON
 [
@@ -65,7 +75,7 @@ For PeerJ papers specifically: the DOI is provided in the EXACT_DOI field of eac
 ]
 DISCOVERIES_JSON -->
 
-Valid sources: "arxiv", "peerj"
+Valid sources: "arxiv", "peerj", "epo"
 Valid categories: propulsion, maintenance, defense, seals, digital, energy, materials, quantum, supply_chain, ai_ml, other
 Valid priorities: act_now, monitor, watch, awareness
 Valid activity_types: "Propulsão Naval", "Manutenção Preditiva", "Defesa & Naval Militar", "Vedantes & Rolamentos", "Plataforma Digital", "Energia & Combustível", "Materiais & Fabrico", "Quantum & Computação", "Supply Chain & Logística", "AI & Machine Learning", "Outro"
@@ -77,6 +87,7 @@ PROMPT;
         'digest', 'patentes', 'patent', 'arxiv', 'peerj', 'crossref', 'papers',
         'descobertas', 'discoveries', 'análise diária', 'daily',
         'resumos', 'hoje', 'today', 'melhores patentes', 'novas patentes',
+        'epo', 'espacenet', 'european patent', 'patente europeia',
         // broader portal/research triggers
         'portal', 'portais', 'científico', 'cientifico', 'pesquisa científica',
         'research', 'publicações', 'publicacoes', 'artigos', 'artigo',
@@ -231,15 +242,154 @@ PROMPT;
         }
     }
 
+    // ─── Fetch EPO patents via OPS API (OAuth2 + CQL search) ──────────────
+    protected function fetchEpoAccessToken(): ?string
+    {
+        try {
+            $key    = config('services.epo.consumer_key');
+            $secret = config('services.epo.consumer_secret');
+            if (!$key || !$secret) return null;
+
+            $response = $this->httpClient->post('https://ops.epo.org/3.2/auth/accesstoken', [
+                'form_params' => ['grant_type' => 'client_credentials'],
+                'headers'     => [
+                    'Authorization' => 'Basic ' . base64_encode("{$key}:{$secret}"),
+                    'Content-Type'  => 'application/x-www-form-urlencoded',
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+            return $data['access_token'] ?? null;
+        } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent: EPO OAuth failed — ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    protected function fetchEpoPatents(): string
+    {
+        try {
+            $token = $this->fetchEpoAccessToken();
+            if (!$token) return '(EPO API token unavailable — check EPO_CONSUMER_KEY/SECRET in .env)';
+
+            // CQL query: maritime propulsion, naval engine maintenance, predictive maintenance
+            // OR quantum computing, AI defense — broad enough to catch PartYard-relevant patents
+            $cql = urlencode(
+                'cql.any all "marine propulsion" OR ' .
+                'cql.any all "ship engine maintenance" OR ' .
+                'cql.any all "naval propulsion system" OR ' .
+                'cql.any all "predictive maintenance vessel" OR ' .
+                'cql.any all "quantum cryptography" OR ' .
+                'cql.any all "autonomous maritime"'
+            );
+
+            $url = "https://ops.epo.org/3.2/rest-services/published-data/search?q={$cql}&Range=1-8";
+
+            $response = $this->httpClient->get($url, [
+                'headers' => [
+                    'Authorization' => "Bearer {$token}",
+                    'Accept'        => 'application/json',
+                    'X-OPS-Accept-Encoding' => 'text',
+                ],
+            ]);
+
+            $data = json_decode($response->getBody()->getContents(), true);
+
+            // Navigate the EPO OPS response structure
+            $results = $data['ops:world-patent-data']['ops:biblio-search']['ops:search-result']['ops:publication-reference'] ?? [];
+
+            // If single result, wrap in array
+            if (isset($results['@country'])) $results = [$results];
+
+            if (empty($results)) return '(EPO: sem patentes encontradas para os critérios de pesquisa)';
+
+            $lines = [];
+            foreach (array_slice($results, 0, 8) as $ref) {
+                $docId   = $ref['document-id'] ?? $ref;
+                $country = $docId['@country'] ?? ($docId['country']['$'] ?? '');
+                $docNum  = $docId['@doc-number'] ?? ($docId['doc-number']['$'] ?? '');
+                $kind    = $docId['@kind'] ?? ($docId['kind']['$'] ?? '');
+                $patNum  = trim("{$country}{$docNum}{$kind}");
+
+                if (!$patNum || $patNum === '') continue;
+
+                $espUrl = 'https://worldwide.espacenet.com/patent/search?q=pn%3D' . urlencode($patNum);
+
+                // Try to fetch biblio details for title/applicant
+                $title     = 'N/A';
+                $applicant = 'N/A';
+                try {
+                    $biblioResp = $this->httpClient->get(
+                        "https://ops.epo.org/3.2/rest-services/published-data/publication/epodoc/{$patNum}/biblio",
+                        ['headers' => ['Authorization' => "Bearer {$token}", 'Accept' => 'application/json']]
+                    );
+                    $bib   = json_decode($biblioResp->getBody()->getContents(), true);
+                    $exDoc = $bib['ops:world-patent-data']['exchange-documents']['exchange-document'] ?? [];
+                    $bib2  = (isset($exDoc[0]) ? $exDoc[0] : $exDoc)['bibliographic-data'] ?? [];
+
+                    // Title
+                    $titles = $bib2['invention-title'] ?? [];
+                    if (isset($titles['$'])) $title = $titles['$'];
+                    elseif (is_array($titles)) {
+                        foreach ($titles as $t) {
+                            if (($t['@lang'] ?? '') === 'en') { $title = $t['$'] ?? $title; break; }
+                        }
+                        if ($title === 'N/A' && !empty($titles[0]['$'])) $title = $titles[0]['$'];
+                    }
+
+                    // Applicant
+                    $parties = $bib2['parties']['applicants']['applicant'] ?? [];
+                    if (!empty($parties)) {
+                        $first = $parties[0] ?? $parties;
+                        $applicant = $first['applicant-name']['name']['$'] ?? ($first['$'] ?? 'N/A');
+                    }
+                } catch (\Throwable $e) {
+                    // biblio fetch failed — still include patent number
+                }
+
+                // Auto-save to discoveries
+                try {
+                    if (!Discovery::where('source', 'epo')->where('reference_id', $patNum)->exists()) {
+                        Discovery::create([
+                            'source'          => 'epo',
+                            'reference_id'    => $patNum,
+                            'title'           => $title,
+                            'authors'         => $applicant,
+                            'summary'         => "Patente EPO {$patNum} — {$title}. Requerente: {$applicant}.",
+                            'category'        => 'other',
+                            'activity_types'  => ['Propulsão Naval', 'Manutenção Preditiva'],
+                            'priority'        => 'watch',
+                            'relevance_score' => 5,
+                            'opportunity'     => 'Avaliar licenciamento ou impacto competitivo para PartYard',
+                            'recommendation'  => 'Analisar reivindicações e identificar sobreposição com produtos actuais',
+                            'url'             => $espUrl,
+                            'published_date'  => now()->format('Y-m-d'),
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning("QuantumAgent: could not save EPO patent {$patNum} — " . $e->getMessage());
+                }
+
+                $lines[] = "- EPO_NUMBER={$patNum} | TITLE={$title} | APPLICANT={$applicant} | URL={$espUrl}";
+            }
+
+            return $lines ? implode("\n", $lines) : '(EPO: sem patentes com dados completos)';
+        } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent: EPO patent fetch failed — ' . $e->getMessage());
+            return '(EPO fetch error: ' . $e->getMessage() . ')';
+        }
+    }
+
     // ─── Build enriched message (pre-fetched data) ─────────────────────────
     protected function buildDigestMessage(string|array $userMessage): string
     {
         $arxiv = $this->fetchArxivPapers();
         $peerj = $this->fetchPeerJPapers();
-        return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj);
+        $epo   = $this->fetchEpoPatents();
+        return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj, $epo);
     }
 
-    protected function buildDigestMessageFromData(string|array $userMessage, string $arxiv, string $peerj): string
+    protected function buildDigestMessageFromData(string|array $userMessage, string $arxiv, string $peerj, string $epo = ''): string
     {
         $today = now()->format('Y-m-d');
 
@@ -254,19 +404,23 @@ PROMPT;
 ## PeerJ Computer Science Articles (fetched live via CrossRef — agents & multi-agent systems):
 {$peerj}
 
+## EPO Patents (fetched live from European Patent Office OPS API — maritime & defense):
+{$epo}
+
 --- END REAL DATA ---
 
-Please analyse ALL the above real data from both sources.
+Please analyse ALL the above real data from the three sources (arXiv + PeerJ + EPO patents).
 CRITICAL RULES — READ EVERY RULE CAREFULLY:
-- Use ONLY the REAL IDs, titles, authors and dates from the data above — NEVER invent or fabricate
-- For EVERY paper in your analysis, include the FULL URL (from the data above)
+- Use ONLY the REAL IDs, titles, authors, applicants and dates from the data above — NEVER invent or fabricate
+- For EVERY paper AND patent in your analysis, include the FULL URL (from the data above)
 - NEVER write "xxxx", "XXXX", "12345", "xxxxx" or ANY placeholder — use ONLY the real values from the data
 - Format each arXiv paper as: **[Title]** (arXiv:[REAL_ID] | 📅 [Published date from data]) — analysis — 🔗 https://arxiv.org/abs/[REAL_ID]
 - Format each PeerJ paper as: **[Title]** (DOI:[EXACT_DOI_FROM_EXACT_DOI_FIELD] | 📅 [Date from data]) — analysis — 🔗 [FULL_URL_FROM_FULL_URL_FIELD]
+- Format each EPO patent as: **[Title]** (EPO:[EPO_NUMBER_FROM_EPO_NUMBER_FIELD] | Requerente: [APPLICANT]) — analysis — 🔗 [URL from data]
 - The PeerJ EXACT_DOI field above IS the real DOI — copy it character-for-character, do NOT substitute or approximate
 - If you cannot find the EXACT_DOI for a PeerJ paper in the data above, DO NOT mention that paper at all
-- For the DISCOVERIES_JSON block, include entries from both sources (source: "arxiv" or "peerj" only)
-- DO NOT analyse patents — no USPTO, no patent numbers, no patent links
+- If you cannot find the EPO_NUMBER for a patent in the data above, DO NOT mention that patent at all
+- For the DISCOVERIES_JSON block, include entries from all three sources (source: "arxiv", "peerj" or "epo")
 MSG;
     }
 
@@ -315,8 +469,10 @@ MSG;
             $arxiv = $this->fetchArxivPapers();
             if ($heartbeat) $heartbeat('a pesquisar PeerJ / CrossRef');
             $peerj = $this->fetchPeerJPapers();
+            if ($heartbeat) $heartbeat('a pesquisar patentes EPO');
+            $epo   = $this->fetchEpoPatents();
             if ($heartbeat) $heartbeat('a construir análise');
-            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj);
+            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj, $epo);
         } else {
             $finalMessage = $message;
             $finalMessage = $this->augmentWithWebSearch($finalMessage, $heartbeat);
