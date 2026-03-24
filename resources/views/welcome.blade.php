@@ -486,7 +486,13 @@ const SESSION_ID = 'cyw_' + Date.now() + '_' + Math.random().toString(36).substr
 const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
-    aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍'
+    aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
+    capitao:'⚓', acingov:'🏛️'
+};
+
+// Agents with a real photo (stored in /images/agents/{key}.png)
+const AGENT_PHOTOS = {
+    acingov: '/images/agents/acingov.png',
 };
 
 const AGENT_NAMES = {
@@ -686,7 +692,14 @@ function updateEmptyState(agent) {
     const emoji = AGENT_EMOJIS[agent] || '🤖';
     const name  = AGENT_NAMES[agent]  || 'ClawYard';
     const desc  = AGENT_DESCRIPTIONS[agent] || 'Escolhe um exemplo ou escreve a tua pergunta';
-    if (avatarEl) avatarEl.textContent = emoji;
+    if (avatarEl) {
+        const photo = AGENT_PHOTOS[agent];
+        if (photo) {
+            avatarEl.innerHTML = `<img src="${photo}" alt="${name}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--agent-color);box-shadow:0 0 24px var(--agent-color)55;">`;
+        } else {
+            avatarEl.innerHTML = emoji;
+        }
+    }
     if (titleEl)  titleEl.innerHTML = `<span>${name}</span>`;
     if (descEl)   descEl.textContent = desc;
 }
