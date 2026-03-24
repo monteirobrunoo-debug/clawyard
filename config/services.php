@@ -74,4 +74,9 @@ return [
         'consumer_secret' => env('EPO_CONSUMER_SECRET'),
     ],
 
+    'acingov' => [
+        'username' => env('ACINGOV_USERNAME'),
+        'password' => env('ACINGOV_PASSWORD'),
+    ],
+
 ];

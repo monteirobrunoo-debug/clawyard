@@ -360,6 +360,7 @@
         <option value="finance">💰 Dr. Luís Financeiro</option>
         <option value="research">🔍 Marina Research</option>
         <option value="capitao">⚓ Capitão Porto</option>
+        <option value="acingov">🏛️ Dra. Ana Contratos</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -448,9 +449,8 @@
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
-            <label class="icon-btn" id="image-btn" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)" style="position:relative;overflow:hidden;cursor:pointer">📎
-                <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" onclick="this.value=''" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;font-size:0">
-            </label>
+            <button class="icon-btn" id="image-btn" type="button" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)">📎</button>
+            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none">
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -493,7 +493,8 @@ const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
     email:'Daniel Email', sap:'Richard SAP', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
     aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research',
-    capitao:'Capitão Porto'
+    capitao:'Capitão Porto',
+    acingov:'Dra. Ana Contratos'
 };
 
 const AGENT_COLORS = {
@@ -502,7 +503,8 @@ const AGENT_COLORS = {
     sap:'#06b6d4', document:'#94a3b8', claude:'#a855f7',
     nvidia:'#76b900', aria:'#ef4444', quantum:'#22d3ee',
     finance:'#10b981', research:'#f97316',
-    capitao:'#0ea5e9'
+    capitao:'#0ea5e9',
+    acingov:'#f59e0b'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -520,6 +522,7 @@ const AGENT_DESCRIPTIONS = {
     finance: 'Contabilidade, fiscalidade, SAP financeiro e análise ROI',
     research: 'Pesquisa de mercado, concorrência e análise de websites',
     capitao: 'Operações portuárias, escalas, documentação e logística marítima',
+    acingov: 'Concursos públicos Acingov — oportunidades de contratação para PartYard',
 };
 
 const AGENT_CHIPS = {
@@ -639,6 +642,15 @@ const AGENT_CHIPS = {
         '🔍 Estratégia de palavras-chave SEO para PartYard em PT/EN/ES/GR',
         '🔍 Análise de presença digital de armadores gregos — oportunidades de contacto',
         '🔍 Estratégia de entrada no mercado escandinavo — canais, parceiros e timing',
+    ],
+    // ── Dra. Ana Contratos (Acingov) ──────────────────────────────────────
+    acingov: [
+        '🏛️ Lista todos os concursos públicos abertos hoje no Acingov relevantes para a PartYard',
+        '🏛️ Há concursos de peças navais ou manutenção de motores marítimos em aberto?',
+        '🏛️ Concursos de defesa e material militar — oportunidades para PartYard Military',
+        '🏛️ Concursos de cybersegurança e IT nos últimos 30 dias — oportunidades para SETQ',
+        '🏛️ Qual o concurso com prazo mais urgente esta semana? Devo candidatar?',
+        '🏛️ Analisa concursos de logística portuária e supply chain abertos em Portugal',
     ],
     // ── Capitão Porto ─────────────────────────────────────────────────────
     capitao: [
@@ -760,8 +772,12 @@ function humanSize(bytes) {
     return (bytes/1048576).toFixed(1) + ' MB';
 }
 
-// image-input: file input sits inside the label (opacity:0;inset:0) — click handled natively
-// onclick="this.value=''" on the input ensures re-selecting the same file always fires 'change'
+// 📎 button → programmatically opens hidden file input (display:none works with .click())
+document.getElementById('image-btn').addEventListener('click', function () {
+    var inp = document.getElementById('image-input');
+    inp.value = ''; // reset so re-selecting the same file always fires 'change'
+    inp.click();
+});
 document.getElementById('image-input').addEventListener('change', fileInputChangeHandler);
 
 document.getElementById('remove-image').addEventListener('click', clearImage);
