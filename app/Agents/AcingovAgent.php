@@ -97,8 +97,8 @@ PROMPT;
         ]);
 
         $this->httpClient = new Client([
-            'timeout'         => 30,
-            'connect_timeout' => 10,
+            'timeout'         => 10,
+            'connect_timeout' => 6,
             'verify'          => false,
             'cookies'         => $this->cookies,
             'headers'         => [
@@ -152,86 +152,101 @@ PROMPT;
         }
     }
 
-    // ─── Fetch contracts list ──────────────────────────────────────────────
-    protected function fetchContracts(): string
+    // ─── Fetch from base.gov.pt public API (no login needed, fast) ───────
+    protected function fetchBaseGov(): string
     {
-        if (!$this->login()) {
-            return '(Erro: login no Acingov falhou. Verifica ACINGOV_USERNAME e ACINGOV_PASSWORD no .env do servidor.)';
-        }
+        $sections = [];
 
-        $contractsData = '';
-
-        // Try multiple possible URL patterns for contracts/procedures
-        $urls = [
-            $this->baseUrl . '/procedimentos',
-            $this->baseUrl . '/concursos',
-            $this->baseUrl . '/anuncios',
-            $this->baseUrl . '/base/consulta_contratos',
-            'https://www.acingov.pt/acingovprod/2/index.php/procedimentos/listar',
-            'https://www.acingov.pt/acingovprod/2/index.php/anuncio/listar',
+        // Keywords relevant to PartYard — searched in parallel via separate calls
+        $searches = [
+            'naval'       => 'naval OR marítimo OR navio OR propulsão',
+            'motores'     => 'motor OR manutenção motor OR peças sobressalentes',
+            'defesa'      => 'defesa OR militar OR NATO OR armamento',
+            'portos'      => 'porto OR portuário OR logística marítima',
+            'ti_cyber'    => 'cibersegurança OR cybersecurity OR sistemas informação',
         ];
 
-        foreach ($urls as $url) {
+        foreach ($searches as $label => $query) {
             try {
-                $response = $this->httpClient->get($url, [
-                    'headers' => ['Referer' => $this->baseUrl],
+                $url = 'https://www.base.gov.pt/base4/api/anuncios?' . http_build_query([
+                    'search'   => $query,
+                    'tipo'     => 'anuncio',
+                    'estado'   => 'publicado',
+                    'pageSize' => 8,
+                    'page'     => 0,
                 ]);
-                $html = $response->getBody()->getContents();
 
-                if (strlen($html) > 500 && !str_contains($html, 'login') && !str_contains($html, 'acesso negado')) {
-                    $contractsData = $this->parseContractsHtml($html, $url);
-                    if ($contractsData && strlen($contractsData) > 100) break;
+                $resp = $this->httpClient->get($url, [
+                    'timeout' => 8,
+                    'headers' => [
+                        'Accept'     => 'application/json',
+                        'User-Agent' => 'ClawYard/1.0 (research@hp-group.org)',
+                    ],
+                ]);
+
+                $data  = json_decode($resp->getBody()->getContents(), true);
+                $items = $data['items'] ?? $data['content'] ?? $data['_embedded']['anuncios'] ?? [];
+
+                if (!empty($items)) {
+                    $lines = ["=== BASE.GOV — {$label} ==="];
+                    foreach (array_slice($items, 0, 6) as $item) {
+                        $id         = $item['id']         ?? $item['anuncioId']   ?? '';
+                        $objeto     = $item['objeto']     ?? $item['descricao']   ?? $item['title'] ?? 'N/A';
+                        $entidade   = $item['entidade']   ?? $item['adjudicante'] ?? $item['compradorNome'] ?? 'N/A';
+                        $valor      = $item['precoBase']  ?? $item['valor']       ?? '';
+                        $prazo      = $item['dataFimProposta'] ?? $item['dataPublicacao'] ?? '';
+                        $tipo       = $item['tipo']       ?? $item['procedimentoTipo'] ?? '';
+                        $link       = $id ? "https://www.base.gov.pt/base4/pt/anuncio/{$id}" : '';
+                        $lines[] = "- ID:{$id} | OBJETO:{$objeto} | ENTIDADE:{$entidade} | VALOR:{$valor} | PRAZO:{$prazo} | TIPO:{$tipo} | URL:{$link}";
+                    }
+                    $sections[] = implode("\n", $lines);
                 }
             } catch (\Throwable $e) {
-                Log::info("AcingovAgent: tried {$url} — " . $e->getMessage());
-                continue;
+                Log::info("AcingovAgent base.gov [{$label}]: " . $e->getMessage());
             }
         }
 
-        if (!$contractsData) {
-            // Try the portal search for open tenders
-            try {
-                $response = $this->httpClient->post(
-                    'https://www.acingov.pt/acingovprod/2/index.php/anuncio/pesquisar',
-                    [
-                        'form_params' => [
-                            'estado'   => 'aberto',
-                            'tipo'     => '',
-                            'entidade' => '',
-                        ],
-                        'headers' => [
-                            'X-Requested-With' => 'XMLHttpRequest',
-                            'Referer'          => $this->baseUrl,
-                        ],
-                    ]
-                );
-                $html = $response->getBody()->getContents();
-                $contractsData = $this->parseContractsHtml($html, 'pesquisa');
-            } catch (\Throwable $e) {
-                Log::warning('AcingovAgent: search request failed — ' . $e->getMessage());
-            }
+        return $sections ? implode("\n\n", $sections) : '';
+    }
+
+    // ─── Fetch contracts list (base.gov primary + Acingov fallback) ───────
+    protected function fetchContracts(): string
+    {
+        // 1. Try base.gov.pt first — public API, no login, fast
+        $baseData = $this->fetchBaseGov();
+        if ($baseData && strlen($baseData) > 200) {
+            return "=== FONTE: base.gov.pt (API pública) — " . now()->format('Y-m-d H:i') . " ===\n\n" . $baseData;
         }
 
-        return $contractsData ?: '(Não foi possível obter a lista de contratos. O Acingov pode ter alterado a estrutura das páginas ou exigir autenticação adicional.)';
+        // 2. Fallback: Acingov with login (single attempt, short timeout)
+        if (!$this->login()) {
+            return '(base.gov.pt não devolveu resultados e o login no Acingov falhou. Verifica as credenciais ACINGOV_USERNAME / ACINGOV_PASSWORD no .env.)';
+        }
+
+        try {
+            $response = $this->httpClient->get(
+                'https://www.acingov.pt/acingovprod/2/index.php/anuncio/listar',
+                ['timeout' => 10, 'headers' => ['Referer' => $this->baseUrl]]
+            );
+            $html = $response->getBody()->getContents();
+            $data = $this->parseContractsHtml($html, 'Acingov');
+            if ($data && strlen($data) > 100) return $data;
+        } catch (\Throwable $e) {
+            Log::warning('AcingovAgent Acingov fallback: ' . $e->getMessage());
+        }
+
+        return '(Sem dados disponíveis de base.gov.pt nem Acingov neste momento.)';
     }
 
     // ─── Parse HTML → structured text ─────────────────────────────────────
     protected function parseContractsHtml(string $html, string $source): string
     {
-        // Remove scripts, styles, comments
         $html = preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $html);
         $html = preg_replace('/<style\b[^>]*>[\s\S]*?<\/style>/i', '', $html);
         $html = preg_replace('/<!--[\s\S]*?-->/', '', $html);
-
-        // Extract table rows or list items that look like contracts
-        $text = strip_tags($html);
-        $text = preg_replace('/\s+/', ' ', $text);
-        $text = trim($text);
-
-        if (strlen($text) < 100) return '';
-
-        // Return first 8000 chars of meaningful content
-        return "=== DADOS DE {$source} ===\n" . substr($text, 0, 8000);
+        $text = preg_replace('/\s+/', ' ', strip_tags($html));
+        if (strlen(trim($text)) < 100) return '';
+        return "=== {$source} ===\n" . substr(trim($text), 0, 8000);
     }
 
     // ─── Build message with live contracts data ────────────────────────────
@@ -309,9 +324,9 @@ MSG;
     // ─── stream() ──────────────────────────────────────────────────────────
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        if ($heartbeat) $heartbeat('a fazer login no Acingov');
+        if ($heartbeat) $heartbeat('a consultar base.gov.pt');
         $finalMessage = $this->buildContractsMessage($message);
-        if ($heartbeat) $heartbeat('a analisar concursos');
+        if ($heartbeat) $heartbeat('a classificar concursos para PartYard');
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $finalMessage],
