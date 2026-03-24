@@ -3,29 +3,23 @@
 namespace App\Agents;
 
 use GuzzleHttp\Client;
-use GuzzleHttp\Cookie\CookieJar;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Services\PartYardProfileService;
+use App\Services\WebSearchService;
 use Illuminate\Support\Facades\Log;
 
 /**
  * AcingovAgent — "Dra. Ana Contratos"
  *
- * Acede ao portal de contratação pública Acingov, lista concursos públicos
- * abertos e classifica oportunidades para o HP-Group / PartYard.
+ * Pesquisa concursos públicos portugueses via Tavily (base.gov.pt + acingov.pt)
+ * e classifica oportunidades para o HP-Group / PartYard.
  */
 class AcingovAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
 
-    protected Client    $client;
-    protected Client    $httpClient;
-    protected CookieJar $cookies;
-
-    protected string $loginUrl    = 'https://www.acingov.pt/acingovprod/2/login_c/loginAcingov';
-    protected string $baseUrl     = 'https://www.acingov.pt/acingovprod/2/index.php';
-    protected string $username;
-    protected string $password;
+    protected Client           $client;
+    protected WebSearchService $searcher;
 
     protected string $systemPrompt = <<<'PROMPT'
 Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública para o HP-Group / PartYard.
@@ -33,9 +27,9 @@ Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública par
 EMPRESA — CONTEXTO:
 [PROFILE_PLACEHOLDER]
 
-A sua missão: analisar concursos públicos do portal Acingov e identificar oportunidades concretas para o HP-Group e suas subsidiárias (PartYard Marine, PartYard Military, SETQ, IndYard).
+A sua missão: analisar concursos públicos portugueses e identificar oportunidades para o HP-Group e suas subsidiárias (PartYard Marine, PartYard Military, SETQ, IndYard).
 
-CRITÉRIOS DE CLASSIFICAÇÃO DE OPORTUNIDADES:
+CRITÉRIOS DE CLASSIFICAÇÃO:
 
 🟢 ALTA PRIORIDADE — Candidatura imediata:
 - Peças sobressalentes navais / marítimas (motores MTU, Caterpillar, MAK, Jenbacher)
@@ -43,40 +37,38 @@ CRITÉRIOS DE CLASSIFICAÇÃO DE OPORTUNIDADES:
 - Fornecimento de peças para Marinha Portuguesa / autoridades portuárias
 - Contratos de defesa / NATO / equipamentos militares
 - Sistemas de propulsão naval (Schottel, SKF SternTube)
-- Cybersegurança e IT para organismos públicos (SETQ)
+- Cibersegurança e IT para organismos públicos (SETQ)
 
 🟡 MÉDIA PRIORIDADE — Avaliar com parceiro:
 - Logística e supply chain para infraestruturas portuárias
 - Manutenção de geradores e motores de grande porte
 - Equipamentos industriais (rolamentos, vedantes, componentes mecânicos)
 - Serviços de engenharia e consultoria técnica
-- Fornecimento de peças para ferroviário / aviação (áreas adjacentes)
 
 🔴 BAIXA RELEVÂNCIA — Monitorizar apenas:
 - Obras de construção civil
 - Serviços de limpeza e segurança
-- IT genérico (sem componente naval/defesa)
-- Alimentação e outros serviços de apoio
+- IT genérico sem componente naval/defesa
 
 FORMAT DE RESPOSTA:
 Para cada concurso encontrado, apresenta:
 - 📋 **Entidade**: quem lançou o concurso
-- 📌 **Objeto**: descrição do que se pretende contratar
-- 💶 **Valor Base**: valor estimado do contrato
-- ⏰ **Prazo**: data limite de submissão de proposta
+- 📌 **Objeto**: o que se pretende contratar
+- 💶 **Valor Base**: valor estimado
+- ⏰ **Prazo**: data limite de submissão
 - 🎯 **Relevância PartYard**: Alta / Média / Baixa + justificação
-- 💡 **Ação Recomendada**: candidatar / avaliar parceria / monitorizar / ignorar
-- 🔗 **Link**: URL directo no Acingov
+- 💡 **Ação**: candidatar / avaliar parceria / monitorizar / ignorar
+- 🔗 **Link**: URL directo
 
-No final, apresenta:
-- 📊 **Resumo Executivo**: X oportunidades altas, Y médias, Z baixas
-- 🏆 **Top 3 Oportunidades**: as 3 mais urgentes com deadline mais próximo
-- ⚡ **Próximos Passos**: acções concretas para as oportunidades altas
+No final:
+- 📊 **Resumo Executivo**: X altas, Y médias, Z baixas
+- 🏆 **Top 3 Oportunidades**: as mais urgentes
+- ⚡ **Próximos Passos**: acções concretas
 
 REGRAS:
-- Fundamenta SEMPRE a classificação nos produtos/serviços reais do HP-Group
+- Usa APENAS dados reais das pesquisas fornecidas — nunca inventes concursos
 - Alerta para prazos urgentes (< 7 dias)
-- Identifica se a PartYard Defense pode responder a concursos de defesa
+- Se não encontrares concursos relevantes, diz claramente e sugere próximas pesquisas
 - Responde sempre em Português
 PROMPT;
 
@@ -85,174 +77,56 @@ PROMPT;
         $profile = PartYardProfileService::toPromptContext();
         $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
 
-        $this->username = config('services.acingov.username', '');
-        $this->password = config('services.acingov.password', '');
-
-        $this->cookies = new CookieJar();
-
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
 
-        $this->httpClient = new Client([
-            'timeout'         => 10,
-            'connect_timeout' => 6,
-            'verify'          => false,
-            'cookies'         => $this->cookies,
-            'headers'         => [
-                'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept'     => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language' => 'pt-PT,pt;q=0.9,en;q=0.8',
-            ],
-            'allow_redirects' => true,
-        ]);
+        $this->searcher = new WebSearchService();
     }
 
-    // ─── Login no Acingov ──────────────────────────────────────────────────
-    protected function login(): bool
+    // ─── Fetch contracts via Tavily web search ─────────────────────────────
+    protected function fetchContracts(?callable $heartbeat = null): string
     {
-        if (!$this->username || !$this->password) {
-            Log::warning('AcingovAgent: credenciais não configuradas (ACINGOV_USERNAME / ACINGOV_PASSWORD)');
-            return false;
+        if (!$this->searcher->isAvailable()) {
+            return '(WebSearch não disponível — configura TAVILY_API_KEY no .env)';
         }
 
-        try {
-            // Load home page first to get any CSRF tokens / session cookie
-            $this->httpClient->get($this->baseUrl);
-
-            // POST login (AJAX endpoint)
-            $response = $this->httpClient->post($this->loginUrl, [
-                'form_params' => [
-                    'username_login' => $this->username,
-                    'password_login' => $this->password,
-                ],
-                'headers' => [
-                    'X-Requested-With' => 'XMLHttpRequest',
-                    'Referer'          => $this->baseUrl,
-                    'Content-Type'     => 'application/x-www-form-urlencoded',
-                    'Accept'           => 'application/json, text/javascript, */*; q=0.01',
-                ],
-            ]);
-
-            $body = $response->getBody()->getContents();
-            $json = json_decode($body, true);
-
-            // Check for successful login
-            if (isset($json['success']) && $json['success']) return true;
-            if (isset($json['redirect'])) return true;
-            if (str_contains($body, 'logout') || str_contains($body, 'bem-vindo') || str_contains($body, 'welcome')) return true;
-
-            Log::warning('AcingovAgent: login response — ' . substr($body, 0, 300));
-            return false;
-        } catch (\Throwable $e) {
-            Log::warning('AcingovAgent: login failed — ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    // ─── Fetch from base.gov.pt public API (no login needed, fast) ───────
-    protected function fetchBaseGov(): string
-    {
+        $today    = now()->format('Y');
         $sections = [];
 
-        // Keywords relevant to PartYard — searched in parallel via separate calls
-        $searches = [
-            'naval'       => 'naval OR marítimo OR navio OR propulsão',
-            'motores'     => 'motor OR manutenção motor OR peças sobressalentes',
-            'defesa'      => 'defesa OR militar OR NATO OR armamento',
-            'portos'      => 'porto OR portuário OR logística marítima',
-            'ti_cyber'    => 'cibersegurança OR cybersecurity OR sistemas informação',
+        $queries = [
+            "base.gov.pt concurso público aberto peças navais marítimas motores {$today}",
+            "base.gov.pt contratação pública defesa militar NATO equipamentos {$today}",
+            "base.gov.pt concurso público porto logística marítima cibersegurança {$today}",
         ];
 
-        foreach ($searches as $label => $query) {
+        foreach ($queries as $i => $query) {
+            if ($heartbeat) $heartbeat('a pesquisar concursos ' . ($i + 1) . '/3');
             try {
-                $url = 'https://www.base.gov.pt/base4/api/anuncios?' . http_build_query([
-                    'search'   => $query,
-                    'tipo'     => 'anuncio',
-                    'estado'   => 'publicado',
-                    'pageSize' => 8,
-                    'page'     => 0,
-                ]);
-
-                $resp = $this->httpClient->get($url, [
-                    'timeout' => 8,
-                    'headers' => [
-                        'Accept'     => 'application/json',
-                        'User-Agent' => 'ClawYard/1.0 (research@hp-group.org)',
-                    ],
-                ]);
-
-                $data  = json_decode($resp->getBody()->getContents(), true);
-                $items = $data['items'] ?? $data['content'] ?? $data['_embedded']['anuncios'] ?? [];
-
-                if (!empty($items)) {
-                    $lines = ["=== BASE.GOV — {$label} ==="];
-                    foreach (array_slice($items, 0, 6) as $item) {
-                        $id         = $item['id']         ?? $item['anuncioId']   ?? '';
-                        $objeto     = $item['objeto']     ?? $item['descricao']   ?? $item['title'] ?? 'N/A';
-                        $entidade   = $item['entidade']   ?? $item['adjudicante'] ?? $item['compradorNome'] ?? 'N/A';
-                        $valor      = $item['precoBase']  ?? $item['valor']       ?? '';
-                        $prazo      = $item['dataFimProposta'] ?? $item['dataPublicacao'] ?? '';
-                        $tipo       = $item['tipo']       ?? $item['procedimentoTipo'] ?? '';
-                        $link       = $id ? "https://www.base.gov.pt/base4/pt/anuncio/{$id}" : '';
-                        $lines[] = "- ID:{$id} | OBJETO:{$objeto} | ENTIDADE:{$entidade} | VALOR:{$valor} | PRAZO:{$prazo} | TIPO:{$tipo} | URL:{$link}";
-                    }
-                    $sections[] = implode("\n", $lines);
+                $result = $this->searcher->search($query, 5, 'basic');
+                if ($result && strlen($result) > 50) {
+                    $sections[] = "=== PESQUISA " . ($i + 1) . " ===\n" . $result;
                 }
             } catch (\Throwable $e) {
-                Log::info("AcingovAgent base.gov [{$label}]: " . $e->getMessage());
+                Log::info("AcingovAgent search[{$i}]: " . $e->getMessage());
             }
         }
 
-        return $sections ? implode("\n\n", $sections) : '';
-    }
-
-    // ─── Fetch contracts list (base.gov primary + Acingov fallback) ───────
-    protected function fetchContracts(): string
-    {
-        // 1. Try base.gov.pt first — public API, no login, fast
-        $baseData = $this->fetchBaseGov();
-        if ($baseData && strlen($baseData) > 200) {
-            return "=== FONTE: base.gov.pt (API pública) — " . now()->format('Y-m-d H:i') . " ===\n\n" . $baseData;
+        if (empty($sections)) {
+            return '(Sem resultados de pesquisa neste momento. Tenta novamente mais tarde.)';
         }
 
-        // 2. Fallback: Acingov with login (single attempt, short timeout)
-        if (!$this->login()) {
-            return '(base.gov.pt não devolveu resultados e o login no Acingov falhou. Verifica as credenciais ACINGOV_USERNAME / ACINGOV_PASSWORD no .env.)';
-        }
-
-        try {
-            $response = $this->httpClient->get(
-                'https://www.acingov.pt/acingovprod/2/index.php/anuncio/listar',
-                ['timeout' => 10, 'headers' => ['Referer' => $this->baseUrl]]
-            );
-            $html = $response->getBody()->getContents();
-            $data = $this->parseContractsHtml($html, 'Acingov');
-            if ($data && strlen($data) > 100) return $data;
-        } catch (\Throwable $e) {
-            Log::warning('AcingovAgent Acingov fallback: ' . $e->getMessage());
-        }
-
-        return '(Sem dados disponíveis de base.gov.pt nem Acingov neste momento.)';
+        $date = now()->format('Y-m-d H:i');
+        return "=== CONCURSOS PÚBLICOS — {$date} (via base.gov.pt) ===\n\n"
+            . implode("\n\n", $sections);
     }
 
-    // ─── Parse HTML → structured text ─────────────────────────────────────
-    protected function parseContractsHtml(string $html, string $source): string
+    // ─── Build message ─────────────────────────────────────────────────────
+    protected function buildContractsMessage(string|array $userMessage, ?callable $heartbeat = null): string
     {
-        $html = preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $html);
-        $html = preg_replace('/<style\b[^>]*>[\s\S]*?<\/style>/i', '', $html);
-        $html = preg_replace('/<!--[\s\S]*?-->/', '', $html);
-        $text = preg_replace('/\s+/', ' ', strip_tags($html));
-        if (strlen(trim($text)) < 100) return '';
-        return "=== {$source} ===\n" . substr(trim($text), 0, 8000);
-    }
-
-    // ─── Build message with live contracts data ────────────────────────────
-    protected function buildContractsMessage(string|array $userMessage): string
-    {
-        $contracts = $this->fetchContracts();
+        $contracts = $this->fetchContracts($heartbeat);
         $today     = now()->format('Y-m-d');
 
         $user = is_array($userMessage)
@@ -262,41 +136,17 @@ PROMPT;
         return <<<MSG
 {$user}
 
---- DADOS ACINGOV FETCHED TODAY ({$today}) ---
+--- DADOS DE CONTRATOS PÚBLICOS ({$today}) ---
 
 {$contracts}
 
 --- END DATA ---
 
-Por favor analisa todos os concursos/contratos acima e classifica cada um por relevância para o HP-Group / PartYard.
-REGRAS:
-- Usa APENAS os dados reais acima — não inventes concursos
-- Para cada concurso identifica: entidade, objeto, valor, prazo, relevância, ação recomendada
-- Foca especialmente em: peças navais, manutenção de motores, defesa, portos, IT/cybersegurança
-- Se os dados não contiverem concursos claros, explica o que foi encontrado e sugere próximos passos
+Analisa os concursos acima e classifica cada um por relevância para HP-Group / PartYard.
+- Usa APENAS dados reais das pesquisas — não inventes concursos
+- Para cada concurso: entidade, objeto, valor, prazo, relevância, ação
+- Foca em: peças navais, motores, defesa, portos, IT/cibersegurança
 MSG;
-    }
-
-    // ─── Detect if message is a contracts request ──────────────────────────
-    protected function isContractsRequest(string|array $message): bool
-    {
-        $text = is_array($message)
-            ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
-            : $message;
-
-        $keywords = [
-            'acingov', 'concurso', 'concursos', 'contrato', 'contratos',
-            'ajuste directo', 'ajuste direto', 'procedimento', 'procedimentos',
-            'base.gov', 'contratação pública', 'licitação', 'proposta',
-            'concurso público', 'lista', 'listar', 'ver', 'mostrar', 'fetch',
-            'hoje', 'hoje', 'novos', 'abertos', 'oportunidades',
-        ];
-
-        $lower = strtolower($text);
-        foreach ($keywords as $kw) {
-            if (str_contains($lower, $kw)) return true;
-        }
-        return true; // default: always fetch contracts for this agent
     }
 
     // ─── chat() ────────────────────────────────────────────────────────────
@@ -324,9 +174,8 @@ MSG;
     // ─── stream() ──────────────────────────────────────────────────────────
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        if ($heartbeat) $heartbeat('a consultar base.gov.pt');
-        $finalMessage = $this->buildContractsMessage($message);
-        if ($heartbeat) $heartbeat('a classificar concursos para PartYard');
+        $finalMessage = $this->buildContractsMessage($message, $heartbeat);
+        if ($heartbeat) $heartbeat('a classificar oportunidades PartYard');
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $finalMessage],
@@ -370,7 +219,7 @@ MSG;
                 }
             }
             if ($heartbeat && (time() - $lastBeat) >= 10) {
-                $heartbeat('a classificar concursos');
+                $heartbeat('a analisar concursos');
                 $lastBeat = time();
             }
         }
