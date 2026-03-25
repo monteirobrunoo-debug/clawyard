@@ -319,12 +319,124 @@ MSG;
             ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
             : $message;
 
+        $dateFrom = now()->subDays(5)->format('d/m/Y');
+        $dateTo   = now()->format('d/m/Y');
+
         // ── Header ───────────────────────────────────────────────────────────
         $emit("## 📋 Relatório de Contratos Públicos — {$today}\n");
-        $emit("Portais: 🇺🇸 SAM.gov · 🇵🇹 base.gov.pt · Vortal · Acingov · 🌍 UNIDO · UNGM\n\n");
+        $emit("Período: **{$dateFrom}** → **{$dateTo}** (últimos 5 dias)\n");
+        $emit("Portais: 🇵🇹 Acingov · Vortal · base.gov.pt · 🌍 UNGM · 🇺🇸 SAM.gov\n\n");
 
-        // ── Portal 1: SAM.gov ────────────────────────────────────────────────
-        $emit("---\n### 🇺🇸 Portal 1/3 — SAM.gov (US Federal)\n");
+        // ── Portal 1: Acingov ────────────────────────────────────────────────
+        $emit("---\n### 🇵🇹 Portal 1/4 — Acingov (Base de Dados Nacional de Contratos)\n");
+        $emit("⏳ A pesquisar concursos em acingov.gov.pt...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar Acingov');
+
+        $acingovData = '';
+        if ($this->searcher->isAvailable()) {
+            try {
+                $acingovData = $this->searcher->search(
+                    "site:acingov.gov.pt concurso naval maritimo defesa pecas sobressalentes \"{$dateTo}\" OR \"{$dateFrom}\"", 5, 'basic'
+                );
+            } catch (\Throwable $e) {
+                Log::info('AcingovAgent [Acingov]: ' . $e->getMessage());
+            }
+        }
+
+        if (empty($acingovData) || strlen($acingovData) < 50) {
+            $emit("> ⚠️ Sem resultados Acingov nos últimos 5 dias.\n\n");
+        } else {
+            $emit($acingovData . "\n\n");
+        }
+        $emit("✅ **Acingov concluído.**\n\n");
+
+        // ── Portal 2: Vortal ─────────────────────────────────────────────────
+        $emit("---\n### 🇵🇹 Portal 2/4 — Vortal (Plataforma Electrónica)\n");
+        $emit("⏳ A pesquisar concursos em vortal.biz...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar Vortal');
+
+        $vortalData = '';
+        if ($this->searcher->isAvailable()) {
+            try {
+                $vortalData = $this->searcher->search(
+                    "site:vortal.biz concurso naval maritimo defesa pecas sobressalentes \"{$dateTo}\" OR \"{$dateFrom}\"", 5, 'basic'
+                );
+                if (empty($vortalData) || strlen($vortalData) < 50) {
+                    // broader search without site: restriction
+                    $vortalData = $this->searcher->search(
+                        "vortal.biz concurso publico naval maritimo defesa {$dateTo}", 5, 'basic'
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::info('AcingovAgent [Vortal]: ' . $e->getMessage());
+            }
+        }
+
+        if (empty($vortalData) || strlen($vortalData) < 50) {
+            $emit("> ⚠️ Sem resultados Vortal nos últimos 5 dias.\n\n");
+        } else {
+            $emit($vortalData . "\n\n");
+        }
+        $emit("✅ **Vortal concluído.**\n\n");
+
+        // ── Portal 3: UNGM ───────────────────────────────────────────────────
+        $emit("---\n### 🌍 Portal 3/4 — UNGM (UN Global Marketplace)\n");
+        $emit("⏳ A pesquisar tenders internacionais em ungm.org...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar UNGM');
+
+        $ungmData = '';
+        if ($this->searcher->isAvailable()) {
+            try {
+                $ungmData = $this->searcher->search(
+                    "site:ungm.org tender maritime naval spare parts defense \"{$dateTo}\" OR \"{$dateFrom}\"", 5, 'basic'
+                );
+                if (empty($ungmData) || strlen($ungmData) < 50) {
+                    $ungmData = $this->searcher->search(
+                        "ungm.org tender maritime naval spare parts defense {$dateTo}", 5, 'basic'
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::info('AcingovAgent [UNGM]: ' . $e->getMessage());
+            }
+        }
+
+        if (empty($ungmData) || strlen($ungmData) < 50) {
+            $emit("> ⚠️ Sem resultados UNGM nos últimos 5 dias.\n\n");
+        } else {
+            $emit($ungmData . "\n\n");
+        }
+        $emit("✅ **UNGM concluído.**\n\n");
+
+        // ── Portal 4: base.gov.pt ────────────────────────────────────────────
+        $emit("---\n### 🇵🇹 Portal 4/5 — base.gov.pt (Contratos Adjudicados)\n");
+        $emit("⏳ A pesquisar contratos adjudicados e empresas vencedoras...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar base.gov.pt');
+
+        $baseGovData = '';
+        if ($this->searcher->isAvailable()) {
+            try {
+                $baseGovData = $this->searcher->search(
+                    "site:base.gov.pt/ediçoes contratos adjudicados naval maritimo defesa {$dateTo}", 5, 'basic'
+                );
+                if (empty($baseGovData) || strlen($baseGovData) < 50) {
+                    $baseGovData = $this->searcher->search(
+                        "base.gov.pt contratos adjudicados naval maritimo defesa empresa vencedora {$dateTo}", 5, 'basic'
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::info('AcingovAgent [base.gov.pt]: ' . $e->getMessage());
+            }
+        }
+
+        if (empty($baseGovData) || strlen($baseGovData) < 50) {
+            $emit("> ⚠️ Sem contratos adjudicados em base.gov.pt nos últimos 5 dias.\n\n");
+        } else {
+            $emit($baseGovData . "\n\n");
+        }
+        $emit("✅ **base.gov.pt concluído.**\n\n");
+
+        // ── Portal 5: SAM.gov ────────────────────────────────────────────────
+        $emit("---\n### 🇺🇸 Portal 5/5 — SAM.gov (US Federal Contracts)\n");
         $emit("⏳ A pesquisar contratos federais americanos...\n\n");
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
 
@@ -333,17 +445,11 @@ MSG;
         if (str_starts_with($samData, '(SAM.gov')) {
             $emit("> ⚠️ {$samData}\n\n");
         } else {
-            // Stream SAM raw data lines formatted
             $lines = explode("\n", $samData);
             foreach ($lines as $line) {
                 if (empty(trim($line))) continue;
-                if (str_starts_with($line, '===')) {
-                    // skip section headers, already in our header
-                    continue;
-                }
-                // Format each opportunity line
+                if (str_starts_with($line, '===')) continue;
                 if (str_starts_with($line, '- ID:')) {
-                    // Parse fields: ID | TITLE | DEPT | TYPE | NAICS | POSTED | DEADLINE | VALUE | URL
                     preg_match('/TITLE:([^|]+)/', $line, $t);
                     preg_match('/DEPT:([^|]+)/', $line, $d);
                     preg_match('/DEADLINE:([^|]+)/', $line, $dl);
@@ -361,77 +467,42 @@ MSG;
                 }
             }
         }
-
         $emit("✅ **SAM.gov concluído.**\n\n");
-
-        // ── Portal 2: base.gov.pt / Vortal / Acingov ─────────────────────────
-        $emit("---\n### 🇵🇹 Portal 2/3 — base.gov.pt · Vortal · Acingov\n");
-        $emit("⏳ A pesquisar concursos públicos portugueses...\n\n");
-        if ($heartbeat) $heartbeat('a pesquisar base.gov.pt / Vortal');
-
-        $euData = '';
-        if ($this->searcher->isAvailable()) {
-            try {
-                $euData = $this->searcher->search(
-                    'acingov.gov.pt OR base.gov.pt OR vortal.biz concurso naval maritimo defesa 2026', 4, 'basic'
-                );
-            } catch (\Throwable $e) {
-                Log::info('AcingovAgent [EU/PT]: ' . $e->getMessage());
-            }
-        }
-
-        if (empty($euData) || strlen($euData) < 50) {
-            $emit("> ⚠️ Sem resultados nos portais portugueses neste momento.\n\n");
-        } else {
-            $emit($euData . "\n\n");
-        }
-
-        $emit("✅ **Portais PT concluídos.**\n\n");
-
-        // ── Portal 3: UNIDO / UNGM ───────────────────────────────────────────
-        $emit("---\n### 🌍 Portal 3/3 — UNIDO · UNGM (UN Global Marketplace)\n");
-        $emit("⏳ A pesquisar tenders internacionais...\n\n");
-        if ($heartbeat) $heartbeat('a pesquisar UNIDO / UNGM');
-
-        $unData = '';
-        if ($this->searcher->isAvailable()) {
-            try {
-                $unData = $this->searcher->search(
-                    'ungm.org OR unido.org tender maritime naval defense 2026', 4, 'basic'
-                );
-            } catch (\Throwable $e) {
-                Log::info('AcingovAgent [UN]: ' . $e->getMessage());
-            }
-        }
-
-        if (empty($unData) || strlen($unData) < 50) {
-            $emit("> ⚠️ Sem resultados nos portais UN neste momento.\n\n");
-        } else {
-            $emit($unData . "\n\n");
-        }
-
-        $emit("✅ **Portais UN concluídos.**\n\n");
 
         // ── Análise Claude — 1 única chamada ─────────────────────────────────
         $emit("---\n### 🧠 Dra. Ana Contratos — Análise & Classificação\n");
-        $emit("⏳ A classificar oportunidades e preparar resumo executivo...\n\n");
+        $emit("⏳ A classificar oportunidades dos últimos 5 dias...\n\n");
         if ($heartbeat) $heartbeat('Dra. Ana a classificar oportunidades');
 
-        $allData = implode("\n\n", array_filter([$samData, $euData, $unData], fn($v) => strlen($v) > 50));
+        $allData = implode("\n\n", array_filter(
+            [
+                '[ACINGOV]' . $acingovData,
+                '[VORTAL]' . $vortalData,
+                '[UNGM]' . $ungmData,
+                '[BASE.GOV.PT - Adjudicados]' . $baseGovData,
+                '[SAM.gov]' . $samData,
+            ],
+            fn($v) => strlen($v) > 30
+        ));
 
         $analysisPrompt = <<<MSG
 {$userText}
 
-Analisa os concursos abaixo e apresenta:
+Período analisado: {$dateFrom} a {$dateTo} (últimos 5 dias).
+Portais pesquisados: Acingov (Portugal), Vortal (Portugal/Europa), UNGM (ONU), base.gov.pt (contratos adjudicados PT), SAM.gov (EUA).
+
+Analisa APENAS concursos/contratos dos últimos 5 dias e apresenta:
 1. Para cada concurso relevante: 📋 Entidade | 📌 Objeto | 💶 Valor | ⏰ Prazo | 🎯 Relevância (🟢Alta/🟡Média/🔴Baixa) | 💡 Ação | 🔗 Link
-2. 📊 Resumo Executivo: X altas, Y médias, Z baixas
-3. 🏆 Top 3 Oportunidades mais urgentes
-4. ⚡ Próximos Passos concretos
+2. Para contratos base.gov.pt: indica também a empresa vencedora/adjudicatária
+3. 📊 Resumo Executivo: X altas, Y médias, Z baixas — agrupado por portal
+4. 🏆 Top 3 Oportunidades mais urgentes (prazo mais curto + valor mais alto)
+5. ⚡ Próximos Passos concretos para a PartYard
 
-SAM.gov = contratos federais EUA (DoD, Navy, Coast Guard) — alta prioridade PartYard Military
-Foca em: peças navais, motores, defesa, portos, IT/cibersegurança, NATO
+Foca em: peças navais, motores marítimos, defesa, portos, NATO, IT/cibersegurança.
+SAM.gov = alta prioridade PartYard Military (DoD, Navy, Coast Guard).
+base.gov.pt = inteligência competitiva (quem ganhou, que valores, que empresas concorrem neste mercado).
 
---- DADOS DOS 3 PORTAIS ---
+--- DADOS DOS 5 PORTAIS ---
 {$allData}
 --- FIM ---
 MSG;
