@@ -96,50 +96,33 @@ PROMPT;
         $this->searcher = new WebSearchService();
     }
 
-    // ─── Fetch SAM.gov federal contracts (US DoD / NATO aligned) ──────────
+    // ─── Fetch SAM.gov federal contracts — single request, multi-NAICS ────
     protected function fetchSamGov(?callable $heartbeat = null): string
     {
         $apiKey = config('services.samgov.api_key');
         if (!$apiKey) return '(SAM.gov: configura SAM_GOV_API_KEY no .env)';
 
-        if ($heartbeat) $heartbeat('a pesquisar SAM.gov (US Federal)');
-
-        // NAICS codes relevant to PartYard/HP-Group:
-        // 336611 Ship Building & Repairing
-        // 336612 Boat Building
-        // 488390 Other Support Activities for Water Transportation
-        // 334511 Search, Detection, Navigation, Guidance Instruments (Defense)
-        // 541330 Engineering Services
-        // 541512 Computer Systems Design (SETQ)
-        // 332911 Industrial Valves/Parts
-        $naicsCodes = ['336611', '336612', '488390', '334511', '541330', '541512', '332911'];
+        if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
 
         $postedFrom = now()->subDays(5)->format('m/d/Y');
         $postedTo   = now()->format('m/d/Y');
 
-        $allOpps = [];
+        // All NAICS in ONE request (collectionFormat: multi)
+        $naicsCodes = ['336611', '336612', '488390', '334511', '541330', '541512', '332911'];
+        $params     = 'api_key=' . $apiKey
+            . '&postedFrom=' . urlencode($postedFrom)
+            . '&postedTo='   . urlencode($postedTo)
+            . '&limit=10&offset=0'
+            . implode('', array_map(fn($n) => "&ncode={$n}", $naicsCodes));
 
-        foreach ($naicsCodes as $ncode) {
-            try {
-                $url = 'https://api.sam.gov/opportunities/v2/search?' . http_build_query([
-                    'api_key'    => $apiKey,
-                    'ncode'      => $ncode,
-                    'postedFrom' => $postedFrom,
-                    'postedTo'   => $postedTo,
-                    'limit'      => '5',
-                    'offset'     => '0',
-                ]);
-
-                $resp = $this->httpClient->get($url, ['headers' => ['Accept' => 'application/json']]);
-                $data = json_decode($resp->getBody()->getContents(), true);
-                $opps = $data['opportunitiesData'] ?? [];
-
-                foreach ($opps as $opp) {
-                    $allOpps[] = $opp;
-                }
-            } catch (\Throwable $e) {
-                Log::info("AcingovAgent SAM.gov [{$ncode}]: " . $e->getMessage());
-            }
+        try {
+            $resp    = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
+                ['headers' => ['Accept' => 'application/json'], 'timeout' => 12]);
+            $data    = json_decode($resp->getBody()->getContents(), true);
+            $allOpps = $data['opportunitiesData'] ?? [];
+        } catch (\Throwable $e) {
+            Log::warning('AcingovAgent SAM.gov: ' . $e->getMessage());
+            return '(SAM.gov indisponível: ' . $e->getMessage() . ')';
         }
 
         if (empty($allOpps)) {
@@ -181,27 +164,22 @@ PROMPT;
             $sections[] = $sam;
         }
 
-        // 2. EU/UN portals via Tavily
+        // 2. EU/UN portals via Tavily — 2 queries (fast)
         if ($this->searcher->isAvailable()) {
-            $portals = [
-                'base.gov.pt' => 'base.gov.pt concurso aberto naval motor defesa porto 2026',
-                'Vortal'      => 'vortal.biz tender naval marine propulsion defense 2026',
-                'UNIDO'       => 'procurement.unido.org tender maritime naval industrial 2026',
-                'UNGM'        => 'ungm.org tender maritime naval defense propulsion 2026',
+            if ($heartbeat) $heartbeat('a pesquisar portais EU/UN');
+            $tavily = [
+                'EU/PT' => 'base.gov.pt OR vortal.biz concurso naval defesa motor maritimo 2026',
+                'UN'    => 'ungm.org OR unido.org tender maritime naval defense 2026',
             ];
-            $total = count($portals);
-            $i     = 1;
-            foreach ($portals as $label => $query) {
-                if ($heartbeat) $heartbeat("a pesquisar {$label} ({$i}/{$total})");
+            foreach ($tavily as $label => $query) {
                 try {
-                    $result = $this->searcher->search($query, 5, 'basic');
+                    $result = $this->searcher->search($query, 4, 'basic');
                     if ($result && strlen($result) > 50) {
                         $sections[] = "=== {$label} ===\n" . $result;
                     }
                 } catch (\Throwable $e) {
                     Log::info("AcingovAgent [{$label}]: " . $e->getMessage());
                 }
-                $i++;
             }
         }
 
