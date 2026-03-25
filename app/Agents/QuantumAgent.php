@@ -272,15 +272,10 @@ PROMPT;
             $token = $this->fetchEpoAccessToken();
             if (!$token) return '(EPO API token unavailable — check EPO_CONSUMER_KEY/SECRET in .env)';
 
-            // CQL query: maritime propulsion, naval engine maintenance, predictive maintenance
-            // OR quantum computing, AI defense — broad enough to catch PartYard-relevant patents
+            // EPO OPS CQL: field code ta= means title+abstract search
             $cql = urlencode(
-                'cql.any all "marine propulsion" OR ' .
-                'cql.any all "ship engine maintenance" OR ' .
-                'cql.any all "naval propulsion system" OR ' .
-                'cql.any all "predictive maintenance vessel" OR ' .
-                'cql.any all "quantum cryptography" OR ' .
-                'cql.any all "autonomous maritime"'
+                'ta="marine propulsion" OR ta="ship engine" OR ta="naval propulsion" ' .
+                'OR ta="predictive maintenance" OR ta="quantum cryptography" OR ta="autonomous vessel"'
             );
 
             $url = "https://ops.epo.org/3.2/rest-services/published-data/search?q={$cql}&Range=1-8";

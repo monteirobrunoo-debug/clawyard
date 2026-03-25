@@ -93,17 +93,17 @@ PROMPT;
             return '(WebSearch não disponível — configura TAVILY_API_KEY no .env)';
         }
 
-        $today    = now()->format('Y');
+        // Tavily max query = 400 chars — keep each query short
+        $from     = now()->subDays(5)->format('d/m/Y');
         $sections = [];
 
         $queries = [
-            "base.gov.pt concurso público aberto peças navais marítimas motores {$today}",
-            "base.gov.pt contratação pública defesa militar NATO equipamentos {$today}",
-            "base.gov.pt concurso público porto logística marítima cibersegurança {$today}",
+            "base.gov.pt concursos abertos navais motores defesa {$from}",
+            "base.gov.pt contratacao publica portos ciberseguranca 2026",
         ];
 
         foreach ($queries as $i => $query) {
-            if ($heartbeat) $heartbeat('a pesquisar concursos ' . ($i + 1) . '/3');
+            if ($heartbeat) $heartbeat('a pesquisar contratos ' . ($i + 1) . '/2');
             try {
                 $result = $this->searcher->search($query, 5, 'basic');
                 if ($result && strlen($result) > 50) {
@@ -115,11 +115,11 @@ PROMPT;
         }
 
         if (empty($sections)) {
-            return '(Sem resultados de pesquisa neste momento. Tenta novamente mais tarde.)';
+            return '(Sem resultados. Tenta novamente mais tarde.)';
         }
 
         $date = now()->format('Y-m-d H:i');
-        return "=== CONCURSOS PÚBLICOS — {$date} (via base.gov.pt) ===\n\n"
+        return "=== CONTRATOS PÚBLICOS ÚLTIMOS 5 DIAS — {$date} ===\n\n"
             . implode("\n\n", $sections);
     }
 
