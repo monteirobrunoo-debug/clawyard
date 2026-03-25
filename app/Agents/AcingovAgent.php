@@ -117,7 +117,7 @@ PROMPT;
 
         try {
             $resp    = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
-                ['headers' => ['Accept' => 'application/json'], 'timeout' => 12]);
+                ['headers' => ['Accept' => 'application/json'], 'timeout' => 5]);
             $data    = json_decode($resp->getBody()->getContents(), true);
             $allOpps = $data['opportunitiesData'] ?? [];
         } catch (\Throwable $e) {
