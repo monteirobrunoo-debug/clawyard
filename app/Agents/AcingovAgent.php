@@ -242,28 +242,19 @@ MSG;
         return $data['content'][0]['text'] ?? '';
     }
 
-    // ─── streamPortal() — helper to stream Claude analysis for one portal ──
-    protected function streamPortal(string $label, string $data, callable $onChunk, ?callable $heartbeat = null): string
+    // ─── streamClaudeOnce() — single Claude streaming call ─────────────────
+    protected function streamClaudeOnce(string $prompt, array $history, callable $onChunk, ?callable $heartbeat = null, string $beatLabel = 'a analisar'): string
     {
-        $prompt = <<<MSG
-Analisa APENAS os seguintes concursos do portal {$label} e classifica por relevância para HP-Group / PartYard.
-Para cada concurso: entidade, objeto, valor, prazo, relevância (🟢/🟡/🔴), ação recomendada e link.
-Se não houver concursos relevantes, diz claramente.
-Responde em Português. Sê conciso.
-
---- DADOS {$label} ---
-{$data}
---- FIM ---
-MSG;
-
-        $messages = [['role' => 'user', 'content' => $prompt]];
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $prompt],
+        ]);
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($prompt),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 1500,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
@@ -296,7 +287,7 @@ MSG;
                 }
             }
             if ($heartbeat && (time() - $lastBeat) >= 8) {
-                $heartbeat('a analisar ' . $label);
+                $heartbeat($beatLabel);
                 $lastBeat = time();
             }
         }
@@ -309,44 +300,68 @@ MSG;
     {
         $today = now()->format('Y-m-d H:i');
         $full  = '';
-        $allPortalData = [];
 
-        // ── Header ──────────────────────────────────────────────────────────
-        $header = "## 📋 Relatório de Contratos Públicos — {$today}\n\n";
-        $onChunk($header);
-        $full .= $header;
+        $emit = function (string $text) use (&$full, $onChunk) {
+            $full .= $text;
+            $onChunk($text);
+        };
+
+        $userText = is_array($message)
+            ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
+            : $message;
+
+        // ── Header ───────────────────────────────────────────────────────────
+        $emit("## 📋 Relatório de Contratos Públicos — {$today}\n");
+        $emit("Portais: 🇺🇸 SAM.gov · 🇵🇹 base.gov.pt · Vortal · Acingov · 🌍 UNIDO · UNGM\n\n");
 
         // ── Portal 1: SAM.gov ────────────────────────────────────────────────
-        $sep1 = "---\n### 🇺🇸 Portal 1/3 — SAM.gov (US Federal)\n⏳ A pesquisar contratos federais americanos...\n\n";
-        $onChunk($sep1);
-        $full .= $sep1;
-
+        $emit("---\n### 🇺🇸 Portal 1/3 — SAM.gov (US Federal)\n");
+        $emit("⏳ A pesquisar contratos federais americanos...\n\n");
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
+
         $samData = $this->fetchSamGov();
-        $allPortalData['SAM.gov'] = $samData;
 
         if (str_starts_with($samData, '(SAM.gov')) {
-            $msg = "> ⚠️ {$samData}\n\n";
-            $onChunk($msg);
-            $full .= $msg;
+            $emit("> ⚠️ {$samData}\n\n");
         } else {
-            if ($heartbeat) $heartbeat('Dra. Ana a analisar SAM.gov');
-            $analysis = $this->streamPortal('SAM.gov (US Federal)', $samData, $onChunk, $heartbeat);
-            $full    .= $analysis;
+            // Stream SAM raw data lines formatted
+            $lines = explode("\n", $samData);
+            foreach ($lines as $line) {
+                if (empty(trim($line))) continue;
+                if (str_starts_with($line, '===')) {
+                    // skip section headers, already in our header
+                    continue;
+                }
+                // Format each opportunity line
+                if (str_starts_with($line, '- ID:')) {
+                    // Parse fields: ID | TITLE | DEPT | TYPE | NAICS | POSTED | DEADLINE | VALUE | URL
+                    preg_match('/TITLE:([^|]+)/', $line, $t);
+                    preg_match('/DEPT:([^|]+)/', $line, $d);
+                    preg_match('/DEADLINE:([^|]+)/', $line, $dl);
+                    preg_match('/VALUE:\$([^|]+)/', $line, $v);
+                    preg_match('/URL:(\S+)/', $line, $u);
+                    $title    = trim($t[1]  ?? 'N/A');
+                    $dept     = trim($d[1]  ?? 'N/A');
+                    $deadline = trim($dl[1] ?? 'N/A');
+                    $value    = isset($v[1]) ? '$' . trim($v[1]) : '';
+                    $url      = trim($u[1]  ?? '');
+                    $emit("**{$title}**\n");
+                    $emit("📋 {$dept}" . ($value ? " · 💶 {$value}" : '') . ($deadline !== 'N/A' ? " · ⏰ {$deadline}" : '') . "\n");
+                    if ($url) $emit("🔗 {$url}\n");
+                    $emit("\n");
+                }
+            }
         }
 
-        $done1 = "\n\n✅ **SAM.gov concluído.** A avançar para portais europeus...\n\n";
-        $onChunk($done1);
-        $full .= $done1;
+        $emit("✅ **SAM.gov concluído.**\n\n");
 
-        // ── Portal 2: base.gov.pt / Vortal ───────────────────────────────────
-        $sep2 = "---\n### 🇵🇹 Portal 2/3 — base.gov.pt · Vortal · Acingov\n⏳ A pesquisar concursos públicos portugueses...\n\n";
-        $onChunk($sep2);
-        $full .= $sep2;
+        // ── Portal 2: base.gov.pt / Vortal / Acingov ─────────────────────────
+        $emit("---\n### 🇵🇹 Portal 2/3 — base.gov.pt · Vortal · Acingov\n");
+        $emit("⏳ A pesquisar concursos públicos portugueses...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar base.gov.pt / Vortal');
 
         $euData = '';
         if ($this->searcher->isAvailable()) {
-            if ($heartbeat) $heartbeat('a pesquisar base.gov.pt / Vortal');
             try {
                 $euData = $this->searcher->search(
                     'acingov.gov.pt OR base.gov.pt OR vortal.biz concurso naval maritimo defesa 2026', 4, 'basic'
@@ -355,30 +370,22 @@ MSG;
                 Log::info('AcingovAgent [EU/PT]: ' . $e->getMessage());
             }
         }
-        $allPortalData['EU/PT'] = $euData;
 
         if (empty($euData) || strlen($euData) < 50) {
-            $msg = "> ⚠️ Sem resultados nos portais portugueses (Tavily indisponível ou sem resultados).\n\n";
-            $onChunk($msg);
-            $full .= $msg;
+            $emit("> ⚠️ Sem resultados nos portais portugueses neste momento.\n\n");
         } else {
-            if ($heartbeat) $heartbeat('Dra. Ana a analisar base.gov.pt');
-            $analysis = $this->streamPortal('base.gov.pt / Vortal / Acingov (Portugal)', $euData, $onChunk, $heartbeat);
-            $full    .= $analysis;
+            $emit($euData . "\n\n");
         }
 
-        $done2 = "\n\n✅ **Portais PT concluídos.** A avançar para portais internacionais da ONU...\n\n";
-        $onChunk($done2);
-        $full .= $done2;
+        $emit("✅ **Portais PT concluídos.**\n\n");
 
         // ── Portal 3: UNIDO / UNGM ───────────────────────────────────────────
-        $sep3 = "---\n### 🌍 Portal 3/3 — UNIDO · UNGM (UN Global Marketplace)\n⏳ A pesquisar tenders internacionais...\n\n";
-        $onChunk($sep3);
-        $full .= $sep3;
+        $emit("---\n### 🌍 Portal 3/3 — UNIDO · UNGM (UN Global Marketplace)\n");
+        $emit("⏳ A pesquisar tenders internacionais...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar UNIDO / UNGM');
 
         $unData = '';
         if ($this->searcher->isAvailable()) {
-            if ($heartbeat) $heartbeat('a pesquisar UNIDO / UNGM');
             try {
                 $unData = $this->searcher->search(
                     'ungm.org OR unido.org tender maritime naval defense 2026', 4, 'basic'
@@ -387,93 +394,41 @@ MSG;
                 Log::info('AcingovAgent [UN]: ' . $e->getMessage());
             }
         }
-        $allPortalData['UN'] = $unData;
 
         if (empty($unData) || strlen($unData) < 50) {
-            $msg = "> ⚠️ Sem resultados nos portais UN (Tavily indisponível ou sem resultados).\n\n";
-            $onChunk($msg);
-            $full .= $msg;
+            $emit("> ⚠️ Sem resultados nos portais UN neste momento.\n\n");
         } else {
-            if ($heartbeat) $heartbeat('Dra. Ana a analisar UNIDO/UNGM');
-            $analysis = $this->streamPortal('UNIDO / UNGM (UN Global Marketplace)', $unData, $onChunk, $heartbeat);
-            $full    .= $analysis;
+            $emit($unData . "\n\n");
         }
 
-        $done3 = "\n\n✅ **Portais UN concluídos.**\n\n";
-        $onChunk($done3);
-        $full .= $done3;
+        $emit("✅ **Portais UN concluídos.**\n\n");
 
-        // ── Resumo Executivo Final ────────────────────────────────────────────
-        $sepFinal = "---\n### 📊 Resumo Executivo — Dra. Ana Contratos\n⏳ A preparar resumo executivo e próximos passos...\n\n";
-        $onChunk($sepFinal);
-        $full .= $sepFinal;
+        // ── Análise Claude — 1 única chamada ─────────────────────────────────
+        $emit("---\n### 🧠 Dra. Ana Contratos — Análise & Classificação\n");
+        $emit("⏳ A classificar oportunidades e preparar resumo executivo...\n\n");
+        if ($heartbeat) $heartbeat('Dra. Ana a classificar oportunidades');
 
-        if ($heartbeat) $heartbeat('a preparar resumo executivo');
+        $allData = implode("\n\n", array_filter([$samData, $euData, $unData], fn($v) => strlen($v) > 50));
 
-        $combinedData = implode("\n\n", array_filter($allPortalData, fn($v) => strlen($v) > 50));
-        $userText = is_array($message)
-            ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
-            : $message;
-
-        $summaryPrompt = <<<MSG
+        $analysisPrompt = <<<MSG
 {$userText}
 
-Com base na análise completa dos 3 portais (SAM.gov, base.gov.pt/Vortal, UNIDO/UNGM) feita acima, prepara:
+Analisa os concursos abaixo e apresenta:
+1. Para cada concurso relevante: 📋 Entidade | 📌 Objeto | 💶 Valor | ⏰ Prazo | 🎯 Relevância (🟢Alta/🟡Média/🔴Baixa) | 💡 Ação | 🔗 Link
+2. 📊 Resumo Executivo: X altas, Y médias, Z baixas
+3. 🏆 Top 3 Oportunidades mais urgentes
+4. ⚡ Próximos Passos concretos
 
-1. 📊 **Resumo Executivo**: total de oportunidades por prioridade (🟢 Alta / 🟡 Média / 🔴 Baixa)
-2. 🏆 **Top 3 Oportunidades**: as mais urgentes e relevantes para HP-Group / PartYard (com prazo, valor e link)
-3. ⚡ **Próximos Passos**: 3-5 acções concretas a tomar esta semana
+SAM.gov = contratos federais EUA (DoD, Navy, Coast Guard) — alta prioridade PartYard Military
+Foca em: peças navais, motores, defesa, portos, IT/cibersegurança, NATO
 
---- DADOS CONSOLIDADOS ---
-{$combinedData}
+--- DADOS DOS 3 PORTAIS ---
+{$allData}
 --- FIM ---
 MSG;
 
-        $summaryMessages = array_merge($history, [
-            ['role' => 'user', 'content' => $summaryPrompt],
-        ]);
-
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($summaryPrompt),
-            'stream'  => true,
-            'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 1500,
-                'system'     => $this->systemPrompt,
-                'messages'   => $summaryMessages,
-                'stream'     => true,
-            ],
-        ]);
-
-        $body     = $response->getBody();
-        $buf      = '';
-        $lastBeat = time();
-
-        while (!$body->eof()) {
-            $buf .= $body->read(1024);
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            if ($heartbeat && (time() - $lastBeat) >= 8) {
-                $heartbeat('a preparar resumo');
-                $lastBeat = time();
-            }
-        }
+        $analysis = $this->streamClaudeOnce($analysisPrompt, $history, $onChunk, $heartbeat, 'Dra. Ana a analisar');
+        $full .= $analysis;
 
         return $full;
     }
