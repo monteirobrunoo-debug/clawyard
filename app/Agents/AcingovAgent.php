@@ -3,6 +3,7 @@
 namespace App\Agents;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Cookie\CookieJar;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Services\PartYardProfileService;
 use App\Services\WebSearchService;
@@ -177,6 +178,176 @@ PROMPT;
         }
 
         return implode("\n", $lines);
+    }
+
+    // ─── Acingov — HTTP login + scrape ────────────────────────────────────
+    protected function fetchAcingov(): string
+    {
+        $username = config('services.acingov.username');
+        $password = config('services.acingov.password');
+
+        // Try authenticated first (shows deadlines + more detail)
+        if ($username && $password) {
+            $result = $this->fetchAcingovAuthenticated($username, $password);
+            if (strlen($result) > 100) return $result;
+        }
+
+        // Fallback: public zone — no login needed
+        return $this->fetchAcingovPublic();
+    }
+
+    protected function fetchAcingovAuthenticated(string $username, string $password): string
+    {
+        $baseUrl = 'https://www.acingov.pt/acingovprod/2/';
+        $jar     = new CookieJar();
+
+        $client = new Client([
+            'cookies'         => $jar,
+            'allow_redirects' => ['max' => 5],
+            'headers'         => [
+                'User-Agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                'Accept'     => 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language' => 'pt-PT,pt;q=0.9,en;q=0.8',
+            ],
+            'timeout' => 15,
+            'verify'  => false,
+        ]);
+
+        try {
+            // Step 1: GET homepage to initialise PHP session
+            $client->get($baseUrl);
+
+            // Step 2: POST login credentials
+            $client->post($baseUrl, [
+                'form_params' => ['user' => $username, 'pass' => $password],
+            ]);
+
+            // Step 3: Scrape authenticated procedures list with multiple keywords
+            $keywords = ['naval', 'marinha', 'maritimo', 'motor', 'peças sobressalentes', 'defesa', 'porto'];
+            $seen     = [];
+            $lines    = [];
+
+            foreach (array_slice($keywords, 0, 5) as $kw) {
+                try {
+                    $resp = $client->get($baseUrl . 'procedimentos_fornecedor/procedimentos_fornecedor_c', [
+                        'query' => ['object' => $kw],
+                    ]);
+                    $html = $resp->getBody()->getContents();
+
+                    // If redirected to login, credentials failed
+                    if (stripos($html, 'name="user"') !== false && stripos($html, 'name="pass"') !== false) {
+                        Log::info('Acingov: credenciais inválidas ou sessão expirou');
+                        return '';
+                    }
+
+                    $rows  = $this->parseAcingovTable($html, $seen, true);
+                    $lines = array_merge($lines, $rows);
+                } catch (\Throwable $e) {
+                    Log::info("Acingov [auth/{$kw}]: " . $e->getMessage());
+                }
+            }
+
+            if (empty($lines)) return '';
+            return "=== ACINGOV — Concursos (autenticado) ===\n" . implode("\n", $lines);
+
+        } catch (\Throwable $e) {
+            Log::info('Acingov [login]: ' . $e->getMessage());
+            return '';
+        }
+    }
+
+    protected function fetchAcingovPublic(): string
+    {
+        $baseUrl  = 'https://www.acingov.pt/acingovprod/2/zonaPublica/zona_publica_c/indexProcedimentos';
+        $keywords = ['naval', 'marinha', 'maritimo', 'motor', 'defesa'];
+        $seen     = [];
+        $lines    = [];
+
+        foreach ($keywords as $kw) {
+            try {
+                $resp = $this->httpClient->get($baseUrl, [
+                    'query'   => ['procedure_search' => $kw],
+                    'headers' => [
+                        'User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
+                        'Accept'     => 'text/html',
+                    ],
+                    'timeout' => 10,
+                    'verify'  => false,
+                ]);
+                $html  = $resp->getBody()->getContents();
+                $rows  = $this->parseAcingovTable($html, $seen, false);
+                $lines = array_merge($lines, $rows);
+            } catch (\Throwable $e) {
+                Log::info("Acingov [public/{$kw}]: " . $e->getMessage());
+            }
+        }
+
+        if (empty($lines)) return '';
+        return "=== ACINGOV — Concursos (zona pública) ===\n" . implode("\n", $lines);
+    }
+
+    /**
+     * Parse the Acingov HTML table and return formatted lines.
+     * Columns: Nº Procedimento | Tipo | Objeto de Contrato | Entidade | Estado [| Prazo (auth only)]
+     *
+     * @param  bool  $authenticated  Whether coming from the private area (has more columns)
+     */
+    protected function parseAcingovTable(string $html, array &$seen, bool $authenticated = false): array
+    {
+        $lines = [];
+
+        try {
+            $dom = new \DOMDocument('1.0', 'UTF-8');
+            @$dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+            $xpath = new \DOMXPath($dom);
+
+            // Find all <tr> inside <table>, skip header row(s)
+            $rows = $xpath->query('//table//tr[position()>1]');
+            if (!$rows || $rows->length === 0) return [];
+
+            foreach ($rows as $row) {
+                $cells = $xpath->query('.//td', $row);
+                if (!$cells || $cells->length < 3) continue;
+
+                $ref    = trim($cells->item(0)->textContent);
+                $tipo   = trim($cells->item(1)->textContent);
+                $objeto = trim($cells->item(2)->textContent);
+                $entidade = $cells->length > 3 ? trim($cells->item(3)->textContent) : '';
+                $estado   = $cells->length > 4 ? trim($cells->item(4)->textContent) : '';
+                $prazo    = $cells->length > 5 ? trim($cells->item(5)->textContent) : '';
+
+                // Clean up whitespace/newlines in object text
+                $objeto = preg_replace('/\s+/', ' ', $objeto);
+
+                // Attempt to get a link to the procedure
+                $anchor = $xpath->query('.//a[@href]', $row)->item(0);
+                $link   = '';
+                if ($anchor) {
+                    $href = $anchor->getAttribute('href');
+                    if ($href && !str_starts_with($href, 'javascript') && !str_starts_with($href, '#')) {
+                        $link = str_starts_with($href, 'http')
+                            ? $href
+                            : 'https://www.acingov.pt/acingovprod/2/' . ltrim($href, '/');
+                    }
+                }
+
+                if (!$ref || strlen($ref) < 3) continue;
+                if (isset($seen[$ref])) continue;
+                $seen[$ref] = true;
+
+                $line = "- REF: {$ref} | TIPO: {$tipo} | OBJETO: {$objeto}";
+                if ($entidade) $line .= " | ENTIDADE: {$entidade}";
+                if ($estado)   $line .= " | ESTADO: {$estado}";
+                if ($prazo)    $line .= " | PRAZO: {$prazo}";
+                if ($link)     $line .= " | URL: {$link}";
+
+                $lines[] = $line;
+            }
+        } catch (\Throwable $e) {
+            Log::info('parseAcingovTable: ' . $e->getMessage());
+        }
+
+        return $lines;
     }
 
     // ─── base.gov.pt — direct public API (awarded contracts) ──────────────
@@ -508,36 +679,10 @@ MSG;
         // Tavily `days` filter — últimos 7 dias (mais tolerante do que 5 para apanhar mais resultados)
         $tavilyDays = 7;
 
-        // Portal 1: Acingov / DRE.pt
-        // Acingov é privado (paywall). Usamos queries largas que encontram
-        // anúncios publicados em DRE.pt, news e agregadores públicos.
-        $emit("  `1/5` 🇵🇹 Acingov / DRE...\n");
-        if ($heartbeat) $heartbeat('a pesquisar Acingov / DRE');
-        $acingovData = '';
-        if ($this->searcher->isAvailable()) {
-            try {
-                // DRE.pt publica todos os concursos obrigatoriamente — indexado publicamente
-                $acingovData = $this->searcher->search(
-                    'concurso público Portugal 2026 marinha peças sobressalentes motor naval manutenção',
-                    8, 'basic', $tavilyDays
-                );
-                if (strlen($acingovData) < 80) {
-                    $acingovData = $this->searcher->search(
-                        'dre.pt contratação pública 2026 naval marítimo defesa equipamentos',
-                        8, 'basic', $tavilyDays
-                    );
-                }
-                if (strlen($acingovData) < 80) {
-                    // Very broad fallback — any PT public procurement
-                    $acingovData = $this->searcher->search(
-                        'concurso público Portugal março 2026 ajuste direto aquisição',
-                        8, 'basic', $tavilyDays
-                    );
-                }
-            } catch (\Throwable $e) {
-                Log::info('AcingovAgent [Acingov/DRE]: ' . $e->getMessage());
-            }
-        }
+        // Portal 1: Acingov — HTTP direto (login autenticado + fallback zona pública)
+        $emit("  `1/5` 🇵🇹 Acingov...\n");
+        if ($heartbeat) $heartbeat('a pesquisar Acingov');
+        $acingovData = $this->fetchAcingov();
 
         // Portal 2: Vortal / TED (European Tenders)
         // Vortal é privado. Usamos TED (Tenders Electronic Daily, EU) que é público.
