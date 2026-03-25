@@ -79,4 +79,19 @@ return [
         'password' => env('ACINGOV_PASSWORD'),
     ],
 
+    'vortal' => [
+        'username' => env('VORTAL_USERNAME'),
+        'password' => env('VORTAL_PASSWORD'),
+    ],
+
+    'unido' => [
+        'username' => env('UNIDO_USERNAME'),
+        'password' => env('UNIDO_PASSWORD'),
+    ],
+
+    'ungm' => [
+        'username' => env('UNGM_USERNAME'),
+        'password' => env('UNGM_PASSWORD'),
+    ],
+
 ];

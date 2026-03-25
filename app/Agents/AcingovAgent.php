@@ -11,8 +11,9 @@ use Illuminate\Support\Facades\Log;
 /**
  * AcingovAgent — "Dra. Ana Contratos"
  *
- * Pesquisa concursos públicos portugueses via Tavily (base.gov.pt + acingov.pt)
- * e classifica oportunidades para o HP-Group / PartYard.
+ * Pesquisa concursos públicos em 5 portais via Tavily:
+ * base.gov.pt, Acingov, Vortal, UNIDO e UNGM (UN Global Marketplace).
+ * Classifica oportunidades para o HP-Group / PartYard.
  */
 class AcingovAgent implements AgentInterface
 {
@@ -27,7 +28,7 @@ Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública par
 EMPRESA — CONTEXTO:
 [PROFILE_PLACEHOLDER]
 
-A sua missão: analisar concursos públicos portugueses e identificar oportunidades para o HP-Group e suas subsidiárias (PartYard Marine, PartYard Military, SETQ, IndYard).
+A sua missão: analisar concursos públicos de 5 portais (base.gov.pt, Acingov, Vortal, UNIDO e UNGM) e identificar oportunidades para o HP-Group e suas subsidiárias (PartYard Marine, PartYard Military, SETQ, IndYard).
 
 CRITÉRIOS DE CLASSIFICAÇÃO:
 
@@ -86,40 +87,45 @@ PROMPT;
         $this->searcher = new WebSearchService();
     }
 
-    // ─── Fetch contracts via Tavily web search ─────────────────────────────
+    // ─── Fetch contracts via Tavily — 5 portals ────────────────────────────
     protected function fetchContracts(?callable $heartbeat = null): string
     {
         if (!$this->searcher->isAvailable()) {
             return '(WebSearch não disponível — configura TAVILY_API_KEY no .env)';
         }
 
-        // Tavily max query = 400 chars — keep each query short
-        $from     = now()->subDays(5)->format('d/m/Y');
-        $sections = [];
-
-        $queries = [
-            "base.gov.pt concursos abertos navais motores defesa {$from}",
-            "base.gov.pt contratacao publica portos ciberseguranca 2026",
+        // Portals + queries (Tavily max = 400 chars each)
+        $portals = [
+            'base.gov.pt'  => 'base.gov.pt concurso aberto naval motor defesa porto 2026',
+            'Vortal'       => 'vortal.biz tender naval marine propulsion defense equipment 2026',
+            'UNIDO'        => 'procurement.unido.org tender maritime naval industrial 2026',
+            'UNGM'         => 'ungm.org tender maritime naval defense propulsion 2026',
         ];
 
-        foreach ($queries as $i => $query) {
-            if ($heartbeat) $heartbeat('a pesquisar contratos ' . ($i + 1) . '/2');
+        $sections = [];
+        $total    = count($portals);
+        $i        = 1;
+
+        foreach ($portals as $label => $query) {
+            if ($heartbeat) $heartbeat("a pesquisar {$label} ({$i}/{$total})");
             try {
                 $result = $this->searcher->search($query, 5, 'basic');
                 if ($result && strlen($result) > 50) {
-                    $sections[] = "=== PESQUISA " . ($i + 1) . " ===\n" . $result;
+                    $sections[] = "=== {$label} ===\n" . $result;
                 }
             } catch (\Throwable $e) {
-                Log::info("AcingovAgent search[{$i}]: " . $e->getMessage());
+                Log::info("AcingovAgent [{$label}]: " . $e->getMessage());
             }
+            $i++;
         }
 
         if (empty($sections)) {
-            return '(Sem resultados. Tenta novamente mais tarde.)';
+            return '(Sem resultados nos portais. Tenta novamente mais tarde.)';
         }
 
         $date = now()->format('Y-m-d H:i');
-        return "=== CONTRATOS PÚBLICOS ÚLTIMOS 5 DIAS — {$date} ===\n\n"
+        return "=== CONTRATOS PÚBLICOS ÚLTIMOS 5 DIAS — {$date} ===\n"
+            . "PORTAIS: base.gov.pt | Vortal | UNIDO | UNGM\n\n"
             . implode("\n\n", $sections);
     }
 

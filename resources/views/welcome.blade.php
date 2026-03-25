@@ -528,7 +528,7 @@ const AGENT_DESCRIPTIONS = {
     finance: 'Contabilidade, fiscalidade, SAP financeiro e análise ROI',
     research: 'Pesquisa de mercado, concorrência e análise de websites',
     capitao: 'Operações portuárias, escalas, documentação e logística marítima',
-    acingov: 'Concursos públicos Acingov — oportunidades de contratação para PartYard',
+    acingov: 'Concursos públicos: base.gov.pt · Vortal · UNIDO · UNGM — oportunidades para PartYard',
 };
 
 const AGENT_CHIPS = {
@@ -649,14 +649,14 @@ const AGENT_CHIPS = {
         '🔍 Análise de presença digital de armadores gregos — oportunidades de contacto',
         '🔍 Estratégia de entrada no mercado escandinavo — canais, parceiros e timing',
     ],
-    // ── Dra. Ana Contratos (Acingov) ──────────────────────────────────────
+    // ── Dra. Ana Contratos (Acingov + Vortal + UNIDO + UNGM) ──────────────
     acingov: [
-        '🏛️ Lista todos os concursos públicos abertos hoje no Acingov relevantes para a PartYard',
-        '🏛️ Há concursos de peças navais ou manutenção de motores marítimos em aberto?',
-        '🏛️ Concursos de defesa e material militar — oportunidades para PartYard Military',
-        '🏛️ Concursos de cybersegurança e IT nos últimos 30 dias — oportunidades para SETQ',
-        '🏛️ Qual o concurso com prazo mais urgente esta semana? Devo candidatar?',
-        '🏛️ Analisa concursos de logística portuária e supply chain abertos em Portugal',
+        '🏛️ Relatório completo: concursos abertos últimos 5 dias — base.gov.pt + Vortal + UNIDO + UNGM',
+        '🏛️ Concursos navais e motores marítimos abertos agora — todos os portais',
+        '🏛️ Oportunidades UNIDO e UNGM para PartYard Military e SETQ esta semana',
+        '🏛️ Vortal: concursos de defesa, NATO e equipamentos militares em aberto',
+        '🏛️ Qual o concurso com prazo mais urgente nos 4 portais? Ranking por deadline',
+        '🏛️ Concursos de cibersegurança e IT nos portais UN — oportunidades para SETQ',
     ],
     // ── Capitão Porto ─────────────────────────────────────────────────────
     capitao: [
