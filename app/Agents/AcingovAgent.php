@@ -323,15 +323,18 @@ MSG;
         $dateTo   = now()->format('d/m/Y');
 
         // ── Header ───────────────────────────────────────────────────────────
-        $emit("## 📋 Relatório de Contratos Públicos — {$today}\n");
-        $emit("Período: **{$dateFrom}** → **{$dateTo}** (últimos 5 dias)\n");
-        $emit("Portais: 🇵🇹 Acingov · Vortal · base.gov.pt · 🌍 UNGM · 🇺🇸 SAM.gov\n\n");
+        $emit("## 📋 Dra. Ana Contratos — Relatório {$today}\n");
+        $emit("Período: **{$dateFrom}** → **{$dateTo}** · Portais: Acingov · Vortal · base.gov.pt · UNGM · SAM.gov\n\n");
 
-        // ── Portal 1: Acingov ────────────────────────────────────────────────
-        $emit("---\n### 🇵🇹 Portal 1/4 — Acingov (Base de Dados Nacional de Contratos)\n");
-        $emit("⏳ A pesquisar concursos em acingov.gov.pt...\n\n");
+        // ── Recolha silenciosa de todos os portais ────────────────────────────
+        // Mostra só o progresso; os dados brutos NÃO são emitidos —
+        // serão processados em conjunto pela Dra. Ana no final.
+
+        $emit("⏳ A recolher dados dos portais...\n\n");
+
+        // Portal 1: Acingov
+        $emit("  `1/5` 🇵🇹 Acingov...\n");
         if ($heartbeat) $heartbeat('a pesquisar Acingov');
-
         $acingovData = '';
         if ($this->searcher->isAvailable()) {
             try {
@@ -343,18 +346,9 @@ MSG;
             }
         }
 
-        if (empty($acingovData) || strlen($acingovData) < 50) {
-            $emit("> ⚠️ Sem resultados Acingov nos últimos 5 dias.\n\n");
-        } else {
-            $emit($acingovData . "\n\n");
-        }
-        $emit("✅ **Acingov concluído.**\n\n");
-
-        // ── Portal 2: Vortal ─────────────────────────────────────────────────
-        $emit("---\n### 🇵🇹 Portal 2/4 — Vortal (Plataforma Electrónica)\n");
-        $emit("⏳ A pesquisar concursos em vortal.biz...\n\n");
+        // Portal 2: Vortal
+        $emit("  `2/5` 🇵🇹 Vortal...\n");
         if ($heartbeat) $heartbeat('a pesquisar Vortal');
-
         $vortalData = '';
         if ($this->searcher->isAvailable()) {
             try {
@@ -362,7 +356,6 @@ MSG;
                     "site:vortal.biz concurso naval maritimo defesa pecas sobressalentes \"{$dateTo}\" OR \"{$dateFrom}\"", 5, 'basic'
                 );
                 if (empty($vortalData) || strlen($vortalData) < 50) {
-                    // broader search without site: restriction
                     $vortalData = $this->searcher->search(
                         "vortal.biz concurso publico naval maritimo defesa {$dateTo}", 5, 'basic'
                     );
@@ -372,18 +365,9 @@ MSG;
             }
         }
 
-        if (empty($vortalData) || strlen($vortalData) < 50) {
-            $emit("> ⚠️ Sem resultados Vortal nos últimos 5 dias.\n\n");
-        } else {
-            $emit($vortalData . "\n\n");
-        }
-        $emit("✅ **Vortal concluído.**\n\n");
-
-        // ── Portal 3: UNGM ───────────────────────────────────────────────────
-        $emit("---\n### 🌍 Portal 3/4 — UNGM (UN Global Marketplace)\n");
-        $emit("⏳ A pesquisar tenders internacionais em ungm.org...\n\n");
+        // Portal 3: UNGM
+        $emit("  `3/5` 🌍 UNGM...\n");
         if ($heartbeat) $heartbeat('a pesquisar UNGM');
-
         $ungmData = '';
         if ($this->searcher->isAvailable()) {
             try {
@@ -400,23 +384,14 @@ MSG;
             }
         }
 
-        if (empty($ungmData) || strlen($ungmData) < 50) {
-            $emit("> ⚠️ Sem resultados UNGM nos últimos 5 dias.\n\n");
-        } else {
-            $emit($ungmData . "\n\n");
-        }
-        $emit("✅ **UNGM concluído.**\n\n");
-
-        // ── Portal 4: base.gov.pt ────────────────────────────────────────────
-        $emit("---\n### 🇵🇹 Portal 4/5 — base.gov.pt (Contratos Adjudicados)\n");
-        $emit("⏳ A pesquisar contratos adjudicados e empresas vencedoras...\n\n");
+        // Portal 4: base.gov.pt
+        $emit("  `4/5` 🇵🇹 base.gov.pt (adjudicados)...\n");
         if ($heartbeat) $heartbeat('a pesquisar base.gov.pt');
-
         $baseGovData = '';
         if ($this->searcher->isAvailable()) {
             try {
                 $baseGovData = $this->searcher->search(
-                    "site:base.gov.pt/ediçoes contratos adjudicados naval maritimo defesa {$dateTo}", 5, 'basic'
+                    "site:base.gov.pt/edicoes contratos adjudicados naval maritimo defesa {$dateTo}", 5, 'basic'
                 );
                 if (empty($baseGovData) || strlen($baseGovData) < 50) {
                     $baseGovData = $this->searcher->search(
@@ -428,51 +403,16 @@ MSG;
             }
         }
 
-        if (empty($baseGovData) || strlen($baseGovData) < 50) {
-            $emit("> ⚠️ Sem contratos adjudicados em base.gov.pt nos últimos 5 dias.\n\n");
-        } else {
-            $emit($baseGovData . "\n\n");
-        }
-        $emit("✅ **base.gov.pt concluído.**\n\n");
-
-        // ── Portal 5: SAM.gov ────────────────────────────────────────────────
-        $emit("---\n### 🇺🇸 Portal 5/5 — SAM.gov (US Federal Contracts)\n");
-        $emit("⏳ A pesquisar contratos federais americanos...\n\n");
+        // Portal 5: SAM.gov
+        $emit("  `5/5` 🇺🇸 SAM.gov...\n\n");
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
-
         $samData = $this->fetchSamGov();
 
-        if (str_starts_with($samData, '(SAM.gov')) {
-            $emit("> ⚠️ {$samData}\n\n");
-        } else {
-            $lines = explode("\n", $samData);
-            foreach ($lines as $line) {
-                if (empty(trim($line))) continue;
-                if (str_starts_with($line, '===')) continue;
-                if (str_starts_with($line, '- ID:')) {
-                    preg_match('/TITLE:([^|]+)/', $line, $t);
-                    preg_match('/DEPT:([^|]+)/', $line, $d);
-                    preg_match('/DEADLINE:([^|]+)/', $line, $dl);
-                    preg_match('/VALUE:\$([^|]+)/', $line, $v);
-                    preg_match('/URL:(\S+)/', $line, $u);
-                    $title    = trim($t[1]  ?? 'N/A');
-                    $dept     = trim($d[1]  ?? 'N/A');
-                    $deadline = trim($dl[1] ?? 'N/A');
-                    $value    = isset($v[1]) ? '$' . trim($v[1]) : '';
-                    $url      = trim($u[1]  ?? '');
-                    $emit("**{$title}**\n");
-                    $emit("📋 {$dept}" . ($value ? " · 💶 {$value}" : '') . ($deadline !== 'N/A' ? " · ⏰ {$deadline}" : '') . "\n");
-                    if ($url) $emit("🔗 {$url}\n");
-                    $emit("\n");
-                }
-            }
-        }
-        $emit("✅ **SAM.gov concluído.**\n\n");
+        $emit("✅ **Recolha concluída. A classificar por área...**\n\n");
 
-        // ── Análise Claude — 1 única chamada ─────────────────────────────────
-        $emit("---\n### 🧠 Dra. Ana Contratos — Análise & Classificação\n");
-        $emit("⏳ A classificar oportunidades dos últimos 5 dias...\n\n");
-        if ($heartbeat) $heartbeat('Dra. Ana a classificar oportunidades');
+        // ── Análise Claude — classificação por área ───────────────────────────
+        $emit("---\n### 🧠 Dra. Ana Contratos — Classificação por Área\n\n");
+        if ($heartbeat) $heartbeat('Dra. Ana a classificar por área');
 
         $allData = implode("\n\n", array_filter(
             [
@@ -488,19 +428,46 @@ MSG;
         $analysisPrompt = <<<MSG
 {$userText}
 
-Período analisado: {$dateFrom} a {$dateTo} (últimos 5 dias).
-Portais pesquisados: Acingov (Portugal), Vortal (Portugal/Europa), UNGM (ONU), base.gov.pt (contratos adjudicados PT), SAM.gov (EUA).
+Período: {$dateFrom} a {$dateTo} (últimos 5 dias).
+Portais pesquisados: Acingov · Vortal · base.gov.pt · UNGM · SAM.gov
 
-Analisa APENAS concursos/contratos dos últimos 5 dias e apresenta:
-1. Para cada concurso relevante: 📋 Entidade | 📌 Objeto | 💶 Valor | ⏰ Prazo | 🎯 Relevância (🟢Alta/🟡Média/🔴Baixa) | 💡 Ação | 🔗 Link
-2. Para contratos base.gov.pt: indica também a empresa vencedora/adjudicatária
-3. 📊 Resumo Executivo: X altas, Y médias, Z baixas — agrupado por portal
-4. 🏆 Top 3 Oportunidades mais urgentes (prazo mais curto + valor mais alto)
-5. ⚡ Próximos Passos concretos para a PartYard
+Analisa TODOS os contratos/concursos abaixo e apresenta os resultados CLASSIFICADOS POR ÁREA DE NEGÓCIO (não por portal).
 
-Foca em: peças navais, motores marítimos, defesa, portos, NATO, IT/cibersegurança.
-SAM.gov = alta prioridade PartYard Military (DoD, Navy, Coast Guard).
-base.gov.pt = inteligência competitiva (quem ganhou, que valores, que empresas concorrem neste mercado).
+== ESTRUTURA DO RELATÓRIO ==
+
+Para cada ÁREA, lista os contratos relevantes encontrados:
+
+### ⚓ Naval & Marítimo
+### 🛡️ Defesa & Militar
+### 🔧 Manutenção & Peças Industriais
+### 💻 IT & Cibersegurança
+### ⚡ Energia & Ambiente
+### 📦 Supply Chain & Logística
+### 🏗️ Obras & Infraestrutura
+### 🌐 Outros
+
+Para cada contrato dentro de cada área:
+📋 **[Título]** | 🏛️ Entidade | 💶 Valor | ⏰ Prazo | 🌍 Portal: [Acingov/Vortal/UNGM/base.gov.pt/SAM.gov] | 🎯 [🟢Alta/🟡Média/🔴Baixa] | 🔗 Link
+(Para base.gov.pt: indicar também 🏆 Empresa adjudicatária)
+
+Depois do relatório por área:
+---
+### 📊 Resumo Executivo
+- Total: X contratos | 🟢 N altas · 🟡 N médias · 🔴 N baixas
+- Por portal: Acingov(N) · Vortal(N) · UNGM(N) · base.gov.pt(N) · SAM.gov(N)
+
+### 🏆 Top 5 Oportunidades Prioritárias
+(prazo mais curto + valor mais alto + maior relevância PartYard)
+
+### ⚡ Próximos Passos
+(acções concretas para a equipa PartYard esta semana)
+
+REGRAS:
+- INCLUI APENAS contratos dos últimos 5 dias ({$dateFrom}–{$dateTo})
+- Se não houver contratos numa área, omite essa secção
+- Usa SEMPRE os links reais dos dados fornecidos
+- SAM.gov = alta prioridade PartYard Military (DoD, Navy, Coast Guard)
+- base.gov.pt = inteligência competitiva — quem ganhou, a que preço
 
 --- DADOS DOS 5 PORTAIS ---
 {$allData}
