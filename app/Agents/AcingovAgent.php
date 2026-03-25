@@ -242,22 +242,28 @@ MSG;
         return $data['content'][0]['text'] ?? '';
     }
 
-    // ─── stream() ──────────────────────────────────────────────────────────
-    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    // ─── streamPortal() — helper to stream Claude analysis for one portal ──
+    protected function streamPortal(string $label, string $data, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $finalMessage = $this->buildContractsMessage($message, $heartbeat);
-        if ($heartbeat) $heartbeat('a classificar oportunidades PartYard');
+        $prompt = <<<MSG
+Analisa APENAS os seguintes concursos do portal {$label} e classifica por relevância para HP-Group / PartYard.
+Para cada concurso: entidade, objeto, valor, prazo, relevância (🟢/🟡/🔴), ação recomendada e link.
+Se não houver concursos relevantes, diz claramente.
+Responde em Português. Sê conciso.
 
-        $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $finalMessage],
-        ]);
+--- DADOS {$label} ---
+{$data}
+--- FIM ---
+MSG;
+
+        $messages = [['role' => 'user', 'content' => $prompt]];
 
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($finalMessage),
+            'headers' => $this->headersForMessage($prompt),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 4096,
+                'max_tokens' => 1500,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
@@ -289,8 +295,182 @@ MSG;
                     }
                 }
             }
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
-                $heartbeat('a analisar concursos');
+            if ($heartbeat && (time() - $lastBeat) >= 8) {
+                $heartbeat('a analisar ' . $label);
+                $lastBeat = time();
+            }
+        }
+
+        return $full;
+    }
+
+    // ─── stream() ──────────────────────────────────────────────────────────
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    {
+        $today = now()->format('Y-m-d H:i');
+        $full  = '';
+        $allPortalData = [];
+
+        // ── Header ──────────────────────────────────────────────────────────
+        $header = "## 📋 Relatório de Contratos Públicos — {$today}\n\n";
+        $onChunk($header);
+        $full .= $header;
+
+        // ── Portal 1: SAM.gov ────────────────────────────────────────────────
+        $sep1 = "---\n### 🇺🇸 Portal 1/3 — SAM.gov (US Federal)\n⏳ A pesquisar contratos federais americanos...\n\n";
+        $onChunk($sep1);
+        $full .= $sep1;
+
+        if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
+        $samData = $this->fetchSamGov();
+        $allPortalData['SAM.gov'] = $samData;
+
+        if (str_starts_with($samData, '(SAM.gov')) {
+            $msg = "> ⚠️ {$samData}\n\n";
+            $onChunk($msg);
+            $full .= $msg;
+        } else {
+            if ($heartbeat) $heartbeat('Dra. Ana a analisar SAM.gov');
+            $analysis = $this->streamPortal('SAM.gov (US Federal)', $samData, $onChunk, $heartbeat);
+            $full    .= $analysis;
+        }
+
+        $done1 = "\n\n✅ **SAM.gov concluído.** A avançar para portais europeus...\n\n";
+        $onChunk($done1);
+        $full .= $done1;
+
+        // ── Portal 2: base.gov.pt / Vortal ───────────────────────────────────
+        $sep2 = "---\n### 🇵🇹 Portal 2/3 — base.gov.pt · Vortal · Acingov\n⏳ A pesquisar concursos públicos portugueses...\n\n";
+        $onChunk($sep2);
+        $full .= $sep2;
+
+        $euData = '';
+        if ($this->searcher->isAvailable()) {
+            if ($heartbeat) $heartbeat('a pesquisar base.gov.pt / Vortal');
+            try {
+                $euData = $this->searcher->search(
+                    'base.gov.pt OR vortal.biz concurso naval defesa motor maritimo 2026', 4, 'basic'
+                );
+            } catch (\Throwable $e) {
+                Log::info('AcingovAgent [EU/PT]: ' . $e->getMessage());
+            }
+        }
+        $allPortalData['EU/PT'] = $euData;
+
+        if (empty($euData) || strlen($euData) < 50) {
+            $msg = "> ⚠️ Sem resultados nos portais portugueses (Tavily indisponível ou sem resultados).\n\n";
+            $onChunk($msg);
+            $full .= $msg;
+        } else {
+            if ($heartbeat) $heartbeat('Dra. Ana a analisar base.gov.pt');
+            $analysis = $this->streamPortal('base.gov.pt / Vortal / Acingov (Portugal)', $euData, $onChunk, $heartbeat);
+            $full    .= $analysis;
+        }
+
+        $done2 = "\n\n✅ **Portais PT concluídos.** A avançar para portais internacionais da ONU...\n\n";
+        $onChunk($done2);
+        $full .= $done2;
+
+        // ── Portal 3: UNIDO / UNGM ───────────────────────────────────────────
+        $sep3 = "---\n### 🌍 Portal 3/3 — UNIDO · UNGM (UN Global Marketplace)\n⏳ A pesquisar tenders internacionais...\n\n";
+        $onChunk($sep3);
+        $full .= $sep3;
+
+        $unData = '';
+        if ($this->searcher->isAvailable()) {
+            if ($heartbeat) $heartbeat('a pesquisar UNIDO / UNGM');
+            try {
+                $unData = $this->searcher->search(
+                    'ungm.org OR unido.org tender maritime naval defense 2026', 4, 'basic'
+                );
+            } catch (\Throwable $e) {
+                Log::info('AcingovAgent [UN]: ' . $e->getMessage());
+            }
+        }
+        $allPortalData['UN'] = $unData;
+
+        if (empty($unData) || strlen($unData) < 50) {
+            $msg = "> ⚠️ Sem resultados nos portais UN (Tavily indisponível ou sem resultados).\n\n";
+            $onChunk($msg);
+            $full .= $msg;
+        } else {
+            if ($heartbeat) $heartbeat('Dra. Ana a analisar UNIDO/UNGM');
+            $analysis = $this->streamPortal('UNIDO / UNGM (UN Global Marketplace)', $unData, $onChunk, $heartbeat);
+            $full    .= $analysis;
+        }
+
+        $done3 = "\n\n✅ **Portais UN concluídos.**\n\n";
+        $onChunk($done3);
+        $full .= $done3;
+
+        // ── Resumo Executivo Final ────────────────────────────────────────────
+        $sepFinal = "---\n### 📊 Resumo Executivo — Dra. Ana Contratos\n⏳ A preparar resumo executivo e próximos passos...\n\n";
+        $onChunk($sepFinal);
+        $full .= $sepFinal;
+
+        if ($heartbeat) $heartbeat('a preparar resumo executivo');
+
+        $combinedData = implode("\n\n", array_filter($allPortalData, fn($v) => strlen($v) > 50));
+        $userText = is_array($message)
+            ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
+            : $message;
+
+        $summaryPrompt = <<<MSG
+{$userText}
+
+Com base na análise completa dos 3 portais (SAM.gov, base.gov.pt/Vortal, UNIDO/UNGM) feita acima, prepara:
+
+1. 📊 **Resumo Executivo**: total de oportunidades por prioridade (🟢 Alta / 🟡 Média / 🔴 Baixa)
+2. 🏆 **Top 3 Oportunidades**: as mais urgentes e relevantes para HP-Group / PartYard (com prazo, valor e link)
+3. ⚡ **Próximos Passos**: 3-5 acções concretas a tomar esta semana
+
+--- DADOS CONSOLIDADOS ---
+{$combinedData}
+--- FIM ---
+MSG;
+
+        $summaryMessages = array_merge($history, [
+            ['role' => 'user', 'content' => $summaryPrompt],
+        ]);
+
+        $response = $this->client->post('/v1/messages', [
+            'headers' => $this->headersForMessage($summaryPrompt),
+            'stream'  => true,
+            'json'    => [
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
+                'max_tokens' => 1500,
+                'system'     => $this->systemPrompt,
+                'messages'   => $summaryMessages,
+                'stream'     => true,
+            ],
+        ]);
+
+        $body     = $response->getBody();
+        $buf      = '';
+        $lastBeat = time();
+
+        while (!$body->eof()) {
+            $buf .= $body->read(1024);
+            while (($pos = strpos($buf, "\n")) !== false) {
+                $line = substr($buf, 0, $pos);
+                $buf  = substr($buf, $pos + 1);
+                $line = trim($line);
+                if (!str_starts_with($line, 'data: ')) continue;
+                $json = substr($line, 6);
+                if ($json === '[DONE]') break 2;
+                $evt = json_decode($json, true);
+                if (!is_array($evt)) continue;
+                if (($evt['type'] ?? '') === 'content_block_delta'
+                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
+                    $text = $evt['delta']['text'] ?? '';
+                    if ($text !== '') {
+                        $full .= $text;
+                        $onChunk($text);
+                    }
+                }
+            }
+            if ($heartbeat && (time() - $lastBeat) >= 8) {
+                $heartbeat('a preparar resumo');
                 $lastBeat = time();
             }
         }
