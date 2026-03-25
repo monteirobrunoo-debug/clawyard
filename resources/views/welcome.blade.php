@@ -528,7 +528,7 @@ const AGENT_DESCRIPTIONS = {
     finance: 'Contabilidade, fiscalidade, SAP financeiro e análise ROI',
     research: 'Pesquisa de mercado, concorrência e análise de websites',
     capitao: 'Operações portuárias, escalas, documentação e logística marítima',
-    acingov: 'Concursos públicos: base.gov.pt · Vortal · UNIDO · UNGM — oportunidades para PartYard',
+    acingov: 'SAM.gov · base.gov.pt · Vortal · UNIDO · UNGM — contratos públicos para PartYard',
 };
 
 const AGENT_CHIPS = {
@@ -649,14 +649,14 @@ const AGENT_CHIPS = {
         '🔍 Análise de presença digital de armadores gregos — oportunidades de contacto',
         '🔍 Estratégia de entrada no mercado escandinavo — canais, parceiros e timing',
     ],
-    // ── Dra. Ana Contratos (Acingov + Vortal + UNIDO + UNGM) ──────────────
+    // ── Dra. Ana Contratos (SAM.gov + base.gov.pt + Vortal + UNIDO + UNGM) ─
     acingov: [
-        '🏛️ Relatório completo: concursos abertos últimos 5 dias — base.gov.pt + Vortal + UNIDO + UNGM',
-        '🏛️ Concursos navais e motores marítimos abertos agora — todos os portais',
+        '🏛️ Relatório completo últimos 5 dias: SAM.gov + base.gov.pt + Vortal + UNIDO + UNGM',
+        '🏛️ SAM.gov: contratos US Navy, DoD e Coast Guard abertos para PartYard Military',
+        '🏛️ Concursos navais e motores marítimos abertos agora — todos os 5 portais',
         '🏛️ Oportunidades UNIDO e UNGM para PartYard Military e SETQ esta semana',
-        '🏛️ Vortal: concursos de defesa, NATO e equipamentos militares em aberto',
-        '🏛️ Qual o concurso com prazo mais urgente nos 4 portais? Ranking por deadline',
-        '🏛️ Concursos de cibersegurança e IT nos portais UN — oportunidades para SETQ',
+        '🏛️ Qual o contrato com prazo mais urgente nos 5 portais? Ranking por deadline',
+        '🏛️ SAM.gov NAICS 336611 e 334511 — ship building e defense navigation abertos',
     ],
     // ── Capitão Porto ─────────────────────────────────────────────────────
     capitao: [

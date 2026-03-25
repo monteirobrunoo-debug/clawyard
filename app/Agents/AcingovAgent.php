@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Services\PartYardProfileService;
 use App\Services\WebSearchService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * AcingovAgent — "Dra. Ana Contratos"
@@ -20,6 +21,7 @@ class AcingovAgent implements AgentInterface
     use AnthropicKeyTrait;
 
     protected Client           $client;
+    protected Client           $httpClient;
     protected WebSearchService $searcher;
 
     protected string $systemPrompt = <<<'PROMPT'
@@ -28,7 +30,7 @@ Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública par
 EMPRESA — CONTEXTO:
 [PROFILE_PLACEHOLDER]
 
-A sua missão: analisar concursos públicos de 5 portais (base.gov.pt, Acingov, Vortal, UNIDO e UNGM) e identificar oportunidades para o HP-Group e suas subsidiárias (PartYard Marine, PartYard Military, SETQ, IndYard).
+A sua missão: analisar concursos públicos de 6 portais (base.gov.pt, Acingov, Vortal, UNIDO, UNGM e **SAM.gov** — contratos federais dos EUA) e identificar oportunidades para o HP-Group e suas subsidiárias (PartYard Marine, PartYard Military, SETQ, IndYard).
 
 CRITÉRIOS DE CLASSIFICAÇÃO:
 
@@ -84,48 +86,132 @@ PROMPT;
             'connect_timeout' => 10,
         ]);
 
+        $this->httpClient = new Client([
+            'timeout'         => 15,
+            'connect_timeout' => 8,
+            'verify'          => false,
+            'headers'         => ['User-Agent' => 'ClawYard/1.0 (research@hp-group.org)'],
+        ]);
+
         $this->searcher = new WebSearchService();
     }
 
-    // ─── Fetch contracts via Tavily — 5 portals ────────────────────────────
-    protected function fetchContracts(?callable $heartbeat = null): string
+    // ─── Fetch SAM.gov federal contracts (US DoD / NATO aligned) ──────────
+    protected function fetchSamGov(?callable $heartbeat = null): string
     {
-        if (!$this->searcher->isAvailable()) {
-            return '(WebSearch não disponível — configura TAVILY_API_KEY no .env)';
-        }
+        $apiKey = config('services.samgov.api_key');
+        if (!$apiKey) return '(SAM.gov: configura SAM_GOV_API_KEY no .env)';
 
-        // Portals + queries (Tavily max = 400 chars each)
-        $portals = [
-            'base.gov.pt'  => 'base.gov.pt concurso aberto naval motor defesa porto 2026',
-            'Vortal'       => 'vortal.biz tender naval marine propulsion defense equipment 2026',
-            'UNIDO'        => 'procurement.unido.org tender maritime naval industrial 2026',
-            'UNGM'         => 'ungm.org tender maritime naval defense propulsion 2026',
-        ];
+        if ($heartbeat) $heartbeat('a pesquisar SAM.gov (US Federal)');
 
-        $sections = [];
-        $total    = count($portals);
-        $i        = 1;
+        // NAICS codes relevant to PartYard/HP-Group:
+        // 336611 Ship Building & Repairing
+        // 336612 Boat Building
+        // 488390 Other Support Activities for Water Transportation
+        // 334511 Search, Detection, Navigation, Guidance Instruments (Defense)
+        // 541330 Engineering Services
+        // 541512 Computer Systems Design (SETQ)
+        // 332911 Industrial Valves/Parts
+        $naicsCodes = ['336611', '336612', '488390', '334511', '541330', '541512', '332911'];
 
-        foreach ($portals as $label => $query) {
-            if ($heartbeat) $heartbeat("a pesquisar {$label} ({$i}/{$total})");
+        $postedFrom = now()->subDays(5)->format('m/d/Y');
+        $postedTo   = now()->format('m/d/Y');
+
+        $allOpps = [];
+
+        foreach ($naicsCodes as $ncode) {
             try {
-                $result = $this->searcher->search($query, 5, 'basic');
-                if ($result && strlen($result) > 50) {
-                    $sections[] = "=== {$label} ===\n" . $result;
+                $url = 'https://api.sam.gov/opportunities/v2/search?' . http_build_query([
+                    'api_key'    => $apiKey,
+                    'ncode'      => $ncode,
+                    'postedFrom' => $postedFrom,
+                    'postedTo'   => $postedTo,
+                    'limit'      => '5',
+                    'offset'     => '0',
+                ]);
+
+                $resp = $this->httpClient->get($url, ['headers' => ['Accept' => 'application/json']]);
+                $data = json_decode($resp->getBody()->getContents(), true);
+                $opps = $data['opportunitiesData'] ?? [];
+
+                foreach ($opps as $opp) {
+                    $allOpps[] = $opp;
                 }
             } catch (\Throwable $e) {
-                Log::info("AcingovAgent [{$label}]: " . $e->getMessage());
+                Log::info("AcingovAgent SAM.gov [{$ncode}]: " . $e->getMessage());
             }
-            $i++;
+        }
+
+        if (empty($allOpps)) {
+            return '(SAM.gov: sem oportunidades nos últimos 5 dias para os NAICS selecionados)';
+        }
+
+        // Deduplicate by noticeId
+        $seen  = [];
+        $lines = ["=== SAM.GOV — US Federal Opportunities (últimos 5 dias) ==="];
+
+        foreach ($allOpps as $opp) {
+            $id = $opp['noticeId'] ?? $opp['solicitationNumber'] ?? '';
+            if ($id && isset($seen[$id])) continue;
+            if ($id) $seen[$id] = true;
+
+            $title    = $opp['title']                ?? 'N/A';
+            $dept     = $opp['departmentName']       ?? ($opp['organizationHierarchy'][0]['name'] ?? 'N/A');
+            $type     = $opp['type']                 ?? 'N/A';
+            $naics    = $opp['naicsCode']            ?? 'N/A';
+            $deadline = $opp['responseDeadLine']     ?? ($opp['archiveDate'] ?? 'N/A');
+            $posted   = $opp['postedDate']           ?? 'N/A';
+            $value    = $opp['award']['amount']      ?? '';
+            $link     = $opp['uiLink']               ?? ($id ? "https://sam.gov/opp/{$id}/view" : '');
+
+            $lines[] = "- ID:{$id} | TITLE:{$title} | DEPT:{$dept} | TYPE:{$type} | NAICS:{$naics} | POSTED:{$posted} | DEADLINE:{$deadline}" . ($value ? " | VALUE:\${$value}" : '') . " | URL:{$link}";
+        }
+
+        return implode("\n", $lines);
+    }
+
+    // ─── Fetch contracts via Tavily — EU/UN portals ───────────────────────
+    protected function fetchContracts(?callable $heartbeat = null): string
+    {
+        $sections = [];
+
+        // 1. SAM.gov — direct API (most reliable)
+        $sam = $this->fetchSamGov($heartbeat);
+        if ($sam && !str_starts_with($sam, '(SAM.gov:')) {
+            $sections[] = $sam;
+        }
+
+        // 2. EU/UN portals via Tavily
+        if ($this->searcher->isAvailable()) {
+            $portals = [
+                'base.gov.pt' => 'base.gov.pt concurso aberto naval motor defesa porto 2026',
+                'Vortal'      => 'vortal.biz tender naval marine propulsion defense 2026',
+                'UNIDO'       => 'procurement.unido.org tender maritime naval industrial 2026',
+                'UNGM'        => 'ungm.org tender maritime naval defense propulsion 2026',
+            ];
+            $total = count($portals);
+            $i     = 1;
+            foreach ($portals as $label => $query) {
+                if ($heartbeat) $heartbeat("a pesquisar {$label} ({$i}/{$total})");
+                try {
+                    $result = $this->searcher->search($query, 5, 'basic');
+                    if ($result && strlen($result) > 50) {
+                        $sections[] = "=== {$label} ===\n" . $result;
+                    }
+                } catch (\Throwable $e) {
+                    Log::info("AcingovAgent [{$label}]: " . $e->getMessage());
+                }
+                $i++;
+            }
         }
 
         if (empty($sections)) {
-            return '(Sem resultados nos portais. Tenta novamente mais tarde.)';
+            return '(Sem resultados nos portais. Verifica as API keys no .env)';
         }
 
         $date = now()->format('Y-m-d H:i');
         return "=== CONTRATOS PÚBLICOS ÚLTIMOS 5 DIAS — {$date} ===\n"
-            . "PORTAIS: base.gov.pt | Vortal | UNIDO | UNGM\n\n"
+            . "PORTAIS: SAM.gov | base.gov.pt | Vortal | UNIDO | UNGM\n\n"
             . implode("\n\n", $sections);
     }
 
@@ -151,7 +237,8 @@ PROMPT;
 Analisa os concursos acima e classifica cada um por relevância para HP-Group / PartYard.
 - Usa APENAS dados reais das pesquisas — não inventes concursos
 - Para cada concurso: entidade, objeto, valor, prazo, relevância, ação
-- Foca em: peças navais, motores, defesa, portos, IT/cibersegurança
+- SAM.gov = contratos federais americanos (DoD, Navy, Coast Guard) — alta prioridade para PartYard Military
+- Foca em: peças navais, motores, defesa, portos, IT/cibersegurança, NATO
 MSG;
     }
 

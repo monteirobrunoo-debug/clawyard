@@ -94,4 +94,8 @@ return [
         'password' => env('UNGM_PASSWORD'),
     ],
 
+    'samgov' => [
+        'api_key' => env('SAM_GOV_API_KEY'),
+    ],
+
 ];
