@@ -105,15 +105,19 @@ PROMPT;
 
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
 
-        // Keyword searches — broad enough to return results across all relevant areas.
-        // We don't filter by NAICS here; Claude classifies by area afterwards.
-        // Try multiple keyword groups and merge results.
+        // Keyword groups — each maps to a PartYard business area.
+        // SAM.gov supports OR syntax natively. No NAICS filter → Claude classifies.
         $keywordGroups = [
-            'marine OR naval OR ship OR vessel OR maritime OR propulsion OR coast guard',
-            'defense OR military OR army OR navy OR NATO OR weapon OR ammunition',
-            'engine OR motor OR spare parts OR maintenance OR repair OR overhaul',
-            'cybersecurity OR IT services OR network OR software OR technology',
-            'logistics OR supply chain OR transportation OR warehouse OR parts',
+            // PartYard Marine / Military — core
+            'marine OR naval OR ship OR vessel OR maritime OR coast guard OR propulsion OR watercraft',
+            // Defense & NATO supply
+            'defense OR military OR navy OR army OR NATO OR ammunition OR ordnance OR weapon system',
+            // Engine & mechanical parts (MTU, Caterpillar, MAK)
+            '"spare parts" OR "engine overhaul" OR "diesel engine" OR "propulsion system" OR "ship repair"',
+            // IT & cybersecurity (SETQ subsidiary)
+            'cybersecurity OR "information technology" OR "network security" OR "software development"',
+            // Logistics & supply chain
+            '"supply chain" OR "logistics support" OR "parts distribution" OR "warehousing" OR "depot maintenance"',
         ];
 
         $allOpps  = [];
@@ -129,7 +133,7 @@ PROMPT;
                     . '&q='          . urlencode($keywords)
                     . '&postedFrom=' . urlencode($postedFrom)
                     . '&postedTo='   . urlencode($postedTo)
-                    . '&limit=10&offset=0';
+                    . '&limit=20&offset=0';
 
                 try {
                     $resp  = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
@@ -158,23 +162,49 @@ PROMPT;
             return '(SAM.gov: sem oportunidades nos últimos 30 dias — verifica SAM_GOV_API_KEY)';
         }
 
-        $lines = ["=== SAM.GOV — US Federal Opportunities (últimos {$usedDays} dias) ==="];
+        // Sort: solicitations first (open bids), then award notices (intel)
+        usort($allOpps, function($a, $b) {
+            $aType = strtolower($a['type'] ?? '');
+            $bType = strtolower($b['type'] ?? '');
+            $aIsSol = str_contains($aType, 'solicitation') || str_contains($aType, 'pre-sol') ? 0 : 1;
+            $bIsSol = str_contains($bType, 'solicitation') || str_contains($bType, 'pre-sol') ? 0 : 1;
+            return $aIsSol <=> $bIsSol;
+        });
+
+        $lines = ["=== SAM.GOV — US Federal Opportunities (últimos {$usedDays} dias) ===",
+                  "Total: " . count($allOpps) . " contratos"];
 
         foreach ($allOpps as $opp) {
-            $id = $opp['noticeId'] ?? $opp['solicitationNumber'] ?? '';
-            if ($id && isset($seen[$id])) continue;
-            if ($id) $seen[$id] = true;
+            $id     = $opp['noticeId'] ?? $opp['solicitationNumber'] ?? '';
+            $title  = $opp['title']    ?? 'N/A';
+            $type   = $opp['type']     ?? 'N/A';
+            $naics  = $opp['naicsCode'] ?? ($opp['naicsCodes'][0] ?? 'N/A');
+            $posted = $opp['postedDate'] ?? 'N/A';
 
-            $title    = $opp['title']                ?? 'N/A';
-            $dept     = $opp['departmentName']       ?? ($opp['organizationHierarchy'][0]['name'] ?? 'N/A');
-            $type     = $opp['type']                 ?? 'N/A';
-            $naics    = $opp['naicsCode']            ?? 'N/A';
-            $deadline = $opp['responseDeadLine']     ?? ($opp['archiveDate'] ?? 'N/A');
-            $posted   = $opp['postedDate']           ?? 'N/A';
-            $value    = $opp['award']['amount']      ?? '';
-            $link     = $opp['uiLink']               ?? ($id ? "https://sam.gov/opp/{$id}/view" : '');
+            // Department from fullParentPathName (dot-separated hierarchy)
+            $dept = 'N/A';
+            if (!empty($opp['fullParentPathName'])) {
+                $parts = explode('.', $opp['fullParentPathName']);
+                $dept  = trim($parts[0]); // e.g. "DEPT OF DEFENSE"
+                if (count($parts) > 1) $dept .= ' > ' . trim($parts[1]); // e.g. "> DEFENSE LOGISTICS AGENCY"
+            }
 
-            $lines[] = "- ID:{$id} | TITLE:{$title} | DEPT:{$dept} | TYPE:{$type} | NAICS:{$naics} | POSTED:{$posted} | DEADLINE:{$deadline}" . ($value ? " | VALUE:\${$value}" : '') . " | URL:{$link}";
+            // Deadline: responseDeadLine for solicitations, archiveDate for awards
+            $deadline = $opp['responseDeadLine'] ?? ($opp['archiveDate'] ?? 'N/A');
+
+            // Award info (for Award Notices — competitive intel)
+            $awardee = $opp['award']['awardee']['name'] ?? '';
+            $value   = $opp['award']['amount']          ?? '';
+
+            // Direct link to SAM.gov
+            $link = $opp['uiLink'] ?? ($id ? "https://sam.gov/workspace/contract/opp/{$id}/view" : '');
+
+            $line = "- [{$type}] {$title} | DEPT: {$dept} | NAICS: {$naics} | POSTED: {$posted} | DEADLINE: {$deadline}";
+            if ($value)   $line .= " | VALUE: \${$value}";
+            if ($awardee) $line .= " | WINNER: {$awardee}";
+            if ($link)    $line .= " | URL: {$link}";
+
+            $lines[] = $line;
         }
 
         return implode("\n", $lines);
