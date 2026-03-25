@@ -349,7 +349,7 @@ MSG;
             if ($heartbeat) $heartbeat('a pesquisar base.gov.pt / Vortal');
             try {
                 $euData = $this->searcher->search(
-                    'base.gov.pt OR vortal.biz concurso naval defesa motor maritimo 2026', 4, 'basic'
+                    'acingov.gov.pt OR base.gov.pt OR vortal.biz concurso naval maritimo defesa 2026', 4, 'basic'
                 );
             } catch (\Throwable $e) {
                 Log::info('AcingovAgent [EU/PT]: ' . $e->getMessage());
