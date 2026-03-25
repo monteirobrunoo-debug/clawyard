@@ -144,9 +144,12 @@ PROMPT;
             ],
         ]);
 
-        $body = $response->getBody();
-        $full = '';
-        $buf  = '';
+        $body          = $response->getBody();
+        $full          = '';
+        $buf           = '';
+        $jsonStarted   = false;
+        $progressSent  = false;
+        $lastBeat      = time();
 
         while (!$body->eof()) {
             $buf .= $body->read(1024);
@@ -161,12 +164,24 @@ PROMPT;
                 if (!is_array($evt)) continue;
                 if (($evt['type'] ?? '') === 'content_block_delta'
                     && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        // Buffer JSON — only stream a progress indicator, not the raw JSON
-                        if (!str_contains($full, '{')) {
-                            $onChunk($text);
+                    $chunk = $evt['delta']['text'] ?? '';
+                    if ($chunk === '') continue;
+
+                    $full .= $chunk;
+
+                    if (!$jsonStarted && !str_contains($full, '{')) {
+                        // Pre-JSON text (rare) — stream directly
+                        $onChunk($chunk);
+                    } else {
+                        // JSON is being built — send a one-time progress indicator
+                        if (!$jsonStarted) {
+                            $jsonStarted = true;
+                            $onChunk("⏳ A redigir email...\n");
+                        }
+                        // Heartbeat every second so Nginx/SSE doesn't time out
+                        if (time() - $lastBeat >= 1) {
+                            if ($heartbeat) $heartbeat('a escrever');
+                            $lastBeat = time();
                         }
                     }
                 }
