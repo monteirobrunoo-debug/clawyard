@@ -104,57 +104,59 @@ PROMPT;
 
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
 
-        // Expanded NAICS: naval, defesa, maquinaria, engineering, IT, supply chain
-        $naicsCodes = [
-            '336611', // Ship Building and Repairing
-            '336612', // Boat Building
-            '488390', // Other Support Activities for Water Transportation
-            '334511', // Search, Detection, Navigation instruments
-            '541330', // Engineering Services
-            '541512', // Computer Systems Design
-            '332911', // Industrial Valves
-            '336412', // Aircraft Engine & Parts
-            '332710', // Machine Shops
-            '423860', // Transportation Equipment Wholesalers
-            '811310', // Commercial & Industrial Machinery Repair
-            '335312', // Motor and Generator Manufacturing
-            '332999', // All Other Misc Fabricated Metal Products
+        // Keyword searches — broad enough to return results across all relevant areas.
+        // We don't filter by NAICS here; Claude classifies by area afterwards.
+        // Try multiple keyword groups and merge results.
+        $keywordGroups = [
+            'marine OR naval OR ship OR vessel OR maritime OR propulsion OR coast guard',
+            'defense OR military OR army OR navy OR NATO OR weapon OR ammunition',
+            'engine OR motor OR spare parts OR maintenance OR repair OR overhaul',
+            'cybersecurity OR IT services OR network OR software OR technology',
+            'logistics OR supply chain OR transportation OR warehouse OR parts',
         ];
 
-        // Try last 5 days first, fall back to 30 days if empty
-        $allOpps    = [];
-        $usedDays   = 5;
-        foreach ([5, 30] as $days) {
+        $allOpps  = [];
+        $usedDays = 5;
+        $seen     = [];
+
+        foreach ([5, 14, 30] as $days) {
             $postedFrom = now()->subDays($days)->format('m/d/Y');
             $postedTo   = now()->format('m/d/Y');
-            $params     = 'api_key=' . $apiKey
-                . '&postedFrom=' . urlencode($postedFrom)
-                . '&postedTo='   . urlencode($postedTo)
-                . '&limit=15&offset=0'
-                . implode('', array_map(fn($n) => "&ncode={$n}", $naicsCodes));
 
-            try {
-                $resp    = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
-                    ['headers' => ['Accept' => 'application/json'], 'timeout' => 8]);
-                $data    = json_decode($resp->getBody()->getContents(), true);
-                $allOpps = $data['opportunitiesData'] ?? [];
-            } catch (\Throwable $e) {
-                Log::warning('AcingovAgent SAM.gov: ' . $e->getMessage());
-                return '(SAM.gov indisponível: ' . $e->getMessage() . ')';
+            foreach ($keywordGroups as $keywords) {
+                $params = 'api_key=' . $apiKey
+                    . '&q='          . urlencode($keywords)
+                    . '&postedFrom=' . urlencode($postedFrom)
+                    . '&postedTo='   . urlencode($postedTo)
+                    . '&limit=10&offset=0';
+
+                try {
+                    $resp  = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
+                        ['headers' => ['Accept' => 'application/json'], 'timeout' => 8]);
+                    $data  = json_decode($resp->getBody()->getContents(), true);
+                    $opps  = $data['opportunitiesData'] ?? [];
+
+                    foreach ($opps as $opp) {
+                        $id = $opp['noticeId'] ?? $opp['solicitationNumber'] ?? '';
+                        if ($id && isset($seen[$id])) continue;
+                        if ($id) $seen[$id] = true;
+                        $allOpps[] = $opp;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('AcingovAgent SAM.gov [' . substr($keywords, 0, 30) . ']: ' . $e->getMessage());
+                }
             }
 
             if (!empty($allOpps)) {
                 $usedDays = $days;
-                break;
+                break; // Got results — no need to widen date range
             }
         }
 
         if (empty($allOpps)) {
-            return '(SAM.gov: sem oportunidades nos últimos 30 dias para os NAICS selecionados)';
+            return '(SAM.gov: sem oportunidades nos últimos 30 dias — verifica SAM_GOV_API_KEY)';
         }
 
-        // Deduplicate by noticeId
-        $seen  = [];
         $lines = ["=== SAM.GOV — US Federal Opportunities (últimos {$usedDays} dias) ==="];
 
         foreach ($allOpps as $opp) {
