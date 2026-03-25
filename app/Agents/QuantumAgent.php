@@ -38,7 +38,7 @@ REPORTING:
 When given real data, produce:
 - Part 1: Top 10 arXiv quantum/AI papers analysis
 - Part 2: Top 4 PeerJ CS articles on agents & multi-agent systems
-- Part 3: Top 6 EPO Patents (European Patent Office) — latest patents relevant to PartYard/HP-Group
+- Part 3: Top 10 EPO Patents (European Patent Office) — últimas patentes dos últimos 3 dias relevantes para PartYard/HP-Group (naval, defesa, quantum, cyber, AI, IoT, energia, materiais, supply chain)
 - End with Professor's Strategic Insight
 
 PATENT ANALYSIS (Part 3):
@@ -266,42 +266,116 @@ PROMPT;
         }
     }
 
+    /**
+     * Build EPO CQL query covering all PartYard/HP-Group relevant areas with date filter.
+     * If dateFrom/dateTo supplied, wraps the whole query in a date range filter.
+     */
+    protected function buildEpoCql(?string $dateFrom = null, ?string $dateTo = null): string
+    {
+        // Wide topic coverage across all HP-Group business units
+        $topics = implode(' OR ', [
+            // Maritime & Naval
+            'ta="marine propulsion"',
+            'ta="ship engine"',
+            'ta="naval propulsion"',
+            'ta="autonomous vessel"',
+            'ta="underwater vehicle"',
+            'ta="ship maintenance"',
+            // Defense & Military
+            'ta="naval defense"',
+            'ta="military platform"',
+            'ta="radar system"',
+            'ta="sonar system"',
+            'ta="missile guidance"',
+            // Quantum & Cryptography
+            'ta="quantum cryptography"',
+            'ta="quantum communication"',
+            'ta="quantum computing"',
+            'ta="post-quantum"',
+            // AI & Machine Learning
+            'ta="artificial intelligence industrial"',
+            'ta="machine learning predictive"',
+            'ta="digital twin"',
+            'ta="autonomous systems"',
+            // Cybersecurity
+            'ta="cybersecurity"',
+            'ta="intrusion detection"',
+            'ta="network security industrial"',
+            // IoT & Industry 4.0
+            'ta="industrial IoT"',
+            'ta="predictive maintenance"',
+            'ta="condition monitoring"',
+            // Energy & Sustainability
+            'ta="energy efficiency vessel"',
+            'ta="fuel cell marine"',
+            'ta="hydrogen propulsion"',
+            // Materials & Manufacturing
+            'ta="composite materials aerospace"',
+            'ta="additive manufacturing"',
+            'ta="corrosion resistant coating"',
+            // Supply Chain & Logistics
+            'ta="supply chain optimization"',
+            'ta="satellite communication maritime"',
+            'ta="port logistics"',
+        ]);
+
+        if ($dateFrom && $dateTo) {
+            return "({$topics}) AND pd within \"{$dateFrom} {$dateTo}\"";
+        }
+        return "({$topics})";
+    }
+
     protected function fetchEpoPatents(): string
     {
         try {
             $token = $this->fetchEpoAccessToken();
             if (!$token) return '(EPO API token unavailable — check EPO_CONSUMER_KEY/SECRET in .env)';
 
-            // EPO OPS CQL: ta= searches title+abstract (correct EPO OPS field code)
-            // Using /search/biblio constituent to get title+applicant in a single call
-            $cql = urlencode(
-                'ta="marine propulsion" OR ta="ship engine" OR ta="naval propulsion" ' .
-                'OR ta="predictive maintenance" OR ta="quantum cryptography" OR ta="autonomous vessel"'
-            );
+            // Try last 3 days first, fall back to 7 days if empty
+            $dateRanges = [
+                ['label' => '3 dias', 'from' => now()->subDays(3)->format('Ymd'), 'to' => now()->format('Ymd')],
+                ['label' => '7 dias', 'from' => now()->subDays(7)->format('Ymd'), 'to' => now()->format('Ymd')],
+                ['label' => '30 dias', 'from' => now()->subDays(30)->format('Ymd'), 'to' => now()->format('Ymd')],
+            ];
 
-            // /search/biblio returns exchange-documents with full biblio data directly
-            $url = "https://ops.epo.org/3.2/rest-services/published-data/search/biblio?q={$cql}";
+            $docs       = [];
+            $usedLabel  = '';
 
-            $response = $this->httpClient->get($url, [
-                'headers' => [
-                    'Authorization' => "Bearer {$token}",
-                    'Accept'        => 'application/json',
-                    'X-OPS-Range'   => '1-8',
-                ],
-            ]);
+            foreach ($dateRanges as $range) {
+                $cql      = urlencode($this->buildEpoCql($range['from'], $range['to']));
+                $url      = "https://ops.epo.org/3.2/rest-services/published-data/search/biblio?q={$cql}";
 
-            $data = json_decode($response->getBody()->getContents(), true);
+                try {
+                    $response = $this->httpClient->get($url, [
+                        'headers' => [
+                            'Authorization' => "Bearer {$token}",
+                            'Accept'        => 'application/json',
+                            'X-OPS-Range'   => '1-10',
+                        ],
+                        'timeout' => 15,
+                    ]);
 
-            // /search/biblio returns exchange-documents directly in search result
-            $searchResult = $data['ops:world-patent-data']['ops:biblio-search']['ops:search-result'] ?? [];
-            $docs = $searchResult['exchange-documents']['exchange-document'] ?? [];
+                    $data         = json_decode($response->getBody()->getContents(), true);
+                    $searchResult = $data['ops:world-patent-data']['ops:biblio-search']['ops:search-result'] ?? [];
+                    $found        = $searchResult['exchange-documents']['exchange-document'] ?? [];
 
-            // Single result: wrap in array
-            if (isset($docs['@country'])) $docs = [$docs];
-            if (empty($docs)) return '(EPO: sem patentes encontradas para os critérios)';
+                    // Single result: wrap in array
+                    if (isset($found['@country'])) $found = [$found];
 
-            $lines = [];
-            foreach (array_slice($docs, 0, 8) as $doc) {
+                    if (!empty($found)) {
+                        $docs      = $found;
+                        $usedLabel = $range['label'];
+                        break;
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning("QuantumAgent: EPO search ({$range['label']}) error — " . $e->getMessage());
+                }
+            }
+
+            if (empty($docs)) return '(EPO: sem patentes encontradas nos últimos 30 dias para os critérios definidos)';
+
+            $lines = ["=== EPO Patents — últimos {$usedLabel} ==="];
+            foreach (array_slice($docs, 0, 10) as $doc) {
                 $bib = $doc['bibliographic-data'] ?? [];
 
                 // Patent number from publication reference
@@ -361,7 +435,7 @@ PROMPT;
                 $lines[] = "- EPO_NUMBER={$patNum} | TITLE={$title} | APPLICANT={$applicant} | URL={$espUrl}";
             }
 
-            return $lines ? implode("\n", $lines) : '(EPO: sem patentes com dados completos)';
+            return count($lines) > 1 ? implode("\n", $lines) : "(EPO: sem patentes com dados completos nos últimos {$usedLabel})";
         } catch (\Throwable $e) {
             \Log::warning('QuantumAgent: EPO patent fetch failed — ' . $e->getMessage());
             return '(EPO fetch error: ' . $e->getMessage() . ')';
@@ -392,7 +466,7 @@ PROMPT;
 ## PeerJ Computer Science Articles (fetched live via CrossRef — agents & multi-agent systems):
 {$peerj}
 
-## EPO Patents (fetched live from European Patent Office OPS API — maritime & defense):
+## EPO Patents (fetched live from European Patent Office OPS API — últimos 3 dias, áreas: naval, defesa, quantum, cyber, AI, IoT, energia, materiais, supply chain):
 {$epo}
 
 --- END REAL DATA ---
