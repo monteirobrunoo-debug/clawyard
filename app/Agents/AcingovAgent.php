@@ -301,9 +301,12 @@ MSG;
         $today = now()->format('Y-m-d H:i');
         $full  = '';
 
-        $emit = function (string $text) use (&$full, $onChunk) {
+        // $emit sends text AND forces a buffer flush via heartbeat comment
+        $emit = function (string $text) use (&$full, $onChunk, &$heartbeat) {
             $full .= $text;
             $onChunk($text);
+            // Force flush: heartbeat is a proven SSE flush mechanism
+            if ($heartbeat) $heartbeat('');
         };
 
         $userText = is_array($message)
