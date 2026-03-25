@@ -104,34 +104,58 @@ PROMPT;
 
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
 
-        $postedFrom = now()->subDays(5)->format('m/d/Y');
-        $postedTo   = now()->format('m/d/Y');
+        // Expanded NAICS: naval, defesa, maquinaria, engineering, IT, supply chain
+        $naicsCodes = [
+            '336611', // Ship Building and Repairing
+            '336612', // Boat Building
+            '488390', // Other Support Activities for Water Transportation
+            '334511', // Search, Detection, Navigation instruments
+            '541330', // Engineering Services
+            '541512', // Computer Systems Design
+            '332911', // Industrial Valves
+            '336412', // Aircraft Engine & Parts
+            '332710', // Machine Shops
+            '423860', // Transportation Equipment Wholesalers
+            '811310', // Commercial & Industrial Machinery Repair
+            '335312', // Motor and Generator Manufacturing
+            '332999', // All Other Misc Fabricated Metal Products
+        ];
 
-        // All NAICS in ONE request (collectionFormat: multi)
-        $naicsCodes = ['336611', '336612', '488390', '334511', '541330', '541512', '332911'];
-        $params     = 'api_key=' . $apiKey
-            . '&postedFrom=' . urlencode($postedFrom)
-            . '&postedTo='   . urlencode($postedTo)
-            . '&limit=10&offset=0'
-            . implode('', array_map(fn($n) => "&ncode={$n}", $naicsCodes));
+        // Try last 5 days first, fall back to 30 days if empty
+        $allOpps    = [];
+        $usedDays   = 5;
+        foreach ([5, 30] as $days) {
+            $postedFrom = now()->subDays($days)->format('m/d/Y');
+            $postedTo   = now()->format('m/d/Y');
+            $params     = 'api_key=' . $apiKey
+                . '&postedFrom=' . urlencode($postedFrom)
+                . '&postedTo='   . urlencode($postedTo)
+                . '&limit=15&offset=0'
+                . implode('', array_map(fn($n) => "&ncode={$n}", $naicsCodes));
 
-        try {
-            $resp    = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
-                ['headers' => ['Accept' => 'application/json'], 'timeout' => 5]);
-            $data    = json_decode($resp->getBody()->getContents(), true);
-            $allOpps = $data['opportunitiesData'] ?? [];
-        } catch (\Throwable $e) {
-            Log::warning('AcingovAgent SAM.gov: ' . $e->getMessage());
-            return '(SAM.gov indisponível: ' . $e->getMessage() . ')';
+            try {
+                $resp    = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
+                    ['headers' => ['Accept' => 'application/json'], 'timeout' => 8]);
+                $data    = json_decode($resp->getBody()->getContents(), true);
+                $allOpps = $data['opportunitiesData'] ?? [];
+            } catch (\Throwable $e) {
+                Log::warning('AcingovAgent SAM.gov: ' . $e->getMessage());
+                return '(SAM.gov indisponível: ' . $e->getMessage() . ')';
+            }
+
+            if (!empty($allOpps)) {
+                $usedDays = $days;
+                break;
+            }
         }
 
         if (empty($allOpps)) {
-            return '(SAM.gov: sem oportunidades nos últimos 5 dias para os NAICS selecionados)';
+            return '(SAM.gov: sem oportunidades nos últimos 30 dias para os NAICS selecionados)';
         }
 
         // Deduplicate by noticeId
         $seen  = [];
-        $lines = ["=== SAM.GOV — US Federal Opportunities (últimos 5 dias) ==="];
+        $lines = ["=== SAM.GOV — US Federal Opportunities (últimos {$usedDays} dias) ==="];
 
         foreach ($allOpps as $opp) {
             $id = $opp['noticeId'] ?? $opp['solicitationNumber'] ?? '';
@@ -332,15 +356,28 @@ MSG;
 
         $emit("⏳ A recolher dados dos portais...\n\n");
 
+        // Tavily `days` filter — últimos 7 dias (mais tolerante do que 5 para apanhar mais resultados)
+        $tavilyDays = 7;
+
         // Portal 1: Acingov
+        // Nota: site: operator não funciona em portais fechados. Usamos queries naturais
+        // que o Tavily consegue indexar (notícias, relatórios, agregadores de contratos PT).
         $emit("  `1/5` 🇵🇹 Acingov...\n");
         if ($heartbeat) $heartbeat('a pesquisar Acingov');
         $acingovData = '';
         if ($this->searcher->isAvailable()) {
             try {
+                // Tenta com vários ângulos para maximizar resultados
                 $acingovData = $this->searcher->search(
-                    "site:acingov.gov.pt concurso naval maritimo defesa pecas sobressalentes \"{$dateTo}\" OR \"{$dateFrom}\"", 5, 'basic'
+                    'acingov concurso publico portugal naval maritimo defesa pecas sobressalentes 2026',
+                    5, 'basic', $tavilyDays
                 );
+                if (strlen($acingovData) < 80) {
+                    $acingovData = $this->searcher->search(
+                        'acingov.gov.pt concurso ajuste direto consulta prévia naval marinha 2026',
+                        5, 'basic', $tavilyDays
+                    );
+                }
             } catch (\Throwable $e) {
                 Log::info('AcingovAgent [Acingov]: ' . $e->getMessage());
             }
@@ -353,11 +390,13 @@ MSG;
         if ($this->searcher->isAvailable()) {
             try {
                 $vortalData = $this->searcher->search(
-                    "site:vortal.biz concurso naval maritimo defesa pecas sobressalentes \"{$dateTo}\" OR \"{$dateFrom}\"", 5, 'basic'
+                    'vortal concurso publico portugal naval maritimo defesa equipamento 2026',
+                    5, 'basic', $tavilyDays
                 );
-                if (empty($vortalData) || strlen($vortalData) < 50) {
+                if (strlen($vortalData) < 80) {
                     $vortalData = $this->searcher->search(
-                        "vortal.biz concurso publico naval maritimo defesa {$dateTo}", 5, 'basic'
+                        'vortal.biz tender procurement portugal maritime defense spare parts',
+                        5, 'basic', $tavilyDays
                     );
                 }
             } catch (\Throwable $e) {
@@ -372,11 +411,13 @@ MSG;
         if ($this->searcher->isAvailable()) {
             try {
                 $ungmData = $this->searcher->search(
-                    "site:ungm.org tender maritime naval spare parts defense \"{$dateTo}\" OR \"{$dateFrom}\"", 5, 'basic'
+                    'ungm.org tender maritime naval spare parts defense 2026',
+                    5, 'basic', $tavilyDays
                 );
-                if (empty($ungmData) || strlen($ungmData) < 50) {
+                if (strlen($ungmData) < 80) {
                     $ungmData = $this->searcher->search(
-                        "ungm.org tender maritime naval spare parts defense {$dateTo}", 5, 'basic'
+                        'UN Global Marketplace tender maritime naval equipment defense procurement 2026',
+                        5, 'basic', $tavilyDays
                     );
                 }
             } catch (\Throwable $e) {
@@ -391,11 +432,13 @@ MSG;
         if ($this->searcher->isAvailable()) {
             try {
                 $baseGovData = $this->searcher->search(
-                    "site:base.gov.pt/edicoes contratos adjudicados naval maritimo defesa {$dateTo}", 5, 'basic'
+                    'base.gov.pt contratos adjudicados naval maritimo defesa manutenção motores 2026',
+                    5, 'basic', $tavilyDays
                 );
-                if (empty($baseGovData) || strlen($baseGovData) < 50) {
+                if (strlen($baseGovData) < 80) {
                     $baseGovData = $this->searcher->search(
-                        "base.gov.pt contratos adjudicados naval maritimo defesa empresa vencedora {$dateTo}", 5, 'basic'
+                        'base.gov.pt adjudicação contrato marinha portuguesa porto peças sobressalentes',
+                        5, 'basic', $tavilyDays
                     );
                 }
             } catch (\Throwable $e) {

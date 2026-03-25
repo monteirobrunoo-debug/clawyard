@@ -23,26 +23,34 @@ class WebSearchService
     /**
      * Search the web and return formatted results string.
      *
-     * @param string $query
-     * @param int    $maxResults
-     * @param string $searchDepth  'basic' | 'advanced'
+     * @param string   $query
+     * @param int      $maxResults
+     * @param string   $searchDepth  'basic' | 'advanced'
+     * @param int|null $days         Filter results published in last N days (null = no filter)
      */
-    public function search(string $query, int $maxResults = 5, string $searchDepth = 'basic'): string
+    public function search(string $query, int $maxResults = 5, string $searchDepth = 'basic', ?int $days = null): string
     {
         if (!$this->isAvailable()) {
             return '(Web search not available — TAVILY_API_KEY not configured)';
         }
 
         try {
+            $payload = [
+                'api_key'             => $this->apiKey,
+                'query'               => $query,
+                'max_results'         => $maxResults,
+                'search_depth'        => $searchDepth,
+                'include_answer'      => true,
+                'include_raw_content' => false,
+            ];
+
+            // Tavily `days` param: restrict to results published within last N days
+            if ($days !== null && $days > 0) {
+                $payload['days'] = $days;
+            }
+
             $response = $this->http->post('https://api.tavily.com/search', [
-                'json' => [
-                    'api_key'      => $this->apiKey,
-                    'query'        => $query,
-                    'max_results'  => $maxResults,
-                    'search_depth' => $searchDepth,
-                    'include_answer'      => true,
-                    'include_raw_content' => false,
-                ],
+                'json' => $payload,
             ]);
 
             $data    = json_decode($response->getBody()->getContents(), true);
