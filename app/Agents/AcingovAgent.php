@@ -179,6 +179,153 @@ PROMPT;
         return implode("\n", $lines);
     }
 
+    // ─── base.gov.pt — direct public API (awarded contracts) ──────────────
+    protected function fetchBaseGovPt(): string
+    {
+        $dateFrom = now()->subDays(30)->format('d-m-Y'); // 30 days — adjudicados têm latência
+        $dateTo   = now()->format('d-m-Y');
+
+        // Multiple keyword passes to find maritime/defense contracts
+        $keywords = ['naval', 'marítimo', 'maritimo', 'marinha', 'motor diesel', 'peças sobressalentes', 'defesa', 'porto'];
+        $seen     = [];
+        $lines    = [];
+
+        foreach ($keywords as $kw) {
+            try {
+                $resp = $this->httpClient->get(
+                    'https://www.base.gov.pt/Base/pt/ResultadoContratosSearch',
+                    [
+                        'query' => [
+                            'tipo'          => 'CO',
+                            'tipocontrato'  => '0',
+                            'cpv'           => '',
+                            'dte'           => $dateTo,
+                            'dta'           => $dateFrom,
+                            'designacao'    => $kw,
+                            'adjudicante'   => '',
+                            'adjudicatario' => '',
+                            'pageSize'      => '10',
+                            'page'          => '1',
+                        ],
+                        'headers' => [
+                            'Accept'           => 'application/json, text/javascript, */*; q=0.01',
+                            'X-Requested-With' => 'XMLHttpRequest',
+                            'Referer'          => 'https://www.base.gov.pt/Base/pt/Pesquisa',
+                            'User-Agent'       => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
+                        ],
+                        'timeout' => 8,
+                    ]
+                );
+
+                $body = $resp->getBody()->getContents();
+                $data = json_decode($body, true);
+                $contracts = $data['items'] ?? $data['list'] ?? $data ?? [];
+
+                if (!is_array($contracts)) continue;
+
+                foreach ($contracts as $c) {
+                    if (!is_array($c)) continue;
+                    $id = $c['id'] ?? $c['ncontrato'] ?? '';
+                    if ($id && isset($seen[$id])) continue;
+                    if ($id) $seen[$id] = true;
+
+                    $obj  = $c['objectoContrato']       ?? ($c['designacao']            ?? 'N/A');
+                    $ent  = $c['adjudicante']            ?? ($c['entidade']              ?? 'N/A');
+                    $win  = $c['adjudicatario']          ?? '';
+                    $val  = $c['precoContratual']        ?? ($c['valor']                 ?? '');
+                    $date = $c['dataCelebracaoContrato'] ?? ($c['dataPublicacao']         ?? 'N/A');
+                    $link = $id ? "https://www.base.gov.pt/Base/pt/Detalhe/Contratos/{$id}" : '';
+
+                    $line = "- OBJETO: {$obj} | ENTIDADE: {$ent}";
+                    if ($win)  $line .= " | ADJUDICATÁRIO: {$win}";
+                    if ($val)  $line .= " | VALOR: €{$val}";
+                    if ($date) $line .= " | DATA: {$date}";
+                    if ($link) $line .= " | URL: {$link}";
+                    $lines[] = $line;
+                }
+            } catch (\Throwable $e) {
+                Log::info("base.gov.pt [{$kw}]: " . $e->getMessage());
+            }
+        }
+
+        if (empty($lines)) {
+            return "(base.gov.pt: sem contratos adjudicados nos últimos 30 dias para os critérios navais/defesa)";
+        }
+
+        return "=== BASE.GOV.PT — Contratos Adjudicados (últimos 30 dias) ===\n" . implode("\n", $lines);
+    }
+
+    // ─── UNGM — direct public API ──────────────────────────────────────────
+    protected function fetchUNGM(): string
+    {
+        $dateFrom = now()->subDays(14)->format('Y-m-d');
+        $dateTo   = now()->format('Y-m-d');
+
+        $searchGroups = [
+            'marine naval vessel ship spare parts',
+            'maritime defense military procurement',
+            'diesel engine propulsion mechanical',
+        ];
+
+        $seen  = [];
+        $lines = [];
+
+        foreach ($searchGroups as $keywords) {
+            try {
+                $resp = $this->httpClient->get(
+                    'https://www.ungm.org/Public/Notice',
+                    [
+                        'query' => [
+                            'noticeType'    => '0',     // 0 = all
+                            'status'        => '0',     // 0 = active
+                            'keyword'       => $keywords,
+                            'pageIndex'     => '0',
+                            'pageSize'      => '10',
+                            'publishing_start' => $dateFrom,
+                            'publishing_end'   => $dateTo,
+                        ],
+                        'headers' => [
+                            'Accept'     => 'application/json, text/plain, */*',
+                            'User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
+                            'Referer'    => 'https://www.ungm.org/Public/Notice',
+                        ],
+                        'timeout' => 10,
+                    ]
+                );
+
+                $body    = $resp->getBody()->getContents();
+                $data    = json_decode($body, true);
+                $notices = $data['notices'] ?? $data['items'] ?? $data ?? [];
+
+                if (!is_array($notices)) continue;
+
+                foreach ($notices as $n) {
+                    if (!is_array($n)) continue;
+                    $id = $n['noticeId'] ?? $n['id'] ?? '';
+                    if ($id && isset($seen[$id])) continue;
+                    if ($id) $seen[$id] = true;
+
+                    $title    = $n['title']           ?? ($n['noticeTitle']    ?? 'N/A');
+                    $org      = $n['organization']    ?? ($n['organizationId'] ?? 'N/A');
+                    $deadline = $n['deadline']        ?? ($n['deadlineDate']   ?? 'N/A');
+                    $ref      = $n['reference']       ?? ($n['solNo']          ?? '');
+                    $link     = $id ? "https://www.ungm.org/Public/Notice/{$id}" : '';
+
+                    $line = "- TITLE: {$title} | ORG: {$org} | DEADLINE: {$deadline}";
+                    if ($ref)  $line .= " | REF: {$ref}";
+                    if ($link) $line .= " | URL: {$link}";
+                    $lines[] = $line;
+                }
+            } catch (\Throwable $e) {
+                Log::info("UNGM [{$keywords}]: " . $e->getMessage());
+            }
+        }
+
+        if (empty($lines)) return '';
+
+        return "=== UNGM — UN Global Marketplace Tenders (últimos 14 dias) ===\n" . implode("\n", $lines);
+    }
+
     // ─── Fetch contracts via Tavily — EU/UN portals ───────────────────────
     protected function fetchContracts(?callable $heartbeat = null): string
     {
@@ -361,92 +508,91 @@ MSG;
         // Tavily `days` filter — últimos 7 dias (mais tolerante do que 5 para apanhar mais resultados)
         $tavilyDays = 7;
 
-        // Portal 1: Acingov
-        // Nota: site: operator não funciona em portais fechados. Usamos queries naturais
-        // que o Tavily consegue indexar (notícias, relatórios, agregadores de contratos PT).
-        $emit("  `1/5` 🇵🇹 Acingov...\n");
-        if ($heartbeat) $heartbeat('a pesquisar Acingov');
+        // Portal 1: Acingov / DRE.pt
+        // Acingov é privado (paywall). Usamos queries largas que encontram
+        // anúncios publicados em DRE.pt, news e agregadores públicos.
+        $emit("  `1/5` 🇵🇹 Acingov / DRE...\n");
+        if ($heartbeat) $heartbeat('a pesquisar Acingov / DRE');
         $acingovData = '';
         if ($this->searcher->isAvailable()) {
             try {
-                // Tenta com vários ângulos para maximizar resultados
+                // DRE.pt publica todos os concursos obrigatoriamente — indexado publicamente
                 $acingovData = $this->searcher->search(
-                    'acingov concurso publico portugal naval maritimo defesa pecas sobressalentes 2026',
-                    5, 'basic', $tavilyDays
+                    'concurso público Portugal 2026 marinha peças sobressalentes motor naval manutenção',
+                    8, 'basic', $tavilyDays
                 );
                 if (strlen($acingovData) < 80) {
                     $acingovData = $this->searcher->search(
-                        'acingov.gov.pt concurso ajuste direto consulta prévia naval marinha 2026',
-                        5, 'basic', $tavilyDays
+                        'dre.pt contratação pública 2026 naval marítimo defesa equipamentos',
+                        8, 'basic', $tavilyDays
+                    );
+                }
+                if (strlen($acingovData) < 80) {
+                    // Very broad fallback — any PT public procurement
+                    $acingovData = $this->searcher->search(
+                        'concurso público Portugal março 2026 ajuste direto aquisição',
+                        8, 'basic', $tavilyDays
                     );
                 }
             } catch (\Throwable $e) {
-                Log::info('AcingovAgent [Acingov]: ' . $e->getMessage());
+                Log::info('AcingovAgent [Acingov/DRE]: ' . $e->getMessage());
             }
         }
 
-        // Portal 2: Vortal
-        $emit("  `2/5` 🇵🇹 Vortal...\n");
-        if ($heartbeat) $heartbeat('a pesquisar Vortal');
+        // Portal 2: Vortal / TED (European Tenders)
+        // Vortal é privado. Usamos TED (Tenders Electronic Daily, EU) que é público.
+        $emit("  `2/5` 🇵🇹 Vortal / TED Europa...\n");
+        if ($heartbeat) $heartbeat('a pesquisar Vortal / TED Europa');
         $vortalData = '';
         if ($this->searcher->isAvailable()) {
             try {
                 $vortalData = $this->searcher->search(
-                    'vortal concurso publico portugal naval maritimo defesa equipamento 2026',
-                    5, 'basic', $tavilyDays
+                    'ted.europa.eu OR vortal tender Portugal 2026 naval maritime defense equipment procurement',
+                    8, 'basic', $tavilyDays
                 );
                 if (strlen($vortalData) < 80) {
                     $vortalData = $this->searcher->search(
-                        'vortal.biz tender procurement portugal maritime defense spare parts',
-                        5, 'basic', $tavilyDays
+                        'TED tenders Portugal 2026 naval defesa equipamento maritime',
+                        8, 'basic', $tavilyDays
+                    );
+                }
+                if (strlen($vortalData) < 80) {
+                    $vortalData = $this->searcher->search(
+                        'European tender 2026 maritime naval spare parts Portugal defense procurement',
+                        8, 'basic', $tavilyDays
                     );
                 }
             } catch (\Throwable $e) {
-                Log::info('AcingovAgent [Vortal]: ' . $e->getMessage());
+                Log::info('AcingovAgent [Vortal/TED]: ' . $e->getMessage());
             }
         }
 
-        // Portal 3: UNGM
+        // Portal 3: UNGM — direct public API
         $emit("  `3/5` 🌍 UNGM...\n");
         if ($heartbeat) $heartbeat('a pesquisar UNGM');
-        $ungmData = '';
-        if ($this->searcher->isAvailable()) {
+        $ungmData = $this->fetchUNGM();
+        // Tavily fallback if direct API returns nothing
+        if (strlen($ungmData) < 80 && $this->searcher->isAvailable()) {
             try {
                 $ungmData = $this->searcher->search(
-                    'ungm.org tender maritime naval spare parts defense 2026',
+                    'site:ungm.org tender maritime naval spare parts defense procurement 2026',
                     5, 'basic', $tavilyDays
                 );
                 if (strlen($ungmData) < 80) {
                     $ungmData = $this->searcher->search(
-                        'UN Global Marketplace tender maritime naval equipment defense procurement 2026',
+                        'UNGM "United Nations Global Marketplace" tender maritime naval 2026 deadline',
                         5, 'basic', $tavilyDays
                     );
                 }
             } catch (\Throwable $e) {
-                Log::info('AcingovAgent [UNGM]: ' . $e->getMessage());
+                Log::info('AcingovAgent [UNGM Tavily fallback]: ' . $e->getMessage());
             }
         }
 
-        // Portal 4: base.gov.pt
+        // Portal 4: base.gov.pt — direct public API (no auth needed)
         $emit("  `4/5` 🇵🇹 base.gov.pt (adjudicados)...\n");
         if ($heartbeat) $heartbeat('a pesquisar base.gov.pt');
-        $baseGovData = '';
-        if ($this->searcher->isAvailable()) {
-            try {
-                $baseGovData = $this->searcher->search(
-                    'base.gov.pt contratos adjudicados naval maritimo defesa manutenção motores 2026',
-                    5, 'basic', $tavilyDays
-                );
-                if (strlen($baseGovData) < 80) {
-                    $baseGovData = $this->searcher->search(
-                        'base.gov.pt adjudicação contrato marinha portuguesa porto peças sobressalentes',
-                        5, 'basic', $tavilyDays
-                    );
-                }
-            } catch (\Throwable $e) {
-                Log::info('AcingovAgent [base.gov.pt]: ' . $e->getMessage());
-            }
-        }
+        $baseGovData = $this->fetchBaseGovPt();
 
         // Portal 5: SAM.gov
         $emit("  `5/5` 🇺🇸 SAM.gov...\n\n");
@@ -461,10 +607,10 @@ MSG;
 
         $allData = implode("\n\n", array_filter(
             [
-                '[ACINGOV]' . $acingovData,
-                '[VORTAL]' . $vortalData,
-                '[UNGM]' . $ungmData,
-                '[BASE.GOV.PT - Adjudicados]' . $baseGovData,
+                '[ACINGOV/DRE.pt - Concursos PT]' . $acingovData,
+                '[VORTAL/TED Europa - Concursos EU]' . $vortalData,
+                '[UNGM - UN Tenders]' . $ungmData,
+                '[BASE.GOV.PT - Contratos Adjudicados]' . $baseGovData,
                 '[SAM.gov]' . $samData,
             ],
             fn($v) => strlen($v) > 30
@@ -508,11 +654,14 @@ Depois do relatório por área:
 (acções concretas para a equipa PartYard esta semana)
 
 REGRAS:
-- INCLUI APENAS contratos dos últimos 5 dias ({$dateFrom}–{$dateTo})
+- INCLUI contratos/concursos encontrados (base.gov.pt tem janela 30 dias, os restantes 5-14 dias)
 - Se não houver contratos numa área, omite essa secção
 - Usa SEMPRE os links reais dos dados fornecidos
 - SAM.gov = alta prioridade PartYard Military (DoD, Navy, Coast Guard)
 - base.gov.pt = inteligência competitiva — quem ganhou, a que preço
+- DRE.pt/Acingov = concursos abertos em Portugal
+- TED/Vortal = concursos abertos na Europa (obrigatório publicar acima de €140k)
+- UNGM = tenders ONU/organizações internacionais
 
 --- DADOS DOS 5 PORTAIS ---
 {$allData}
