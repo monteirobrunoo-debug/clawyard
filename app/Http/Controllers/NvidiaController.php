@@ -321,14 +321,14 @@ class NvidiaController extends Controller
                     'session_id' => $sessionId,
                 ];
                 echo 'data: ' . json_encode($meta) . "\n\n";
-                ob_flush(); flush();
+                flush();
 
                 // Single chunk with full reply
                 echo 'data: ' . json_encode(['chunk' => $reply]) . "\n\n";
-                ob_flush(); flush();
+                flush();
 
                 echo "data: [DONE]\n\n";
-                ob_flush(); flush();
+                flush();
             }, 200, [
                 'Content-Type'      => 'text/event-stream',
                 'Cache-Control'     => 'no-cache',
@@ -361,6 +361,11 @@ class NvidiaController extends Controller
             $resolvedAgentLog, $suggestions, $agentModel, $agentName_final,
             $conversationRef, $sessionId, $userId
         ) {
+            // Flush all PHP output buffers so SSE data reaches the browser immediately
+            // (PHP-FPM output_buffering=4096 would otherwise hold small packets)
+            while (ob_get_level() > 0) { ob_end_flush(); }
+            flush();
+
             // Send metadata first so the JS can set up the message bubble correctly
             $meta = [
                 'type'        => 'meta',
@@ -372,12 +377,12 @@ class NvidiaController extends Controller
                 'suggestions' => $suggestions,
             ];
             echo 'data: ' . json_encode($meta) . "\n\n";
-            ob_flush(); flush();
+            flush();
 
             // Heartbeat: keeps Nginx/Cloudflare alive during slow external fetches
             $heartbeat = function (string $status = '') {
                 echo ': heartbeat' . ($status ? " {$status}" : '') . "\n\n";
-                ob_flush(); flush();
+                flush();
             };
 
             try {
@@ -386,7 +391,7 @@ class NvidiaController extends Controller
                     $resolvedHistory,
                     function (string $chunk) {
                         echo 'data: ' . json_encode(['chunk' => $chunk]) . "\n\n";
-                        ob_flush(); flush();
+                        flush();
                     },
                     $heartbeat
                 );
@@ -401,9 +406,9 @@ class NvidiaController extends Controller
                     ? 'Erro ao processar: ' . $e->getMessage()
                     : $e->getMessage();
                 echo 'data: ' . json_encode(['error' => $errMsg]) . "\n\n";
-                ob_flush(); flush();
+                flush();
                 echo "data: [DONE]\n\n";
-                ob_flush(); flush();
+                flush();
                 return;
             }
 
@@ -448,7 +453,7 @@ class NvidiaController extends Controller
             }
 
             echo "data: [DONE]\n\n";
-            ob_flush(); flush();
+            flush();
         }, 200, [
             'Content-Type'      => 'text/event-stream',
             'Cache-Control'     => 'no-cache',
