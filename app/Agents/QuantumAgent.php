@@ -272,75 +272,68 @@ PROMPT;
             $token = $this->fetchEpoAccessToken();
             if (!$token) return '(EPO API token unavailable — check EPO_CONSUMER_KEY/SECRET in .env)';
 
-            // EPO OPS CQL: field code ta= means title+abstract search
+            // EPO OPS CQL: ta= searches title+abstract (correct EPO OPS field code)
+            // Using /search/biblio constituent to get title+applicant in a single call
             $cql = urlencode(
                 'ta="marine propulsion" OR ta="ship engine" OR ta="naval propulsion" ' .
                 'OR ta="predictive maintenance" OR ta="quantum cryptography" OR ta="autonomous vessel"'
             );
 
-            $url = "https://ops.epo.org/3.2/rest-services/published-data/search?q={$cql}&Range=1-8";
+            // /search/biblio returns exchange-documents with full biblio data directly
+            $url = "https://ops.epo.org/3.2/rest-services/published-data/search/biblio?q={$cql}";
 
             $response = $this->httpClient->get($url, [
                 'headers' => [
                     'Authorization' => "Bearer {$token}",
                     'Accept'        => 'application/json',
-                    'X-OPS-Accept-Encoding' => 'text',
+                    'X-OPS-Range'   => '1-8',
                 ],
             ]);
 
             $data = json_decode($response->getBody()->getContents(), true);
 
-            // Navigate the EPO OPS response structure
-            $results = $data['ops:world-patent-data']['ops:biblio-search']['ops:search-result']['ops:publication-reference'] ?? [];
+            // /search/biblio returns exchange-documents directly in search result
+            $searchResult = $data['ops:world-patent-data']['ops:biblio-search']['ops:search-result'] ?? [];
+            $docs = $searchResult['exchange-documents']['exchange-document'] ?? [];
 
-            // If single result, wrap in array
-            if (isset($results['@country'])) $results = [$results];
-
-            if (empty($results)) return '(EPO: sem patentes encontradas para os critérios de pesquisa)';
+            // Single result: wrap in array
+            if (isset($docs['@country'])) $docs = [$docs];
+            if (empty($docs)) return '(EPO: sem patentes encontradas para os critérios)';
 
             $lines = [];
-            foreach (array_slice($results, 0, 8) as $ref) {
-                $docId   = $ref['document-id'] ?? $ref;
-                $country = $docId['@country'] ?? ($docId['country']['$'] ?? '');
-                $docNum  = $docId['@doc-number'] ?? ($docId['doc-number']['$'] ?? '');
-                $kind    = $docId['@kind'] ?? ($docId['kind']['$'] ?? '');
-                $patNum  = trim("{$country}{$docNum}{$kind}");
+            foreach (array_slice($docs, 0, 8) as $doc) {
+                $bib = $doc['bibliographic-data'] ?? [];
 
-                if (!$patNum || $patNum === '') continue;
+                // Patent number from publication reference
+                $pubRef  = $bib['publication-reference']['document-id'] ?? [];
+                if (isset($pubRef[0])) $pubRef = $pubRef[0]; // first doc-id (epodoc format)
+                $country = $pubRef['country']['$'] ?? ($pubRef['@country'] ?? '');
+                $docNum  = $pubRef['doc-number']['$'] ?? ($pubRef['@doc-number'] ?? '');
+                $kind    = $pubRef['kind']['$'] ?? ($pubRef['@kind'] ?? '');
+                $patNum  = trim("{$country}{$docNum}{$kind}");
+                if (!$patNum) continue;
+
+                // Title (prefer English)
+                $title  = 'N/A';
+                $titles = $bib['invention-title'] ?? [];
+                if (isset($titles['$'])) {
+                    $title = $titles['$'];
+                } elseif (is_array($titles)) {
+                    foreach ($titles as $t) {
+                        if (($t['@lang'] ?? '') === 'en') { $title = $t['$'] ?? $title; break; }
+                    }
+                    if ($title === 'N/A' && !empty($titles[0]['$'])) $title = $titles[0]['$'];
+                }
+
+                // Applicant
+                $applicant = 'N/A';
+                $parties   = $bib['parties']['applicants']['applicant'] ?? [];
+                if (!empty($parties)) {
+                    $first     = isset($parties[0]) ? $parties[0] : $parties;
+                    $applicant = $first['applicant-name']['name']['$'] ?? 'N/A';
+                }
 
                 $espUrl = 'https://worldwide.espacenet.com/patent/search?q=pn%3D' . urlencode($patNum);
-
-                // Try to fetch biblio details for title/applicant
-                $title     = 'N/A';
-                $applicant = 'N/A';
-                try {
-                    $biblioResp = $this->httpClient->get(
-                        "https://ops.epo.org/3.2/rest-services/published-data/publication/epodoc/{$patNum}/biblio",
-                        ['headers' => ['Authorization' => "Bearer {$token}", 'Accept' => 'application/json']]
-                    );
-                    $bib   = json_decode($biblioResp->getBody()->getContents(), true);
-                    $exDoc = $bib['ops:world-patent-data']['exchange-documents']['exchange-document'] ?? [];
-                    $bib2  = (isset($exDoc[0]) ? $exDoc[0] : $exDoc)['bibliographic-data'] ?? [];
-
-                    // Title
-                    $titles = $bib2['invention-title'] ?? [];
-                    if (isset($titles['$'])) $title = $titles['$'];
-                    elseif (is_array($titles)) {
-                        foreach ($titles as $t) {
-                            if (($t['@lang'] ?? '') === 'en') { $title = $t['$'] ?? $title; break; }
-                        }
-                        if ($title === 'N/A' && !empty($titles[0]['$'])) $title = $titles[0]['$'];
-                    }
-
-                    // Applicant
-                    $parties = $bib2['parties']['applicants']['applicant'] ?? [];
-                    if (!empty($parties)) {
-                        $first = $parties[0] ?? $parties;
-                        $applicant = $first['applicant-name']['name']['$'] ?? ($first['$'] ?? 'N/A');
-                    }
-                } catch (\Throwable $e) {
-                    // biblio fetch failed — still include patent number
-                }
 
                 // Auto-save to discoveries
                 try {
