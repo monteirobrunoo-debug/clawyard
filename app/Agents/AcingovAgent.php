@@ -298,6 +298,12 @@ MSG;
     // ─── stream() ──────────────────────────────────────────────────────────
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        // Flush & destroy all PHP output buffers so every echo() reaches the
+        // browser immediately without waiting for the 4096-byte buffer to fill
+        while (ob_get_level() > 0) {
+            ob_end_flush();
+        }
+
         $today = now()->format('Y-m-d H:i');
         $full  = '';
 
