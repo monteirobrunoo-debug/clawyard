@@ -449,8 +449,8 @@
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
-            <button class="icon-btn" id="image-btn" type="button" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)">📎</button>
-            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
+            <label for="image-input" class="icon-btn" id="image-btn" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)" style="cursor:pointer;display:flex;align-items:center;justify-content:center">📎</label>
+            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none">
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -785,13 +785,13 @@ function humanSize(bytes) {
     return (bytes/1048576).toFixed(1) + ' MB';
 }
 
-// 📎 button → programmatically opens hidden file input (display:none works with .click())
-document.getElementById('image-btn').addEventListener('click', function () {
-    var inp = document.getElementById('image-input');
-    inp.value = ''; // reset so re-selecting the same file always fires 'change'
-    inp.click();
+// 📎 label → browser opens file picker natively via <label for="image-input">
+// No JS click() needed — label click is handled by the browser directly.
+document.getElementById('image-input').addEventListener('change', function(e) {
+    fileInputChangeHandler(e);
+    // Reset so re-selecting the same file always fires 'change' again
+    e.target.value = '';
 });
-document.getElementById('image-input').addEventListener('change', fileInputChangeHandler);
 
 document.getElementById('remove-image').addEventListener('click', clearImage);
 function clearImage() {
