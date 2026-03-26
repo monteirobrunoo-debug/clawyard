@@ -14,8 +14,10 @@ class SapService
     protected string $username;
     protected string $password;
 
-    const SESSION_CACHE_KEY = 'sap_b1_session';
-    const SESSION_TTL       = 25; // minutes (SAP default = 30 min)
+    const SESSION_CACHE_KEY  = 'sap_b1_session';
+    const SESSION_TTL        = 25; // minutes (SAP default = 30 min)
+    const SESSION_FAILED_KEY = 'sap_b1_login_failed';
+    const SESSION_FAILED_TTL = 2;  // minutes — negative cache to avoid multi-login hangs
 
     public function __construct()
     {
@@ -58,6 +60,7 @@ class SapService
 
             if ($sessionId) {
                 Cache::put(self::SESSION_CACHE_KEY, $sessionId, now()->addMinutes(self::SESSION_TTL));
+                Cache::forget(self::SESSION_FAILED_KEY); // clear negative cache on success
                 return true;
             }
 
@@ -72,12 +75,21 @@ class SapService
 
     /**
      * Ensure we have a valid session. Login if needed.
+     * Negative-caches failures for SESSION_FAILED_TTL minutes to prevent
+     * repeated login attempts (each 30 s) when SAP is unreachable.
      */
     protected function ensureSession(): ?string
     {
+        // Short-circuit: recent login failure — skip to avoid hanging
+        if (Cache::has(self::SESSION_FAILED_KEY)) return null;
+
         $session = Cache::get(self::SESSION_CACHE_KEY);
         if (!$session) {
-            $this->login();
+            $ok = $this->login();
+            if (!$ok) {
+                Cache::put(self::SESSION_FAILED_KEY, 1, now()->addMinutes(self::SESSION_FAILED_TTL));
+                return null;
+            }
             $session = Cache::get(self::SESSION_CACHE_KEY);
         }
         return $session ?: null;
