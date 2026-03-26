@@ -361,6 +361,7 @@
         <option value="research">🔍 Marina Research</option>
         <option value="capitao">⚓ Capitão Porto</option>
         <option value="acingov">🏛️ Dra. Ana Contratos</option>
+        <option value="engineer">🔩 Eng. Victor I&amp;D</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -409,6 +410,7 @@
                 <div class="agent-mini" data-agent="quantum"><div class="dot-status"></div><span>⚛️ Prof. Quantum Leap</span></div>
                 <div class="agent-mini" data-agent="finance"><div class="dot-status"></div><span>💰 Dr. Luís Financeiro</span></div>
                 <div class="agent-mini" data-agent="research"><div class="dot-status"></div><span>🔍 Marina Research</span></div>
+                <div class="agent-mini" data-agent="engineer"><div class="dot-status"></div><span>🔩 Eng. Victor I&D</span></div>
             </div>
         </div>
     </div>
@@ -487,7 +489,7 @@ const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
-    capitao:'⚓', acingov:'🏛️'
+    capitao:'⚓', acingov:'🏛️', engineer:'🔩'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -500,7 +502,8 @@ const AGENT_NAMES = {
     email:'Daniel Email', sap:'Richard SAP', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
     aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research',
     capitao:'Capitão Porto',
-    acingov:'Dra. Ana Contratos'
+    acingov:'Dra. Ana Contratos',
+    engineer:'Eng. Victor I&D'
 };
 
 const AGENT_COLORS = {
@@ -510,7 +513,8 @@ const AGENT_COLORS = {
     nvidia:'#76b900', aria:'#ef4444', quantum:'#22d3ee',
     finance:'#10b981', research:'#f97316',
     capitao:'#0ea5e9',
-    acingov:'#f59e0b'
+    acingov:'#f59e0b',
+    engineer:'#f97316'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -529,6 +533,7 @@ const AGENT_DESCRIPTIONS = {
     research: 'Pesquisa de mercado, concorrência e análise de websites',
     capitao: 'Operações portuárias, escalas, documentação e logística marítima',
     acingov: 'SAM.gov · base.gov.pt · Vortal · UNIDO · UNGM — contratos públicos para PartYard',
+    engineer: 'I&D e desenvolvimento de produto — planos, TRL, CAPEX e roadmap para novos equipamentos PartYard',
 };
 
 const AGENT_CHIPS = {
@@ -657,6 +662,15 @@ const AGENT_CHIPS = {
         '🏛️ Oportunidades UNIDO e UNGM para PartYard Military e SETQ esta semana',
         '🏛️ Qual o contrato com prazo mais urgente nos 5 portais? Ranking por deadline',
         '🏛️ SAM.gov NAICS 336611 e 334511 — ship building e defense navigation abertos',
+    ],
+    // ── Eng. Victor I&D ────────────────────────────────────────────────────
+    engineer: [
+        '🔩 Analisa o briefing do Renato e propõe 3 novos produtos para desenvolver',
+        '🛩️ Plano de desenvolvimento: kit de reparação certificado MIL-SPEC para AH-64 Apache',
+        '🛢️ ARMITE: plano I&D para novo lubrificante bio-based MIL-PRF-32033 sustentável',
+        '🎯 Roadmap completo: simulador de voo part-task trainer para C-130 — TRL, CAPEX, parceiros',
+        '🔐 SETQ: plano de produto HSM (Hardware Security Module) para instalações NATO',
+        '🚗 Retrofit kit para Leopard 2: sistema de gestão de potência com IA — viabilidade técnica',
     ],
     // ── Capitão Porto ─────────────────────────────────────────────────────
     capitao: [

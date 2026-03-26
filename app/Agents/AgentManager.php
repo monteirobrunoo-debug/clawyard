@@ -24,6 +24,7 @@ class AgentManager
             'finance'   => new FinanceAgent(),
             'capitao'   => new CapitaoAgent(),
             'acingov'   => new AcingovAgent(),
+            'engineer'  => new EngineerAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -110,6 +111,24 @@ class AgentManager
         ];
         foreach ($financeKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['finance'];
+        }
+
+        // Engineer / R&D / product development keywords
+        $engineerKeywords = [
+            'victor', 'eng. victor', 'engenheiro', 'engineer', 'i&d', 'r&d',
+            'fabricar', 'manufacture', 'construir equipamento', 'build equipment',
+            'desenvolver produto', 'develop product', 'protótipo', 'prototype',
+            'plano de desenvolvimento', 'development plan', 'roadmap técnico',
+            'viabilidade técnica', 'technical feasibility', 'mil-spec', 'do-160',
+            'armite formulação', 'lubrificante novo', 'new lubricant',
+            'simulador', 'simulator', 'training system', 'sistema de treino',
+            'novo produto', 'new product', 'novo equipamento', 'new equipment',
+            'certificação easa', 'faa certification', 'as9100', 'as9120',
+            'patente', 'patent', 'licenciar tecnologia', 'technology license',
+            'trl', 'technology readiness', 'capex desenvolvimento', 'desenvolvimento produto',
+        ];
+        foreach ($engineerKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['engineer'];
         }
 
         // Research / competitive intelligence keywords
