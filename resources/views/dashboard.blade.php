@@ -202,6 +202,7 @@
         ['key' => 'finance',     'name' => 'Dr. Luís Financeiro',   'emoji' => '💰', 'role' => 'ROC · TOC · PhD Gestão Bancária — Contabilidade, Auditoria e Fiscalidade',              'color' => '#10b981'],
         ['key' => 'research',    'name' => 'Marina Research',       'emoji' => '🔍', 'role' => 'Inteligência competitiva — benchmarking, mercado e melhorias do site',                  'color' => '#f97316'],
         ['key' => 'acingov',     'name' => 'Dra. Ana Contratos',    'emoji' => '🏛️', 'role' => 'Contratação pública — concursos Acingov classificados por relevância para PartYard',       'color' => '#f59e0b'],
+        ['key' => 'engineer',    'name' => 'Eng. Victor I&D',       'emoji' => '🔩', 'role' => 'I&D e Desenvolvimento de Produto — planos TRL, CAPEX, roadmap para novos equipamentos PartYard', 'color' => '#f97316'],
     ];
     @endphp
 
