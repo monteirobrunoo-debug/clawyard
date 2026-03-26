@@ -31,36 +31,101 @@ Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública par
 EMPRESA — CONTEXTO:
 [PROFILE_PLACEHOLDER]
 
-A sua missão: analisar concursos públicos de 6 portais (base.gov.pt, Acingov, Vortal, UNIDO, UNGM e **SAM.gov** — contratos federais dos EUA) e identificar oportunidades para o HP-Group e suas subsidiárias (PartYard Marine, PartYard Military, SETQ, IndYard).
+A sua missão: analisar concursos públicos de 6 portais (base.gov.pt, Acingov, Vortal, UNIDO, UNGM e **SAM.gov** — contratos federais dos EUA) e identificar oportunidades para o HP-Group e todas as suas subsidiárias.
 
-CRITÉRIOS DE CLASSIFICAÇÃO:
+═══════════════════════════════════════════
+ÂMBITOS DE NEGÓCIO DO HP-GROUP / PARTYARD
+═══════════════════════════════════════════
+
+🛩️ **PARTYARD DEFENSE & AEROSPACE — Aviação Militar e Civil**
+Manutenção, Reparação e Revisão (MRO) de aeronaves + fornecimento de peças sobressalentes:
+- Aeronaves militares: Boeing AH-64 Apache, CH-47 Chinook, Lockheed C-130 Hercules,
+  Lockheed F-16 Fighting Falcon, Sikorsky UH-60 Black Hawk
+- Aeronaves civis/regionais: Embraer (135/140/145/170/175/190/195),
+  Boeing (717/727/757/767/777), Airbus (A300/A310/A318/A321/A330/A340/A380),
+  ATR-42/72, Bombardier DHC-8, Fokker F-28, McDonnell Douglas (DC-9/DC-10/MD-80/MD-90)
+- Certificação AS:9120 (qualidade aeronáutica) + NATO NCAGE P3527
+- Fornecedor aprovado: Força Aérea, Exército (aviação), NATO Air Command
+
+⚓ **PARTYARD MARINE — Naval e Marítimo**
+Peças sobressalentes e serviços de manutenção para propulsão naval:
+- Motores: MTU, Caterpillar (CAT), MAK, Jenbacher, Cummins, Wärtsilä, MAN (2T e 4T)
+- Sistemas: SKF SternTube seals, Schottel propulsores e thrusters
+- Clientes: Marinha Portuguesa, armadores, shipyards, autoridades portuárias
+- Entrega de emergência mundial em 24–72h
+
+🚗 **PARTYARD MILITARY — Sistemas Terrestres**
+Fornecimento de peças e suporte técnico para veículos e sistemas militares terrestres:
+- Veículos blindados, viaturas táticas, sistemas de artilharia
+- Manutenção e suporte logístico a frotas militares de terra
+- Equipamentos NATO e parceiros de defesa
+
+🎯 **SIMULAÇÃO E TREINO MILITAR**
+Sistemas integrados de treino e simulação para defesa:
+- Simuladores de missão (ar, mar, terra)
+- Sistemas de treino táctico para forças armadas e NATO
+- Plataformas de simulação para pilotos e tripulações
+
+🛢️ **ARMITE — Lubrificantes Industriais e Táticos**
+Linha de lubrificantes de grau tático/industrial para ambientes severos:
+- Lubrificantes para aviação, naval e veículos militares
+- Fluidos hidráulicos, óleos de motor, graxas especiais
+- Aprovados para uso em equipamentos de defesa
+
+💻 **SETQ — Cibersegurança e IT**
+Soluções de IT e cibersegurança para organismos públicos e defesa:
+- Cibersegurança para infraestruturas críticas e militares
+- Quantum Network e soluções de rede segura
+- Software e sistemas de informação para defesa
+
+🏭 **INDYARD — Serviços Industriais**
+Engenharia e serviços industriais de suporte:
+- Manutenção de geradores e motores de grande porte
+- Supply chain e logística de peças industriais
+- Consultoria técnica e engenharia
+
+🏆 **CERTIFICAÇÕES E ACREDITAÇÕES**
+- ISO 9001:2015 (qualidade)
+- AS:9120 (qualidade aeronáutica — peças de aviação)
+- NATO NCAGE P3527 (fornecedor oficial NATO)
+- COGEMA partner (desde 1959)
+- Escritórios: Portugal, EUA, UK, Brasil, Noruega
+
+═══════════════════════════════════════════
+CRITÉRIOS DE CLASSIFICAÇÃO
+═══════════════════════════════════════════
 
 🟢 ALTA PRIORIDADE — Candidatura imediata:
-- Peças sobressalentes navais / marítimas (motores MTU, Caterpillar, MAK, Jenbacher)
-- Manutenção de frotas marítimas e equipamentos portuários
-- Fornecimento de peças para Marinha Portuguesa / autoridades portuárias
-- Contratos de defesa / NATO / equipamentos militares
-- Sistemas de propulsão naval (Schottel, SKF SternTube)
-- Cibersegurança e IT para organismos públicos (SETQ)
+→ AVIAÇÃO: MRO de aeronaves militares/civis, peças sobressalentes aeronáuticas, suporte técnico a frotas aéreas militares, helicópteros (Apache/Chinook/Black Hawk), F-16, C-130
+→ NAVAL: Peças motores MTU/CAT/MAK/Wärtsilä/MAN, manutenção frotas marítimas, Marinha Portuguesa, propulsão naval
+→ DEFESA/NATO: Contratos NATO, equipamentos militares, defesa nacional, NSPA (NATO Support & Procurement Agency)
+→ SIMULAÇÃO: Sistemas de treino e simulação militar
+→ CIBERSEGURANÇA: IT/cyber para forças armadas, SETQ
+→ LUBRIFICANTES: Contratos de lubrificantes táticos/aviação/naval (ARMITE)
 
 🟡 MÉDIA PRIORIDADE — Avaliar com parceiro:
-- Logística e supply chain para infraestruturas portuárias
-- Manutenção de geradores e motores de grande porte
-- Equipamentos industriais (rolamentos, vedantes, componentes mecânicos)
-- Serviços de engenharia e consultoria técnica
+→ Manutenção de aeronaves civis (companhias aéreas, TAP, SATA)
+→ Logística e supply chain para infraestruturas portuárias e aeroportuárias
+→ Manutenção de geradores e motores industriais de grande porte
+→ Equipamentos industriais (rolamentos, vedantes, componentes mecânicos)
+→ Veículos e equipamentos para forças de segurança (PSP, GNR, SEF)
+→ Serviços de engenharia e consultoria técnica
 
 🔴 BAIXA RELEVÂNCIA — Monitorizar apenas:
-- Obras de construção civil
-- Serviços de limpeza e segurança
-- IT genérico sem componente naval/defesa
+→ Obras de construção civil
+→ Serviços de limpeza, vigilância e segurança física
+→ IT genérico sem componente defesa/naval/aviação
+→ Mobiliário, material de escritório, catering
 
 FORMAT DE RESPOSTA:
 Para cada concurso encontrado, apresenta:
 - 📋 **Entidade**: quem lançou o concurso
 - 📌 **Objeto**: o que se pretende contratar
-- 💶 **Valor Base**: valor estimado
-- ⏰ **Prazo**: data limite de submissão
-- 🎯 **Relevância PartYard**: Alta / Média / Baixa + justificação
+- 💶 **Valor Base**: valor estimado (ou N/A)
+- 📅 **Publicação**: data de publicação (ou N/A)
+- ⏰ **Prazo**: data limite de submissão — SEMPRE mostrar, mesmo que seja N/A
+- 🏢 **Subsidiária PartYard**: qual a empresa do grupo mais indicada (Marine/Military/Defense Aerospace/SETQ/ARMITE/IndYard)
+- 🎯 **Relevância**: Alta / Média / Baixa + justificação em 1 linha
 - 💡 **Ação**: candidatar / avaliar parceria / monitorizar / ignorar
 - 🔗 **Link**: URL directo
 
@@ -105,19 +170,19 @@ PROMPT;
 
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
 
-        // Keyword groups — each maps to a PartYard business area.
+        // Keyword groups — one per PartYard business area.
         // SAM.gov supports OR syntax natively. No NAICS filter → Claude classifies.
         $keywordGroups = [
-            // PartYard Marine / Military — core
-            'marine OR naval OR ship OR vessel OR maritime OR coast guard OR propulsion OR watercraft',
-            // Defense & NATO supply
-            'defense OR military OR navy OR army OR NATO OR ammunition OR ordnance OR weapon system',
-            // Engine & mechanical parts (MTU, Caterpillar, MAK)
-            '"spare parts" OR "engine overhaul" OR "diesel engine" OR "propulsion system" OR "ship repair"',
-            // IT & cybersecurity (SETQ subsidiary)
-            'cybersecurity OR "information technology" OR "network security" OR "software development"',
-            // Logistics & supply chain
-            '"supply chain" OR "logistics support" OR "parts distribution" OR "warehousing" OR "depot maintenance"',
+            // ⚓ PartYard Marine — naval/maritime propulsion & spare parts
+            'marine OR naval OR ship OR vessel OR maritime OR "coast guard" OR propulsion OR watercraft OR "ship repair" OR "port equipment"',
+            // 🛩️ PartYard Defense Aerospace — aircraft MRO & spare parts
+            '"aircraft maintenance" OR "aircraft parts" OR "aviation spare parts" OR MRO OR helicopter OR "F-16" OR "C-130" OR "AH-64" OR "CH-47" OR "UH-60" OR airframe OR avionics OR "fixed wing" OR "rotary wing"',
+            // 🚗 PartYard Military — land systems & defense supply
+            '"spare parts" OR "defense supply" OR "military vehicle" OR "armored vehicle" OR NATO OR NSPA OR "ordnance" OR "ground equipment" OR "army logistics"',
+            // 🎯 Simulation & training + 🛢️ Lubricants (ARMITE)
+            '"training system" OR "simulation system" OR "flight simulator" OR "combat training" OR lubricant OR "hydraulic fluid" OR "aviation oil" OR "tactical lubricant" OR "industrial lubricant"',
+            // 💻 SETQ — IT & cybersecurity for defense/public
+            'cybersecurity OR "information security" OR "network security" OR "secure communications" OR "C4ISR" OR "command and control" OR "software development" OR SIEM OR "zero trust"',
         ];
 
         $allOpps  = [];
@@ -244,16 +309,50 @@ PROMPT;
         ]);
 
         try {
-            // Step 1: GET homepage to initialise PHP session
+            // Step 1: GET homepage to initialise PHP session cookie
             $client->get($baseUrl);
 
-            // Step 2: POST login credentials
-            $client->post($baseUrl, [
-                'form_params' => ['user' => $username, 'pass' => $password],
-            ]);
+            // Step 2: POST login — try the most common CodeIgniter v2 login paths
+            $loginUrls = [
+                $baseUrl . 'utilizador/login',          // CI controller/method
+                $baseUrl . 'login',                     // alias
+                $baseUrl,                               // root POST (fallback)
+            ];
 
-            // Step 3: Scrape authenticated procedures list with multiple keywords
-            $keywords = ['naval', 'marinha', 'maritimo', 'motor', 'peças sobressalentes', 'defesa', 'porto'];
+            $loggedIn = false;
+            foreach ($loginUrls as $loginUrl) {
+                try {
+                    $loginResp = $client->post($loginUrl, [
+                        'form_params' => ['user' => $username, 'pass' => $password],
+                        'allow_redirects' => ['max' => 5, 'strict' => true],
+                    ]);
+                    $loginHtml = $loginResp->getBody()->getContents();
+                    // If the response no longer shows a login form, assume success
+                    if (stripos($loginHtml, 'name="user"') === false && stripos($loginHtml, 'name="pass"') === false) {
+                        $loggedIn = true;
+                        break;
+                    }
+                } catch (\Throwable) {}
+            }
+
+            // Proceed anyway — some CI apps set the session cookie on login even when
+            // the response body still contains the form; the next GET will reveal success.
+
+            // Step 3: Scrape authenticated procedures list — all PartYard business areas
+            $keywords = [
+                // Naval & Marítimo
+                'naval', 'marinha', 'maritimo', 'porto', 'propulsão',
+                // Aviação & Aeronáutica (PartYard Defense Aerospace)
+                'aeronave', 'aviação', 'helicoptero', 'aeronautica', 'MRO',
+                // Sistemas terrestres & defesa
+                'defesa', 'militar', 'veiculo blindado', 'armamento',
+                // Motores & peças
+                'motor', 'peças sobressalentes', 'manutenção',
+                // Simulação & treino
+                'simulação', 'treino militar', 'simulador',
+                // IT & Cibersegurança (SETQ)
+                'cibersegurança', 'segurança informática',
+            ];
             $seen     = [];
             $lines    = [];
 
@@ -289,7 +388,18 @@ PROMPT;
     protected function fetchAcingovPublic(): string
     {
         $baseUrl  = 'https://www.acingov.pt/acingovprod/2/zonaPublica/zona_publica_c/indexProcedimentos';
-        $keywords = ['naval', 'marinha', 'maritimo', 'motor', 'defesa'];
+        $keywords = [
+            // Naval & Marítimo
+            'naval', 'marinha', 'maritimo', 'porto',
+            // Aviação & Aeronáutica
+            'aeronave', 'aviação', 'aeronautica', 'helicoptero',
+            // Defesa & Militar
+            'defesa', 'militar', 'armamento',
+            // Motores & peças
+            'motor', 'peças sobressalentes',
+            // Simulação & Cibersegurança
+            'simulação', 'cibersegurança',
+        ];
         $seen     = [];
         $lines    = [];
 
@@ -317,10 +427,13 @@ PROMPT;
     }
 
     /**
-     * Parse the Acingov HTML table and return formatted lines.
-     * Columns: Nº Procedimento | Tipo | Objeto de Contrato | Entidade | Estado [| Prazo (auth only)]
+     * Parse the Acingov HTML — handles both table and div-based layouts.
      *
-     * @param  bool  $authenticated  Whether coming from the private area (has more columns)
+     * Public zone columns : Nº | Tipo | Objeto | Entidade | Estado   (no date)
+     * Auth zone columns   : Referência | Objeto | Prazo | Entidade | DRE | CPV
+     *                       + <div class="announcement-publish-date"> inside each row
+     *
+     * @param  bool  $authenticated  Whether coming from the private area
      */
     protected function parseAcingovTable(string $html, array &$seen, bool $authenticated = false): array
     {
@@ -331,29 +444,133 @@ PROMPT;
             @$dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
             $xpath = new \DOMXPath($dom);
 
-            // Find all <tr> inside <table>, skip header row(s)
+            // ── Strategy A: table rows (works for both zones) ──────────────
             $rows = $xpath->query('//table//tr[position()>1]');
-            if (!$rows || $rows->length === 0) return [];
 
-            foreach ($rows as $row) {
-                $cells = $xpath->query('.//td', $row);
-                if (!$cells || $cells->length < 3) continue;
+            if ($rows && $rows->length > 0) {
+                foreach ($rows as $row) {
+                    $cells = $xpath->query('.//td', $row);
+                    if (!$cells || $cells->length < 2) continue;
 
-                $ref    = trim($cells->item(0)->textContent);
-                $tipo   = trim($cells->item(1)->textContent);
-                $objeto = trim($cells->item(2)->textContent);
-                $entidade = $cells->length > 3 ? trim($cells->item(3)->textContent) : '';
-                $estado   = $cells->length > 4 ? trim($cells->item(4)->textContent) : '';
-                $prazo    = $cells->length > 5 ? trim($cells->item(5)->textContent) : '';
+                    $ref    = trim($cells->item(0)->textContent ?? '');
+                    $objeto = '';
+                    $tipo   = '';
+                    $entidade = '';
+                    $estado   = '';
+                    $prazo    = '';
 
-                // Clean up whitespace/newlines in object text
-                $objeto = preg_replace('/\s+/', ' ', $objeto);
+                    if ($authenticated) {
+                        // Auth layout: ref | objeto | prazo-col | entidade | DRE | CPV
+                        $objeto   = $cells->length > 1 ? trim($cells->item(1)->textContent ?? '') : '';
+                        $entidade = $cells->length > 3 ? trim($cells->item(3)->textContent ?? '') : '';
 
-                // Attempt to get a link to the procedure
-                $anchor = $xpath->query('.//a[@href]', $row)->item(0);
-                $link   = '';
+                        // Prefer the announcement-publish-date div anywhere in this row
+                        $pubNode = $xpath->query('.//*[contains(@class,"announcement-publish-date")]', $row)->item(0);
+                        if ($pubNode) {
+                            $prazo = trim($pubNode->textContent);
+                        } else {
+                            // Fallback: column 2 (Prazo de entrega) or column 5
+                            $prazo = $cells->length > 2
+                                ? trim($cells->item(2)->textContent ?? '')
+                                : ($cells->length > 5 ? trim($cells->item(5)->textContent ?? '') : '');
+                        }
+
+                        // Clean up the "ending date" noise if it bleeds in
+                        $endNode = $xpath->query('.//*[contains(@class,"announcement-ending-date")]', $row)->item(0);
+                        if ($endNode) {
+                            $endDate = trim($endNode->textContent);
+                            // If prazo is blank but ending-date is filled, use it
+                            if (!$prazo && $endDate) $prazo = $endDate;
+                        }
+                    } else {
+                        // Public layout: nº | tipo | objeto | entidade | estado
+                        $tipo     = $cells->length > 1 ? trim($cells->item(1)->textContent ?? '') : '';
+                        $objeto   = $cells->length > 2 ? trim($cells->item(2)->textContent ?? '') : '';
+                        $entidade = $cells->length > 3 ? trim($cells->item(3)->textContent ?? '') : '';
+                        $estado   = $cells->length > 4 ? trim($cells->item(4)->textContent ?? '') : '';
+                    }
+
+                    // Clean up whitespace in long text fields
+                    $objeto   = preg_replace('/\s+/', ' ', $objeto);
+                    $entidade = preg_replace('/\s+/', ' ', $entidade);
+
+                    // Attempt to get a link
+                    $anchor = $xpath->query('.//a[@href]', $row)->item(0);
+                    $link   = '';
+                    if ($anchor) {
+                        $href = $anchor->getAttribute('href') ?? '';
+                        if ($href && !str_starts_with($href, 'javascript') && !str_starts_with($href, '#')) {
+                            $link = str_starts_with($href, 'http')
+                                ? $href
+                                : 'https://www.acingov.pt/acingovprod/2/' . ltrim($href, '/');
+                        }
+                    }
+
+                    if (!$ref || strlen($ref) < 3) continue;
+                    if (isset($seen[$ref])) continue;
+                    $seen[$ref] = true;
+
+                    $line = "- REF: {$ref}";
+                    if ($tipo)     $line .= " | TIPO: {$tipo}";
+                    if ($objeto)   $line .= " | OBJETO: {$objeto}";
+                    if ($entidade) $line .= " | ENTIDADE: {$entidade}";
+                    if ($estado)   $line .= " | ESTADO: {$estado}";
+                    if ($prazo)    $line .= " | PRAZO: {$prazo}";
+                    if ($link)     $line .= " | URL: {$link}";
+
+                    $lines[] = $line;
+                }
+
+                if (!empty($lines)) return $lines;
+            }
+
+            // ── Strategy B: pure div layout (authenticated zone fallback) ──
+            if (!$authenticated) return $lines; // public zone is always a table
+
+            $dateDivs = $xpath->query('//*[contains(@class,"announcement-publish-date")]');
+            if (!$dateDivs || $dateDivs->length === 0) return $lines;
+
+            foreach ($dateDivs as $dateDiv) {
+                $prazo = trim($dateDiv->textContent ?? '');
+
+                // Walk up the DOM to find a reasonable row container
+                $container = $dateDiv->parentNode;
+                for ($depth = 0; $depth < 6 && $container; $depth++) {
+                    $tag = $container->nodeName ?? '';
+                    if (in_array($tag, ['tr', 'li', 'article', 'section'])) break;
+                    $class = strtolower($container->getAttribute('class') ?? '');
+                    if (str_contains($class, 'row') || str_contains($class, 'item')
+                        || str_contains($class, 'procedure') || str_contains($class, 'anuncio')) break;
+                    $container = $container->parentNode;
+                }
+                if (!$container || $container->nodeName === 'body') continue;
+
+                // Gather leaf text nodes (no child elements) — these are the data fields
+                $leafTexts = [];
+                $leafNodes = $xpath->query('.//*[not(*) and normalize-space(text())]', $container);
+                foreach ($leafNodes as $lf) {
+                    $t = trim(preg_replace('/\s+/', ' ', $lf->textContent ?? ''));
+                    // Skip the date itself and very short noise
+                    if (strlen($t) > 3 && $t !== $prazo) $leafTexts[] = $t;
+                }
+
+                $ref      = $leafTexts[0] ?? '';
+                $objeto   = $leafTexts[1] ?? '';
+                $entidade = '';
+
+                // Try a dedicated entidade/entity div
+                $entNode = $xpath->query('.//*[contains(@class,"entidade") or contains(@class,"entity") or contains(@class,"adjudicante")]', $container)->item(0);
+                if ($entNode) {
+                    $entidade = trim(preg_replace('/\s+/', ' ', $entNode->textContent ?? ''));
+                } elseif (count($leafTexts) > 2) {
+                    $entidade = $leafTexts[2];
+                }
+
+                // Try a link
+                $link = '';
+                $anchor = $xpath->query('.//a[@href]', $container)->item(0);
                 if ($anchor) {
-                    $href = $anchor->getAttribute('href');
+                    $href = $anchor->getAttribute('href') ?? '';
                     if ($href && !str_starts_with($href, 'javascript') && !str_starts_with($href, '#')) {
                         $link = str_starts_with($href, 'http')
                             ? $href
@@ -365,9 +582,8 @@ PROMPT;
                 if (isset($seen[$ref])) continue;
                 $seen[$ref] = true;
 
-                $line = "- REF: {$ref} | TIPO: {$tipo} | OBJETO: {$objeto}";
+                $line = "- REF: {$ref} | OBJETO: {$objeto}";
                 if ($entidade) $line .= " | ENTIDADE: {$entidade}";
-                if ($estado)   $line .= " | ESTADO: {$estado}";
                 if ($prazo)    $line .= " | PRAZO: {$prazo}";
                 if ($link)     $line .= " | URL: {$link}";
 
@@ -386,8 +602,21 @@ PROMPT;
         $dateFrom = now()->subDays(30)->format('d-m-Y'); // 30 days — adjudicados têm latência
         $dateTo   = now()->format('d-m-Y');
 
-        // Multiple keyword passes to find maritime/defense contracts
-        $keywords = ['naval', 'marítimo', 'maritimo', 'marinha', 'motor diesel', 'peças sobressalentes', 'defesa', 'porto'];
+        // Multiple keyword passes — all PartYard business areas
+        $keywords = [
+            // ⚓ Naval & Marítimo
+            'naval', 'marítimo', 'maritimo', 'marinha', 'propulsão naval', 'porto',
+            // 🛩️ Aviação & Aeronáutica
+            'aeronave', 'aviação', 'aeronáutica', 'manutenção aeronáutica', 'helicóptero', 'aeroporto',
+            // 🚗 Defesa & Militar
+            'defesa', 'militar', 'armamento', 'viaturas militares', 'forças armadas',
+            // 🔧 Motores & Peças
+            'motor diesel', 'peças sobressalentes', 'manutenção motores',
+            // 🎯 Simulação & Treino
+            'simulação', 'simulador', 'treino militar',
+            // 💻 Cibersegurança (SETQ)
+            'cibersegurança', 'segurança informática',
+        ];
         $seen     = [];
         $lines    = [];
 
@@ -463,9 +692,16 @@ PROMPT;
         $dateTo   = now()->format('Y-m-d');
 
         $searchGroups = [
-            'marine naval vessel ship spare parts',
-            'maritime defense military procurement',
-            'diesel engine propulsion mechanical',
+            // ⚓ Naval & Marítimo
+            'marine naval vessel ship spare parts propulsion',
+            // 🛩️ Aviação & Aeronáutica
+            'aircraft aviation MRO helicopter spare parts airframe',
+            // 🚗 Defesa & Militar
+            'defense military land vehicle army procurement',
+            // 🎯 Simulação + 🛢️ Lubrificantes
+            'simulation training system lubricant defense equipment',
+            // 💻 IT & Cyber
+            'cybersecurity information security defense IT',
         ];
 
         $seen  = [];
@@ -588,7 +824,8 @@ PROMPT;
 
 Analisa os concursos acima e classifica cada um por relevância para HP-Group / PartYard.
 - Usa APENAS dados reais das pesquisas — não inventes concursos
-- Para cada concurso: entidade, objeto, valor, prazo, relevância, ação
+- Para cada concurso: entidade, objeto, valor, 📅 data publicação, ⏰ prazo limite, relevância, ação
+- O campo ⏰ PRAZO é OBRIGATÓRIO em todos os contratos — usa N/A se não disponível
 - SAM.gov = contratos federais americanos (DoD, Navy, Coast Guard) — alta prioridade para PartYard Military
 - Foca em: peças navais, motores, defesa, portos, IT/cibersegurança, NATO
 MSG;
@@ -722,18 +959,18 @@ MSG;
         if ($this->searcher->isAvailable()) {
             try {
                 $vortalData = $this->searcher->search(
-                    'ted.europa.eu OR vortal tender Portugal 2026 naval maritime defense equipment procurement',
+                    'ted.europa.eu OR vortal tender Portugal 2026 naval maritime aviation defense spare parts MRO procurement',
                     8, 'basic', $tavilyDays
                 );
                 if (strlen($vortalData) < 80) {
                     $vortalData = $this->searcher->search(
-                        'TED tenders Portugal 2026 naval defesa equipamento maritime',
+                        'TED tenders Portugal 2026 naval defesa aviação aeronave equipamento maritimo',
                         8, 'basic', $tavilyDays
                     );
                 }
                 if (strlen($vortalData) < 80) {
                     $vortalData = $this->searcher->search(
-                        'European tender 2026 maritime naval spare parts Portugal defense procurement',
+                        'European tender 2026 maritime naval aircraft MRO spare parts Portugal defense NATO procurement',
                         8, 'basic', $tavilyDays
                     );
                 }
@@ -750,12 +987,12 @@ MSG;
         if (strlen($ungmData) < 80 && $this->searcher->isAvailable()) {
             try {
                 $ungmData = $this->searcher->search(
-                    'site:ungm.org tender maritime naval spare parts defense procurement 2026',
+                    'site:ungm.org tender maritime naval aviation aircraft spare parts defense MRO 2026',
                     5, 'basic', $tavilyDays
                 );
                 if (strlen($ungmData) < 80) {
                     $ungmData = $this->searcher->search(
-                        'UNGM "United Nations Global Marketplace" tender maritime naval 2026 deadline',
+                        'UNGM "United Nations Global Marketplace" tender maritime naval aviation helicopter 2026 deadline',
                         5, 'basic', $tavilyDays
                     );
                 }
@@ -797,46 +1034,54 @@ MSG;
 Período: {$dateFrom} a {$dateTo} (últimos 5 dias).
 Portais pesquisados: Acingov · Vortal · base.gov.pt · UNGM · SAM.gov
 
-Analisa TODOS os contratos/concursos abaixo e apresenta os resultados CLASSIFICADOS POR ÁREA DE NEGÓCIO (não por portal).
+Analisa TODOS os contratos/concursos abaixo e apresenta os resultados CLASSIFICADOS POR ÁREA DE NEGÓCIO DO HP-GROUP (não por portal).
 
-== ESTRUTURA DO RELATÓRIO ==
+== ESTRUTURA DO RELATÓRIO — POR SUBSIDIÁRIA / ÂMBITO ==
 
-Para cada ÁREA, lista os contratos relevantes encontrados:
+Para cada ÁREA relevante, lista os contratos encontrados:
 
-### ⚓ Naval & Marítimo
-### 🛡️ Defesa & Militar
-### 🔧 Manutenção & Peças Industriais
-### 💻 IT & Cibersegurança
-### ⚡ Energia & Ambiente
-### 📦 Supply Chain & Logística
-### 🏗️ Obras & Infraestrutura
+### 🛩️ Aviação & Aeronáutica  ← PartYard Defense Aerospace (MRO, peças, helicópteros, C-130, F-16, aviação civil)
+### ⚓ Naval & Marítimo  ← PartYard Marine (MTU, CAT, MAK, Wärtsilä, Schottel, SKF)
+### 🚗 Sistemas Terrestres & Defesa  ← PartYard Military (viaturas, armamento, NATO, NSPA)
+### 🎯 Simulação & Treino Militar  ← Simuladores, sistemas de treino táctico
+### 🛢️ Lubrificantes & Químicos  ← ARMITE (lubrificantes táticos, óleos aviação/naval)
+### 💻 IT & Cibersegurança  ← SETQ (C4ISR, redes seguras, cyber para defesa)
+### 🏭 Serviços Industriais & Logística  ← IndYard (manutenção, supply chain, engenharia)
+### 🏗️ Obras & Infraestrutura  ← (monitorizar — baixa prioridade)
 ### 🌐 Outros
 
 Para cada contrato dentro de cada área:
-📋 **[Título]** | 🏛️ Entidade | 💶 Valor | ⏰ Prazo | 🌍 Portal: [Acingov/Vortal/UNGM/base.gov.pt/SAM.gov] | 🎯 [🟢Alta/🟡Média/🔴Baixa] | 🔗 Link
-(Para base.gov.pt: indicar também 🏆 Empresa adjudicatária)
+📋 **[Título/Objeto]**
+🏛️ Entidade: [nome] | 🌍 Portal: [Acingov/Vortal/UNGM/base.gov.pt/SAM.gov]
+📅 Publicado: [data] | ⏰ Prazo: [data limite] ← OBRIGATÓRIO — usa N/A se não disponível
+💶 Valor: [estimativa ou N/A] | 🏢 Subsidiária: [Marine/Military/Defense Aerospace/SETQ/ARMITE/IndYard]
+🎯 [🟢Alta/🟡Média/🔴Baixa] — [justificação 1 linha] | 🔗 [Link]
+(Para base.gov.pt: indicar também 🏆 Adjudicatário)
+
+⚠️ REGRAS FIXAS:
+- A linha ⏰ Prazo é OBRIGATÓRIA em todos os contratos — nunca omitir
+- Identifica SEMPRE a Subsidiária PartYard mais indicada
+- Se não houver contratos numa área, omite essa secção
 
 Depois do relatório por área:
 ---
 ### 📊 Resumo Executivo
 - Total: X contratos | 🟢 N altas · 🟡 N médias · 🔴 N baixas
 - Por portal: Acingov(N) · Vortal(N) · UNGM(N) · base.gov.pt(N) · SAM.gov(N)
+- Por subsidiária: Marine(N) · Military(N) · Aerospace(N) · SETQ(N) · ARMITE(N) · IndYard(N)
 
 ### 🏆 Top 5 Oportunidades Prioritárias
 (prazo mais curto + valor mais alto + maior relevância PartYard)
 
 ### ⚡ Próximos Passos
-(acções concretas para a equipa PartYard esta semana)
+(acções concretas para a equipa PartYard esta semana — por subsidiária)
 
-REGRAS:
-- INCLUI contratos/concursos encontrados (base.gov.pt tem janela 30 dias, os restantes 5-14 dias)
-- Se não houver contratos numa área, omite essa secção
-- Usa SEMPRE os links reais dos dados fornecidos
-- SAM.gov = alta prioridade PartYard Military (DoD, Navy, Coast Guard)
-- base.gov.pt = inteligência competitiva — quem ganhou, a que preço
-- DRE.pt/Acingov = concursos abertos em Portugal
-- TED/Vortal = concursos abertos na Europa (obrigatório publicar acima de €140k)
-- UNGM = tenders ONU/organizações internacionais
+NOTAS POR PORTAL:
+- SAM.gov = alta prioridade (DoD, Navy, Air Force, Army Aviation, Coast Guard, NSPA)
+- base.gov.pt = inteligência competitiva — quem ganhou, a que preço (Forças Armadas PT, FAP, Marinha)
+- DRE.pt/Acingov = concursos abertos em Portugal (Marinha, FAP, Exército, GNR, PSP)
+- TED/Vortal = concursos abertos na Europa acima de €140k (EDA, NATO, países NATO)
+- UNGM = tenders ONU/organizações internacionais (UNDP, UNHCR, UNICEF, WFP)
 
 --- DADOS DOS 5 PORTAIS ---
 {$allData}

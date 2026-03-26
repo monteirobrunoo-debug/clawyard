@@ -28,12 +28,22 @@ class BriefingController extends Controller
         $userId = auth()->id();
 
         return response()->stream(function () use ($userId) {
-            echo "data: " . json_encode(['type' => 'start']) . "\n\n";
-            ob_flush(); flush();
 
+            // ── 1. Flush ALL PHP output buffers immediately (same as NvidiaController)
+            while (ob_get_level() > 0) ob_end_flush();
+            flush();
+
+            // ── 2. Release session lock — allows other requests to proceed during stream
+            session()->save();
+
+            // ── 3. Send meta event so the frontend knows the stream is alive
+            echo 'data: ' . json_encode(['type' => 'meta', 'mode' => 'briefing']) . "\n\n";
+            flush();
+
+            // ── 4. Heartbeat — keep Nginx / Cloudflare alive (no ob_flush needed)
             $heartbeat = function (string $status = '') {
                 echo ': heartbeat' . ($status ? " {$status}" : '') . "\n\n";
-                ob_flush(); flush();
+                flush();
             };
 
             $agent = new BriefingAgent();
@@ -45,16 +55,16 @@ class BriefingController extends Controller
                     [],
                     function (string $chunk) {
                         echo 'data: ' . json_encode(['chunk' => $chunk]) . "\n\n";
-                        ob_flush(); flush();
+                        flush();
                     },
                     $heartbeat
                 );
             } catch (\Throwable $e) {
                 \Log::error('BriefingAgent error: ' . $e->getMessage());
                 echo 'data: ' . json_encode(['error' => 'Erro ao gerar briefing: ' . $e->getMessage()]) . "\n\n";
-                ob_flush(); flush();
+                flush();
                 echo "data: [DONE]\n\n";
-                ob_flush(); flush();
+                flush();
                 return;
             }
 
@@ -74,12 +84,13 @@ class BriefingController extends Controller
             }
 
             echo "data: [DONE]\n\n";
-            ob_flush(); flush();
+            flush();
 
         }, 200, [
             'Content-Type'      => 'text/event-stream',
             'Cache-Control'     => 'no-cache',
             'X-Accel-Buffering' => 'no',
+            'Connection'        => 'keep-alive',
         ]);
     }
 

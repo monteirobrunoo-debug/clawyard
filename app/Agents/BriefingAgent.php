@@ -146,17 +146,32 @@ PROMPT;
         $this->sap = new SapService();
     }
 
-    // ─── Gather all today's intelligence from DB ───────────────────────────
-    protected function gatherIntelligence(): string
+    // ─── stream() ──────────────────────────────────────────────────────────
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $today    = now()->startOfDay();
-        $sections = [];
+        // Note: ob buffers already flushed by BriefingController before calling this method.
+        $today = now()->format('d/m/Y H:i');
+        $full  = '';
 
-        // 1. Today's discoveries (arXiv, PeerJ)
-        $discoveries = Discovery::where('created_at', '>=', $today)
-            ->orderBy('relevance_score', 'desc')
-            ->limit(20)
-            ->get();
+        // $progress() → browser only (NOT saved to $full / report)
+        $progress = function (string $text) use ($onChunk) {
+            $onChunk($text);
+        };
+
+        // ── Step 0: Show header immediately (user sees something right away) ─
+        $progress("## 📊 Briefing Executivo — {$today}\n");
+        $progress("**Renato — Estratega HP-Group · ClawYard AI**\n\n");
+        $progress("⏳ A recolher inteligência de todas as fontes...\n\n");
+
+        // ── Step 1: DB — Discoveries ─────────────────────────────────────────
+        $progress("  `1/4` 🔭 Discoveries (arXiv / PeerJ)...\n");
+        if ($heartbeat) $heartbeat('a ler discoveries');
+
+        $sections  = [];
+        $today_ts  = now()->startOfDay();
+
+        $discoveries = \App\Models\Discovery::where('created_at', '>=', $today_ts)
+            ->orderBy('relevance_score', 'desc')->limit(20)->get();
 
         if ($discoveries->isNotEmpty()) {
             $lines = ["## DISCOVERIES FROM TODAY ({$discoveries->count()} items):"];
@@ -164,14 +179,13 @@ PROMPT;
                 $id  = $d->reference_id ?? '';
                 $url = $d->url ?? ($id ? "https://arxiv.org/abs/{$id}" : '');
                 $lines[] = "- [{$d->source}:{$id}] {$d->title} | Priority: {$d->priority} | Score: {$d->relevance_score}/10 | {$d->summary}";
-                if ($url)              $lines[] = "  → Link: {$url}";
-                if ($d->opportunity)   $lines[] = "  → Opportunity: {$d->opportunity}";
+                if ($url)               $lines[] = "  → Link: {$url}";
+                if ($d->opportunity)    $lines[] = "  → Opportunity: {$d->opportunity}";
                 if ($d->recommendation) $lines[] = "  → Recommendation: {$d->recommendation}";
             }
             $sections[] = implode("\n", $lines);
         } else {
-            // Fallback: last 3 days
-            $discoveries = Discovery::where('created_at', '>=', now()->subDays(3))
+            $discoveries = \App\Models\Discovery::where('created_at', '>=', now()->subDays(3))
                 ->orderBy('relevance_score', 'desc')->limit(15)->get();
             if ($discoveries->isNotEmpty()) {
                 $lines = ["## RECENT DISCOVERIES (last 3 days, {$discoveries->count()} items):"];
@@ -185,11 +199,12 @@ PROMPT;
             }
         }
 
-        // 2. Today's reports from all agents
-        $reports = Report::where('created_at', '>=', $today)
-            ->orderBy('created_at', 'desc')
-            ->limit(10)
-            ->get();
+        // ── Step 2: DB — Agent Reports ────────────────────────────────────────
+        $progress("  `2/4` 📋 Relatórios dos agentes...\n");
+        if ($heartbeat) $heartbeat('a ler relatórios');
+
+        $reports = \App\Models\Report::where('created_at', '>=', $today_ts)
+            ->orderBy('created_at', 'desc')->limit(10)->get();
 
         if ($reports->isNotEmpty()) {
             $lines = ["## AGENT REPORTS FROM TODAY ({$reports->count()} reports):"];
@@ -199,8 +214,7 @@ PROMPT;
             }
             $sections[] = implode("\n", $lines);
         } else {
-            // Fallback: last 7 days
-            $reports = Report::where('created_at', '>=', now()->subDays(7))
+            $reports = \App\Models\Report::where('created_at', '>=', now()->subDays(7))
                 ->orderBy('created_at', 'desc')->limit(5)->get();
             if ($reports->isNotEmpty()) {
                 $lines = ["## RECENT AGENT REPORTS (last 7 days):"];
@@ -212,7 +226,10 @@ PROMPT;
             }
         }
 
-        // 3. SAP financial snapshot
+        // ── Step 3: SAP snapshot (external API — pode demorar) ───────────────
+        $progress("  `3/4` 💼 SAP B1 (financeiro/operacional)...\n");
+        if ($heartbeat) $heartbeat('a ler SAP');
+
         try {
             $sapContext = $this->sap->buildContext('faturas stock encomendas compras clientes');
             if ($sapContext) {
@@ -222,9 +239,12 @@ PROMPT;
             \Log::warning('BriefingAgent: SAP snapshot failed — ' . $e->getMessage());
         }
 
-        // 4. Live market news via web search
+        // ── Step 4: Live news (Tavily — pode demorar) ────────────────────────
+        $progress("  `4/4` 🌐 Notícias de mercado...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar notícias');
+
         try {
-            $newsQuery = 'PartYard marine spare parts MTU Caterpillar MAK maritime news ' . now()->format('Y');
+            $newsQuery  = 'PartYard marine spare parts MTU Caterpillar MAK maritime news ' . now()->format('Y');
             $newsResult = $this->augmentWithWebSearch($newsQuery);
             if ($newsResult && $newsResult !== $newsQuery) {
                 $sections[] = "## NOTÍCIAS DE MERCADO (pesquisa live):\n" . substr($newsResult, strlen($newsQuery));
@@ -233,7 +253,7 @@ PROMPT;
             \Log::warning('BriefingAgent: web search failed — ' . $e->getMessage());
         }
 
-        // Always prepend the live company profile
+        // ── Build intelligence package ────────────────────────────────────────
         $profile = PartYardProfileService::toPromptContext();
         array_unshift($sections, "## COMPANY PROFILE (reference for all analysis):\n{$profile}");
 
@@ -241,23 +261,16 @@ PROMPT;
             $sections[] = "No intelligence data available for today. Please generate a Quantum digest first, then run the briefing.";
         }
 
-        $date = now()->format('d/m/Y H:i');
-        return "=== INTELLIGENCE PACKAGE — {$date} ===\n\n" . implode("\n\n---\n\n", $sections);
-    }
+        $dateLabel   = now()->format('d/m/Y H:i');
+        $intelligence = "=== INTELLIGENCE PACKAGE — {$dateLabel} ===\n\n" . implode("\n\n---\n\n", $sections);
 
-    // ─── stream() ──────────────────────────────────────────────────────────
-    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
-    {
-        if ($heartbeat) $heartbeat('gathering intelligence');
+        // ── Stream Claude analysis ────────────────────────────────────────────
+        $progress("✅ **Inteligência recolhida. Renato a gerar briefing...**\n\n---\n\n");
+        if ($heartbeat) $heartbeat('Renato a analisar');
 
-        $intelligence = $this->gatherIntelligence();
-
-        if ($heartbeat) $heartbeat('analysing');
-
-        $today = now()->format('d \d\e F \d\e Y');
-        $prompt = "Generate today's executive daily briefing for PartYard / HP-Group.\n\nToday is: {$today}\n\n{$intelligence}";
-
-        $messages = [['role' => 'user', 'content' => $prompt]];
+        $todayLong = now()->format('d \d\e F \d\e Y');
+        $prompt    = "Generate today's executive daily briefing for PartYard / HP-Group.\n\nToday is: {$todayLong}\n\n{$intelligence}";
+        $messages  = [['role' => 'user', 'content' => $prompt]];
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($prompt),
@@ -271,10 +284,9 @@ PROMPT;
             ],
         ]);
 
-        $body      = $response->getBody();
-        $full      = '';
-        $buf       = '';
-        $lastBeat  = time();
+        $body     = $response->getBody();
+        $buf      = '';
+        $lastBeat = time();
 
         while (!$body->eof()) {
             $buf .= $body->read(1024);
@@ -296,8 +308,8 @@ PROMPT;
                     }
                 }
             }
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
-                $heartbeat('generating');
+            if ($heartbeat && (time() - $lastBeat) >= 5) {
+                $heartbeat('Renato a escrever');
                 $lastBeat = time();
             }
         }
@@ -305,7 +317,7 @@ PROMPT;
         return trim($full);
     }
 
-    // ─── chat() ────────────────────────────────────────────────────────────
+    // ─── chat() — delegates to stream() silently ──────────────────────────
     public function chat(string|array $message, array $history = []): string
     {
         $full = '';
@@ -313,6 +325,48 @@ PROMPT;
             $full .= $chunk;
         });
         return $full;
+    }
+
+    // ─── gatherIntelligence() kept for backwards compatibility ─────────────
+    // (used by scheduled tasks that call it directly)
+    protected function gatherIntelligence(): string
+    {
+        $today_ts  = now()->startOfDay();
+        $sections  = [];
+
+        $discoveries = \App\Models\Discovery::where('created_at', '>=', $today_ts)
+            ->orderBy('relevance_score', 'desc')->limit(20)->get();
+        if ($discoveries->isNotEmpty()) {
+            $lines = ["## DISCOVERIES FROM TODAY ({$discoveries->count()} items):"];
+            foreach ($discoveries as $d) {
+                $id  = $d->reference_id ?? '';
+                $url = $d->url ?? ($id ? "https://arxiv.org/abs/{$id}" : '');
+                $lines[] = "- [{$d->source}:{$id}] {$d->title} | Score: {$d->relevance_score}/10 | {$d->summary}";
+                if ($url) $lines[] = "  → Link: {$url}";
+            }
+            $sections[] = implode("\n", $lines);
+        }
+
+        $reports = \App\Models\Report::where('created_at', '>=', $today_ts)
+            ->orderBy('created_at', 'desc')->limit(10)->get();
+        if ($reports->isNotEmpty()) {
+            $lines = ["## AGENT REPORTS FROM TODAY:"];
+            foreach ($reports as $r) {
+                $lines[] = "\n### [{$r->type}] {$r->title}\n" . substr(strip_tags($r->content), 0, 800) . '...';
+            }
+            $sections[] = implode("\n", $lines);
+        }
+
+        try {
+            $sap = $this->sap->buildContext('faturas stock encomendas');
+            if ($sap) $sections[] = "## SAP B1:\n" . trim($sap);
+        } catch (\Throwable) {}
+
+        $profile = PartYardProfileService::toPromptContext();
+        array_unshift($sections, "## COMPANY PROFILE:\n{$profile}");
+
+        $date = now()->format('d/m/Y H:i');
+        return "=== INTELLIGENCE PACKAGE — {$date} ===\n\n" . implode("\n\n---\n\n", $sections);
     }
 
     public function getName(): string  { return 'briefing'; }

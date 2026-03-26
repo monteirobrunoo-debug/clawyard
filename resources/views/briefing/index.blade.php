@@ -179,7 +179,7 @@ function startBriefing() {
         }
         try {
             const d = JSON.parse(e.data);
-            if (d.type === 'start') return;
+            if (d.type === 'start' || d.type === 'meta') return;
             if (d.error) {
                 textEl.innerHTML = '<p style="color:#ff4444">❌ ' + d.error + '</p>';
                 genBanner.style.display = 'none';

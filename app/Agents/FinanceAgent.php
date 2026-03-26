@@ -184,8 +184,11 @@ PROMPT;
                 Log::warning('FinanceAgent: SAP context failed — ' . $e->getMessage());
             }
         }
-        if ($heartbeat) $heartbeat('a pesquisar normativa');
-        $message = $this->augmentWithWebSearch($message, $heartbeat);
+        // Skip web search for multimodal messages (file/image attached) — avoids corrupting array structure
+        if (is_string($message) && $this->needsWebSearch($message)) {
+            if ($heartbeat) $heartbeat('a pesquisar normativa');
+            $message = $this->augmentWithWebSearch($message, $heartbeat);
+        }
         return $message;
     }
 
