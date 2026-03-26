@@ -361,6 +361,9 @@ class NvidiaController extends Controller
             $resolvedAgentLog, $suggestions, $agentModel, $agentName_final,
             $conversationRef, $sessionId, $userId
         ) {
+            // Release session lock so other tabs don't block waiting for this stream
+            session()->save();
+
             // Flush all PHP output buffers so SSE data reaches the browser immediately
             // (PHP-FPM output_buffering=4096 would otherwise hold small packets)
             while (ob_get_level() > 0) { ob_end_flush(); }
