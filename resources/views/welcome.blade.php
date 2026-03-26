@@ -706,7 +706,8 @@ function updateEmptyState(agent) {
 
 let isRecording  = false;
 let recognition  = null;
-let currentImg   = null;
+let currentImg      = null;
+let currentImgType  = 'image/jpeg'; // MIME type of attached image
 let currentFile  = null; // { name, type, b64, text } for non-image files
 let panelOpen    = true;
 let actCount     = 0;
@@ -787,19 +788,20 @@ function humanSize(bytes) {
 
 // 📎 label → browser opens file picker natively via <label for="image-input">
 // No JS click() needed — label click is handled by the browser directly.
-document.getElementById('image-input').addEventListener('change', function(e) {
-    fileInputChangeHandler(e);
-    // Reset so re-selecting the same file always fires 'change' again
-    e.target.value = '';
-});
+// NOTE: do NOT reset input.value here — resetting before reader.onload fires
+// causes browsers to release the File reference before async read completes
+// (PDF/large files silently fail). Value is reset inside clearImage() instead.
+document.getElementById('image-input').addEventListener('change', fileInputChangeHandler);
 
 document.getElementById('remove-image').addEventListener('click', clearImage);
 function clearImage() {
-    currentImg  = null;
-    currentFile = null;
+    currentImg      = null;
+    currentImgType  = 'image/jpeg';
+    currentFile     = null;
     document.getElementById('image-preview').style.display = 'none';
     document.getElementById('preview-img').style.display = 'none';
     document.getElementById('file-preview-info').style.display = 'none';
+    // Reset AFTER FileReader completes (called from sendMessage/remove btn, never mid-read)
     document.getElementById('image-input').value = '';
 }
 
@@ -812,8 +814,9 @@ function fileInputChangeHandler(e) {
 
     if (isImage) {
         reader.onload = (ev) => {
-            currentImg  = ev.target.result.split(',')[1];
-            currentFile = null;
+            currentImg      = ev.target.result.split(',')[1];
+            currentImgType  = file.type || 'image/jpeg'; // preserve real MIME type
+            currentFile     = null;
             document.getElementById('preview-img').src = ev.target.result;
             document.getElementById('preview-img').style.display = 'block';
             document.getElementById('file-preview-info').style.display = 'none';
@@ -1349,7 +1352,8 @@ async function sendMessage() {
     const payload = { message: text, agent: selectedAgent, session_id: SESSION_ID };
 
     if (currentImg) {
-        payload.image = currentImg;
+        payload.image      = currentImg;
+        payload.image_type = currentImgType;
         clearImage();
         logActivity('🖼️', 'Imagem incluída (multimodal)', 'done');
     } else if (currentFile) {

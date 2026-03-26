@@ -40,6 +40,7 @@ class NvidiaController extends Controller
             : 'u' . $userId . '_' . bin2hex(random_bytes(16));
 
         $imageB64  = $request->input('image');
+        $imageType = $request->input('image_type', 'image/jpeg');
 
         try {
             // Load or create conversation (Memory)
@@ -60,7 +61,7 @@ class NvidiaController extends Controller
                     ['type' => 'text', 'text' => $augmentedMessage],
                     ['type' => 'image', 'source' => [
                         'type'       => 'base64',
-                        'media_type' => 'image/jpeg',
+                        'media_type' => $imageType,
                         'data'       => $imageB64,
                     ]],
                 ];
@@ -153,7 +154,8 @@ class NvidiaController extends Controller
             'message'   => 'required|string|min:1|max:20000',
             'agent'     => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum,finance,research,capitao,acingov',
             'session_id'=> 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
-            'image'     => 'nullable|string|max:10485760',  // base64 image ~7.5MB
+            'image'      => 'nullable|string|max:10485760',  // base64 image ~7.5MB
+        'image_type' => 'nullable|string|max:50',
             'file_b64'  => 'nullable|string|max:20971520',  // base64 file up to ~15MB binary
             'file_type' => 'nullable|string|max:200',
             'file_name' => 'nullable|string|max:255',
@@ -168,10 +170,11 @@ class NvidiaController extends Controller
             ? 'u' . $userId . '_' . $clientSid
             : 'u' . $userId . '_' . bin2hex(random_bytes(16));
 
-        $imageB64  = $request->input('image');
-        $fileB64   = $request->input('file_b64');
-        $fileType  = $request->input('file_type', 'application/octet-stream');
-        $fileName  = $request->input('file_name', 'ficheiro');
+        $imageB64   = $request->input('image');
+        $imageType  = $request->input('image_type', 'image/jpeg');
+        $fileB64    = $request->input('file_b64');
+        $fileType   = $request->input('file_type', 'application/octet-stream');
+        $fileName   = $request->input('file_name', 'ficheiro');
 
         // Resolve agent and augment message *before* streaming so any validation
         // errors surface as JSON, not mid-stream garbage.
@@ -192,12 +195,12 @@ class NvidiaController extends Controller
         }
 
         if ($imageB64) {
-            // Image attachment (vision)
+            // Image attachment (vision) — use real MIME type sent by browser
             $augmentedMessage = [
                 ['type' => 'text', 'text' => $augmentedMessage],
                 ['type' => 'image', 'source' => [
                     'type'       => 'base64',
-                    'media_type' => 'image/jpeg',
+                    'media_type' => $imageType,
                     'data'       => $imageB64,
                 ]],
             ];
