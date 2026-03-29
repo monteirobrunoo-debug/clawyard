@@ -338,46 +338,28 @@ PROMPT;
             // Proceed anyway — some CI apps set the session cookie on login even when
             // the response body still contains the form; the next GET will reveal success.
 
-            // Step 3: Scrape authenticated procedures list — all PartYard business areas
-            $keywords = [
-                // Naval & Marítimo
-                'naval', 'marinha', 'maritimo', 'porto', 'propulsão',
-                // Aviação & Aeronáutica (PartYard Defense Aerospace)
-                'aeronave', 'aviação', 'helicoptero', 'aeronautica', 'MRO',
-                // Sistemas terrestres & defesa
-                'defesa', 'militar', 'veiculo blindado', 'armamento',
-                // Motores & peças
-                'motor', 'peças sobressalentes', 'manutenção',
-                // Simulação & treino
-                'simulação', 'treino militar', 'simulador',
-                // IT & Cibersegurança (SETQ)
-                'cibersegurança', 'segurança informática',
-            ];
-            $seen     = [];
-            $lines    = [];
+            // Step 3: Fetch the most recent 20 procedures — no keyword filter
+            $seen  = [];
+            $lines = [];
 
-            foreach (array_slice($keywords, 0, 5) as $kw) {
-                try {
-                    $resp = $client->get($baseUrl . 'procedimentos_fornecedor/procedimentos_fornecedor_c', [
-                        'query' => ['object' => $kw],
-                    ]);
-                    $html = $resp->getBody()->getContents();
+            try {
+                $resp = $client->get($baseUrl . 'procedimentos_fornecedor/procedimentos_fornecedor_c');
+                $html = $resp->getBody()->getContents();
 
-                    // If redirected to login, credentials failed
-                    if (stripos($html, 'name="user"') !== false && stripos($html, 'name="pass"') !== false) {
-                        Log::info('Acingov: credenciais inválidas ou sessão expirou');
-                        return '';
-                    }
-
-                    $rows  = $this->parseAcingovTable($html, $seen, true);
-                    $lines = array_merge($lines, $rows);
-                } catch (\Throwable $e) {
-                    Log::info("Acingov [auth/{$kw}]: " . $e->getMessage());
+                // If redirected to login, credentials failed
+                if (stripos($html, 'name="user"') !== false && stripos($html, 'name="pass"') !== false) {
+                    Log::info('Acingov: credenciais inválidas ou sessão expirou');
+                    return '';
                 }
+
+                $rows  = $this->parseAcingovTable($html, $seen, true);
+                $lines = array_slice($rows, 0, 20); // cap at 20
+            } catch (\Throwable $e) {
+                Log::info('Acingov [auth]: ' . $e->getMessage());
             }
 
             if (empty($lines)) return '';
-            return "=== ACINGOV — Concursos (autenticado) ===\n" . implode("\n", $lines);
+            return "=== ACINGOV — Últimos 20 Concursos (autenticado, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $lines);
 
         } catch (\Throwable $e) {
             Log::info('Acingov [login]: ' . $e->getMessage());
@@ -387,43 +369,28 @@ PROMPT;
 
     protected function fetchAcingovPublic(): string
     {
-        $baseUrl  = 'https://www.acingov.pt/acingovprod/2/zonaPublica/zona_publica_c/indexProcedimentos';
-        $keywords = [
-            // Naval & Marítimo
-            'naval', 'marinha', 'maritimo', 'porto',
-            // Aviação & Aeronáutica
-            'aeronave', 'aviação', 'aeronautica', 'helicoptero',
-            // Defesa & Militar
-            'defesa', 'militar', 'armamento',
-            // Motores & peças
-            'motor', 'peças sobressalentes',
-            // Simulação & Cibersegurança
-            'simulação', 'cibersegurança',
-        ];
-        $seen     = [];
-        $lines    = [];
+        $baseUrl = 'https://www.acingov.pt/acingovprod/2/zonaPublica/zona_publica_c/indexProcedimentos';
+        $seen    = [];
+        $lines   = [];
 
-        foreach ($keywords as $kw) {
-            try {
-                $resp = $this->httpClient->get($baseUrl, [
-                    'query'   => ['procedure_search' => $kw],
-                    'headers' => [
-                        'User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
-                        'Accept'     => 'text/html',
-                    ],
-                    'timeout' => 10,
-                    'verify'  => false,
-                ]);
-                $html  = $resp->getBody()->getContents();
-                $rows  = $this->parseAcingovTable($html, $seen, false);
-                $lines = array_merge($lines, $rows);
-            } catch (\Throwable $e) {
-                Log::info("Acingov [public/{$kw}]: " . $e->getMessage());
-            }
+        try {
+            $resp  = $this->httpClient->get($baseUrl, [
+                'headers' => [
+                    'User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
+                    'Accept'     => 'text/html',
+                ],
+                'timeout' => 10,
+                'verify'  => false,
+            ]);
+            $html  = $resp->getBody()->getContents();
+            $rows  = $this->parseAcingovTable($html, $seen, false);
+            $lines = array_slice($rows, 0, 20); // cap at 20
+        } catch (\Throwable $e) {
+            Log::info('Acingov [public]: ' . $e->getMessage());
         }
 
         if (empty($lines)) return '';
-        return "=== ACINGOV — Concursos (zona pública) ===\n" . implode("\n", $lines);
+        return "=== ACINGOV — Últimos 20 Concursos (zona pública, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $lines);
     }
 
     /**
