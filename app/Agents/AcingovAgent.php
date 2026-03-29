@@ -103,19 +103,39 @@ Qualquer concurso de qualquer uma destas entidades é **AUTOMATICAMENTE ALTA PRI
 
 🥇 **#1 — Força Aérea Portuguesa (FAP)**
 Palavras-chave entidade: Força Aérea, FAP, Base Aérea, Esquadra, OGMA, CLAFA
-→ PartYard é fornecedor AS:9120 + NATO NCAGE P3527 — posição competitiva máxima
+Âmbito PartYard — TODOS os anúncios são relevantes, especialmente:
+- Aeronaves F-16 Fighting Falcon: peças sobressalentes, MRO, overhaul, revisão
+- Helicópteros (EH-101 Merlin, SA-330 Puma, AW119): peças, manutenção
+- C-130 Hercules, P-3 Orion, Casa 295: componentes, suporte técnico
+- Qualquer reparação, revisão geral (overhaul), inspeção ou manutenção de aeronaves
+- Peças sobressalentes aeronáuticas (qualquer aeronave, qualquer componente)
+- Certificação AS:9120 + NATO NCAGE P3527 — PartYard em posição competitiva máxima
 
 🥈 **#2 — Marinha Portuguesa**
-Palavras-chave entidade: Marinha, Arsenal do Alfeite, CEMA, Flotilha, Fragata, Corveta, Navio
-→ PartYard Marine fornece MTU/CAT/MAK/Wärtsilä para frotas navais
+Palavras-chave entidade: Marinha, Arsenal do Alfeite, CEMA, Flotilha, Fragata, Corveta, Navio Patrulha, Submarino
+Âmbito PartYard:
+- Peças sobressalentes para motores navais: MTU, Caterpillar, MAK, Wärtsilä, MAN, Cummins
+- Reparação e overhaul de motores e sistemas de propulsão naval
+- SKF SternTube seals, Schottel propulsores, thrusters
+- Manutenção de embarcações, fragatas, corvetas, patrulhas e navios de guerra
+- Componentes mecânicos, hidráulicos e elétricos para frotas navais
 
 🥉 **#3 — Exército Português**
-Palavras-chave entidade: Exército, Regimento, Brigada, Batalhão, DGME, Academia Militar
-→ PartYard Military cobre veículos blindados, peças táticas e suporte logístico
+Palavras-chave entidade: Exército, Regimento, Brigada, Batalhão, DGME, Academia Militar, CFT
+Âmbito PartYard:
+- Veículos blindados e viaturas táticas: peças sobressalentes, manutenção, overhaul
+- Peças táticas para sistemas de artilharia, viaturas de combate, transportes militares
+- Peças sobressalentes para equipamentos militares terrestres (qualquer tipo)
+- Suporte logístico e supply chain de peças para frotas do Exército
 
-🏅 **#4 — Estado-Maior General das Forças Armadas (EMGFA)**
-Palavras-chave entidade: EMGFA, Estado-Maior, CEMGFA, NATO, NSPA, MDN (Ministério da Defesa Nacional)
-→ Contratos transversais / conjuntos de elevado valor estratégico
+🏅 **#4 — Estado-Maior General das Forças Armadas (EMGFA) / MDN**
+Palavras-chave entidade: EMGFA, Estado-Maior, CEMGFA, MDN, Ministério da Defesa, NATO, NSPA, DGAIED
+Âmbito PartYard — contratos transversais e estratégicos:
+- Contratos conjuntos multi-ramo (ar + mar + terra)
+- Peças, componentes e equipamentos de defesa (qualquer área)
+- Tecnologia: sistemas C4ISR, comunicações seguras, cibersegurança (SETQ)
+- Serviços: manutenção, consultoria técnica, logística integrada de defesa
+- Equipamentos NATO, contratos NSPA, procurement OTAN
 
 ═══════════════════════════════════════════
 CRITÉRIOS DE CLASSIFICAÇÃO
