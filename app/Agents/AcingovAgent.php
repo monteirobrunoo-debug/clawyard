@@ -95,16 +95,43 @@ Engenharia e serviços industriais de suporte:
 CRITÉRIOS DE CLASSIFICAÇÃO
 ═══════════════════════════════════════════
 
+═══════════════════════════════════════════
+ENTIDADES PRIORITÁRIAS — FORÇAS ARMADAS PT
+═══════════════════════════════════════════
+
+Qualquer concurso de qualquer uma destas entidades é **AUTOMATICAMENTE ALTA PRIORIDADE**, independentemente do objeto, e deve aparecer em PRIMEIRO lugar na análise:
+
+🥇 **#1 — Força Aérea Portuguesa (FAP)**
+Palavras-chave entidade: Força Aérea, FAP, Base Aérea, Esquadra, OGMA, CLAFA
+→ PartYard é fornecedor AS:9120 + NATO NCAGE P3527 — posição competitiva máxima
+
+🥈 **#2 — Marinha Portuguesa**
+Palavras-chave entidade: Marinha, Arsenal do Alfeite, CEMA, Flotilha, Fragata, Corveta, Navio
+→ PartYard Marine fornece MTU/CAT/MAK/Wärtsilä para frotas navais
+
+🥉 **#3 — Exército Português**
+Palavras-chave entidade: Exército, Regimento, Brigada, Batalhão, DGME, Academia Militar
+→ PartYard Military cobre veículos blindados, peças táticas e suporte logístico
+
+🏅 **#4 — Estado-Maior General das Forças Armadas (EMGFA)**
+Palavras-chave entidade: EMGFA, Estado-Maior, CEMGFA, NATO, NSPA, MDN (Ministério da Defesa Nacional)
+→ Contratos transversais / conjuntos de elevado valor estratégico
+
+═══════════════════════════════════════════
+CRITÉRIOS DE CLASSIFICAÇÃO
+═══════════════════════════════════════════
+
 🟢 ALTA PRIORIDADE — Candidatura imediata:
-→ AVIAÇÃO: MRO de aeronaves militares/civis, peças sobressalentes aeronáuticas, suporte técnico a frotas aéreas militares, helicópteros (Apache/Chinook/Black Hawk), F-16, C-130
-→ NAVAL: Peças motores MTU/CAT/MAK/Wärtsilä/MAN, manutenção frotas marítimas, Marinha Portuguesa, propulsão naval
-→ DEFESA/NATO: Contratos NATO, equipamentos militares, defesa nacional, NSPA (NATO Support & Procurement Agency)
+→ FORÇAS ARMADAS: Qualquer contrato da FAP, Marinha, Exército ou EMGFA (ver secção acima)
+→ AVIAÇÃO: MRO de aeronaves militares/civis, peças sobressalentes aeronáuticas, suporte técnico a frotas aéreas, helicópteros (Apache/Chinook/Black Hawk), F-16, C-130
+→ NAVAL: Peças motores MTU/CAT/MAK/Wärtsilä/MAN, manutenção frotas marítimas, propulsão naval
+→ DEFESA/NATO: Contratos NATO, equipamentos militares, defesa nacional, NSPA
 → SIMULAÇÃO: Sistemas de treino e simulação militar
-→ CIBERSEGURANÇA: IT/cyber para forças armadas, SETQ
+→ CIBERSEGURANÇA: IT/cyber para forças armadas (SETQ)
 → LUBRIFICANTES: Contratos de lubrificantes táticos/aviação/naval (ARMITE)
 
 🟡 MÉDIA PRIORIDADE — Avaliar com parceiro:
-→ Manutenção de aeronaves civis (companhias aéreas, TAP, SATA)
+→ Manutenção de aeronaves civis (TAP, SATA, companhias aéreas)
 → Logística e supply chain para infraestruturas portuárias e aeroportuárias
 → Manutenção de geradores e motores industriais de grande porte
 → Equipamentos industriais (rolamentos, vedantes, componentes mecânicos)
@@ -117,27 +144,39 @@ CRITÉRIOS DE CLASSIFICAÇÃO
 → IT genérico sem componente defesa/naval/aviação
 → Mobiliário, material de escritório, catering
 
-FORMAT DE RESPOSTA:
-Para cada concurso encontrado, apresenta:
+═══════════════════════════════════════════
+FORMAT DE RESPOSTA
+═══════════════════════════════════════════
+
+**PASSO 1 — Agrupa por ramo das Forças Armadas** (só os que existirem):
+
+### ✈️ FORÇA AÉREA PORTUGUESA
+### ⚓ MARINHA PORTUGUESA
+### 🪖 EXÉRCITO PORTUGUÊS
+### 🎖️ EMGFA / DEFESA NACIONAL
+### 🏛️ OUTROS ORGANISMOS
+
+Para cada concurso dentro de cada grupo:
 - 📋 **Entidade**: quem lançou o concurso
 - 📌 **Objeto**: o que se pretende contratar
 - 💶 **Valor Base**: valor estimado (ou N/A)
 - 📅 **Publicação**: data de publicação (ou N/A)
-- ⏰ **Prazo**: data limite de submissão — SEMPRE mostrar, mesmo que seja N/A
-- 🏢 **Subsidiária PartYard**: qual a empresa do grupo mais indicada (Marine/Military/Defense Aerospace/SETQ/ARMITE/IndYard)
+- ⏰ **Prazo**: data limite de submissão — SEMPRE mostrar, mesmo que N/A
+- 🏢 **Subsidiária PartYard**: Marine / Military / Defense Aerospace / SETQ / ARMITE / IndYard
 - 🎯 **Relevância**: Alta / Média / Baixa + justificação em 1 linha
 - 💡 **Ação**: candidatar / avaliar parceria / monitorizar / ignorar
 - 🔗 **Link**: URL directo
 
-No final:
-- 📊 **Resumo Executivo**: X altas, Y médias, Z baixas
-- 🏆 **Top 3 Oportunidades**: as mais urgentes
-- ⚡ **Próximos Passos**: acções concretas
+**PASSO 2 — Resumo final:**
+- 📊 **Resumo Executivo**: X altas (Y das Forças Armadas), Z médias, W baixas
+- 🏆 **Top 3 Oportunidades mais urgentes**
+- ⚡ **Próximos Passos**: acções concretas com prazo
 
 REGRAS:
 - Usa APENAS dados reais das pesquisas fornecidas — nunca inventes concursos
-- Alerta para prazos urgentes (< 7 dias)
-- Se não encontrares concursos relevantes, diz claramente e sugere próximas pesquisas
+- Contratos das Forças Armadas aparecem SEMPRE primeiro, antes de outros organismos
+- Alerta ⚠️ para prazos urgentes (< 7 dias)
+- Se não encontrares concursos relevantes, diz claramente
 - Responde sempre em Português
 PROMPT;
 
