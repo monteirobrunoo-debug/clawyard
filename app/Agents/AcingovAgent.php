@@ -168,35 +168,33 @@ CRITÉRIOS DE CLASSIFICAÇÃO
 FORMAT DE RESPOSTA
 ═══════════════════════════════════════════
 
-**PASSO 1 — Agrupa por ramo das Forças Armadas** (só os que existirem):
+**FILTROS OBRIGATÓRIOS** (aplicar antes de apresentar qualquer resultado):
+1. Excluir concursos com deadline já ultrapassado
+2. Excluir concursos com deadline a mais de 2 meses
+3. Incluir sem prazo definido (marcar ⚠️)
+4. Ordenar dentro de cada fonte por deadline mais próximo primeiro
+5. Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem sempre em primeiro dentro de cada fonte
 
-### ✈️ FORÇA AÉREA PORTUGUESA
-### ⚓ MARINHA PORTUGUESA
-### 🪖 EXÉRCITO PORTUGUÊS
-### 🎖️ EMGFA / DEFESA NACIONAL
-### 🏛️ OUTROS ORGANISMOS
+**ESTRUTURA — agrupado por fonte de informação:**
 
-Para cada concurso dentro de cada grupo:
-- 📋 **Entidade**: quem lançou o concurso
-- 📌 **Objeto**: o que se pretende contratar
-- 💶 **Valor Base**: valor estimado (ou N/A)
-- 📅 **Publicação**: data de publicação (ou N/A)
-- ⏰ **Prazo**: data limite de submissão — SEMPRE mostrar, mesmo que N/A
-- 🏢 **Subsidiária PartYard**: Marine / Military / Defense Aerospace / SETQ / ARMITE / IndYard
-- 🎯 **Relevância**: Alta / Média / Baixa + justificação em 1 linha
-- 💡 **Ação**: candidatar / avaliar parceria / monitorizar / ignorar
-- 🔗 **Link**: URL directo
+### 🇵🇹 ACINGOV
+### 🇪🇺 VORTAL / TED EUROPA
+### 🌍 UNGM
+### 🇵🇹 BASE.GOV.PT (intel competitiva)
+### 🇺🇸 SAM.GOV
 
-**PASSO 2 — Resumo final:**
-- 📊 **Resumo Executivo**: X altas (Y das Forças Armadas), Z médias, W baixas
-- 🏆 **Top 3 Oportunidades mais urgentes**
-- ⚡ **Próximos Passos**: acções concretas com prazo
+Para cada concurso:
+📋 **[Objeto]** | 🏛️ Entidade | ⏰ Prazo: dd/mm/yyyy | 💶 Valor
+🏢 Subsidiária | 🎯 🟢Alta/🟡Média/🔴Baixa — justificação | 🔗 Link
+(🚨 se prazo < 7 dias)
+
+**Resumo final:**
+- 📊 Total dentro prazo | Por fonte | Forças Armadas PT: N
+- 🏆 Top 5 mais urgentes
+- ⚡ Próximos passos com prazo
 
 REGRAS:
-- Usa APENAS dados reais das pesquisas fornecidas — nunca inventes concursos
-- Contratos das Forças Armadas aparecem SEMPRE primeiro, antes de outros organismos
-- Alerta ⚠️ para prazos urgentes (< 7 dias)
-- Se não encontrares concursos relevantes, diz claramente
+- Usa APENAS dados reais — nunca inventes concursos
 - Responde sempre em Português
 PROMPT;
 
@@ -1037,77 +1035,78 @@ MSG;
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
         $samData = $this->fetchSamGov();
 
-        $emit("✅ **Recolha concluída. A classificar por área...**\n\n");
+        $emit("✅ **Recolha concluída. A filtrar e ordenar por prazo...**\n\n");
 
-        // ── Análise Claude — classificação por área ───────────────────────────
-        $emit("---\n### 🧠 Dra. Ana Contratos — Classificação por Área\n\n");
-        if ($heartbeat) $heartbeat('Dra. Ana a classificar por área');
+        // ── Análise Claude — agrupado por portal, filtrado por prazo ──────────
+        $emit("---\n### 🧠 Dra. Ana Contratos — Relatório por Fonte\n\n");
+        if ($heartbeat) $heartbeat('Dra. Ana a filtrar por prazo');
+
+        $today2m = now()->addMonths(2)->format('d/m/Y');
 
         $allData = implode("\n\n", array_filter(
             [
-                '[ACINGOV/DRE.pt - Concursos PT]' . $acingovData,
-                '[VORTAL/TED Europa - Concursos EU]' . $vortalData,
-                '[UNGM - UN Tenders]' . $ungmData,
-                '[BASE.GOV.PT - Contratos Adjudicados]' . $baseGovData,
-                '[SAM.gov]' . $samData,
+                '[FONTE: ACINGOV — Concursos Públicos Portugal]' . "\n" . $acingovData,
+                '[FONTE: VORTAL / TED Europa — Concursos UE]'    . "\n" . $vortalData,
+                '[FONTE: UNGM — UN Global Marketplace]'          . "\n" . $ungmData,
+                '[FONTE: BASE.GOV.PT — Contratos Adjudicados PT]'. "\n" . $baseGovData,
+                '[FONTE: SAM.GOV — US Federal Contracts]'        . "\n" . $samData,
             ],
-            fn($v) => strlen($v) > 30
+            fn($v) => strlen($v) > 50
         ));
 
         $analysisPrompt = <<<MSG
 {$userText}
 
-Período: {$dateFrom} a {$dateTo} (últimos 5 dias).
-Portais pesquisados: Acingov · Vortal · base.gov.pt · UNGM · SAM.gov
+Data de hoje: {$dateTo}
+Prazo máximo a considerar: {$today2m} (2 meses a partir de hoje)
+Portais pesquisados: Acingov · Vortal/TED · base.gov.pt · UNGM · SAM.gov
 
-Analisa TODOS os contratos/concursos abaixo e apresenta os resultados CLASSIFICADOS POR ÁREA DE NEGÓCIO DO HP-GROUP (não por portal).
+═══════════════════════════════════════════
+REGRAS DE FILTRAGEM — APLICAR ANTES DE TUDO
+═══════════════════════════════════════════
+1. EXCLUIR contratos cujo prazo já passou (deadline < {$dateTo})
+2. EXCLUIR contratos com prazo superior a 2 meses ({$today2m})
+3. INCLUIR contratos sem prazo definido (N/A) — mostrar com ⚠️ Prazo desconhecido
+4. ORDENAR dentro de cada fonte: prazo mais próximo PRIMEIRO (urgente → menos urgente)
+5. Dentro do mesmo portal, contratos das Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem SEMPRE em primeiro
 
-== ESTRUTURA DO RELATÓRIO — POR SUBSIDIÁRIA / ÂMBITO ==
+═══════════════════════════════════════════
+ESTRUTURA DO RELATÓRIO — AGRUPADO POR FONTE
+═══════════════════════════════════════════
 
-Para cada ÁREA relevante, lista os contratos encontrados:
+### 🇵🇹 ACINGOV — Concursos Públicos Portugal
+### 🇪🇺 VORTAL / TED EUROPA — Concursos UE
+### 🌍 UNGM — UN Global Marketplace
+### 🇵🇹 BASE.GOV.PT — Contratos Adjudicados (inteligência competitiva)
+### 🇺🇸 SAM.GOV — US Federal Contracts
 
-### 🛩️ Aviação & Aeronáutica  ← PartYard Defense Aerospace (MRO, peças, helicópteros, C-130, F-16, aviação civil)
-### ⚓ Naval & Marítimo  ← PartYard Marine (MTU, CAT, MAK, Wärtsilä, Schottel, SKF)
-### 🚗 Sistemas Terrestres & Defesa  ← PartYard Military (viaturas, armamento, NATO, NSPA)
-### 🎯 Simulação & Treino Militar  ← Simuladores, sistemas de treino táctico
-### 🛢️ Lubrificantes & Químicos  ← ARMITE (lubrificantes táticos, óleos aviação/naval)
-### 💻 IT & Cibersegurança  ← SETQ (C4ISR, redes seguras, cyber para defesa)
-### 🏭 Serviços Industriais & Logística  ← IndYard (manutenção, supply chain, engenharia)
-### 🏗️ Obras & Infraestrutura  ← (monitorizar — baixa prioridade)
-### 🌐 Outros
+Se uma fonte não tiver resultados válidos (após filtragem), escreve: *Sem concursos dentro do prazo de 2 meses.*
 
-Para cada contrato dentro de cada área:
-📋 **[Título/Objeto]**
-🏛️ Entidade: [nome] | 🌍 Portal: [Acingov/Vortal/UNGM/base.gov.pt/SAM.gov]
-📅 Publicado: [data] | ⏰ Prazo: [data limite] ← OBRIGATÓRIO — usa N/A se não disponível
-💶 Valor: [estimativa ou N/A] | 🏢 Subsidiária: [Marine/Military/Defense Aerospace/SETQ/ARMITE/IndYard]
+Para cada concurso dentro de cada fonte:
+📋 **[Título / Objeto do contrato]**
+🏛️ Entidade: [nome] | ⏰ Prazo: **[dd/mm/yyyy]** ← prazo de submissão
+📅 Publicado: [data] | 💶 Valor: [€ estimado ou N/A]
+🏢 Subsidiária: [Marine/Military/Defense Aerospace/SETQ/ARMITE/IndYard]
 🎯 [🟢Alta/🟡Média/🔴Baixa] — [justificação 1 linha] | 🔗 [Link]
-(Para base.gov.pt: indicar também 🏆 Adjudicatário)
 
-⚠️ REGRAS FIXAS:
-- A linha ⏰ Prazo é OBRIGATÓRIA em todos os contratos — nunca omitir
-- Identifica SEMPRE a Subsidiária PartYard mais indicada
-- Se não houver contratos numa área, omite essa secção
+⚠️ Prazo urgente (< 7 dias): adicionar emoji 🚨 no início da linha do contrato
+⚠️ Para base.gov.pt: adicionar 🏆 Adjudicatário e usar como intel — quem ganhou, a que preço
 
-Depois do relatório por área:
----
+═══════════════════════════════════════════
+RESUMO FINAL
+═══════════════════════════════════════════
+
 ### 📊 Resumo Executivo
-- Total: X contratos | 🟢 N altas · 🟡 N médias · 🔴 N baixas
-- Por portal: Acingov(N) · Vortal(N) · UNGM(N) · base.gov.pt(N) · SAM.gov(N)
-- Por subsidiária: Marine(N) · Military(N) · Aerospace(N) · SETQ(N) · ARMITE(N) · IndYard(N)
+- Contratos dentro do prazo (≤ 2 meses): X total | 🟢 N altas · 🟡 N médias · 🔴 N baixas
+- Por fonte: Acingov(N) · Vortal/TED(N) · UNGM(N) · base.gov.pt(N) · SAM.gov(N)
+- Das Forças Armadas PT (FAP/Marinha/Exército/EMGFA): N contratos
+- Excluídos por prazo expirado ou > 2 meses: N
 
-### 🏆 Top 5 Oportunidades Prioritárias
-(prazo mais curto + valor mais alto + maior relevância PartYard)
+### 🏆 Top 5 Oportunidades — Candidatura Imediata
+(ordenadas: prazo mais curto + relevância PartYard mais alta)
 
 ### ⚡ Próximos Passos
-(acções concretas para a equipa PartYard esta semana — por subsidiária)
-
-NOTAS POR PORTAL:
-- SAM.gov = alta prioridade (DoD, Navy, Air Force, Army Aviation, Coast Guard, NSPA)
-- base.gov.pt = inteligência competitiva — quem ganhou, a que preço (Forças Armadas PT, FAP, Marinha)
-- DRE.pt/Acingov = concursos abertos em Portugal (Marinha, FAP, Exército, GNR, PSP)
-- TED/Vortal = concursos abertos na Europa acima de €140k (EDA, NATO, países NATO)
-- UNGM = tenders ONU/organizações internacionais (UNDP, UNHCR, UNICEF, WFP)
+(acções concretas esta semana, por subsidiária, com prazo)
 
 --- DADOS DOS 5 PORTAIS ---
 {$allData}
