@@ -419,8 +419,10 @@ PROMPT;
             $seen  = [];
             $lines = [];
 
+            $kwRequests = 0;
             foreach ($keywords as $kw) {
-                if (count($lines) >= 20) break;
+                if (count($lines) >= 20 || $kwRequests >= 8) break; // max 8 HTTP requests
+                $kwRequests++;
                 try {
                     $resp = $client->get($baseUrl . 'procedimentos_fornecedor/procedimentos_fornecedor_c', [
                         'query' => ['object' => $kw],
@@ -487,8 +489,10 @@ PROMPT;
         $seen  = [];
         $lines = [];
 
+        $kwRequests = 0;
         foreach ($keywords as $kw) {
-            if (count($lines) >= 20) break;
+            if (count($lines) >= 20 || $kwRequests >= 8) break; // max 8 HTTP requests
+            $kwRequests++;
             try {
                 $resp = $this->httpClient->get($baseUrl, [
                     'query'   => ['procedure_search' => $kw],
@@ -1136,7 +1140,7 @@ Portais pesquisados: Acingov · Vortal/TED · base.gov.pt · UNGM · SAM.gov
 ═══════════════════════════════════════════
 REGRAS DE FILTRAGEM — APLICAR ANTES DE TUDO
 ═══════════════════════════════════════════
-1. EXCLUIR contratos cujo prazo já passou (deadline < {$dateTo}) — ÚNICA razão de exclusão
+1. EXCLUIR contratos cujo prazo já passou (deadline < {$dateTo}) — MAS APENAS se o prazo é também POSTERIOR à data de publicação. Se o prazo for ANTERIOR à publicação, é erro de dados — mostra o contrato com ⚠️ *Data inconsistente*
 2. NUNCA excluir um contrato por "irrelevância" ou "fora do core business" — mostra TUDO
 3. MARCAR contratos com prazo > 2 meses ({$today2m}) com 📆 *Prazo distante (> 2 meses)*
 4. INCLUIR contratos sem prazo definido (N/A) — mostrar com ⚠️ Prazo desconhecido
