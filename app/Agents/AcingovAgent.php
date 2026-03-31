@@ -169,10 +169,10 @@ FORMAT DE RESPOSTA
 ═══════════════════════════════════════════
 
 **FILTROS OBRIGATÓRIOS** (aplicar antes de apresentar qualquer resultado):
-1. Excluir concursos com deadline já ultrapassado
-2. Excluir concursos com deadline a mais de 2 meses
+1. Excluir APENAS concursos com deadline já ultrapassado (expirados)
+2. Incluir TODOS os restantes, mesmo com prazo > 2 meses — marcar com 📆 *Prazo distante*
 3. Incluir sem prazo definido (marcar ⚠️)
-4. Ordenar dentro de cada fonte por deadline mais próximo primeiro
+4. Ordenar dentro de cada fonte: prazo mais próximo primeiro; prazo distante e sem prazo no fim
 5. Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem sempre em primeiro dentro de cada fonte
 
 **ESTRUTURA — agrupado por fonte de informação:**
@@ -1064,11 +1064,12 @@ Portais pesquisados: Acingov · Vortal/TED · base.gov.pt · UNGM · SAM.gov
 ═══════════════════════════════════════════
 REGRAS DE FILTRAGEM — APLICAR ANTES DE TUDO
 ═══════════════════════════════════════════
-1. EXCLUIR contratos cujo prazo já passou (deadline < {$dateTo})
-2. EXCLUIR contratos com prazo superior a 2 meses ({$today2m})
-3. INCLUIR contratos sem prazo definido (N/A) — mostrar com ⚠️ Prazo desconhecido
-4. ORDENAR dentro de cada fonte: prazo mais próximo PRIMEIRO (urgente → menos urgente)
-5. Dentro do mesmo portal, contratos das Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem SEMPRE em primeiro
+1. EXCLUIR contratos cujo prazo já passou (deadline < {$dateTo}) — estes não aparecem
+2. INCLUIR todos os restantes, independentemente do prazo
+3. MARCAR contratos com prazo > 2 meses ({$today2m}) com 📆 *Prazo distante (> 2 meses)*
+4. INCLUIR contratos sem prazo definido (N/A) — mostrar com ⚠️ Prazo desconhecido
+5. ORDENAR dentro de cada fonte: prazo mais próximo PRIMEIRO (urgente → menos urgente; prazo distante no fim; sem prazo no fim)
+6. Dentro do mesmo portal, contratos das Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem SEMPRE em primeiro
 
 ═══════════════════════════════════════════
 ESTRUTURA DO RELATÓRIO — AGRUPADO POR FONTE
@@ -1097,10 +1098,11 @@ RESUMO FINAL
 ═══════════════════════════════════════════
 
 ### 📊 Resumo Executivo
-- Contratos dentro do prazo (≤ 2 meses): X total | 🟢 N altas · 🟡 N médias · 🔴 N baixas
+- Total encontrado: X | 🟢 N altas · 🟡 N médias · 🔴 N baixas
+- Prazo ≤ 2 meses: N | Prazo > 2 meses (📆): N | Sem prazo (⚠️): N
 - Por fonte: Acingov(N) · Vortal/TED(N) · UNGM(N) · base.gov.pt(N) · SAM.gov(N)
 - Das Forças Armadas PT (FAP/Marinha/Exército/EMGFA): N contratos
-- Excluídos por prazo expirado ou > 2 meses: N
+- Excluídos por prazo expirado: N
 
 ### 🏆 Top 5 Oportunidades — Candidatura Imediata
 (ordenadas: prazo mais curto + relevância PartYard mais alta)
