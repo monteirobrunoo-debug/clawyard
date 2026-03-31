@@ -397,9 +397,22 @@ PROMPT;
 
             // Step 3: Search by defense/military keywords — collect up to 20 unique results
             $keywords = [
-                'defesa', 'militar', 'marinha', 'aeronave', 'aviação',
-                'manutenção', 'peças', 'motor', 'sobressalentes', 'NATO',
-                'força aérea', 'exército', 'armamento', 'navio', 'helicóptero',
+                // Defesa & Forças Armadas
+                'defesa', 'militar', 'marinha', 'força aérea', 'exército', 'NATO', 'armamento',
+                // Aviação & Aeronáutica
+                'aeronave', 'aviação', 'helicóptero', 'aeronáutica', 'MRO',
+                // Naval & Marítimo
+                'navio', 'naval', 'propulsão', 'embarcação',
+                // Motores & Peças
+                'motor', 'peças', 'sobressalentes', 'manutenção', 'revisão geral', 'overhaul',
+                // Equipamentos Médicos
+                'equipamento médico', 'médico', 'hospitalar', 'dispositivos médicos',
+                // Destruição de Documentos & Segurança
+                'destruição de documentos', 'destruidoras', 'fragmentação', 'trituração',
+                // Simulação & IT
+                'simulação', 'simulador', 'cibersegurança', 'tecnologia',
+                // Lubrificantes & Químicos
+                'lubrificantes', 'óleos', 'fluidos',
             ];
             $seen  = [];
             $lines = [];
@@ -452,9 +465,22 @@ PROMPT;
     {
         $baseUrl  = 'https://www.acingov.pt/acingovprod/2/zonaPublica/zona_publica_c/indexProcedimentos';
         $keywords = [
-            'defesa', 'militar', 'marinha', 'aeronave', 'aviação',
-            'manutenção', 'peças', 'motor', 'sobressalentes', 'NATO',
-            'força aérea', 'exército', 'armamento', 'navio', 'helicóptero',
+            // Defesa & Forças Armadas
+            'defesa', 'militar', 'marinha', 'força aérea', 'exército', 'NATO', 'armamento',
+            // Aviação & Aeronáutica
+            'aeronave', 'aviação', 'helicóptero', 'aeronáutica', 'MRO',
+            // Naval & Marítimo
+            'navio', 'naval', 'propulsão', 'embarcação',
+            // Motores & Peças
+            'motor', 'peças', 'sobressalentes', 'manutenção', 'revisão geral', 'overhaul',
+            // Equipamentos Médicos
+            'equipamento médico', 'médico', 'hospitalar', 'dispositivos médicos',
+            // Destruição de Documentos & Segurança
+            'destruição de documentos', 'destruidoras', 'fragmentação', 'trituração',
+            // Simulação & IT
+            'simulação', 'simulador', 'cibersegurança', 'tecnologia',
+            // Lubrificantes & Químicos
+            'lubrificantes', 'óleos', 'fluidos',
         ];
         $seen  = [];
         $lines = [];
