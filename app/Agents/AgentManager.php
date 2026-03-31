@@ -25,6 +25,7 @@ class AgentManager
             'capitao'   => new CapitaoAgent(),
             'acingov'   => new AcingovAgent(),
             'engineer'  => new EngineerAgent(),
+            'patent'    => new PatentAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -111,6 +112,23 @@ class AgentManager
         ];
         foreach ($financeKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['finance'];
+        }
+
+        // Patent / IP validation keywords
+        $patentKeywords = [
+            'sofia', 'dra. sofia', 'patent agent', 'agente de patentes',
+            'validar patente', 'validate patent', 'prior art', 'arte anterior',
+            'freedom to operate', 'fto', 'patenteabilidade', 'patentability',
+            'novidade patente', 'actividade inventiva', 'inventive step',
+            'depositar patente', 'file patent', 'pedido de patente', 'patent application',
+            'infringement', 'contrafacção', 'design-around', 'licenciar patente',
+            'epo search', 'uspto search', 'espacenet', 'wipo search', 'pct',
+            'já foi inventado', 'already invented', 'já existe patente',
+            'validação ip', 'ip validation', 'propriedade intelectual',
+            'intellectual property', 'patent search', 'pesquisa de patentes',
+        ];
+        foreach ($patentKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['patent'];
         }
 
         // Engineer / R&D / product development keywords

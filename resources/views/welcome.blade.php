@@ -411,6 +411,7 @@
                 <div class="agent-mini" data-agent="finance"><div class="dot-status"></div><span>💰 Dr. Luís Financeiro</span></div>
                 <div class="agent-mini" data-agent="research"><div class="dot-status"></div><span>🔍 Marina Research</span></div>
                 <div class="agent-mini" data-agent="engineer"><div class="dot-status"></div><span>🔩 Eng. Victor I&D</span></div>
+                <div class="agent-mini" data-agent="patent"><div class="dot-status"></div><span>🏛️ Dra. Sofia IP</span></div>
             </div>
         </div>
     </div>
@@ -503,7 +504,8 @@ const AGENT_NAMES = {
     aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research',
     capitao:'Capitão Porto',
     acingov:'Dra. Ana Contratos',
-    engineer:'Eng. Victor I&D'
+    engineer:'Eng. Victor I&D',
+    patent: 'Dra. Sofia IP'
 };
 
 const AGENT_COLORS = {
@@ -534,6 +536,7 @@ const AGENT_DESCRIPTIONS = {
     capitao: 'Operações portuárias, escalas, documentação e logística marítima',
     acingov: 'SAM.gov · base.gov.pt · Vortal · UNIDO · UNGM — contratos públicos para PartYard',
     engineer: 'I&D e desenvolvimento de produto — planos, TRL, CAPEX e roadmap para novos equipamentos PartYard',
+    patent:   'Propriedade Intelectual — validação de patentes, prior art EPO/USPTO/WIPO, patenteabilidade e Freedom to Operate',
 };
 
 const AGENT_CHIPS = {
