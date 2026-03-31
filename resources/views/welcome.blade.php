@@ -362,6 +362,7 @@
         <option value="capitao">⚓ Capitão Porto</option>
         <option value="acingov">🏛️ Dra. Ana Contratos</option>
         <option value="engineer">🔩 Eng. Victor I&amp;D</option>
+        <option value="patent">🏛️ Dra. Sofia IP</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -490,7 +491,7 @@ const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
-    capitao:'⚓', acingov:'🏛️', engineer:'🔩'
+    capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -516,7 +517,8 @@ const AGENT_COLORS = {
     finance:'#10b981', research:'#f97316',
     capitao:'#0ea5e9',
     acingov:'#f59e0b',
-    engineer:'#f97316'
+    engineer:'#f97316',
+    patent:'#8b5cf6'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -674,6 +676,15 @@ const AGENT_CHIPS = {
         '🎯 Roadmap completo: simulador de voo part-task trainer para C-130 — TRL, CAPEX, parceiros',
         '🔐 SETQ: plano de produto HSM (Hardware Security Module) para instalações NATO',
         '🚗 Retrofit kit para Leopard 2: sistema de gestão de potência com IA — viabilidade técnica',
+    ],
+    // ── Dra. Sofia IP ────────────────────────────────────────────────────
+    patent: [
+        '🔍 Valida o projecto de lubrificante bio-based ARMITE — prior art EPO e patenteabilidade',
+        '🏛️ Pesquisa prior art para simulador de voo com IA adaptativa — conflitos com patentes activas?',
+        '✅ O sistema de diagnóstico remoto de motores navais da PartYard já foi patenteado por alguém?',
+        '📋 Analisa todos os projectos do Eng. Victor e diz quais são patenteáveis imediatamente',
+        '🔐 Freedom to Operate: kit de reparação MIL-SPEC para AH-64 — podemos fabricar sem infringir?',
+        '💡 Estratégia IP completa para o HP-Group — onde depositar patentes primeiro (EP vs PCT vs PT)',
     ],
     // ── Capitão Porto ─────────────────────────────────────────────────────
     capitao: [
