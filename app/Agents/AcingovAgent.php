@@ -169,11 +169,13 @@ FORMAT DE RESPOSTA
 ═══════════════════════════════════════════
 
 **FILTROS OBRIGATÓRIOS** (aplicar antes de apresentar qualquer resultado):
-1. Excluir APENAS concursos com deadline já ultrapassado (expirados)
-2. Incluir TODOS os restantes, mesmo com prazo > 2 meses — marcar com 📆 *Prazo distante*
-3. Incluir sem prazo definido (marcar ⚠️)
-4. Ordenar dentro de cada fonte: prazo mais próximo primeiro; prazo distante e sem prazo no fim
-5. Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem sempre em primeiro dentro de cada fonte
+1. Excluir APENAS concursos com deadline já ultrapassado (expirados) — ÚNICA razão de exclusão
+2. NUNCA excluir por "irrelevância", "fora do core business" ou qualquer outro critério subjectivo
+3. Incluir TODOS os restantes, mesmo com prazo > 2 meses — marcar com 📆 *Prazo distante*
+4. Incluir sem prazo definido (marcar ⚠️)
+5. Ordenar dentro de cada fonte: prazo mais próximo primeiro; prazo distante e sem prazo no fim
+6. Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem sempre em primeiro dentro de cada fonte
+7. Se uma fonte trouxe N contratos nos dados, apresentas os N contratos — NUNCA escreves "Sem concursos" quando há dados
 
 **ESTRUTURA — agrupado por fonte de informação:**
 
@@ -1134,12 +1136,13 @@ Portais pesquisados: Acingov · Vortal/TED · base.gov.pt · UNGM · SAM.gov
 ═══════════════════════════════════════════
 REGRAS DE FILTRAGEM — APLICAR ANTES DE TUDO
 ═══════════════════════════════════════════
-1. EXCLUIR contratos cujo prazo já passou (deadline < {$dateTo}) — estes não aparecem
-2. INCLUIR todos os restantes, independentemente do prazo
+1. EXCLUIR contratos cujo prazo já passou (deadline < {$dateTo}) — ÚNICA razão de exclusão
+2. NUNCA excluir um contrato por "irrelevância" ou "fora do core business" — mostra TUDO
 3. MARCAR contratos com prazo > 2 meses ({$today2m}) com 📆 *Prazo distante (> 2 meses)*
 4. INCLUIR contratos sem prazo definido (N/A) — mostrar com ⚠️ Prazo desconhecido
 5. ORDENAR dentro de cada fonte: prazo mais próximo PRIMEIRO (urgente → menos urgente; prazo distante no fim; sem prazo no fim)
 6. Dentro do mesmo portal, contratos das Forças Armadas PT (FAP/Marinha/Exército/EMGFA) aparecem SEMPRE em primeiro
+7. ⚠️ PROIBIDO: Nunca escrever "Sem concursos" se existem dados na fonte — se o Acingov trouxe 7 contratos, mostras os 7
 
 ═══════════════════════════════════════════
 ESTRUTURA DO RELATÓRIO — AGRUPADO POR FONTE
@@ -1151,7 +1154,9 @@ ESTRUTURA DO RELATÓRIO — AGRUPADO POR FONTE
 ### 🇵🇹 BASE.GOV.PT — Contratos Adjudicados (inteligência competitiva)
 ### 🇺🇸 SAM.GOV — US Federal Contracts
 
-Se uma fonte não tiver resultados válidos (após filtragem), escreve: *Sem concursos dentro do prazo de 2 meses.*
+Se uma fonte não tiver NENHUM dado (campo vazio), escreve: *Sem dados disponíveis nesta fonte.*
+Se uma fonte trouxe dados mas todos têm prazo expirado, escreve: *N contratos encontrados — todos com prazo expirado.*
+NUNCA escrever "Sem concursos" se existem contratos nos dados — mostra TODOS.
 
 Para cada concurso dentro de cada fonte:
 📋 **[Título / Objeto do contrato]**
