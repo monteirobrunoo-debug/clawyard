@@ -261,7 +261,7 @@ PROMPT;
 
                 try {
                     $resp  = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
-                        ['headers' => ['Accept' => 'application/json'], 'timeout' => 8]);
+                        ['headers' => ['Accept' => 'application/json'], 'timeout' => 5]);
                     $data  = json_decode($resp->getBody()->getContents(), true);
                     $opps  = $data['opportunitiesData'] ?? [];
 
@@ -717,10 +717,13 @@ PROMPT;
             // 💻 Cibersegurança (SETQ)
             'cibersegurança', 'segurança informática',
         ];
-        $seen     = [];
-        $lines    = [];
+        $seen       = [];
+        $lines      = [];
+        $kwRequests = 0;
 
         foreach ($keywords as $kw) {
+            if ($kwRequests >= 6) break; // max 6 HTTP requests — avoid blocking
+            $kwRequests++;
             try {
                 $resp = $this->httpClient->get(
                     'https://www.base.gov.pt/Base/pt/ResultadoContratosSearch',
@@ -743,7 +746,7 @@ PROMPT;
                             'Referer'          => 'https://www.base.gov.pt/Base/pt/Pesquisa',
                             'User-Agent'       => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
                         ],
-                        'timeout' => 8,
+                        'timeout' => 5, // reduced from 8 — fail fast
                     ]
                 );
 
@@ -804,10 +807,13 @@ PROMPT;
             'cybersecurity information security defense IT',
         ];
 
-        $seen  = [];
-        $lines = [];
+        $seen       = [];
+        $lines      = [];
+        $kwRequests = 0;
 
         foreach ($searchGroups as $keywords) {
+            if ($kwRequests >= 3) break; // max 3 UNGM requests — API is slow
+            $kwRequests++;
             try {
                 $resp = $this->httpClient->get(
                     'https://www.ungm.org/Public/Notice',
@@ -826,7 +832,7 @@ PROMPT;
                             'User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
                             'Referer'    => 'https://www.ungm.org/Public/Notice',
                         ],
-                        'timeout' => 10,
+                        'timeout' => 5,
                     ]
                 );
 
