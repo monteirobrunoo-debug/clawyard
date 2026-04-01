@@ -171,7 +171,7 @@ PROMPT;
         $today_ts  = now()->startOfDay();
 
         $discoveries = \App\Models\Discovery::where('created_at', '>=', $today_ts)
-            ->orderBy('relevance_score', 'desc')->limit(20)->get();
+            ->orderBy('relevance_score', 'desc')->limit(40)->get();
 
         if ($discoveries->isNotEmpty()) {
             $lines = ["## DISCOVERIES FROM TODAY ({$discoveries->count()} items):"];
@@ -186,7 +186,7 @@ PROMPT;
             $sections[] = implode("\n", $lines);
         } else {
             $discoveries = \App\Models\Discovery::where('created_at', '>=', now()->subDays(3))
-                ->orderBy('relevance_score', 'desc')->limit(15)->get();
+                ->orderBy('relevance_score', 'desc')->limit(25)->get();
             if ($discoveries->isNotEmpty()) {
                 $lines = ["## RECENT DISCOVERIES (last 3 days, {$discoveries->count()} items):"];
                 foreach ($discoveries as $d) {
@@ -204,7 +204,7 @@ PROMPT;
         if ($heartbeat) $heartbeat('a ler relatórios');
 
         $reports = \App\Models\Report::where('created_at', '>=', $today_ts)
-            ->orderBy('created_at', 'desc')->limit(10)->get();
+            ->orderBy('created_at', 'desc')->limit(20)->get();
 
         if ($reports->isNotEmpty()) {
             $lines = ["## AGENT REPORTS FROM TODAY ({$reports->count()} reports):"];
@@ -215,7 +215,7 @@ PROMPT;
             $sections[] = implode("\n", $lines);
         } else {
             $reports = \App\Models\Report::where('created_at', '>=', now()->subDays(7))
-                ->orderBy('created_at', 'desc')->limit(5)->get();
+                ->orderBy('created_at', 'desc')->limit(10)->get();
             if ($reports->isNotEmpty()) {
                 $lines = ["## RECENT AGENT REPORTS (last 7 days):"];
                 foreach ($reports as $r) {
@@ -335,7 +335,7 @@ PROMPT;
         $sections  = [];
 
         $discoveries = \App\Models\Discovery::where('created_at', '>=', $today_ts)
-            ->orderBy('relevance_score', 'desc')->limit(20)->get();
+            ->orderBy('relevance_score', 'desc')->limit(40)->get();
         if ($discoveries->isNotEmpty()) {
             $lines = ["## DISCOVERIES FROM TODAY ({$discoveries->count()} items):"];
             foreach ($discoveries as $d) {
@@ -348,7 +348,7 @@ PROMPT;
         }
 
         $reports = \App\Models\Report::where('created_at', '>=', $today_ts)
-            ->orderBy('created_at', 'desc')->limit(10)->get();
+            ->orderBy('created_at', 'desc')->limit(20)->get();
         if ($reports->isNotEmpty()) {
             $lines = ["## AGENT REPORTS FROM TODAY:"];
             foreach ($reports as $r) {

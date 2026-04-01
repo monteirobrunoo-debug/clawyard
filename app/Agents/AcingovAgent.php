@@ -257,7 +257,7 @@ PROMPT;
                     . '&q='          . urlencode($keywords)
                     . '&postedFrom=' . urlencode($postedFrom)
                     . '&postedTo='   . urlencode($postedTo)
-                    . '&limit=20&offset=0';
+                    . '&limit=40&offset=0';
 
                 try {
                     $resp  = $this->httpClient->get('https://api.sam.gov/opportunities/v2/search?' . $params,
@@ -455,7 +455,7 @@ PROMPT;
                 }
             }
 
-            $lines = array_slice($lines, 0, 20);
+            $lines = array_slice($lines, 0, 40);
             if (empty($lines)) return '';
             return "=== ACINGOV — Concursos (autenticado, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $lines);
 
@@ -521,7 +521,7 @@ PROMPT;
             }
         }
 
-        $lines = array_slice($lines, 0, 20);
+        $lines = array_slice($lines, 0, 40);
         if (empty($lines)) return '';
         return "=== ACINGOV — Concursos (zona pública, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $lines);
     }
@@ -734,7 +734,7 @@ PROMPT;
                             'designacao'    => $kw,
                             'adjudicante'   => '',
                             'adjudicatario' => '',
-                            'pageSize'      => '10',
+                            'pageSize'      => '20',
                             'page'          => '1',
                         ],
                         'headers' => [
@@ -817,7 +817,7 @@ PROMPT;
                             'status'        => '0',     // 0 = active
                             'keyword'       => $keywords,
                             'pageIndex'     => '0',
-                            'pageSize'      => '10',
+                            'pageSize'      => '20',
                             'publishing_start' => $dateFrom,
                             'publishing_end'   => $dateTo,
                         ],
@@ -883,7 +883,7 @@ PROMPT;
             ];
             foreach ($tavily as $label => $query) {
                 try {
-                    $result = $this->searcher->search($query, 4, 'basic');
+                    $result = $this->searcher->search($query, 8, 'basic');
                     if ($result && strlen($result) > 50) {
                         $sections[] = "=== {$label} ===\n" . $result;
                     }

@@ -134,7 +134,7 @@ PROMPT;
                 'OR autonomous vessel OR marine propulsion AI OR naval defense technology OR predictive maintenance industrial'
             );
             $year  = now()->year;
-            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=12&sortBy=submittedDate&sortOrder=descending";
+            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=25&sortBy=submittedDate&sortOrder=descending";
             $xml   = $this->httpClient->get($url)->getBody()->getContents();
             $feed  = simplexml_load_string($xml);
             if (!$feed) return '(arXiv unavailable)';
@@ -375,7 +375,7 @@ PROMPT;
             if (empty($docs)) return '(EPO: sem patentes encontradas nos últimos 30 dias para os critérios definidos)';
 
             $lines = ["=== EPO Patents — últimos {$usedLabel} ==="];
-            foreach (array_slice($docs, 0, 10) as $doc) {
+            foreach (array_slice($docs, 0, 20) as $doc) {
                 $bib = $doc['bibliographic-data'] ?? [];
 
                 // Patent number from publication reference
