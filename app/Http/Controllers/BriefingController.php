@@ -54,7 +54,10 @@ class BriefingController extends Controller
                     'Generate daily briefing',
                     [],
                     function (string $chunk) {
-                        echo 'data: ' . json_encode(['chunk' => $chunk]) . "\n\n";
+                        // Sanitise invalid UTF-8 bytes from external sources (SAP/Tavily/DB)
+                        // before json_encode, which rejects malformed sequences
+                        $safe = mb_convert_encoding($chunk, 'UTF-8', 'UTF-8');
+                        echo 'data: ' . json_encode(['chunk' => $safe], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                         flush();
                     },
                     $heartbeat

@@ -327,7 +327,7 @@ class NvidiaController extends Controller
                 flush();
 
                 // Single chunk with full reply
-                echo 'data: ' . json_encode(['chunk' => $reply]) . "\n\n";
+                echo 'data: ' . json_encode(['chunk' => $reply], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                 flush();
 
                 echo "data: [DONE]\n\n";
@@ -396,7 +396,7 @@ class NvidiaController extends Controller
                     $resolvedMessage,
                     $resolvedHistory,
                     function (string $chunk) {
-                        echo 'data: ' . json_encode(['chunk' => $chunk]) . "\n\n";
+                        echo 'data: ' . json_encode(['chunk' => $chunk], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                         flush();
                     },
                     $heartbeat
