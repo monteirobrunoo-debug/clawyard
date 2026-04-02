@@ -166,22 +166,61 @@ PROMPT;
         ]);
     }
 
-    // ─── Fetch existing patents/discoveries from DB ────────────────────────
+    // ─── Fetch context from ALL agents in the system ──────────────────────
     protected function buildPatentContext(): string
     {
         $sections = [];
+        $today    = now()->startOfDay();
+        $week     = now()->subDays(7);
 
-        // 1. Recent patent discoveries saved by QuantumAgent
-        $patents = Discovery::where('source', 'like', '%EPO%')
-            ->orWhere('source', 'like', '%USPTO%')
-            ->orWhere('source', 'like', '%patent%')
-            ->orWhere('category', 'like', '%patent%')
+        // ── 1. Briefing do dia (Renato) ────────────────────────────────────
+        $briefing = Report::where('type', 'briefing')
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if ($briefing) {
+            $excerpt = substr(strip_tags($briefing->content), 0, 1200);
+            $sections[] = "## BRIEFING EXECUTIVO — RENATO (último, " . $briefing->created_at->format('d/m/Y') . "):\n{$excerpt}...";
+        }
+
+        // ── 2. Planos de I&D do Eng. Victor ───────────────────────────────
+        $engineerReports = Report::where('type', 'engineer')
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
+
+        if ($engineerReports->isNotEmpty()) {
+            $lines = ["## PLANOS DE DESENVOLVIMENTO — ENG. VICTOR (últimos {$engineerReports->count()}):"];
+            foreach ($engineerReports as $r) {
+                $excerpt = substr(strip_tags($r->content), 0, 800);
+                $lines[] = "\n### [{$r->created_at->format('d/m/Y')}] {$r->title}\n{$excerpt}...";
+            }
+            $sections[] = implode("\n", $lines);
+        }
+
+        // ── 3. Relatório do Prof. Quantum (papers + patentes EPO) ─────────
+        $quantumReport = Report::where('type', 'quantum')
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if ($quantumReport) {
+            $excerpt = substr(strip_tags($quantumReport->content), 0, 1000);
+            $sections[] = "## DIGEST CIENTÍFICO — PROF. QUANTUM (último, " . $quantumReport->created_at->format('d/m/Y') . "):\n{$excerpt}...";
+        }
+
+        // ── 4. Patentes EPO/USPTO guardadas nas Discoveries ───────────────
+        $patents = Discovery::where(function ($q) {
+                $q->where('source', 'like', '%EPO%')
+                  ->orWhere('source', 'like', '%USPTO%')
+                  ->orWhere('source', 'like', '%patent%')
+                  ->orWhere('category', 'like', '%patent%');
+            })
             ->orderBy('created_at', 'desc')
             ->limit(30)
             ->get();
 
         if ($patents->isNotEmpty()) {
-            $lines = ["## PATENTES RECENTES NO SISTEMA (EPO/USPTO — últimas descobertas):"];
+            $lines = ["## PATENTES RECENTES NO SISTEMA (EPO/USPTO — " . $patents->count() . " entradas):"];
             foreach ($patents as $p) {
                 $line = "- [{$p->source}] {$p->title}";
                 if ($p->reference_id) $line .= " | REF: {$p->reference_id}";
@@ -192,22 +231,58 @@ PROMPT;
             $sections[] = implode("\n", $lines);
         }
 
-        // 2. Engineer reports (product development plans)
-        $engineerReports = Report::where('type', 'engineer')
+        // ── 5. Todas as Discoveries recentes (arXiv + PeerJ + EPO) ────────
+        $allDiscoveries = Discovery::where('created_at', '>=', $week)
+            ->orderBy('relevance_score', 'desc')
             ->orderBy('created_at', 'desc')
-            ->limit(5)
+            ->limit(40)
             ->get();
 
-        if ($engineerReports->isNotEmpty()) {
-            $lines = ["## PLANOS DE DESENVOLVIMENTO (Eng. Victor — últimos relatórios):"];
-            foreach ($engineerReports as $r) {
-                $excerpt = substr(strip_tags($r->content), 0, 600);
-                $lines[] = "\n### {$r->title}\n{$excerpt}...";
+        if ($allDiscoveries->isNotEmpty()) {
+            $lines = ["## DESCOBERTAS CIENTÍFICAS RECENTES (últimos 7 dias — " . $allDiscoveries->count() . " papers/patentes):"];
+            foreach ($allDiscoveries as $d) {
+                $line = "- [{$d->source}] [{$d->category}] {$d->title}";
+                if ($d->summary)          $line .= " — {$d->summary}";
+                if ($d->opportunity)      $line .= " | Oportunidade: {$d->opportunity}";
+                if ($d->recommendation)   $line .= " | Recomendação: {$d->recommendation}";
+                if ($d->url)              $line .= " | {$d->url}";
+                $lines[] = $line;
             }
             $sections[] = implode("\n", $lines);
         }
 
-        // 3. Quantum/research discoveries (papers that may relate to the project)
+        // ── 6. Todos os relatórios recentes de todos os agentes ────────────
+        $allReports = Report::where('created_at', '>=', $week)
+            ->where('type', '!=', 'briefing') // briefing já incluído acima
+            ->where('type', '!=', 'quantum')  // quantum já incluído acima
+            ->orderBy('created_at', 'desc')
+            ->limit(10)
+            ->get();
+
+        if ($allReports->isNotEmpty()) {
+            $lines = ["## RELATÓRIOS RECENTES — TODOS OS AGENTES (últimos 7 dias):"];
+            foreach ($allReports as $r) {
+                $excerpt = substr(strip_tags($r->content), 0, 400);
+                $lines[] = "\n### [{$r->type}] {$r->title} ({$r->created_at->format('d/m/Y')})\n{$excerpt}...";
+            }
+            $sections[] = implode("\n", $lines);
+        }
+
+        if (empty($sections)) {
+            return "(Sem dados de agentes no sistema ainda — executa o Renato e o Prof. Quantum primeiro)\n\n";
+        }
+
+        return "=== CONTEXTO COMPLETO HP-GROUP — TODOS OS AGENTES ===\n\n"
+            . implode("\n\n---\n\n", $sections)
+            . "\n\n=== FIM CONTEXTO ===\n\n";
+    }
+
+    // ─── [LEGACY — mantido para compatibilidade] ──────────────────────────
+    protected function buildPatentContextLegacy(): string
+    {
+        $sections = [];
+
+        // Quantum/research discoveries (papers that may relate to the project)
         $discoveries = Discovery::whereIn('category', ['quantum', 'defense', 'propulsion', 'materials', 'ai_ml', 'digital'])
             ->where('created_at', '>=', now()->subDays(30))
             ->orderBy('relevance_score', 'desc')
