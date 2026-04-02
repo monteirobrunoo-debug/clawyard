@@ -284,39 +284,101 @@ PROMPT;
     }
 
     /**
-     * Build EPO CQL query covering all PartYard/HP-Group relevant areas.
+     * Build EPO CQL query covering ALL HP-Group / PartYard business activities.
      *
-     * Uses the `any` operator (matches ANY of the listed words in title/abstract)
-     * instead of exact phrase matching — dramatically widens the result set.
-     * Exact phrase matching with `ta="marine propulsion"` often returns zero
-     * results for short date windows because the exact phrase must appear verbatim.
+     * Uses `ta any "..."` so ANY patent whose title or abstract contains
+     * at least ONE of the listed keywords is returned.
+     *
+     * Covers every PartYard business unit:
+     *   PartYard Marine      — spare parts, engines, seals, propulsion
+     *   PartYard Military    — defense, aerospace MRO, NATO platforms
+     *   Armite Lubricants    — lubricant formulation, MIL-SPEC greases
+     *   SETQ Cybersecurity   — network security, quantum crypto, C4ISR
+     *   IndYard              — workforce, ERP, supply chain
+     *   Viridis Ocean        — decarbonisation, sustainable shipping
+     *   HP-Group R&D         — sensors, NDT, digital twin, AI, IoT
      */
     protected function buildEpoCql(?string $dateFrom = null, ?string $dateTo = null): string
     {
-        // Single broad `ta any` query — EPO OPS will match any patent whose
-        // title or abstract contains at least one of these keywords.
         $keywords = implode(' ', [
-            // Maritime & Naval
-            'propulsion', 'maritime', 'naval', 'vessel', 'ship', 'submarine',
-            'underwater', 'offshore', 'stern', 'rudder', 'thruster',
-            // Defense & Military
-            'defense', 'military', 'radar', 'sonar', 'missile', 'surveillance',
-            'ballistic', 'armament', 'munition', 'drone',
-            // Quantum & Cryptography
-            'quantum', 'cryptography', 'encryption', 'qubit', 'entanglement',
-            'post-quantum', 'lattice',
-            // AI & Machine Learning
-            'machine-learning', 'neural', 'autonomous', 'digital-twin', 'predictive',
-            // Cybersecurity
-            'cybersecurity', 'intrusion', 'firewall', 'zero-trust',
-            // IoT & Maintenance
-            'IoT', 'condition-monitoring', 'vibration', 'thermography',
-            // Energy & Sustainability
-            'hydrogen', 'biofuel', 'ammonia', 'scrubber', 'decarbonization',
-            // Materials & Manufacturing
-            'composite', 'additive', 'coating', 'corrosion', 'lubricant',
-            // Aerospace & MRO
-            'aerospace', 'turbine', 'overhaul', 'MRO',
+
+            // ── PartYard Marine — Engines & Spare Parts ───────────────────
+            'propulsion', 'maritime', 'marine', 'naval', 'vessel', 'ship',
+            'diesel-engine', 'engine-overhaul', 'crankshaft', 'camshaft',
+            'fuel-injection', 'turbocharger', 'intercooler', 'heat-exchanger',
+            'governor', 'gearbox', 'coupling', 'aftercooler', 'cylinder-liner',
+            'piston', 'connecting-rod', 'exhaust-valve', 'inlet-valve',
+            'water-pump', 'oil-cooler', 'separator', 'purifier',
+
+            // ── PartYard Marine — Seals & Propulsion Systems ──────────────
+            'stern-tube', 'shaft-seal', 'lip-seal', 'mechanical-seal',
+            'propeller', 'thruster', 'azipod', 'pod-drive', 'rudder',
+            'controllable-pitch', 'waterjet', 'cavitation', 'bearing',
+            'roller-bearing', 'slewing-ring', 'bushing',
+
+            // ── PartYard Military / Defense ───────────────────────────────
+            'defense', 'military', 'armament', 'munition', 'ballistic',
+            'radar', 'sonar', 'lidar', 'infrared-sensor', 'surveillance',
+            'missile', 'torpedo', 'drone', 'UAV', 'UUV', 'USV',
+            'combat', 'battlefield', 'C4ISR', 'IFF', 'ECM', 'countermeasure',
+            'night-vision', 'thermal-imaging', 'armor', 'ballistic-protection',
+            'NBC-protection',
+
+            // ── Aerospace MRO — PartYard Military platforms ───────────────
+            'aerospace', 'aircraft', 'helicopter', 'turbine', 'MRO',
+            'airframe', 'avionics', 'landing-gear', 'hydraulics', 'actuator',
+            'NDT', 'non-destructive', 'ultrasonic-inspection', 'eddy-current',
+            'fatigue', 'crack-detection', 'composite-repair',
+
+            // ── Armite Lubricants ─────────────────────────────────────────
+            'lubricant', 'grease', 'oil-analysis', 'viscosity', 'tribology',
+            'anti-wear', 'extreme-pressure', 'nano-lubricant', 'bio-lubricant',
+            'synthetic-oil', 'gear-oil', 'hydraulic-fluid', 'rust-inhibitor',
+
+            // ── SETQ Cybersecurity ─────────────────────────────────────────
+            'cybersecurity', 'intrusion-detection', 'firewall', 'zero-trust',
+            'SIEM', 'vulnerability', 'penetration-testing', 'encryption',
+            'cryptography', 'PKI', 'certificate', 'authentication', 'biometric',
+
+            // ── Quantum Technologies ───────────────────────────────────────
+            'quantum', 'qubit', 'entanglement', 'superposition', 'QKD',
+            'post-quantum', 'lattice-cryptography', 'quantum-sensing',
+            'quantum-radar', 'quantum-communication', 'photon',
+
+            // ── AI / Machine Learning ──────────────────────────────────────
+            'machine-learning', 'deep-learning', 'neural-network',
+            'autonomous', 'digital-twin', 'predictive-maintenance',
+            'anomaly-detection', 'computer-vision', 'reinforcement-learning',
+            'natural-language', 'large-language-model', 'transformer',
+
+            // ── IoT & Industry 4.0 ────────────────────────────────────────
+            'IoT', 'sensor-fusion', 'condition-monitoring', 'vibration-analysis',
+            'thermography', 'remote-monitoring', 'SCADA', 'OPC-UA', 'edge-computing',
+            'cloud-platform', 'digital-platform',
+
+            // ── Energy & Decarbonisation ──────────────────────────────────
+            'hydrogen', 'biofuel', 'LNG', 'methanol', 'ammonia',
+            'fuel-cell', 'shore-power', 'battery-storage', 'hybrid-propulsion',
+            'wind-propulsion', 'kite', 'scrubber', 'exhaust-cleaning',
+            'decarbonization', 'CII', 'EEXI', 'carbon-capture',
+
+            // ── Materials & Manufacturing ─────────────────────────────────
+            'composite', 'additive-manufacturing', '3D-printing', 'coating',
+            'corrosion-protection', 'thermal-spray', 'welding', 'casting',
+            'high-strength-steel', 'titanium', 'aluminium-alloy',
+
+            // ── Supply Chain & Logistics ──────────────────────────────────
+            'supply-chain', 'spare-parts', 'inventory-management',
+            'ERP', 'SAP', 'procurement', 'port-logistics', 'cargo',
+            'containerization', 'tracking', 'RFID', 'blockchain-supply',
+
+            // ── Simulation & Training ─────────────────────────────────────
+            'simulator', 'training-system', 'virtual-reality', 'augmented-reality',
+            'tactical-training', 'flight-simulator', 'mission-simulation',
+
+            // ── Satellite & Communications ────────────────────────────────
+            'satellite', 'VSAT', 'LEO', 'MEO', 'antenna', 'communication-system',
+            'datalink', 'bandwidth', 'maritime-connectivity',
         ]);
 
         $base = "ta any \"{$keywords}\"";
