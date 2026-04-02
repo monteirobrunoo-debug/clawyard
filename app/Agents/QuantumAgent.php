@@ -128,28 +128,29 @@ PROMPT;
     // ─── Fetch arXiv papers + auto-save to discoveries ────────────────────
     protected function fetchArxivPapers(): string
     {
+        // Shorter, simpler query → faster response from export.arxiv.org
+        $query = urlencode(
+            'quantum computing OR quantum cryptography OR quantum machine learning ' .
+            'OR autonomous vessel OR marine propulsion OR naval defense OR predictive maintenance'
+        );
+        $url = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=25&sortBy=submittedDate&sortOrder=descending";
+
         try {
-            $query = urlencode(
-                'quantum computing OR quantum cryptography OR quantum machine learning ' .
-                'OR autonomous vessel OR marine propulsion AI OR naval defense technology OR predictive maintenance industrial'
-            );
-            $year  = now()->year;
-            $url   = "https://export.arxiv.org/api/query?search_query={$query}&start=0&max_results=25&sortBy=submittedDate&sortOrder=descending";
-            $xml   = $this->httpClient->get($url)->getBody()->getContents();
-            $feed  = simplexml_load_string($xml);
-            if (!$feed) return '(arXiv unavailable)';
+            // 35s per-request timeout (overrides httpClient default 20s)
+            $xml  = $this->httpClient->get($url, ['timeout' => 35])->getBody()->getContents();
+            $feed = simplexml_load_string($xml);
+            if (!$feed || !isset($feed->entry)) return '(arXiv: sem resultados)';
 
             $lines = [];
             foreach ($feed->entry as $entry) {
-                $id       = basename((string) $entry->id);
-                $title    = trim((string) $entry->title);
-                $authors  = implode(', ', array_slice(array_map(fn($a) => (string)$a->name, iterator_to_array($entry->author)), 0, 3));
+                $id        = basename((string) $entry->id);
+                $title     = trim((string) $entry->title);
+                $authors   = implode(', ', array_slice(array_map(fn($a) => (string)$a->name, iterator_to_array($entry->author)), 0, 3));
                 $published = substr((string) $entry->published, 0, 10);
                 $abstract  = trim((string) $entry->summary);
 
-                // Auto-save to discoveries (skip duplicates)
                 try {
-                    if (!Discovery::where('source','arxiv')->where('reference_id',$id)->exists()) {
+                    if (!Discovery::where('source', 'arxiv')->where('reference_id', $id)->exists()) {
                         Discovery::create([
                             'source'          => 'arxiv',
                             'reference_id'    => $id,
@@ -167,16 +168,32 @@ PROMPT;
                         ]);
                     }
                 } catch (\Throwable $e) {
-                    \Log::warning("QuantumAgent: could not save arXiv discovery {$id} — " . $e->getMessage());
+                    \Log::warning("QuantumAgent: arXiv save {$id} — " . $e->getMessage());
                 }
 
                 $lines[] = "- [{$id}] {$title} | Authors: {$authors} | Published: {$published} | URL: https://arxiv.org/abs/{$id} | Abstract: " . substr($abstract, 0, 300) . '...';
             }
 
-            return implode("\n", $lines) ?: '(no arXiv results)';
+            return $lines ? implode("\n", $lines) : '(arXiv: sem resultados para os critérios)';
+
         } catch (\Throwable $e) {
             \Log::warning('QuantumAgent: arXiv fetch failed — ' . $e->getMessage());
-            return '(arXiv fetch error: ' . $e->getMessage() . ')';
+
+            // ── Fallback: Tavily web search for recent arXiv papers ──────────
+            try {
+                \Log::info('QuantumAgent: arXiv fallback → Tavily');
+                $fallback = $this->augmentWithWebSearch(
+                    'arxiv.org latest papers quantum computing maritime AI naval defense 2025 2026',
+                    null
+                );
+                if ($fallback && strlen($fallback) > 50) {
+                    return "(arXiv Quantum/AI — via pesquisa web [API timeout])\n{$fallback}";
+                }
+            } catch (\Throwable $e2) {
+                \Log::warning('QuantumAgent: arXiv Tavily fallback failed — ' . $e2->getMessage());
+            }
+
+            return '(arXiv Quantum/AI: ❌ Indisponível — timeout. Tentar novamente mais tarde.)';
         }
     }
 
@@ -267,62 +284,47 @@ PROMPT;
     }
 
     /**
-     * Build EPO CQL query covering all PartYard/HP-Group relevant areas with date filter.
-     * If dateFrom/dateTo supplied, wraps the whole query in a date range filter.
+     * Build EPO CQL query covering all PartYard/HP-Group relevant areas.
+     *
+     * Uses the `any` operator (matches ANY of the listed words in title/abstract)
+     * instead of exact phrase matching — dramatically widens the result set.
+     * Exact phrase matching with `ta="marine propulsion"` often returns zero
+     * results for short date windows because the exact phrase must appear verbatim.
      */
     protected function buildEpoCql(?string $dateFrom = null, ?string $dateTo = null): string
     {
-        // Wide topic coverage across all HP-Group business units
-        $topics = implode(' OR ', [
+        // Single broad `ta any` query — EPO OPS will match any patent whose
+        // title or abstract contains at least one of these keywords.
+        $keywords = implode(' ', [
             // Maritime & Naval
-            'ta="marine propulsion"',
-            'ta="ship engine"',
-            'ta="naval propulsion"',
-            'ta="autonomous vessel"',
-            'ta="underwater vehicle"',
-            'ta="ship maintenance"',
+            'propulsion', 'maritime', 'naval', 'vessel', 'ship', 'submarine',
+            'underwater', 'offshore', 'stern', 'rudder', 'thruster',
             // Defense & Military
-            'ta="naval defense"',
-            'ta="military platform"',
-            'ta="radar system"',
-            'ta="sonar system"',
-            'ta="missile guidance"',
+            'defense', 'military', 'radar', 'sonar', 'missile', 'surveillance',
+            'ballistic', 'armament', 'munition', 'drone',
             // Quantum & Cryptography
-            'ta="quantum cryptography"',
-            'ta="quantum communication"',
-            'ta="quantum computing"',
-            'ta="post-quantum"',
+            'quantum', 'cryptography', 'encryption', 'qubit', 'entanglement',
+            'post-quantum', 'lattice',
             // AI & Machine Learning
-            'ta="artificial intelligence industrial"',
-            'ta="machine learning predictive"',
-            'ta="digital twin"',
-            'ta="autonomous systems"',
+            'machine-learning', 'neural', 'autonomous', 'digital-twin', 'predictive',
             // Cybersecurity
-            'ta="cybersecurity"',
-            'ta="intrusion detection"',
-            'ta="network security industrial"',
-            // IoT & Industry 4.0
-            'ta="industrial IoT"',
-            'ta="predictive maintenance"',
-            'ta="condition monitoring"',
+            'cybersecurity', 'intrusion', 'firewall', 'zero-trust',
+            // IoT & Maintenance
+            'IoT', 'condition-monitoring', 'vibration', 'thermography',
             // Energy & Sustainability
-            'ta="energy efficiency vessel"',
-            'ta="fuel cell marine"',
-            'ta="hydrogen propulsion"',
+            'hydrogen', 'biofuel', 'ammonia', 'scrubber', 'decarbonization',
             // Materials & Manufacturing
-            'ta="composite materials aerospace"',
-            'ta="additive manufacturing"',
-            'ta="corrosion resistant coating"',
-            // Supply Chain & Logistics
-            'ta="supply chain optimization"',
-            'ta="satellite communication maritime"',
-            'ta="port logistics"',
+            'composite', 'additive', 'coating', 'corrosion', 'lubricant',
+            // Aerospace & MRO
+            'aerospace', 'turbine', 'overhaul', 'MRO',
         ]);
 
+        $base = "ta any \"{$keywords}\"";
+
         if ($dateFrom && $dateTo) {
-            return "({$topics}) AND pd within \"{$dateFrom} {$dateTo}\"";
+            return "({$base}) AND pd within \"{$dateFrom} {$dateTo}\"";
         }
-        return "({$topics})";
+        return $base;
     }
 
     protected function fetchEpoPatents(): string
@@ -331,11 +333,12 @@ PROMPT;
             $token = $this->fetchEpoAccessToken();
             if (!$token) return '(EPO API token unavailable — check EPO_CONSUMER_KEY/SECRET in .env)';
 
-            // Try last 3 days first, fall back to 7 days if empty
+            // Progressive date-range fallback: 7 → 30 → 90 days
+            // (3-day window was too narrow and returned zero results)
             $dateRanges = [
-                ['label' => '3 dias', 'from' => now()->subDays(3)->format('Ymd'), 'to' => now()->format('Ymd')],
-                ['label' => '7 dias', 'from' => now()->subDays(7)->format('Ymd'), 'to' => now()->format('Ymd')],
+                ['label' => '7 dias',  'from' => now()->subDays(7)->format('Ymd'),  'to' => now()->format('Ymd')],
                 ['label' => '30 dias', 'from' => now()->subDays(30)->format('Ymd'), 'to' => now()->format('Ymd')],
+                ['label' => '90 dias', 'from' => now()->subDays(90)->format('Ymd'), 'to' => now()->format('Ymd')],
             ];
 
             $docs       = [];
@@ -350,9 +353,9 @@ PROMPT;
                         'headers' => [
                             'Authorization' => "Bearer {$token}",
                             'Accept'        => 'application/json',
-                            'X-OPS-Range'   => '1-10',
+                            'X-OPS-Range'   => '1-20',
                         ],
-                        'timeout' => 15,
+                        'timeout' => 20,
                     ]);
 
                     $data         = json_decode($response->getBody()->getContents(), true);
@@ -372,7 +375,22 @@ PROMPT;
                 }
             }
 
-            if (empty($docs)) return '(EPO: sem patentes encontradas nos últimos 30 dias para os critérios definidos)';
+            if (empty($docs)) {
+                \Log::warning('QuantumAgent: EPO OPS returned no results — trying Tavily fallback');
+                try {
+                    $fallback = $this->augmentWithWebSearch(
+                        'site:worldwide.espacenet.com OR site:patents.google.com ' .
+                        'marine naval propulsion quantum cryptography cybersecurity aerospace 2025 2026 new patent',
+                        null
+                    );
+                    if ($fallback && strlen($fallback) > 80) {
+                        return "(EPO Patents — via pesquisa web [OPS API sem resultados])\n{$fallback}";
+                    }
+                } catch (\Throwable $ef) {
+                    \Log::warning('QuantumAgent: EPO Tavily fallback failed — ' . $ef->getMessage());
+                }
+                return '(EPO: sem patentes encontradas nos últimos 90 dias para os critérios definidos)';
+            }
 
             $lines = ["=== EPO Patents — últimos {$usedLabel} ==="];
             foreach (array_slice($docs, 0, 20) as $doc) {
@@ -648,13 +666,13 @@ MSG;
         }
     }
 
-    // ─── Save digest output as a Report so BriefingAgent can use it ──────
+    // ─── Save digest output as a Report so BriefingAgent / PatentAgent can read it ──
     protected function saveDigestReport(string $fullText): void
     {
         try {
             $clean = trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $fullText));
             Report::create([
-                'type'    => 'quantum_digest',
+                'type'    => 'quantum',   // PatentAgent reads type='quantum'
                 'title'   => 'Prof. Quantum Digest — ' . now()->format('d/m/Y'),
                 'content' => $clean,
             ]);
