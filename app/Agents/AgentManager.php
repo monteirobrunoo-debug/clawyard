@@ -26,6 +26,7 @@ class AgentManager
             'acingov'   => new AcingovAgent(),
             'engineer'  => new EngineerAgent(),
             'patent'    => new PatentAgent(),
+            'energy'    => new EnergyAdvisorAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -112,6 +113,21 @@ class AgentManager
         ];
         foreach ($financeKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['finance'];
+        }
+
+        // Energy advisory / decarbonisation keywords
+        $energyKeywords = [
+            'sofia energia', 'eng. sofia', 'energy advisor', 'fuzzy topsis',
+            'descarbonização', 'decarbonization', 'combustível marítimo', 'marine fuel',
+            'lng', 'biocombustível', 'biofuel', 'hidrogénio', 'hydrogen', 'propulsão eléctrica',
+            'cii rating', 'eexi', 'imo 2050', 'imo 2030', 'ghg strategy',
+            'bunker', 'bunkeramento', 'fleet energy', 'energia frota',
+            'alternativa combustível', 'fuel alternative', 'retrofit propulsão',
+            'emissões co2 navio', 'carbon footprint navio', 'eu ets marítimo',
+            'shore power', 'scrubber', 'wind propulsion',
+        ];
+        foreach ($energyKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['energy'];
         }
 
         // Patent / IP validation keywords

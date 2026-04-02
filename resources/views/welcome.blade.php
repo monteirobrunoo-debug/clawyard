@@ -363,6 +363,7 @@
         <option value="acingov">🏛️ Dra. Ana Contratos</option>
         <option value="engineer">🔩 Eng. Victor I&amp;D</option>
         <option value="patent">🏛️ Dra. Sofia IP</option>
+        <option value="energy">⚡ Eng. Sofia Energia</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -413,6 +414,7 @@
                 <div class="agent-mini" data-agent="research"><div class="dot-status"></div><span>🔍 Marina Research</span></div>
                 <div class="agent-mini" data-agent="engineer"><div class="dot-status"></div><span>🔩 Eng. Victor I&D</span></div>
                 <div class="agent-mini" data-agent="patent"><div class="dot-status"></div><span>🏛️ Dra. Sofia IP</span></div>
+                <div class="agent-mini" data-agent="energy"><div class="dot-status"></div><span>⚡ Eng. Sofia Energia</span></div>
             </div>
         </div>
     </div>
@@ -506,7 +508,8 @@ const AGENT_NAMES = {
     capitao:'Capitão Porto',
     acingov:'Dra. Ana Contratos',
     engineer:'Eng. Victor I&D',
-    patent: 'Dra. Sofia IP'
+    patent: 'Dra. Sofia IP',
+    energy: 'Eng. Sofia Energia'
 };
 
 const AGENT_COLORS = {
@@ -518,7 +521,8 @@ const AGENT_COLORS = {
     capitao:'#0ea5e9',
     acingov:'#f59e0b',
     engineer:'#f97316',
-    patent:'#8b5cf6'
+    patent:'#8b5cf6',
+    energy:'#10b981'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -539,6 +543,7 @@ const AGENT_DESCRIPTIONS = {
     acingov: 'SAM.gov · base.gov.pt · Vortal · UNIDO · UNGM — contratos públicos para PartYard',
     engineer: 'I&D e desenvolvimento de produto — planos, TRL, CAPEX e roadmap para novos equipamentos PartYard',
     patent:   'Propriedade Intelectual — validação de patentes, prior art EPO/USPTO/WIPO, patenteabilidade e Freedom to Operate',
+    energy:   'Descarbonização marítima — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H₂, Fleet Energy Management (PeerJ CS 3625)',
 };
 
 const AGENT_CHIPS = {
@@ -676,6 +681,15 @@ const AGENT_CHIPS = {
         '🎯 Roadmap completo: simulador de voo part-task trainer para C-130 — TRL, CAPEX, parceiros',
         '🔐 SETQ: plano de produto HSM (Hardware Security Module) para instalações NATO',
         '🚗 Retrofit kit para Leopard 2: sistema de gestão de potência com IA — viabilidade técnica',
+    ],
+    // ── Eng. Sofia Energia ───────────────────────────────────────────────
+    energy: [
+        '⚡ Fuzzy TOPSIS: qual o melhor combustível para um ferry de 120m em rotas de cabotagem PT?',
+        '🌊 Análise CII/EEXI: navio bulk carrier com motor MAK 9M32C — opções de retrofit para 2026',
+        '🔋 Comparação LNG vs Biofuel drop-in para frota de 5 rebocadores MTU — CAPEX e payback',
+        '🌿 Plano de descarbonização para armador com 12 navios — metas IMO 2030 e EU ETS marítimo',
+        '⚓ Retrofit propulsão eléctrica para ferry Setúbal-Tróia — viabilidade técnica e financiamento',
+        '📊 Qual o impacto de mudar para biocombustível B30 nos motores CAT 3516 da frota PartYard?',
     ],
     // ── Dra. Sofia IP ────────────────────────────────────────────────────
     patent: [

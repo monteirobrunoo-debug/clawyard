@@ -204,6 +204,7 @@
         ['key' => 'acingov',     'name' => 'Dra. Ana Contratos',    'emoji' => '🏛️', 'role' => 'Contratação pública — concursos Acingov classificados por relevância para PartYard',       'color' => '#f59e0b'],
         ['key' => 'engineer',    'name' => 'Eng. Victor I&D',       'emoji' => '🔩', 'role' => 'I&D e Desenvolvimento de Produto — planos TRL, CAPEX, roadmap para novos equipamentos PartYard', 'color' => '#f97316'],
         ['key' => 'patent',      'name' => 'Dra. Sofia IP',         'emoji' => '🏛️', 'role' => 'Propriedade Intelectual — validação de patentes, prior art EPO/USPTO, patenteabilidade e FTO', 'color' => '#8b5cf6'],
+        ['key' => 'energy',      'name' => 'Eng. Sofia Energia',    'emoji' => '⚡', 'role' => 'Descarbonização marítima — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H2, Fleet Energy Management', 'color' => '#10b981'],
     ];
     @endphp
 
