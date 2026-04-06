@@ -217,6 +217,166 @@ class SapService
         return $this->get("BusinessPartners('{$cardCode}')") ?: null;
     }
 
+    // ─── Structured table data for the SAP Documents UI ───────────────────────
+
+    /**
+     * Document type → SAP Service Layer endpoint mapping.
+     */
+    protected static array $docTypeMap = [
+        'invoices'       => 'Invoices',
+        'orders'         => 'Orders',
+        'purchase_orders'=> 'PurchaseOrders',
+        'quotations'     => 'Quotations',
+        'deliveries'     => 'DeliveryNotes',
+        'returns'        => 'Returns',
+        'credit_notes'   => 'CreditNotes',
+    ];
+
+    /**
+     * Human-readable document type labels (PT).
+     */
+    protected static array $docTypeLabels = [
+        'invoices'        => 'Faturas',
+        'orders'          => 'Encomendas',
+        'purchase_orders' => 'Ordens de Compra',
+        'quotations'      => 'Propostas',
+        'deliveries'      => 'Entregas',
+        'returns'         => 'Devoluções',
+        'credit_notes'    => 'Notas de Crédito',
+    ];
+
+    /**
+     * Fetch documents for the interactive SAP table view.
+     *
+     * Returns rows with normalised fields:
+     *   doc_num, doc_status, sales_status, payment_status, payment_ok,
+     *   doc_date, due_date, total, currency, card_name, card_code, doc_type
+     */
+    public function getDocumentsForTable(
+        string  $docType    = 'invoices',
+        int     $top        = 30,
+        ?string $dateFrom   = null,
+        ?string $dateTo     = null,
+        ?string $cardFilter = null
+    ): array {
+        $endpoint = self::$docTypeMap[$docType] ?? 'Invoices';
+
+        $select = implode(',', [
+            'DocNum', 'DocEntry', 'CardCode', 'CardName',
+            'DocumentStatus', 'DocDate', 'DocDueDate',
+            'DocTotal', 'DocCurrency', 'PaidToDate',
+            'NumAtCard', 'Ref2', 'Comments',
+            'U_SalesOrderRef',          // custom field if exists — graceful fallback
+        ]);
+
+        $filters = [];
+
+        if ($dateFrom) {
+            $filters[] = "DocDate ge '" . date('Y-m-d', strtotime($dateFrom)) . "'";
+        }
+        if ($dateTo) {
+            $filters[] = "DocDate le '" . date('Y-m-d', strtotime($dateTo)) . "'";
+        }
+        if ($cardFilter) {
+            $safe      = addslashes($cardFilter);
+            $filters[] = "(contains(CardName,'{$safe}') or contains(CardCode,'{$safe}'))";
+        }
+
+        $query = [
+            '$select'  => $select,
+            '$top'     => $top,
+            '$orderby' => 'DocDate desc',
+        ];
+        if ($filters) {
+            $query['$filter'] = implode(' and ', $filters);
+        }
+
+        $data = $this->get($endpoint, $query);
+        $rows = $data['value'] ?? [];
+
+        return array_map(function (array $doc) use ($docType): array {
+            // Document status
+            $rawStatus = $doc['DocumentStatus'] ?? '';
+            $docStatus = match ($rawStatus) {
+                'bost_Open'  => 'Open',
+                'bost_Close' => 'Closed',
+                default      => $rawStatus ?: 'Unknown',
+            };
+
+            // Payment status — derived from PaidToDate vs DocTotal
+            $paid  = (float) ($doc['PaidToDate'] ?? 0);
+            $total = (float) ($doc['DocTotal']   ?? 0);
+            $paymentOk = false;
+
+            if ($docType === 'invoices' || $docType === 'credit_notes') {
+                if ($total > 0 && $paid >= $total) {
+                    $paymentStatus = 'Payment successful';
+                    $paymentOk     = true;
+                } elseif ($docStatus === 'Closed' && $total == 0) {
+                    $paymentStatus = 'Payment successful';
+                    $paymentOk     = true;
+                } else {
+                    $paymentStatus = 'Pending payment';
+                }
+            } else {
+                // Orders / POs / Deliveries don't have a payment status
+                $paymentStatus = $docStatus === 'Closed' ? 'Closed' : 'Open';
+                $paymentOk     = ($docStatus === 'Closed');
+            }
+
+            // Sales order reference — NumAtCard is usually the customer's PO/ref
+            $salesRef = trim((string)($doc['NumAtCard'] ?? $doc['Ref2'] ?? ''));
+
+            return [
+                'doc_num'        => $doc['DocNum']      ?? '',
+                'doc_entry'      => $doc['DocEntry']    ?? '',
+                'doc_status'     => $docStatus,
+                'sales_status'   => $salesRef ?: null,
+                'payment_status' => $paymentStatus,
+                'payment_ok'     => $paymentOk,
+                'doc_date'       => substr((string)($doc['DocDate']    ?? ''), 0, 10),
+                'due_date'       => substr((string)($doc['DocDueDate'] ?? ''), 0, 10),
+                'total'          => $total,
+                'currency'       => $doc['DocCurrency'] ?? 'EUR',
+                'card_name'      => $doc['CardName']    ?? '',
+                'card_code'      => $doc['CardCode']    ?? '',
+                'doc_type'       => $docType,
+            ];
+        }, $rows);
+    }
+
+    /**
+     * Year range available in SAP documents (for the timeline slider).
+     */
+    public function getDocumentYearRange(string $docType = 'invoices'): array
+    {
+        $endpoint = self::$docTypeMap[$docType] ?? 'Invoices';
+
+        $oldest = $this->get($endpoint, [
+            '$select'  => 'DocDate',
+            '$top'     => 1,
+            '$orderby' => 'DocDate asc',
+        ]);
+        $newest = $this->get($endpoint, [
+            '$select'  => 'DocDate',
+            '$top'     => 1,
+            '$orderby' => 'DocDate desc',
+        ]);
+
+        $minYear = (int) substr((string)($oldest['value'][0]['DocDate'] ?? date('Y')), 0, 4);
+        $maxYear = (int) substr((string)($newest['value'][0]['DocDate'] ?? date('Y')), 0, 4);
+
+        return ['min' => $minYear ?: (int)date('Y') - 10, 'max' => $maxYear ?: (int)date('Y')];
+    }
+
+    /**
+     * All available doc types for the tab bar.
+     */
+    public static function getDocTypeLabels(): array
+    {
+        return self::$docTypeLabels;
+    }
+
     // ─── Smart context builder ─────────────────────────────────────────────────
 
     /**

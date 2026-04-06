@@ -234,8 +234,23 @@
         </div>
         <div class="agent-name">{{ $agent['name'] }}</div>
         <div class="agent-role">{{ $agent['role'] }}</div>
-        <span class="talk-btn">{{ $isSpecial ? 'Gerar Briefing →' : 'Falar' }}</span>
+        @if($agent['key'] === 'sap')
+            <span class="talk-btn">Falar</span>
+        @elseif($isSpecial)
+            <span class="talk-btn">Gerar Briefing →</span>
+        @else
+            <span class="talk-btn">Falar</span>
+        @endif
     </a>
+    @if($agent['key'] === 'sap')
+    <a href="/sap/documents"
+       style="display:block;margin-top:-8px;margin-bottom:4px;text-align:center;font-size:11px;font-weight:600;color:#06b6d4;text-decoration:none;padding:5px 0;background:rgba(6,182,212,.07);border-radius:0 0 12px 12px;border:1px solid rgba(6,182,212,.15);border-top:none;transition:background .15s;"
+       onmouseover="this.style.background='rgba(6,182,212,.14)'"
+       onmouseout="this.style.background='rgba(6,182,212,.07)'"
+       onclick="event.stopPropagation()">
+        🗂️ Ver Documentos SAP
+    </a>
+    @endif
     @endforeach
 
 </div>

@@ -6,6 +6,7 @@ use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SapTableController;
 use Illuminate\Support\Facades\Route;
 
 // Redirect root to dashboard (or login if not authenticated)
@@ -57,6 +58,11 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('/discoveries', [DiscoveryController::class, 'index'])->name('discoveries');
     Route::delete('/discoveries/{discovery}', [DiscoveryController::class, 'destroy'])->name('discoveries.destroy');
+});
+
+// SAP Documents — interactive table (Richard SAP)
+Route::middleware(['auth'])->group(function () {
+    Route::get('/sap/documents', [SapTableController::class, 'index'])->name('sap.documents');
 });
 
 // Schedules page — visible to all authenticated users
