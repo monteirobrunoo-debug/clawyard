@@ -6,6 +6,7 @@ use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\SapTableController;
 use Illuminate\Support\Facades\Route;
 
@@ -59,6 +60,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/discoveries', [DiscoveryController::class, 'index'])->name('discoveries');
     Route::delete('/discoveries/{discovery}', [DiscoveryController::class, 'destroy'])->name('discoveries.destroy');
 });
+
+// Agent Activity — live status cards
+Route::middleware(['auth'])->get('/agents/activity', [AgentActivityController::class, 'index'])->name('agents.activity');
 
 // SAP Documents — interactive table (Richard SAP)
 Route::middleware(['auth'])->group(function () {

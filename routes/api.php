@@ -4,6 +4,7 @@ use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\EmailSendController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NvidiaController;
+use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\SapTableController;
 use App\Http\Controllers\WhatsAppController;
 use App\Services\PartYardProfileService;
@@ -41,6 +42,9 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
 
     // Discoveries — save patent/paper from agent
     Route::post('/discoveries', [DiscoveryController::class, 'store']);
+
+    // Agent activity feed
+    Route::get('/agents/activity', [AgentActivityController::class, 'data']);
 
     // SAP Documents table — Richard SAP UI
     Route::get('/sap/table',  [SapTableController::class, 'tableData']);

@@ -161,6 +161,7 @@
     <span class="badge">NVIDIA NeMo</span>
     <div class="nav-links">
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
+        <a href="/agents/activity" class="nav-link" style="color:#76b900;border-color:#1e3300;background:#0d1a00">🤖 Actividade</a>
         <a href="/discoveries" class="nav-link">🔬 Descobertas</a>
         <a href="/reports" class="nav-link">📋 Relatórios</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
