@@ -356,12 +356,12 @@ class SapService
 
         $endpoint = self::$docTypeMap[$docType] ?? 'Invoices';
 
+        // Only standard SAP B1 fields — no custom U_* fields that may not exist
         $select = implode(',', [
             'DocNum', 'DocEntry', 'CardCode', 'CardName',
             'DocumentStatus', 'DocDate', 'DocDueDate',
             'DocTotal', 'DocCurrency', 'PaidToDate',
-            'NumAtCard', 'Ref2', 'Comments',
-            'U_SalesOrderRef',          // custom field if exists — graceful fallback
+            'NumAtCard', 'Ref2',
         ]);
 
         $filters = [];

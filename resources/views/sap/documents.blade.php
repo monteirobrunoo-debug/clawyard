@@ -408,8 +408,11 @@ let sortCol     = 'doc_date';
 let sortAsc     = false;
 let yearMin     = 2010;
 let yearMax     = new Date().getFullYear();
-let fromYear    = yearMin;
-let toYear      = yearMax;
+// Default: last 30 days — SAP responds faster with narrow range
+let fromDate    = new Date(); fromDate.setDate(fromDate.getDate() - 30);
+let toDate      = new Date();
+let fromYear    = fromDate.getFullYear();
+let toYear      = toDate.getFullYear();
 let dragging    = null;
 
 const LABELS = {
@@ -438,18 +441,18 @@ function switchType(type) {
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 async function loadYears() {
+    const currentYr = new Date().getFullYear();
     try {
         const r = await apiFetch(`/api/sap/years?type=${currentType}`);
         yearMin  = r.min || 2010;
-        yearMax  = r.max || new Date().getFullYear();
-        fromYear = yearMin;
-        toYear   = yearMax;
+        yearMax  = r.max || currentYr;
     } catch (e) {
         yearMin  = 2010;
-        yearMax  = new Date().getFullYear();
-        fromYear = yearMin;
-        toYear   = yearMax;
+        yearMax  = currentYr;
     }
+    // Default view: last 12 months — narrow enough for SAP to respond quickly
+    fromYear = yearMax - 1;
+    toYear   = yearMax;
     renderTimeline();
 }
 
@@ -525,8 +528,10 @@ async function loadData() {
     $('countBadge').textContent = '';
 
     const search = $('searchInput').value.trim();
+    // Use exact dates derived from slider years — mid-year clamp avoided
     const dateFrom = `${fromYear}-01-01`;
     const dateTo   = `${toYear}-12-31`;
+
 
     const params = new URLSearchParams({
         type: currentType,
