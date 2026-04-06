@@ -40,6 +40,8 @@
         .topnav .logo { font-size: 17px; font-weight: 800; color: #0f172a; letter-spacing: -.5px; }
         .topnav .logo span { color: var(--cyan); }
         .topnav .badge { font-size: 10px; background: var(--cyan); color: #fff; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+        .topnav .sap-logo { height: 28px; width: auto; margin-left: 4px; }
+        .topnav .divider { width: 1px; height: 22px; background: var(--border); margin: 0 4px; }
         .topnav .back {
             margin-left: auto; font-size: 12px; color: var(--muted); text-decoration: none;
             border: 1px solid var(--border); padding: 5px 14px; border-radius: 8px;
@@ -84,6 +86,10 @@
         }
         .powered { padding: 12px 16px; margin-top: auto; font-size: 11px; color: var(--muted2); border-top: 1px solid var(--border); }
         .powered strong { color: var(--muted); }
+        .sidebar-logo { padding: 14px 16px 10px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+        .sidebar-logo img { height: 32px; width: auto; }
+        .sidebar-logo-text { font-size: 11px; color: var(--muted); line-height: 1.3; }
+        .sidebar-logo-text strong { display: block; font-size: 12px; color: var(--text); font-weight: 700; }
 
         /* ── MAIN CONTENT ────────────────────────────────────────────── */
         .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -249,7 +255,9 @@
 <!-- TOP NAV -->
 <nav class="topnav">
     <div class="logo">Claw<span>Yard</span></div>
-    <div class="badge">SAP B1</div>
+    <div class="divider"></div>
+    <img src="/images/agents/sap.png" alt="SAP" class="sap-logo">
+    <div class="badge">Business One</div>
     <a href="/dashboard" class="back">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
         Dashboard
@@ -265,6 +273,13 @@
 
     <!-- SIDEBAR -->
     <aside class="sidebar">
+        <div class="sidebar-logo">
+            <img src="/images/agents/sap.png" alt="SAP Business One">
+            <div class="sidebar-logo-text">
+                <strong>SAP Business One</strong>
+                PartYard / HP-Group
+            </div>
+        </div>
         <div class="sidebar-search">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input type="text" placeholder="Pesquisar..." id="sidebarSearch">
