@@ -61,13 +61,26 @@
         @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
         /* Agent live status */
-        .agent-live { padding:12px 16px; border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
+        .agent-live { padding:8px 12px; border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
         .agent-live .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
-        .agent-cards-mini { display:flex; flex-direction:column; gap:4px; }
-        .agent-mini { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:12px; color:var(--muted); }
+        .agent-cards-mini { display:flex; flex-direction:column; gap:2px; }
+        .agent-mini { display:flex; align-items:center; gap:9px; padding:5px 8px; border-radius:8px; font-size:12px; color:var(--muted); cursor:pointer; transition:background .12s, color .12s; }
+        .agent-mini:hover { background:var(--bg3); color:#bbb; }
         .agent-mini.active { background:var(--bg3); color:var(--text); }
-        .agent-mini .dot-status { width:7px; height:7px; border-radius:50%; background:var(--muted2); flex-shrink:0; }
-        .agent-mini.active .dot-status { background:var(--green); box-shadow:0 0 4px var(--green); animation:pulse-dot 1.5s infinite; }
+        .agent-mini .mini-avatar {
+            width:28px; height:28px; border-radius:50%; flex-shrink:0;
+            display:flex; align-items:center; justify-content:center;
+            font-size:14px; background:var(--bg3); border:1.5px solid var(--border2);
+            overflow:hidden; position:relative; transition:border-color .15s;
+        }
+        .agent-mini .mini-avatar img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+        .agent-mini.active .mini-avatar { border-color:var(--green); }
+        .agent-mini .mini-avatar .dot-status {
+            position:absolute; bottom:0; right:0;
+            width:8px; height:8px; border-radius:50%;
+            background:var(--muted2); border:1.5px solid var(--bg2);
+        }
+        .agent-mini.active .mini-avatar .dot-status { background:var(--green); box-shadow:0 0 4px var(--green); animation:pulse-dot 1.5s infinite; }
         @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
         /* ── CHAT AREA ── */
@@ -401,20 +414,21 @@
         <div class="agent-live">
             <div class="lbl">Agentes Disponíveis</div>
             <div class="agent-cards-mini" id="agent-status-list">
-                <div class="agent-mini" data-agent="sales"><div class="dot-status"></div><span>💼 Marco Sales</span></div>
-                <div class="agent-mini" data-agent="support"><div class="dot-status"></div><span>🔧 Marcus Suporte</span></div>
-                <div class="agent-mini" data-agent="email"><div class="dot-status"></div><span>📧 Daniel Email</span></div>
-                <div class="agent-mini" data-agent="sap"><div class="dot-status"></div><span>📊 Richard SAP</span></div>
-                <div class="agent-mini" data-agent="document"><div class="dot-status"></div><span>📄 Comandante Doc</span></div>
-                <div class="agent-mini" data-agent="claude"><div class="dot-status"></div><span>🧠 Bruno AI</span></div>
-                <div class="agent-mini" data-agent="nvidia"><div class="dot-status"></div><span>⚡ Carlos NVIDIA</span></div>
-                <div class="agent-mini" data-agent="aria"><div class="dot-status"></div><span>🔐 ARIA Security</span></div>
-                <div class="agent-mini" data-agent="quantum"><div class="dot-status"></div><span>⚛️ Prof. Quantum Leap</span></div>
-                <div class="agent-mini" data-agent="finance"><div class="dot-status"></div><span>💰 Dr. Luís Financeiro</span></div>
-                <div class="agent-mini" data-agent="research"><div class="dot-status"></div><span>🔍 Marina Research</span></div>
-                <div class="agent-mini" data-agent="engineer"><div class="dot-status"></div><span>🔩 Eng. Victor I&D</span></div>
-                <div class="agent-mini" data-agent="patent"><div class="dot-status"></div><span>🏛️ Dra. Sofia IP</span></div>
-                <div class="agent-mini" data-agent="energy"><div class="dot-status"></div><span>⚡ Eng. Sofia Energia</span></div>
+                <div class="agent-mini" data-agent="sales"><div class="mini-avatar"><img src="/images/agents/sales.png" alt=""><div class="dot-status"></div></div><span>Marco Sales</span></div>
+                <div class="agent-mini" data-agent="support"><div class="mini-avatar"><img src="/images/agents/support.png" alt=""><div class="dot-status"></div></div><span>Marcus Suporte</span></div>
+                <div class="agent-mini" data-agent="email"><div class="mini-avatar"><img src="/images/agents/email.png" alt=""><div class="dot-status"></div></div><span>Daniel Email</span></div>
+                <div class="agent-mini" data-agent="sap"><div class="mini-avatar"><img src="/images/agents/sap.png" alt=""><div class="dot-status"></div></div><span>Richard SAP</span></div>
+                <div class="agent-mini" data-agent="document"><div class="mini-avatar"><img src="/images/agents/document.png" alt=""><div class="dot-status"></div></div><span>Comandante Doc</span></div>
+                <div class="agent-mini" data-agent="claude"><div class="mini-avatar"><img src="/images/agents/claude.png" alt=""><div class="dot-status"></div></div><span>Bruno AI</span></div>
+                <div class="agent-mini" data-agent="nvidia"><div class="mini-avatar"><img src="/images/agents/nvidia.png" alt=""><div class="dot-status"></div></div><span>Carlos NVIDIA</span></div>
+                <div class="agent-mini" data-agent="aria"><div class="mini-avatar"><img src="/images/agents/aria.png" alt=""><div class="dot-status"></div></div><span>ARIA Security</span></div>
+                <div class="agent-mini" data-agent="quantum"><div class="mini-avatar"><img src="/images/agents/quantum.png" alt=""><div class="dot-status"></div></div><span>Prof. Quantum Leap</span></div>
+                <div class="agent-mini" data-agent="finance"><div class="mini-avatar"><img src="/images/agents/finance.png" alt=""><div class="dot-status"></div></div><span>Dr. Luís Financeiro</span></div>
+                <div class="agent-mini" data-agent="research"><div class="mini-avatar"><img src="/images/agents/maritime.png" alt=""><div class="dot-status"></div></div><span>Marina Research</span></div>
+                <div class="agent-mini" data-agent="acingov"><div class="mini-avatar"><img src="/images/agents/acingov.png" alt=""><div class="dot-status"></div></div><span>Dra. Ana Contratos</span></div>
+                <div class="agent-mini" data-agent="engineer"><div class="mini-avatar"><span>🔩</span><div class="dot-status"></div></div><span>Eng. Victor I&D</span></div>
+                <div class="agent-mini" data-agent="patent"><div class="mini-avatar"><span>🏛️</span><div class="dot-status"></div></div><span>Dra. Sofia IP</span></div>
+                <div class="agent-mini" data-agent="energy"><div class="mini-avatar"><span>⚡</span><div class="dot-status"></div></div><span>Eng. Sofia Energia</span></div>
             </div>
         </div>
     </div>
@@ -498,7 +512,20 @@ const AGENT_EMOJIS = {
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
 const AGENT_PHOTOS = {
-    acingov: '/images/agents/acingov.png',
+    briefing:     '/images/agents/briefing.png',
+    orchestrator: '/images/agents/orchestrator.png',
+    sales:        '/images/agents/sales.png',
+    support:      '/images/agents/support.png',
+    email:        '/images/agents/email.png',
+    sap:          '/images/agents/sap.png',
+    document:     '/images/agents/document.png',
+    claude:       '/images/agents/claude.png',
+    nvidia:       '/images/agents/nvidia.png',
+    aria:         '/images/agents/aria.png',
+    quantum:      '/images/agents/quantum.png',
+    finance:      '/images/agents/finance.png',
+    research:     '/images/agents/maritime.png',
+    acingov:      '/images/agents/acingov.png',
 };
 
 const AGENT_NAMES = {
@@ -1004,11 +1031,21 @@ function addMessage(role, text, agentName = '') {
         ? '{{ Auth::user()->name }}'
         : (AGENT_NAMES[agentName] || 'ClawYard');
 
+    const agentPhoto = role === 'ai' ? (AGENT_PHOTOS[agentName] || null) : null;
+
+    const avatarHtml = agentPhoto
+        ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${agentPhoto}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+        : `<div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>`;
+
     // Email card
     if (role === 'ai' && text.startsWith('__EMAIL__')) {
         const emailData = JSON.parse(text.replace('__EMAIL__', ''));
+        const emailPhoto = AGENT_PHOTOS['email'];
+        const emailAvatar = emailPhoto
+            ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${emailPhoto}" alt="Daniel Email" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+            : `<div class="avatar">${AGENT_EMOJIS['email']}</div>`;
         msg.innerHTML = `
-            <div class="avatar">${AGENT_EMOJIS['email']}</div>
+            ${emailAvatar}
             <div class="msg-col" style="max-width:560px">
                 <div class="msg-meta">
                     <span class="agent-tag active">📧 Daniel Email</span>
@@ -1023,7 +1060,7 @@ function addMessage(role, text, agentName = '') {
 
     const saveBtn = role === 'ai' ? `<button class="save-report-btn" onclick="saveAsReport(this,'${agentName}')" title="Guardar como relatório">💾</button>` : '';
     msg.innerHTML = `
-        <div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>
+        ${avatarHtml}
         <div class="msg-col">
             <div class="msg-meta">
                 <span>${role === 'user' ? '{{ Auth::user()->name }}' : name}</span>
