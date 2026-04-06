@@ -264,6 +264,11 @@ PROMPT;
         $dateLabel   = now()->format('d/m/Y H:i');
         $intelligence = "=== INTELLIGENCE PACKAGE — {$dateLabel} ===\n\n" . implode("\n\n---\n\n", $sections);
 
+        // ── Sanitize UTF-8 — external sources (arXiv/EPO/Tavily/DB) can contain
+        //    malformed byte sequences that make Guzzle's internal json_encode fail
+        $intelligence = mb_convert_encoding($intelligence, 'UTF-8', 'UTF-8');
+        $intelligence = preg_replace('/[^\x{0009}\x{000A}\x{000D}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/u', '', $intelligence) ?? $intelligence;
+
         // ── Stream Claude analysis ────────────────────────────────────────────
         $progress("✅ **Inteligência recolhida. Renato a gerar briefing...**\n\n---\n\n");
         if ($heartbeat) $heartbeat('Renato a analisar');
