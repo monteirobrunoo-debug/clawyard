@@ -525,7 +525,8 @@ async function loadData() {
         const data = await apiFetch(`/api/sap/table?${params}`);
 
         if (!data.ok) {
-            showError(data.error || 'Erro desconhecido');
+            const hint = data.hint ? `<br><small style="color:#999">${data.hint}</small>` : '';
+            showError((data.error || 'Erro desconhecido') + hint);
             return;
         }
 

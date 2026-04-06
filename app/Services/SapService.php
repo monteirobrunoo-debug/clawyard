@@ -350,7 +350,10 @@ class SapService
         ?string $dateFrom   = null,
         ?string $dateTo     = null,
         ?string $cardFilter = null
-    ): array {
+    ): ?array {
+        // Return null (not empty array) when SAP is unreachable — caller can distinguish
+        if (!$this->ensureSession()) return null;
+
         $endpoint = self::$docTypeMap[$docType] ?? 'Invoices';
 
         $select = implode(',', [

@@ -39,21 +39,33 @@ class SapTableController extends Controller
         try {
             $rows = $this->sap->getDocumentsForTable($docType, $top, $dateFrom, $dateTo, $search ?: null);
 
+            // null means SAP login failed — surface a clear message
+            if ($rows === null) {
+                $diag = $this->sap->testConnection();
+                return response()->json([
+                    'ok'    => false,
+                    'error' => $diag['message'] ?? 'Não foi possível ligar ao SAP B1.',
+                    'hint'  => $diag['hint'] ?? '',
+                    'rows'  => [],
+                ], 200);
+            }
+
             return response()->json([
                 'ok'      => true,
                 'type'    => $docType,
                 'count'   => count($rows),
                 'rows'    => $rows,
                 'labels'  => SapService::getDocTypeLabels(),
-            ]);
+            ], 200);
         } catch (\Throwable $e) {
             \Log::error('SapTableController: ' . $e->getMessage());
 
+            // Always HTTP 200 so JS can read the error body
             return response()->json([
                 'ok'    => false,
-                'error' => 'Erro ao ligar ao SAP B1: ' . $e->getMessage(),
+                'error' => 'Erro SAP B1: ' . $e->getMessage(),
                 'rows'  => [],
-            ], 500);
+            ], 200);
         }
     }
 
