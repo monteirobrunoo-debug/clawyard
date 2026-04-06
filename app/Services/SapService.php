@@ -467,6 +467,35 @@ class SapService
 
         $context = [];
 
+        // ── OVERVIEW SEMPRE CARREGADO ─────────────────────────────────────────
+        // Independentemente das keywords, sempre buscar um resumo do estado actual
+        // para que o Richard tenha sempre dados reais para responder.
+        $overviewParts = [];
+
+        $recentInvoices = $this->getRecentInvoices(8);
+        if ($recentInvoices) {
+            $rows = array_map(fn($i) => "  • #{$i['DocNum']} — {$i['CardName']} | {$i['DocDate']} | €" . number_format((float)$i['DocTotal'], 2, '.', ',') . " | " . ($i['DocumentStatus'] === 'bost_Open' ? 'Aberta' : 'Fechada'), $recentInvoices);
+            $overviewParts[] = "🧾 ÚLTIMAS FATURAS (8):\n" . implode("\n", $rows);
+        }
+
+        $openOrders = $this->getOpenSalesOrders(8);
+        if ($openOrders) {
+            $rows = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 2, '.', ','), $openOrders);
+            $overviewParts[] = "📋 ENCOMENDAS DE VENDA ABERTAS (8):\n" . implode("\n", $rows);
+        }
+
+        $openPOs = $this->getOpenPurchaseOrders(5);
+        if ($openPOs) {
+            $rows = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 2, '.', ','), $openPOs);
+            $overviewParts[] = "🏭 ORDENS DE COMPRA ABERTAS (5):\n" . implode("\n", $rows);
+        }
+
+        if ($overviewParts) {
+            $context[] = implode("\n\n", $overviewParts);
+        }
+
+        // ── SECÇÕES ADICIONAIS POR KEYWORD ────────────────────────────────────
+
         // --- Stock queries ---
         if (preg_match('/stock|saldo|quantidad|quantidade|inventari|armazém|warehouse|existên/i', $message)) {
             if (preg_match('/stock\s+(?:de\s+)?([A-Z0-9\-\.]{3,20})/i', $message, $m)) {
@@ -496,34 +525,7 @@ class SapService
             }
         }
 
-        // --- Sales orders ---
-        if (preg_match('/encomenda|order|pedido|venda/i', $message)) {
-            $orders = $this->getOpenSalesOrders(5);
-            if ($orders) {
-                $rows      = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €{$o['DocTotal']}", $orders);
-                $context[] = "📋 ENCOMENDAS ABERTAS (últimas 5):\n" . implode("\n", $rows);
-            }
-        }
-
-        // --- Purchase orders (extended: accounts payable terms) ---
-        if (preg_match('/compra|purchase|fornecedor|supplier|PO |conta.a.pagar|accounts.payable|pagamento|payment|despesa|custo|cost/i', $message)) {
-            $pos = $this->getOpenPurchaseOrders(5);
-            if ($pos) {
-                $rows      = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €{$o['DocTotal']}", $pos);
-                $context[] = "🏭 ORDENS DE COMPRA ABERTAS (últimas 5):\n" . implode("\n", $rows);
-            }
-        }
-
-        // --- Invoices (extended: finance/accounting terms) ---
-        if (preg_match('/fatura|invoice|factura|recibo|conta.a.receber|accounts.receivable|faturação|billing|receita|revenue|cobrar|cobrança/i', $message)) {
-            $invoices = $this->getRecentInvoices(5);
-            if ($invoices) {
-                $rows      = array_map(fn($i) => "  • #{$i['DocNum']} — {$i['CardName']} | {$i['DocDate']} | €{$i['DocTotal']}", $invoices);
-                $context[] = "🧾 FATURAS RECENTES (últimas 5):\n" . implode("\n", $rows);
-            }
-        }
-
-        // --- Business partner (extended: financial/audit terms) ---
+        // --- Business partner search ---
         if (preg_match('/cliente|client|fornecedor|supplier|parceiro|partner|empresa|devedor|debtor|credor|creditor|saldo.de|conta.corrente|current.account/i', $message)) {
             if (preg_match('/(?:cliente|client|fornecedor|supplier|parceiro|partner|empresa)\s+["\']?([A-Za-zÀ-ú\s]{3,30})["\']?/i', $message, $m)) {
                 $bps = $this->searchBusinessPartners(trim($m[1]), 3);
@@ -532,10 +534,6 @@ class SapService
                     $context[] = "👤 PARCEIROS ENCONTRADOS:\n" . implode("\n", $rows);
                 }
             }
-        }
-
-        if (empty($context)) {
-            return '';
         }
 
         return "\n\n--- DADOS REAIS DO SAP B1 (PARTYARD) ---\n"
