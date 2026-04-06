@@ -227,6 +227,16 @@
         /* Card name in row */
         td.card-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 
+        /* Connection banner */
+        .conn-banner {
+            display: none; align-items: center; gap: 10px;
+            padding: 10px 24px; font-size: 13px; font-weight: 500;
+            border-bottom: 1px solid var(--border);
+        }
+        .conn-banner.error  { display:flex; background:#fef2f2; color:#dc2626; }
+        .conn-banner.ok     { display:flex; background:#f0fdf4; color:#16a34a; }
+        .conn-banner a { color: inherit; font-weight: 700; }
+
         /* Responsive */
         @media (max-width: 860px) {
             .sidebar { display: none; }
@@ -307,6 +317,9 @@
 
     <!-- MAIN -->
     <div class="main">
+
+        <!-- CONNECTION BANNER -->
+        <div class="conn-banner" id="connBanner"></div>
 
         <!-- PAGE HEADER + TIMELINE -->
         <div class="page-header">
@@ -663,8 +676,29 @@ $('sidebarSearch').addEventListener('input', function() {
     });
 });
 
+// ── SAP connection ping ───────────────────────────────────────────────────────
+async function pingSap() {
+    const banner = $('connBanner');
+    try {
+        const r = await apiFetch('/api/sap/ping');
+        if (r.ok) {
+            banner.className = 'conn-banner ok';
+            banner.innerHTML = `✅ ${r.message}`;
+            setTimeout(() => { banner.className = 'conn-banner'; }, 5000); // hide after 5s
+        } else {
+            banner.className = 'conn-banner error';
+            const hint = r.hint ? ` — <strong>${r.hint}</strong>` : '';
+            banner.innerHTML = `${r.message}${hint} &nbsp;|&nbsp; <a href="/chat?agent=sap">Falar com Richard</a>`;
+        }
+    } catch (e) {
+        banner.className = 'conn-banner error';
+        banner.innerHTML = `❌ Erro ao contactar SAP: ${e.message}`;
+    }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 setupSlider();
+pingSap();
 loadYears().then(loadData);
 </script>
 </body>

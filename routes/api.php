@@ -45,6 +45,7 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
     // SAP Documents table — Richard SAP UI
     Route::get('/sap/table',  [SapTableController::class, 'tableData']);
     Route::get('/sap/years',  [SapTableController::class, 'yearRange']);
+    Route::get('/sap/ping',   [SapTableController::class, 'ping']);
 
     // Email sending
     Route::post('/email/send', [EmailSendController::class, 'send'])

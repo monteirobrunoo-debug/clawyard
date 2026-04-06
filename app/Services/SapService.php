@@ -96,6 +96,71 @@ class SapService
     }
 
     /**
+     * Test SAP connection and return a human-readable status string.
+     * Also clears any negative cache so the next real request retries.
+     */
+    public function testConnection(): array
+    {
+        // Always retry fresh — clear negative cache before testing
+        Cache::forget(self::SESSION_FAILED_KEY);
+        Cache::forget(self::SESSION_CACHE_KEY);
+
+        if (!$this->username || !$this->password) {
+            return [
+                'ok'      => false,
+                'status'  => 'credentials_missing',
+                'message' => 'SAP_B1_USER ou SAP_B1_PASSWORD não configurados no .env do servidor.',
+            ];
+        }
+
+        try {
+            $response = $this->http->post("{$this->baseUrl}/Login", [
+                'headers' => ['Content-Type' => 'application/json'],
+                'json'    => [
+                    'CompanyDB' => $this->company,
+                    'UserName'  => $this->username,
+                    'Password'  => $this->password,
+                ],
+            ]);
+
+            $httpCode = $response->getStatusCode();
+            $data     = json_decode($response->getBody()->getContents(), true);
+            $session  = $data['SessionId'] ?? null;
+
+            if ($session) {
+                Cache::put(self::SESSION_CACHE_KEY, $session, now()->addMinutes(self::SESSION_TTL));
+                return [
+                    'ok'      => true,
+                    'status'  => 'connected',
+                    'message' => "✅ Ligação ao SAP B1 bem-sucedida. Empresa: {$this->company} | URL: {$this->baseUrl}",
+                ];
+            }
+
+            $errMsg = $data['error']['message']['value'] ?? ($data['message'] ?? json_encode($data));
+            return [
+                'ok'      => false,
+                'status'  => 'login_failed',
+                'message' => "❌ Login SAP falhou (HTTP {$httpCode}): {$errMsg}",
+                'hint'    => 'Provavelmente a password mudou. Actualiza SAP_B1_PASSWORD no .env do servidor.',
+            ];
+
+        } catch (\GuzzleHttp\Exception\ConnectException $e) {
+            return [
+                'ok'      => false,
+                'status'  => 'unreachable',
+                'message' => "❌ SAP B1 inacessível: " . $e->getMessage(),
+                'hint'    => "Verifica se {$this->baseUrl} está acessível e o VPN está activo.",
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'ok'      => false,
+                'status'  => 'error',
+                'message' => "❌ Erro ao ligar ao SAP: " . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Make an authenticated GET request.
      * Sends the SessionId as the B1SESSION cookie header.
      * Re-logins once on 401 (session expired).
@@ -385,7 +450,19 @@ class SapService
     public function buildContext(string $message): string
     {
         if (!$this->username || !$this->password) {
-            return '';
+            return "\n\n--- ERRO SAP B1 ---\nCredenciais não configuradas (SAP_B1_USER / SAP_B1_PASSWORD em falta no .env do servidor).\nDiz ao utilizador que as credenciais SAP não estão configuradas e que deve contactar o administrador.\n--- FIM ERRO ---\n";
+        }
+
+        // Test if we can get a session — detect login failures explicitly
+        $session = $this->ensureSession();
+        if (!$session) {
+            // Try once more with fresh cache to get a proper error message
+            $diag = $this->testConnection();
+            $hint = $diag['hint'] ?? '';
+            return "\n\n--- ERRO LIGAÇÃO SAP B1 ---\n"
+                . ($diag['message'] ?? 'Não foi possível ligar ao SAP B1.')
+                . ($hint ? "\nSugestão: {$hint}" : '')
+                . "\nDiz ao utilizador exactamente este erro para que possa resolver o problema de acesso ao SAP.\n--- FIM ERRO ---\n";
         }
 
         $context = [];

@@ -70,4 +70,12 @@ class SapTableController extends Controller
             return response()->json(['ok' => false, 'min' => $year - 5, 'max' => $year]);
         }
     }
+
+    // ── GET /api/sap/ping — test SAP connection ──────────────────────────────
+    public function ping(): JsonResponse
+    {
+        $result = $this->sap->testConnection();
+        $code   = $result['ok'] ? 200 : 503;
+        return response()->json($result, $code);
+    }
 }
