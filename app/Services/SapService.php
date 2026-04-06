@@ -64,7 +64,7 @@ class SapService
                 return true;
             }
 
-            Log::warning('SAP Login: no SessionId in response body', $data);
+            Log::warning('SAP Login: no SessionId in response body', (array) $data);
             return false;
 
         } catch (\Exception $e) {
@@ -127,8 +127,8 @@ class SapService
             ]);
 
             $httpCode = $response->getStatusCode();
-            $body     = $response->getBody()->getContents();
-            $data     = json_decode($body, true) ?? [];
+            $body     = (string) $response->getBody()->getContents();
+            $data     = (array) (json_decode($body, true) ?? []);
             $session  = $data['SessionId'] ?? null;
 
             if ($session) {
