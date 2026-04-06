@@ -114,9 +114,12 @@ class SapService
         }
 
         try {
+            // http_errors=false → Guzzle never throws on 4xx/5xx;
+            // we read the response body ourselves to get the SAP error message.
             $response = $this->http->post("{$this->baseUrl}/Login", [
-                'headers' => ['Content-Type' => 'application/json'],
-                'json'    => [
+                'http_errors' => false,
+                'headers'     => ['Content-Type' => 'application/json'],
+                'json'        => [
                     'CompanyDB' => $this->company,
                     'UserName'  => $this->username,
                     'Password'  => $this->password,
@@ -124,7 +127,8 @@ class SapService
             ]);
 
             $httpCode = $response->getStatusCode();
-            $data     = json_decode($response->getBody()->getContents(), true);
+            $body     = $response->getBody()->getContents();
+            $data     = json_decode($body, true) ?? [];
             $session  = $data['SessionId'] ?? null;
 
             if ($session) {
@@ -136,26 +140,49 @@ class SapService
                 ];
             }
 
-            $errMsg = $data['error']['message']['value'] ?? ($data['message'] ?? json_encode($data));
+            // HTTP 503 = servidor SAP inacessível / em manutenção
+            if ($httpCode === 503) {
+                return [
+                    'ok'      => false,
+                    'status'  => 'unreachable',
+                    'message' => "❌ SAP B1 Service Layer inacessível (HTTP 503 — servidor em baixo ou em manutenção).",
+                    'hint'    => "Verifica se o servidor SAP ({$this->baseUrl}) está activo. Se usas VPN, confirma que está ligada.",
+                ];
+            }
+
+            // HTTP 401/403 = credenciais erradas
+            if (in_array($httpCode, [401, 403])) {
+                $errMsg = $data['error']['message']['value'] ?? ($data['message'] ?? "Credenciais inválidas");
+                return [
+                    'ok'      => false,
+                    'status'  => 'login_failed',
+                    'message' => "❌ Login SAP recusado (HTTP {$httpCode}): {$errMsg}",
+                    'hint'    => 'A password pode ter mudado. Actualiza SAP_B1_PASSWORD no .env do servidor.',
+                ];
+            }
+
+            // Outro erro HTTP
+            $errMsg = $data['error']['message']['value'] ?? ($data['message'] ?? substr($body, 0, 200));
             return [
                 'ok'      => false,
                 'status'  => 'login_failed',
                 'message' => "❌ Login SAP falhou (HTTP {$httpCode}): {$errMsg}",
-                'hint'    => 'Provavelmente a password mudou. Actualiza SAP_B1_PASSWORD no .env do servidor.',
+                'hint'    => "URL: {$this->baseUrl} | Empresa: {$this->company} | User: {$this->username}",
             ];
 
         } catch (\GuzzleHttp\Exception\ConnectException $e) {
             return [
                 'ok'      => false,
                 'status'  => 'unreachable',
-                'message' => "❌ SAP B1 inacessível: " . $e->getMessage(),
-                'hint'    => "Verifica se {$this->baseUrl} está acessível e o VPN está activo.",
+                'message' => "❌ SAP B1 inacessível — não foi possível estabelecer ligação TCP.",
+                'hint'    => "Verifica se {$this->baseUrl} está acessível (firewall / VPN / DNS).",
             ];
         } catch (\Throwable $e) {
             return [
                 'ok'      => false,
                 'status'  => 'error',
                 'message' => "❌ Erro ao ligar ao SAP: " . $e->getMessage(),
+                'hint'    => "URL configurada: {$this->baseUrl}",
             ];
         }
     }

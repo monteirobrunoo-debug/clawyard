@@ -72,10 +72,11 @@ class SapTableController extends Controller
     }
 
     // ── GET /api/sap/ping — test SAP connection ──────────────────────────────
+    // Always returns HTTP 200 so the browser JS can read the JSON body.
+    // The 'ok' field inside the payload indicates success/failure.
     public function ping(): JsonResponse
     {
         $result = $this->sap->testConnection();
-        $code   = $result['ok'] ? 200 : 503;
-        return response()->json($result, $code);
+        return response()->json($result, 200);
     }
 }
