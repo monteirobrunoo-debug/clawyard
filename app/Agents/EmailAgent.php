@@ -169,28 +169,27 @@ PROMPT;
 
                     $full .= $chunk;
 
-                    if (!$jsonStarted && !str_contains($full, '{')) {
-                        // Pre-JSON text (rare) — stream directly
-                        $onChunk($chunk);
-                    } else {
-                        // JSON is being built — send a one-time progress indicator
-                        if (!$jsonStarted) {
-                            $jsonStarted = true;
-                            $onChunk("⏳ A redigir email...\n");
-                        }
-                        // Heartbeat every second so Nginx/SSE doesn't time out
-                        if (time() - $lastBeat >= 1) {
-                            if ($heartbeat) $heartbeat('a escrever');
-                            $lastBeat = time();
-                        }
+                    // While Claude builds the JSON silently, send heartbeats so
+                    // Nginx / SSE connection stays alive (avoids "stuck" appearance).
+                    // We do NOT stream raw JSON chunks — we wait for the complete
+                    // JSON, parse it, then push the result in one shot below.
+                    if ($heartbeat && (time() - $lastBeat >= 1)) {
+                        $heartbeat('a escrever');
+                        $lastBeat = time();
                     }
                 }
             }
         }
 
-        // Post-process: if it's a valid email JSON, return the special marker
+        // Post-process: parse the completed JSON and push the email to the browser
         $parsed = $this->parseEmailJson($full);
-        return $parsed ?? $full;
+        $result = $parsed ?? $full;
+
+        // ── CRITICAL: send the result to the browser via onChunk ──────────────
+        // Without this, the browser never receives the email and appears "stuck".
+        $onChunk($result);
+
+        return $result;
     }
 
     public function getName(): string  { return 'email'; }
