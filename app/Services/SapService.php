@@ -161,13 +161,14 @@ class SapService
                 ];
             }
 
-            // Outro erro HTTP
-            $errMsg = $data['error']['message']['value'] ?? ($data['message'] ?? substr($body, 0, 200));
+            // Outro erro HTTP — mostra body raw para diagnóstico
+            $errMsg = $data['error']['message']['value'] ?? ($data['message'] ?? null);
+            $rawPreview = substr(strip_tags($body), 0, 300);
             return [
                 'ok'      => false,
                 'status'  => 'login_failed',
-                'message' => "❌ Login SAP falhou (HTTP {$httpCode}): {$errMsg}",
-                'hint'    => "URL: {$this->baseUrl} | Empresa: {$this->company} | User: {$this->username}",
+                'message' => "❌ Login SAP falhou (HTTP {$httpCode})" . ($errMsg ? ": {$errMsg}" : ''),
+                'hint'    => "URL: {$this->baseUrl} | Empresa: {$this->company} | User: {$this->username}" . ($rawPreview ? " | Resposta: {$rawPreview}" : ''),
             ];
 
         } catch (\GuzzleHttp\Exception\ConnectException $e) {
