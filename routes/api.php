@@ -45,6 +45,7 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
 
     // Agent activity feed
     Route::get('/agents/activity', [AgentActivityController::class, 'data']);
+    Route::get('/agents/activity/{key}', [AgentActivityController::class, 'detail']);
 
     // SAP Documents table — Richard SAP UI
     Route::get('/sap/table',  [SapTableController::class, 'tableData']);
