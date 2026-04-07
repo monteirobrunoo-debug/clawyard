@@ -771,6 +771,21 @@ function updateEmptyState(agent) {
     }
     if (titleEl)  titleEl.innerHTML = `<span>${name}</span>`;
     if (descEl)   descEl.textContent = desc;
+
+    // SAP: show WebClient shortcut link
+    const existingLink = document.getElementById('sap-webclient-link');
+    if (existingLink) existingLink.remove();
+    if (agent === 'sap') {
+        const link = document.createElement('a');
+        link.id = 'sap-webclient-link';
+        link.href = 'https://sld.partyard.privatcloud.biz/webx/index.html';
+        link.target = '_blank';
+        link.innerHTML = '🔗 Abrir SAP WebClient →';
+        link.style.cssText = 'display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:12px;font-weight:600;color:#06b6d4;text-decoration:none;border:1px solid rgba(6,182,212,.3);padding:6px 16px;border-radius:20px;transition:all .15s;';
+        link.onmouseover = () => { link.style.background='rgba(6,182,212,.1)'; link.style.borderColor='rgba(6,182,212,.6)'; };
+        link.onmouseout  = () => { link.style.background=''; link.style.borderColor='rgba(6,182,212,.3)'; };
+        document.getElementById('empty-state')?.querySelector('.empty-state-hero')?.appendChild(link);
+    }
 }
 
 let isRecording  = false;
