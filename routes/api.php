@@ -62,10 +62,11 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
     Route::post('/keys/store',            [EmailEncryptionController::class, 'storePublicKey']);
     Route::get( '/keys/{email}',          [EmailEncryptionController::class, 'getPublicKey']);
     Route::delete('/keys',                [EmailEncryptionController::class, 'deletePublicKey']);
-    Route::post('/email/decrypt',         [EmailEncryptionController::class, 'decryptEmail'])
-        ->middleware('throttle:20,1');
-
 });
+
+// Kyber-1024 decrypt — public, no login required (anyone with a secret key can decrypt)
+Route::post('/email/decrypt', [EmailEncryptionController::class, 'decryptEmail'])
+    ->middleware('throttle:20,1');
 
 // ─── ADMIN ONLY ────────────────────────────────────────────────────────────
 Route::middleware(['auth:web', 'admin', 'throttle:30,1'])->group(function () {
