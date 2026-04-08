@@ -89,6 +89,9 @@
     <label>Mensagem</label>
     <textarea id="test-body" rows="3">Este email foi encriptado com CRYSTALS-Kyber 1024 + AES-256-GCM. Só o destinatário o pode ler.</textarea>
 
+    <label>Anexos <small>(opcional — máx. 5 ficheiros, 20 MB cada)</small></label>
+    <input type="file" id="test-attachments" multiple style="font-family:Arial;font-size:13px;padding:6px 0;">
+
     <button class="btn" onclick="enviarTeste()">📧 Enviar Email Encriptado</button>
     <a href="/decrypt" class="btn-outline">🔓 Ir para Desencriptar</a>
     <div id="res-envio" class="result"></div>
@@ -149,10 +152,21 @@ function enviarTeste() {
     const subject = document.getElementById('test-subject').value.trim();
     const body    = document.getElementById('test-body').value.trim();
     if (!to) return alert('Introduz o email do destinatário.');
+
+    const fd = new FormData();
+    fd.append('to', to);
+    fd.append('subject', subject);
+    fd.append('body', body);
+    fd.append('encrypt', '1');
+    const files = document.getElementById('test-attachments').files;
+    for (let i = 0; i < files.length; i++) {
+        fd.append('attachments[]', files[i]);
+    }
+
     fetch('/api/email/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
-        body: JSON.stringify({ to, subject, body, encrypt: true })
+        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+        body: fd
     })
     .then(r => r.json())
     .then(d => {
