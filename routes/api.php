@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\DiscoveryController;
+use App\Http\Controllers\EmailEncryptionController;
 use App\Http\Controllers\EmailSendController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\NvidiaController;
@@ -52,9 +53,17 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
     Route::get('/sap/years',  [SapTableController::class, 'yearRange']);
     Route::get('/sap/ping',   [SapTableController::class, 'ping']);
 
-    // Email sending
+    // Email sending (plain or Kyber-1024 encrypted)
     Route::post('/email/send', [EmailSendController::class, 'send'])
-        ->middleware('throttle:10,1'); // max 10 emails per minute per user
+        ->middleware('throttle:10,1');
+
+    // Kyber-1024 post-quantum email encryption — key management & decryption
+    Route::post('/keys/generate',         [EmailEncryptionController::class, 'generateKeyPair']);
+    Route::post('/keys/store',            [EmailEncryptionController::class, 'storePublicKey']);
+    Route::get( '/keys/{email}',          [EmailEncryptionController::class, 'getPublicKey']);
+    Route::delete('/keys',                [EmailEncryptionController::class, 'deletePublicKey']);
+    Route::post('/email/decrypt',         [EmailEncryptionController::class, 'decryptEmail'])
+        ->middleware('throttle:20,1');
 
 });
 
