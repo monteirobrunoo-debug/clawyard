@@ -65,6 +65,18 @@
 <script>
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
 
+// Auto-fill JSON from URL hash (set by email link)
+window.addEventListener('DOMContentLoaded', function() {
+    const hash = location.hash.slice(1);
+    if (hash) {
+        try {
+            const json = atob(hash);
+            JSON.parse(json); // validate
+            document.getElementById('pkg').value = json;
+        } catch(e) {}
+    }
+});
+
 function desencriptar() {
     const sk  = document.getElementById('sk').value.trim();
     const pkg = document.getElementById('pkg').value.trim();
