@@ -22,11 +22,13 @@ class EmailSendController extends Controller
     public function send(Request $request): JsonResponse
     {
         $request->validate([
-            'to'      => 'required|email',
-            'subject' => 'required|string|max:500',
-            'body'    => 'required|string|max:20000',
-            'cc'      => 'nullable|email',
-            'encrypt' => 'nullable|boolean',
+            'to'            => 'required|email',
+            'subject'       => 'required|string|max:500',
+            'body'          => 'required|string|max:20000',
+            'cc'            => 'nullable|email',
+            'encrypt'       => 'nullable|boolean',
+            'attachments'   => 'nullable|array|max:5',
+            'attachments.*' => 'file|max:20480', // 20 MB per file
         ]);
 
         try {
@@ -35,7 +37,7 @@ class EmailSendController extends Controller
             $subject = $request->input('subject');
             $body    = $request->input('body');
             $from    = config('mail.from.address', 'info@clawyard.com');
-            $name    = config('mail.from.name', 'ClawYard Maritime');
+            $name    = config('mail.from.name', 'ClawYard');
 
             // ── Encryption path ────────────────────────────────────────────
             // Priority: sender's own key → recipient's key → plaintext
@@ -57,14 +59,25 @@ class EmailSendController extends Controller
                 $emailSubject = $subject;
             }
 
+            // ── Attachments ────────────────────────────────────────────────
+            $attachments = $request->file('attachments') ?? [];
+
             // ── Send ───────────────────────────────────────────────────────
-            Mail::html($htmlBody, function ($mail) use ($to, $cc, $emailSubject, $from, $name) {
+            Mail::html($htmlBody, function ($mail) use ($to, $cc, $emailSubject, $from, $name, $attachments) {
                 $mail->to($to)
                      ->from($from, $name)
                      ->subject($emailSubject);
 
                 if ($cc) {
                     $mail->cc($cc);
+                }
+
+                foreach ($attachments as $file) {
+                    $mail->attachData(
+                        $file->get(),
+                        $file->getClientOriginalName(),
+                        ['mime' => $file->getMimeType()]
+                    );
                 }
             });
 
@@ -113,11 +126,11 @@ class EmailSendController extends Controller
 <body>
 <div class="wrapper">
   <div class="header">
-    <div class="logo">🐾 ClawYard Maritime</div>
+    <div class="logo">🐾 ClawYard</div>
   </div>
   <div class="body">{$html}</div>
   <div class="footer">
-    ClawYard Maritime | IT Partyard LDA<br>
+    ClawYard | IT Partyard LDA<br>
     Marine Spare Parts &amp; Technical Services<br>
     Setúbal, Portugal · info@clawyard.com
   </div>
