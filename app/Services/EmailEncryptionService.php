@@ -170,9 +170,12 @@ class EmailEncryptionService
      */
     public function buildOutlookHtml(array $package, string $senderName = 'ClawYard Maritime', string $appUrl = ''): string
     {
-        $appUrl      = 'https://clawyard.partyard.eu';
-        $decryptUrl  = $appUrl . '/decrypt';
-        $json        = htmlspecialchars(json_encode($package, JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8');
+        $appUrl     = 'https://clawyard.partyard.eu';
+        // Encode JSON in URL hash — not sent to server, auto-fills /decrypt page
+        $jsonRaw    = json_encode($package, JSON_UNESCAPED_SLASHES);
+        $hash       = base64_encode($jsonRaw);
+        $decryptUrl = $appUrl . '/decrypt#' . $hash;
+        $json       = htmlspecialchars($jsonRaw, ENT_QUOTES, 'UTF-8');
 
         return <<<HTML
 <!DOCTYPE html>
@@ -193,11 +196,13 @@ class EmailEncryptionService
   .badge    { display:inline-block; background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7;
               border-radius:4px; padding:3px 10px; font-size:12px; font-weight:bold; margin-bottom:16px; }
   p  { color:#444; font-size:14px; line-height:1.7; margin:0 0 12px; }
+  .cta-btn  { display:inline-block; background:#76b900; color:#fff !important; text-decoration:none;
+              padding:14px 36px; border-radius:6px; font-size:16px; font-weight:bold; margin:8px 0 20px; }
+  .copy-btn { display:inline-block; background:#f0f0f0; color:#333 !important; text-decoration:none;
+              padding:10px 24px; border-radius:6px; font-size:14px; margin-left:10px; }
   .blob-box { background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;
               padding:14px; font-family:'Courier New',monospace; font-size:10px;
-              color:#333; word-break:break-all; white-space:pre-wrap; margin:14px 0 20px; }
-  .cta-btn  { display:inline-block; background:#76b900; color:#fff !important; text-decoration:none;
-              padding:13px 32px; border-radius:6px; font-size:15px; font-weight:bold; }
+              color:#555; word-break:break-all; white-space:pre-wrap; margin:16px 0 8px; }
   .footer   { border-top:1px solid #eee; padding:16px 32px; font-size:11px; color:#aaa; }
 </style>
 </head>
@@ -207,20 +212,20 @@ class EmailEncryptionService
   <div class="wrapper">
     <div class="header">
       <p>🐾 ClawYard Maritime</p>
-      <small>Mensagem encriptada com Kyber-1024 + AES-256-GCM</small>
+      <small>Mensagem encriptada · Kyber-1024 + AES-256-GCM</small>
     </div>
     <div class="content">
       <span class="badge">🔒 MENSAGEM ENCRIPTADA</span>
       <p>Recebeste uma mensagem encriptada de <strong>{$senderName}</strong>.<br>
-         Para leres o conteúdo, copia o bloco abaixo e clica no botão.</p>
+         Clica no botão para a desencriptar — o conteúdo é carregado automaticamente.</p>
 
+      <a class="cta-btn" href="{$decryptUrl}" target="_blank">🔓 Abrir e Desencriptar →</a>
+
+      <p style="font-size:12px;color:#999;margin:0 0 6px">Em alternativa, copia o bloco abaixo e cola em <a href="{$appUrl}/decrypt" style="color:#76b900">{$appUrl}/decrypt</a></p>
       <div class="blob-box">{$json}</div>
-
-      <a class="cta-btn" href="{$decryptUrl}" target="_blank">🔓 Desencriptar em ClawYard →</a>
     </div>
     <div class="footer">
-      ClawYard Maritime · IT Partyard LDA · Setúbal, Portugal<br>
-      <a href="{$decryptUrl}" style="color:#76b900">{$decryptUrl}</a>
+      ClawYard Maritime · IT Partyard LDA · Setúbal, Portugal
     </div>
   </div>
 </td></tr>
