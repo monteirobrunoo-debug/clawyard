@@ -181,9 +181,27 @@
         .email-copy-btn { background:none; color:var(--muted); border:1px solid var(--border2); padding:8px 16px; border-radius:8px; font-size:12px; cursor:pointer; }
         .email-copy-btn:hover { border-color:var(--muted); color:#aaa; }
         .email-edit-btn { background:none; color:var(--muted); border:1px solid var(--border2); padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer; }
+        .email-outlook-btn { background:#0078d4; color:#fff; border:none; padding:8px 16px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; }
+        .email-outlook-btn:hover { background:#006cbe; }
         .email-status { font-size:11px; margin-left:auto; }
         .email-status.sent { color:var(--green); }
         .email-status.err { color:#ff4444; }
+        /* ── TABLE CARD (Marco Sales) ── */
+        .table-card { background:var(--bg); border:1px solid #1a2e00; border-left:3px solid #3b82f6; border-radius:12px; overflow:hidden; margin-top:4px; }
+        .table-card-header { background:#0a1220; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1a2e00; }
+        .table-card-header span { font-size:12px; font-weight:700; color:#3b82f6; }
+        .table-card-header small { font-size:11px; color:var(--muted); }
+        .table-wrap { overflow-x:auto; max-height:320px; overflow-y:auto; }
+        .table-card table { width:100%; border-collapse:collapse; font-size:12px; }
+        .table-card th { background:#0d1a30; color:#7ab3f0; padding:7px 12px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; position:sticky; top:0; }
+        .table-card td { padding:7px 12px; border-bottom:1px solid #111; color:#ccc; }
+        .table-card tr:hover td { background:#0a1220; }
+        .table-analysis { padding:10px 16px; font-size:12px; color:#aaa; border-top:1px solid #111; line-height:1.6; }
+        .table-recommendation { padding:8px 16px 10px; font-size:12px; color:var(--green); font-weight:600; }
+        .table-actions { padding:8px 16px; display:flex; gap:8px; background:#0a1220; border-top:1px solid #1a2e00; }
+        .table-excel-btn { background:#217346; color:#fff; border:none; padding:7px 16px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; }
+        .table-excel-btn:hover { background:#1a5c38; }
+        .table-copy-btn { background:none; color:var(--muted); border:1px solid var(--border2); padding:7px 14px; border-radius:8px; font-size:12px; cursor:pointer; }
 
         /* ── IMAGE PREVIEW ── */
         #image-preview { display:none; padding:8px 20px 0; position:relative; }
@@ -555,7 +573,7 @@ const AGENT_COLORS = {
 const AGENT_DESCRIPTIONS = {
     auto: 'Routing inteligente — vai ao agente certo automaticamente',
     orchestrator: 'Colaboração entre todos os agentes em simultâneo',
-    sales: 'Cotações, peças, disponibilidade e propostas comerciais',
+    sales: 'Comparação de preços, análise de fornecedores e códigos de fabricante — exporta Excel',
     support: 'Diagnóstico técnico, avarias, manutenção e reparação',
     email: 'Emails profissionais em PT/EN/ES prontos a enviar',
     sap: 'Acesso directo ao ERP SAP B1 — stock, faturas, encomendas',
@@ -594,12 +612,12 @@ const AGENT_CHIPS = {
     ],
     // ── Marco Sales ───────────────────────────────────────────────────────
     sales: [
-        '💼 Cotação urgente: pistões + camisas MTU Série 4000 para navio em Sines',
-        '💼 Proposta completa para revisão MAK M32 — cliente novo em Barcelona',
-        '💼 Disponibilidade de selos SKF SternTube — navio em dique em Lisboa',
-        '💼 Peças Schottel SRP-X para rebocador — prazo e preço CIF Algeciras',
-        '💼 Kit de válvulas Jenbacher J620 — cliente em Hamburgo precisa urgente',
-        '💼 Turbocompressor Caterpillar 3516 remanufacturado — opções e garantia',
+        '💼 Compara preços OEM vs aftermarket para pistões MTU Série 4000 — exporta Excel',
+        '💼 Analisa este PDF de fornecedor e extrai referências, preços e lead times',
+        '💼 Equivalências de filtros Caterpillar 3516 — OEM vs Fleetguard vs Mann',
+        '💼 Compara 3 fornecedores de selos SKF SternTube — qualidade, preço e prazo',
+        '💼 Códigos cruzados MAN B&W vs peças aftermarket — tabela comparativa',
+        '💼 Análise de mercado: turbocompressores MAK M32 — fornecedores globais e preços',
     ],
     // ── Marcus Suporte ─────────────────────────────────────────────────────
     support: [
@@ -612,12 +630,12 @@ const AGENT_CHIPS = {
     ],
     // ── Daniel Email ──────────────────────────────────────────────────────
     email: [
-        '📧 Cold outreach EN para shipping agent em Hamburgo — stock MTU disponível',
-        '📧 Proposta comercial ES para armador em Algeciras — peças MAK M32',
-        '📧 Follow-up de cotação para cliente em Roterdão — Caterpillar C32',
-        '📧 Email urgente PT/EN para agente em Pireu — selos SKF em stock imediato',
-        '📧 Apresentação PartYard Defense para agente naval em Lisboa — PDF anexo',
+        '📧 Cold outreach EN para shipping agent em Hamburgo — motor MTU Série 4000',
+        '📧 Proposta comercial PT para armador em Lisboa — peças MAK M32 disponíveis',
+        '📧 Follow-up urgente para cliente em Pireu — selos SKF em stock imediato',
+        '📧 Apresentação PartYard Defense para NATO procurement em Bruxelas',
         '📧 Email de parceria para agente marítimo em Valência — exclusividade Schottel',
+        '📧 Warranty claim ao fabricante MTU — defeito em peças série 2000',
     ],
     // ── Richard SAP ───────────────────────────────────────────────────────
     sap: [
@@ -1052,6 +1070,34 @@ function addMessage(role, text, agentName = '') {
         ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${agentPhoto}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
         : `<div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>`;
 
+    // Table card (Marco Sales)
+    if (role === 'ai' && text.includes('__TABLE__')) {
+        const tableMatch = text.match(/__TABLE__(\{[\s\S]*\})/);
+        if (tableMatch) {
+            try {
+                const tableData  = JSON.parse(tableMatch[1]);
+                const salesPhoto = AGENT_PHOTOS['sales'];
+                const salesAvatar = salesPhoto
+                    ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${salesPhoto}" alt="Marco Sales" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+                    : `<div class="avatar">${AGENT_EMOJIS['sales']}</div>`;
+                const preText = text.split('__TABLE__')[0].trim();
+                msg.innerHTML = `
+                    ${salesAvatar}
+                    <div class="msg-col" style="max-width:700px">
+                        <div class="msg-meta">
+                            <span class="agent-tag active">💼 Marco Sales</span>
+                            <span>análise gerada</span>
+                        </div>
+                        ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
+                        ${buildTableCard(tableData)}
+                    </div>`;
+                chat.appendChild(msg);
+                chat.scrollTop = chat.scrollHeight;
+                return msg;
+            } catch(e) { /* fall through to normal render */ }
+        }
+    }
+
     // Email card
     if (role === 'ai' && text.startsWith('__EMAIL__')) {
         const emailData = JSON.parse(text.replace('__EMAIL__', ''));
@@ -1175,6 +1221,53 @@ function rejectAction(id) {
 // ═══════════════════════════════
 //  EMAIL CARD
 // ═══════════════════════════════
+function buildTableCard(data) {
+    const id = 'tbl_' + Date.now();
+    const headers = data.columns.map(c => `<th>${esc(c)}</th>`).join('');
+    const rows = data.rows.map(r => `<tr>${r.map(c => `<td>${esc(String(c))}</td>`).join('')}</tr>`).join('');
+    return `
+    <div class="table-card" id="${id}">
+        <div class="table-card-header">
+            <span>📊 ${esc(data.title||'Análise Marco Sales')}</span>
+            <small>${data.rows.length} itens</small>
+        </div>
+        <div class="table-wrap">
+            <table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>
+        </div>
+        ${data.analysis ? `<div class="table-analysis">🔍 ${esc(data.analysis)}</div>` : ''}
+        ${data.recommendation ? `<div class="table-recommendation">✅ ${esc(data.recommendation)}</div>` : ''}
+        <div class="table-actions">
+            <button class="table-excel-btn" onclick="exportExcel('${id}')">📥 Exportar Excel</button>
+            <button class="table-copy-btn" onclick="copyTable('${id}')">📋 Copiar CSV</button>
+        </div>
+    </div>`;
+}
+
+function exportExcel(id) {
+    const card = document.getElementById(id);
+    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','') || 'marco_analise';
+    const rows  = Array.from(card.querySelectorAll('table tr'));
+    const csv   = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => '"' + c.textContent.replace(/"/g,'""') + '"').join(',')).join('\n');
+    const bom   = '\uFEFF';
+    const blob  = new Blob([bom + csv], {type:'text/csv;charset=utf-8;'});
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement('a');
+    a.href      = url;
+    a.download  = title.replace(/[^a-zA-Z0-9_\-]/g,'_') + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function copyTable(id) {
+    const card = document.getElementById(id);
+    const rows = Array.from(card.querySelectorAll('table tr'));
+    const csv  = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => c.textContent).join('\t')).join('\n');
+    navigator.clipboard.writeText(csv);
+    const btn = card.querySelector('.table-copy-btn');
+    btn.textContent = '✅ Copiado!';
+    setTimeout(() => btn.textContent = '📋 Copiar CSV', 2000);
+}
+
 function buildEmailCard(data) {
     const id = 'em_' + Date.now();
     const lang = data.language === 'pt' ? '🇵🇹 PT' : data.language === 'es' ? '🇪🇸 ES' : '🇬🇧 EN';
@@ -1202,6 +1295,10 @@ function buildEmailCard(data) {
         <div class="email-actions">
             <button class="email-send-btn" id="${id}_sendbtn" onclick="sendEmail('${id}')">
                 ✈️ Enviar
+            </button>
+            <button class="email-outlook-btn" onclick="openInOutlook('${id}')" title="Abrir no Outlook">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l10-2.5V6.5L7 4zm2 2.8l6 1.5v7.4l-6 1.5V6.8zM2 7v10l4 1V6L2 7z"/></svg>
+                Outlook
             </button>
             <button class="email-copy-btn" onclick="copyEmail('${id}')">📋 Copiar</button>
             <button class="email-edit-btn" onclick="editEmail('${id}')">✏️</button>
@@ -1273,6 +1370,22 @@ function editEmail(id) {
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
+}
+
+function openInOutlook(id) {
+    const to      = document.getElementById(id+'_to')?.value.trim() || '';
+    const cc      = document.getElementById(id+'_cc')?.value.trim() || '';
+    const subject = document.getElementById(id+'_subject')?.value.trim() || '';
+    const body    = document.getElementById(id+'_body')?.innerText.trim() || '';
+
+    let mailto = 'mailto:' + encodeURIComponent(to);
+    const parts = [];
+    if (cc)      parts.push('cc='      + encodeURIComponent(cc));
+    if (subject) parts.push('subject=' + encodeURIComponent(subject));
+    if (body)    parts.push('body='    + encodeURIComponent(body));
+    if (parts.length) mailto += '?' + parts.join('&');
+
+    window.location.href = mailto;
 }
 
 // ═══════════════════════════════
