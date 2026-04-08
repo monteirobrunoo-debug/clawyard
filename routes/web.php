@@ -15,6 +15,27 @@ Route::get('/', function () {
     return auth()->check() ? redirect('/dashboard') : redirect('/login');
 });
 
+// SAP diagnostic — temporary, remove after fix
+Route::get('/sap-diag', function () {
+    $url  = config('services.sap.base_url', 'https://sld.partyard.privatcloud.biz/b1s/v1');
+    $user = trim(config('services.sap.username', ''), '"\'');
+    $pass = trim(config('services.sap.password', ''), '"\'');
+    $comp = config('services.sap.company', 'PARTYARD');
+
+    $client = new \GuzzleHttp\Client(['verify' => false, 'timeout' => 15, 'http_errors' => false]);
+    $res    = $client->post("{$url}/Login", [
+        'headers' => ['Content-Type' => 'application/json'],
+        'json'    => ['CompanyDB' => $comp, 'UserName' => $user, 'Password' => $pass],
+    ]);
+
+    return response()->json([
+        'url'    => $url,
+        'user'   => $user,
+        'status' => $res->getStatusCode(),
+        'body'   => json_decode($res->getBody()->getContents(), true),
+    ]);
+});
+
 // Dashboard — agent selector portal
 Route::get('/dashboard', function () {
     return view('dashboard');
