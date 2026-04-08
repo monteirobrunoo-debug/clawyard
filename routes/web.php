@@ -10,6 +10,11 @@ use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\SapTableController;
 use Illuminate\Support\Facades\Route;
 
+// Kyber-1024 key management UI
+Route::get('/keys', function () {
+    return view('keys.manage');
+})->middleware('auth');
+
 // Redirect root to dashboard (or login if not authenticated)
 Route::get('/', function () {
     return auth()->check() ? redirect('/dashboard') : redirect('/login');
