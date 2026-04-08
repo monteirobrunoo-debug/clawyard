@@ -168,7 +168,7 @@ class EmailEncryptionService
      * @param  string  $appUrl      Base URL of the ClawYard instance.
      * @return string  Complete HTML email body (inline styles, Outlook-safe).
      */
-    public function buildOutlookHtml(array $package, string $senderName = 'ClawYard Maritime', string $appUrl = ''): string
+    public function buildOutlookHtml(array $package, string $senderName = 'ClawYard', string $appUrl = ''): string
     {
         $appUrl     = 'https://clawyard.partyard.eu';
         // Encode JSON in URL hash — not sent to server, auto-fills /decrypt page
@@ -211,7 +211,7 @@ class EmailEncryptionService
 <tr><td align="center" style="padding:20px 12px;">
   <div class="wrapper">
     <div class="header">
-      <p>🐾 ClawYard Maritime</p>
+      <p>🐾 ClawYard</p>
       <small>Mensagem encriptada · Kyber-1024 + AES-256-GCM</small>
     </div>
     <div class="content">
@@ -225,7 +225,7 @@ class EmailEncryptionService
       <div class="blob-box">{$json}</div>
     </div>
     <div class="footer">
-      ClawYard Maritime · IT Partyard LDA · Setúbal, Portugal
+      ClawYard · IT Partyard LDA · Setúbal, Portugal
     </div>
   </div>
 </td></tr>

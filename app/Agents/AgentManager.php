@@ -27,6 +27,7 @@ class AgentManager
             'engineer'  => new EngineerAgent(),
             'patent'    => new PatentAgent(),
             'energy'    => new EnergyAdvisorAgent(),
+            'kyber'     => new KyberAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -163,6 +164,18 @@ class AgentManager
         ];
         foreach ($engineerKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['engineer'];
+        }
+
+        // Kyber / post-quantum encryption keywords
+        $kyberKeywords = [
+            'kyber', 'encriptar', 'desencriptar', 'encrypt', 'decrypt',
+            'chave', 'secret key', 'public key', 'post-quantum', 'pós-quântico',
+            'kyber-1024', 'aes-256-gcm', 'email encriptado', 'encrypted email',
+            'gerar chave', 'generate key', 'key pair', 'par de chaves',
+            'encriptação', 'encryption', 'decryption', 'desencriptação',
+        ];
+        foreach ($kyberKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['kyber'];
         }
 
         // Research / competitive intelligence keywords
