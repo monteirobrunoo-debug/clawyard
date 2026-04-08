@@ -17,15 +17,14 @@ class SapService
     const SESSION_CACHE_KEY  = 'sap_b1_session';
     const SESSION_TTL        = 25; // minutes (SAP default = 30 min)
     const SESSION_FAILED_KEY = 'sap_b1_login_failed';
-    const SESSION_FAILED_TTL = 10; // minutes
-
+    const SESSION_FAILED_TTL = 10; // minutes — negative cache to avoid multi-login hangs
 
     public function __construct()
     {
         $this->baseUrl  = rtrim(config('services.sap.base_url', 'https://sld.partyard.privatcloud.biz/b1s/v1'), '/');
+        $this->company  = config('services.sap.company',  'PARTYARD');
         $this->username = trim(config('services.sap.username', ''), '"\'');
-$this->password = trim(config('services.sap.password', ''), '"\'');
-        $this->password = config('services.sap.password', '');
+        $this->password = trim(config('services.sap.password', ''), '"\'');
 
         $this->http = new Client([
             'timeout'         => 30,
@@ -488,12 +487,12 @@ $this->password = trim(config('services.sap.password', ''), '"\'');
         // Test if we can get a session — detect login failures explicitly
         $session = $this->ensureSession();
         if (!$session) {
-            // Try once more with fresh cache to get a proper error message
-            $diag = $this->testConnection();
-            $hint = $diag['hint'] ?? '';
+            // Do NOT call testConnection() here — it clears the negative cache
+            // and causes a second login attempt, which locks the SAP account.
             return "\n\n--- ERRO LIGAÇÃO SAP B1 ---\n"
-                . ($diag['message'] ?? 'Não foi possível ligar ao SAP B1.')
-                . ($hint ? "\nSugestão: {$hint}" : '')
+                . "❌ Login SAP recusado (HTTP 401): Fail to NONE-SSO login from SLD.\n"
+                . "Sugestão: Verifica as credenciais SAP_B1_USER e SAP_B1_PASSWORD no .env do servidor.\n"
+                . "User configurado: {$this->username}\n"
                 . "\nDiz ao utilizador exactamente este erro para que possa resolver o problema de acesso ao SAP.\n--- FIM ERRO ---\n";
         }
 
