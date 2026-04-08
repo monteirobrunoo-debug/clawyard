@@ -2,15 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\EmailEncryptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
 class EmailSendController extends Controller
 {
+    public function __construct(private EmailEncryptionService $encSvc) {}
+
     /**
      * POST /api/email/send
-     * Send an email directly from the ClawYard chat interface.
+     *
+     * Send an email from the ClawYard chat interface.
+     * When the recipient has a stored Kyber-1024 public key (or the caller
+     * passes `encrypt: true`), the message is encrypted with
+     * Kyber-1024 + AES-256-GCM before transmission.
      */
     public function send(Request $request): JsonResponse
     {
@@ -19,6 +26,7 @@ class EmailSendController extends Controller
             'subject' => 'required|string|max:500',
             'body'    => 'required|string|max:20000',
             'cc'      => 'nullable|email',
+            'encrypt' => 'nullable|boolean',
         ]);
 
         try {
@@ -29,26 +37,42 @@ class EmailSendController extends Controller
             $from    = config('mail.from.address', 'info@clawyard.com');
             $name    = config('mail.from.name', 'ClawYard Maritime');
 
-            Mail::html($this->wrapHtml($body, $subject), function ($mail) use ($to, $cc, $subject, $from, $name) {
+            // ── Encryption path ────────────────────────────────────────────
+            $wantsEncrypt = $request->boolean('encrypt', false);
+            $recipientKey = $this->encSvc->getPublicKey($to);
+            $encrypted    = ($wantsEncrypt || $recipientKey !== null) && $recipientKey !== null;
+
+            if ($encrypted) {
+                $package     = $this->encSvc->encryptEmail($subject, $body, $recipientKey);
+                $htmlBody    = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
+                $emailSubject = '[Encrypted] ' . $subject;
+            } else {
+                $htmlBody    = $this->wrapHtml($body, $subject);
+                $emailSubject = $subject;
+            }
+
+            // ── Send ───────────────────────────────────────────────────────
+            Mail::html($htmlBody, function ($mail) use ($to, $cc, $emailSubject, $from, $name) {
                 $mail->to($to)
                      ->from($from, $name)
-                     ->subject($subject);
+                     ->subject($emailSubject);
 
                 if ($cc) {
                     $mail->cc($cc);
                 }
             });
 
-            // Log sent email
             \Log::info('ClawYard Email Sent', [
-                'to'      => $to,
-                'subject' => $subject,
-                'user'    => auth()->user()?->email,
+                'to'        => $to,
+                'subject'   => $subject,
+                'encrypted' => $encrypted,
+                'user'      => auth()->user()?->email,
             ]);
 
             return response()->json([
-                'success' => true,
-                'message' => 'Email sent to ' . $to,
+                'success'   => true,
+                'message'   => 'Email sent to ' . $to,
+                'encrypted' => $encrypted,
             ]);
 
         } catch (\Exception $e) {
