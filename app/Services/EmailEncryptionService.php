@@ -170,11 +170,9 @@ class EmailEncryptionService
      */
     public function buildOutlookHtml(array $package, string $senderName = 'ClawYard Maritime', string $appUrl = ''): string
     {
-        $appUrl    = $appUrl ?: config('app.url', 'https://clawyard.com');
-        $json      = htmlspecialchars(json_encode($package, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8');
-        $timestamp = $package['encrypted_at'] ?? now()->toIso8601String();
-        $fingerprint = substr($package['key_fingerprint'] ?? '', 0, 16) . '…';
-        $compactJson = htmlspecialchars(json_encode($package), ENT_QUOTES, 'UTF-8');
+        $appUrl      = 'https://clawyard.partyard.eu';
+        $decryptUrl  = $appUrl . '/decrypt';
+        $json        = htmlspecialchars(json_encode($package, JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8');
 
         return <<<HTML
 <!DOCTYPE html>
@@ -187,83 +185,42 @@ class EmailEncryptionService
 <![endif]-->
 <style type="text/css">
   body, #bodyTable { margin:0; padding:0; background:#f4f4f4; font-family:Arial,sans-serif; }
-  .wrapper { max-width:680px; margin:30px auto; background:#fff; border-radius:8px; overflow:hidden; }
-  .header  { background:#001f3f; padding:28px 36px; }
-  .header-title { color:#76b900; font-size:22px; font-weight:bold; margin:0; }
-  .header-sub   { color:#aaa; font-size:12px; margin:4px 0 0; }
-  .content { padding:32px 36px; }
-  .badge   { display:inline-block; background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7;
-             border-radius:4px; padding:3px 10px; font-size:12px; font-weight:bold; margin-bottom:18px; }
-  h2 { color:#001f3f; font-size:18px; margin:0 0 12px; }
-  p  { color:#444; font-size:14px; line-height:1.7; margin:0 0 14px; }
-  .meta-table { width:100%; border-collapse:collapse; font-size:12px; color:#888; margin-bottom:20px; }
-  .meta-table td { padding:3px 0; }
-  .meta-table td:first-child { width:140px; }
+  .wrapper  { max-width:620px; margin:30px auto; background:#fff; border-radius:8px; overflow:hidden; }
+  .header   { background:#001f3f; padding:24px 32px; }
+  .header p { margin:0; color:#76b900; font-size:20px; font-weight:bold; }
+  .header small { color:#aaa; font-size:11px; display:block; margin-top:3px; }
+  .content  { padding:28px 32px; }
+  .badge    { display:inline-block; background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7;
+              border-radius:4px; padding:3px 10px; font-size:12px; font-weight:bold; margin-bottom:16px; }
+  p  { color:#444; font-size:14px; line-height:1.7; margin:0 0 12px; }
   .blob-box { background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;
-              padding:16px; font-family:'Courier New',monospace; font-size:11px;
-              color:#333; word-break:break-all; white-space:pre-wrap; margin:0 0 20px; }
-  .cta-btn  { display:inline-block; background:#76b900; color:#fff; text-decoration:none;
-              padding:12px 28px; border-radius:6px; font-size:14px; font-weight:bold;
-              margin-bottom:24px; }
-  .steps ol { color:#444; font-size:14px; padding-left:22px; margin:0; }
-  .steps li { margin-bottom:8px; line-height:1.6; }
-  .footer   { border-top:1px solid #eee; padding:20px 36px; font-size:11px; color:#aaa; }
+              padding:14px; font-family:'Courier New',monospace; font-size:10px;
+              color:#333; word-break:break-all; white-space:pre-wrap; margin:14px 0 20px; }
+  .cta-btn  { display:inline-block; background:#76b900; color:#fff !important; text-decoration:none;
+              padding:13px 32px; border-radius:6px; font-size:15px; font-weight:bold; }
+  .footer   { border-top:1px solid #eee; padding:16px 32px; font-size:11px; color:#aaa; }
 </style>
 </head>
 <body>
 <table id="bodyTable" width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr><td align="center" style="padding:20px 12px;">
   <div class="wrapper">
-    <!-- Header -->
     <div class="header">
-      <p class="header-title">🐾 ClawYard Maritime</p>
-      <p class="header-sub">Post-Quantum Encrypted Message · Kyber-1024 + AES-256-GCM</p>
+      <p>🐾 ClawYard Maritime</p>
+      <small>Mensagem encriptada com Kyber-1024 + AES-256-GCM</small>
     </div>
-
-    <!-- Body -->
     <div class="content">
-      <span class="badge">🔒 KYBER-1024 ENCRYPTED</span>
+      <span class="badge">🔒 MENSAGEM ENCRIPTADA</span>
+      <p>Recebeste uma mensagem encriptada de <strong>{$senderName}</strong>.<br>
+         Para leres o conteúdo, copia o bloco abaixo e clica no botão.</p>
 
-      <h2>You have received an encrypted message</h2>
-      <p>
-        This email was encrypted end-to-end using <strong>CRYSTALS-Kyber 1024</strong>
-        (NIST FIPS 203 post-quantum KEM) combined with <strong>AES-256-GCM</strong>
-        authenticated encryption.  Only you — the holder of the matching Kyber-1024
-        secret key — can decrypt its contents.
-      </p>
-
-      <table class="meta-table">
-        <tr><td><strong>Sender</strong></td><td>{$senderName}</td></tr>
-        <tr><td><strong>Encrypted at</strong></td><td>{$timestamp}</td></tr>
-        <tr><td><strong>Key fingerprint</strong></td><td style="font-family:monospace">{$fingerprint}</td></tr>
-        <tr><td><strong>Cipher suite</strong></td><td>Kyber-1024 + HKDF-SHA-256 + AES-256-GCM</td></tr>
-      </table>
-
-      <!-- Encrypted payload -->
-      <p><strong>Encrypted payload</strong> — copy the block below to decrypt:</p>
       <div class="blob-box">{$json}</div>
 
-      <!-- CTA -->
-      <a class="cta-btn" href="{$appUrl}/decrypt" target="_blank">Decrypt on ClawYard →</a>
-
-      <div class="steps">
-        <p><strong>How to decrypt:</strong></p>
-        <ol>
-          <li>Open <a href="{$appUrl}" target="_blank" style="color:#76b900">{$appUrl}</a> and log in.</li>
-          <li>Navigate to <em>Profile → Decrypt Message</em>.</li>
-          <li>Paste your <strong>Kyber-1024 secret key</strong> and the encrypted payload above.</li>
-          <li>Click <strong>Decrypt</strong> to reveal the original message.</li>
-        </ol>
-      </div>
+      <a class="cta-btn" href="{$decryptUrl}" target="_blank">🔓 Desencriptar em ClawYard →</a>
     </div>
-
-    <!-- Footer -->
     <div class="footer">
-      ClawYard Maritime &nbsp;|&nbsp; HP-Group / IT Partyard LDA<br>
-      Setúbal, Portugal &nbsp;·&nbsp; <a href="mailto:info@clawyard.com" style="color:#76b900">info@clawyard.com</a><br>
-      <br>
-      This message uses CRYSTALS-Kyber 1024 (NIST FIPS 203) and AES-256-GCM.<br>
-      If you did not request this message, please disregard it.
+      ClawYard Maritime · IT Partyard LDA · Setúbal, Portugal<br>
+      <a href="{$decryptUrl}" style="color:#76b900">{$decryptUrl}</a>
     </div>
   </div>
 </td></tr>
