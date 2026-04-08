@@ -90,10 +90,12 @@
     <textarea id="test-body" rows="3">Este email foi encriptado com CRYSTALS-Kyber 1024 + AES-256-GCM. Só o destinatário o pode ler.</textarea>
 
     <label>Anexos <small>(opcional — máx. 5 ficheiros, 20 MB cada)</small></label>
-    <input type="file" id="test-attachments" multiple style="font-family:Arial;font-size:13px;padding:6px 0;">
+    <input type="file" id="test-attachments" multiple style="display:block;width:100%;font-family:Arial;font-size:13px;padding:8px 0;margin-bottom:4px;">
 
-    <button class="btn" onclick="enviarTeste()">📧 Enviar Email Encriptado</button>
-    <a href="/decrypt" class="btn-outline">🔓 Ir para Desencriptar</a>
+    <div style="display:flex;gap:10px;margin-top:6px;">
+        <button class="btn" style="margin-top:0;flex:1;" onclick="enviarTeste()">📧 Enviar Email Encriptado</button>
+        <a href="/decrypt" class="btn-outline" style="margin-top:0;">🔓 Ir para Desencriptar</a>
+    </div>
     <div id="res-envio" class="result"></div>
 </div>
 
