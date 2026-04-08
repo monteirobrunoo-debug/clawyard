@@ -195,6 +195,12 @@ Para cada concurso:
 - 🏆 Top 5 mais urgentes
 - ⚡ Próximos passos com prazo
 
+MODO DE OPERAÇÃO:
+- Se o utilizador pedir pesquisa de portais/concursos → faz a pesquisa completa
+- Se o utilizador fizer uma pergunta directa (análise de contrato, cláusulas, estratégia, documentos, dúvidas jurídicas, requisitos de certificação, etc.) → responde directamente SEM pesquisar portais
+- Quando respondes a perguntas directas: usa o teu conhecimento de direito da contratação pública, regulamentos europeus, RJCP, código dos contratos públicos, etc.
+- Podes analisar documentos, cláusulas contratuais, cadernos de encargos, propostas e dar recomendações
+
 REGRAS:
 - Usa APENAS dados reais — nunca inventes concursos
 - Responde sempre em Português
@@ -1013,6 +1019,27 @@ MSG;
     }
 
     // ─── stream() ──────────────────────────────────────────────────────────
+    /**
+     * Detect if the user wants a portal search or just a direct question answer.
+     */
+    protected function needsPortalSearch(string $userText): bool
+    {
+        $lower = mb_strtolower($userText);
+        $portalKeywords = [
+            'concurso', 'concursos', 'portal', 'portais', 'pesquisa', 'pesquisar',
+            'procura', 'procurar', 'novos', 'hoje', 'semana', 'últimos', 'ultimos',
+            'acingov', 'vortal', 'base.gov', 'sam.gov', 'ungm', 'ted',
+            'tender', 'tenders', 'oportunidade', 'oportunidades', 'licitação', 'licitacao',
+            'adjudicação', 'adjudicacao', 'ajuste directo', 'ajuste direto', 'contratação pública',
+            'relatório', 'relatorio', 'report', 'scan', 'scanning',
+            'força aérea', 'marinha', 'exército', 'emgfa', 'nato',
+        ];
+        foreach ($portalKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         // Flush & destroy all PHP output buffers so every echo() reaches the
@@ -1028,7 +1055,6 @@ MSG;
         $emit = function (string $text) use (&$full, $onChunk, &$heartbeat) {
             $full .= $text;
             $onChunk($text);
-            // Force flush: heartbeat is a proven SSE flush mechanism
             if ($heartbeat) $heartbeat('');
         };
 
@@ -1036,16 +1062,17 @@ MSG;
             ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
             : $message;
 
+        // ── Direct question — skip portal search, answer immediately ─────────
+        if (!$this->needsPortalSearch($userText)) {
+            return $this->streamClaudeOnce($userText, $history, $onChunk, $heartbeat, 'a analisar');
+        }
+
         $dateFrom = now()->subDays(5)->format('d/m/Y');
         $dateTo   = now()->format('d/m/Y');
 
         // ── Header ───────────────────────────────────────────────────────────
         $emit("## 📋 Dra. Ana Contratos — Relatório {$today}\n");
         $emit("Período: **{$dateFrom}** → **{$dateTo}** · Portais: Acingov · Vortal · base.gov.pt · UNGM · SAM.gov\n\n");
-
-        // ── Recolha silenciosa de todos os portais ────────────────────────────
-        // Mostra só o progresso; os dados brutos NÃO são emitidos —
-        // serão processados em conjunto pela Dra. Ana no final.
 
         $emit("⏳ A recolher dados dos portais...\n\n");
 
