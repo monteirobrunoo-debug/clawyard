@@ -15,10 +15,10 @@ Route::get('/keys', function () {
     return view('keys.manage');
 })->middleware('auth');
 
-// Kyber-1024 decrypt page
+// Kyber-1024 decrypt page — public, no login required
 Route::get('/decrypt', function () {
     return view('keys.decrypt');
-})->middleware('auth');
+});
 
 // Redirect root to dashboard (or login if not authenticated)
 Route::get('/', function () {
