@@ -44,15 +44,15 @@
         <div class="flow-arrow">→</div>
         <div class="flow-step">2. Registar public key</div>
         <div class="flow-arrow">→</div>
-        <div class="flow-step">3. Enviar email encriptado</div>
+        <div class="flow-step">3. Enviar email encriptado a qualquer pessoa</div>
         <div class="flow-arrow">→</div>
-        <div class="flow-step">4. Outlook recebe JSON</div>
+        <div class="flow-step">4. Enviar secret key por SMS</div>
         <div class="flow-arrow">→</div>
-        <div class="flow-step"><a href="/decrypt" class="link" style="color:#76b900">5. Desencriptar aqui</a></div>
+        <div class="flow-step"><a href="/decrypt" class="link" style="color:#76b900">5. Destinatário desencripta aqui</a></div>
     </div>
     <p style="font-size:13px;color:#666;margin:0">
-        A <strong>public key</strong> fica no servidor — qualquer pessoa pode encriptar para ti.<br>
-        O <strong>secret key</strong> só tu tens — só tu podes ler os emails.
+        O email encriptado vai para <strong>qualquer pessoa</strong> — não precisa de conta no ClawYard.<br>
+        Partilhas o <strong>secret key por SMS/WhatsApp</strong> e ela desencripta em <a href="/decrypt" style="color:#76b900">/decrypt</a>.
     </p>
 </div>
 
