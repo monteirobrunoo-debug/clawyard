@@ -50,20 +50,28 @@ class EmailSendController extends Controller
                 : $recipientKey;                   // auto-encrypt only when recipient has key
             $encrypted = $encryptKey !== null;
 
+            // ── Attachments ────────────────────────────────────────────────
+            $uploadedFiles    = $request->file('attachments') ?? [];
+            $plainAttachments = [];
+
             if ($encrypted) {
-                $package      = $this->encSvc->encryptEmail($subject, $body, $encryptKey);
+                // Embed attachments inside the AES-256-GCM payload (encrypted end-to-end)
+                $encAttachments = array_map(fn($f) => [
+                    'name' => $f->getClientOriginalName(),
+                    'mime' => $f->getMimeType(),
+                    'data' => base64_encode($f->get()),
+                ], $uploadedFiles);
+                $package      = $this->encSvc->encryptEmail($subject, $body, $encryptKey, $encAttachments);
                 $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
                 $emailSubject = '[Encrypted] ' . $subject;
             } else {
-                $htmlBody     = $this->wrapHtml($body, $subject);
-                $emailSubject = $subject;
+                $plainAttachments = $uploadedFiles;
+                $htmlBody         = $this->wrapHtml($body, $subject);
+                $emailSubject     = $subject;
             }
 
-            // ── Attachments ────────────────────────────────────────────────
-            $attachments = $request->file('attachments') ?? [];
-
             // ── Send ───────────────────────────────────────────────────────
-            Mail::html($htmlBody, function ($mail) use ($to, $cc, $emailSubject, $from, $name, $attachments) {
+            Mail::html($htmlBody, function ($mail) use ($to, $cc, $emailSubject, $from, $name, $plainAttachments) {
                 $mail->to($to)
                      ->from($from, $name)
                      ->subject($emailSubject);
@@ -72,7 +80,7 @@ class EmailSendController extends Controller
                     $mail->cc($cc);
                 }
 
-                foreach ($attachments as $file) {
+                foreach ($plainAttachments as $file) {
                     $mail->attachData(
                         $file->get(),
                         $file->getClientOriginalName(),

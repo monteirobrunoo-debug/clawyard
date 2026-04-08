@@ -76,7 +76,11 @@ class EmailEncryptionService
      * @param  string  $publicKeyB64   Recipient's base64-encoded Kyber-1024 public key.
      * @return array   Encrypted package (all fields are base64 strings).
      */
-    public function encryptEmail(string $subject, string $body, string $publicKeyB64): array
+    /**
+     * @param  array  $attachments  Optional list of attachments to encrypt inside the payload.
+     *                              Each entry: ['name' => string, 'mime' => string, 'data' => base64-encoded bytes]
+     */
+    public function encryptEmail(string $subject, string $body, string $publicKeyB64, array $attachments = []): array
     {
         // 1. Kyber KEM → shared secret
         ['ciphertext' => $kemCt, 'shared_secret' => $ssB64] = $this->kyber->encapsulate($publicKeyB64);
@@ -85,8 +89,12 @@ class EmailEncryptionService
         // 2. HKDF → AES-256-GCM key
         $aesKey = hash_hkdf('sha256', $sharedSecret, 32, self::INFO_STRING, '');
 
-        // 3. AES-256-GCM encrypt the message
-        $plaintext = json_encode(['subject' => $subject, 'body' => $body], JSON_UNESCAPED_UNICODE);
+        // 3. AES-256-GCM encrypt the message (+ attachments inside the payload)
+        $payload = ['subject' => $subject, 'body' => $body];
+        if (!empty($attachments)) {
+            $payload['attachments'] = $attachments;
+        }
+        $plaintext = json_encode($payload, JSON_UNESCAPED_UNICODE);
         $iv        = random_bytes(12);
         $tag       = '';
         $ciphertext = openssl_encrypt($plaintext, 'aes-256-gcm', $aesKey, OPENSSL_RAW_DATA, $iv, $tag, '', 16);
@@ -148,7 +156,11 @@ class EmailEncryptionService
             throw new \RuntimeException('Decrypted payload has unexpected format.');
         }
 
-        return ['subject' => $data['subject'], 'body' => $data['body']];
+        return [
+            'subject'     => $data['subject'],
+            'body'        => $data['body'],
+            'attachments' => $data['attachments'] ?? [],
+        ];
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -155,9 +155,10 @@ class EmailEncryptionController extends Controller
             );
 
             return response()->json([
-                'success' => true,
-                'subject' => $decrypted['subject'],
-                'body'    => $decrypted['body'],
+                'success'     => true,
+                'subject'     => $decrypted['subject'],
+                'body'        => $decrypted['body'],
+                'attachments' => $decrypted['attachments'] ?? [],
             ]);
         } catch (\RuntimeException $e) {
             return response()->json([

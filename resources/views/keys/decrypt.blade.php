@@ -57,6 +57,10 @@
             <h2>✅ Email desencriptado com sucesso</h2>
             <div class="subject" id="out-subject"></div>
             <div class="body" id="out-body"></div>
+            <div id="out-attachments" style="margin-top:14px;display:none;">
+                <div style="font-weight:bold;font-size:13px;color:#1b5e20;margin-bottom:8px;">📎 Anexos</div>
+                <div id="out-attachments-list"></div>
+            </div>
         </div>
     </div>
     <div class="err" id="err"></div>
@@ -106,6 +110,23 @@ function desencriptar() {
             document.getElementById('out-subject').textContent = d.subject;
             document.getElementById('out-body').textContent    = d.body;
             document.getElementById('result').style.display   = 'block';
+
+            // Render attachment download links
+            const attList = document.getElementById('out-attachments-list');
+            attList.innerHTML = '';
+            if (d.attachments && d.attachments.length > 0) {
+                d.attachments.forEach(att => {
+                    const a = document.createElement('a');
+                    a.href     = 'data:' + att.mime + ';base64,' + att.data;
+                    a.download = att.name;
+                    a.style.cssText = 'display:inline-block;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:4px;padding:6px 14px;margin:4px 4px 0 0;font-size:13px;color:#1b5e20;text-decoration:none;';
+                    a.textContent = '⬇ ' + att.name;
+                    attList.appendChild(a);
+                });
+                document.getElementById('out-attachments').style.display = 'block';
+            } else {
+                document.getElementById('out-attachments').style.display = 'none';
+            }
         } else {
             showErr(d.error || 'Erro desconhecido.');
         }
