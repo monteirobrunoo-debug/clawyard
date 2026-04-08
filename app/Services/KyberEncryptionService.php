@@ -97,7 +97,7 @@ class KyberEncryptionService
         $r     = substr($G, 32, 32);
         $ct    = $this->indcpaEnc($pk, $m, $r);
         $H_ct  = hash('sha3-256', $ct, true);
-        $K     = hash('shake256', $K_bar . $H_ct, true, ['length' => 32]);
+        $K     = hash_hkdf('sha3-256', $K_bar, 32, 'kem-kdf-v1', $H_ct);
 
         return [
             'ciphertext'    => base64_encode($ct),
@@ -131,7 +131,7 @@ class KyberEncryptionService
 
         // Implicit rejection: use z on mismatch (constant-time select)
         $K_in = hash_equals($ct, $ct_prime) ? $K_bar : $z;
-        $K    = hash('shake256', $K_in . $H_ct, true, ['length' => 32]);
+        $K    = hash_hkdf('sha3-256', $K_in, 32, 'kem-kdf-v1', $H_ct);
 
         return base64_encode($K);
     }
@@ -225,7 +225,7 @@ class KyberEncryptionService
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Matrix generation (SHAKE-128 rejection sampling)
+    // Matrix generation (XOF rejection sampling via SHA3-256 counter mode)
     // ─────────────────────────────────────────────────────────────────────────
 
     private function genMatrix(string $rho, bool $transposed): array
@@ -245,14 +245,13 @@ class KyberEncryptionService
     {
         $poly = array_fill(0, self::N, 0);
         $ctr  = 0;
-        $buf  = hash('shake128', $seed, true, ['length' => 672]);
+        $buf  = $this->xof($seed, 672); // 4 × 168-byte equivalent blocks
         $pos  = 0;
         $blen = 672;
 
         while ($ctr < self::N) {
             if ($pos + 3 > $blen) {
-                $extra = hash('shake128', $seed . chr($blen), true, ['length' => 168]);
-                $buf  .= $extra;
+                $buf  .= $this->xof($seed . pack('V', $blen), 168);
                 $blen += 168;
             }
             $b0 = ord($buf[$pos]);
@@ -272,12 +271,12 @@ class KyberEncryptionService
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Noise sampling (Centred Binomial Distribution, η=2 via SHAKE-256)
+    // Noise sampling (Centred Binomial Distribution, η=2 via PRF)
     // ─────────────────────────────────────────────────────────────────────────
 
     private function polyGetNoise(string $sigma, int $nonce, int $eta): array
     {
-        $buf = hash('shake256', $sigma . chr($nonce), true, ['length' => $eta * 64]);
+        $buf = $this->prf($sigma, $nonce, $eta * 64);
         return $this->polyCBD($buf);
     }
 
@@ -321,7 +320,7 @@ class KyberEncryptionService
         $k = 127;
         for ($len = 2; $len <= 128; $len <<= 1) {
             for ($start = 0; $start < self::N; $start += 2 * $len) {
-                $zeta = self::$Z[$k--];
+                $zeta = -self::$Z[$k--];  // negated: GS butterfly uses -ζ_k (reference invntt.c)
                 for ($j = $start; $j < $start + $len; $j++) {
                     $t            = $f[$j];
                     $f[$j]        = $this->barrett($t + $f[$j + $len]);
@@ -597,6 +596,41 @@ class KyberEncryptionService
                   . chr(($t[6] >> 2)  | ($t[7] << 3));
         }
         return $buf;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Extendable-output functions (XOF / PRF) via SHA3-256 counter mode
+    //
+    // SHAKE-128/256 is not compiled into all PHP builds; we replace them with
+    // a counter-based construction over SHA3-256 (same 256-bit security).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * XOF: deterministic variable-length pseudo-random bytes.
+     * Replaces SHAKE-128 for matrix generation (security: SHA3-256 strength).
+     */
+    private function xof(string $seed, int $length): string
+    {
+        $out = '';
+        $ctr = 0;
+        while (strlen($out) < $length) {
+            $out .= hash('sha3-256', $seed . pack('V', $ctr++), true);
+        }
+        return substr($out, 0, $length);
+    }
+
+    /**
+     * PRF: keyed pseudo-random function for noise generation.
+     * Replaces SHAKE-256 PRF (security: SHA3-256 strength).
+     */
+    private function prf(string $key, int $nonce, int $length): string
+    {
+        $out = '';
+        $ctr = 0;
+        while (strlen($out) < $length) {
+            $out .= hash('sha3-256', $key . chr($nonce) . pack('V', $ctr++), true);
+        }
+        return substr($out, 0, $length);
     }
 
     /** Decompress 160-byte ciphertext component → poly v. */
