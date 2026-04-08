@@ -17,13 +17,14 @@ class SapService
     const SESSION_CACHE_KEY  = 'sap_b1_session';
     const SESSION_TTL        = 25; // minutes (SAP default = 30 min)
     const SESSION_FAILED_KEY = 'sap_b1_login_failed';
-    const SESSION_FAILED_TTL = 2;  // minutes — negative cache to avoid multi-login hangs
+    const SESSION_FAILED_TTL = 10; // minutes
+
 
     public function __construct()
     {
         $this->baseUrl  = rtrim(config('services.sap.base_url', 'https://sld.partyard.privatcloud.biz/b1s/v1'), '/');
-        $this->company  = config('services.sap.company',  'PARTYARD');
-        $this->username = config('services.sap.username', '');
+        $this->username = trim(config('services.sap.username', ''), '"\'');
+$this->password = trim(config('services.sap.password', ''), '"\'');
         $this->password = config('services.sap.password', '');
 
         $this->http = new Client([
