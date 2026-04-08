@@ -38,16 +38,22 @@ class EmailSendController extends Controller
             $name    = config('mail.from.name', 'ClawYard Maritime');
 
             // ── Encryption path ────────────────────────────────────────────
+            // Priority: sender's own key → recipient's key → plaintext
+            // This allows encrypting to anyone: share the secret key out-of-band (SMS, etc.)
             $wantsEncrypt = $request->boolean('encrypt', false);
+            $senderKey    = $this->encSvc->getPublicKey(auth()->user()->email);
             $recipientKey = $this->encSvc->getPublicKey($to);
-            $encrypted    = ($wantsEncrypt || $recipientKey !== null) && $recipientKey !== null;
+            $encryptKey   = $wantsEncrypt
+                ? ($senderKey ?? $recipientKey)   // prefer sender's key when explicitly requested
+                : $recipientKey;                   // auto-encrypt only when recipient has key
+            $encrypted = $encryptKey !== null;
 
             if ($encrypted) {
-                $package     = $this->encSvc->encryptEmail($subject, $body, $recipientKey);
-                $htmlBody    = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
+                $package      = $this->encSvc->encryptEmail($subject, $body, $encryptKey);
+                $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
                 $emailSubject = '[Encrypted] ' . $subject;
             } else {
-                $htmlBody    = $this->wrapHtml($body, $subject);
+                $htmlBody     = $this->wrapHtml($body, $subject);
                 $emailSubject = $subject;
             }
 
