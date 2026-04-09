@@ -2175,9 +2175,9 @@ async function sendMessage() {
                     chat.scrollTop = chat.scrollHeight;
                     return;
                 }
-                if (accumulated.startsWith('__KYBER_COMPOSE__')) {
+                if (accumulated.includes('__KYBER_COMPOSE__')) {
                     try {
-                        const kd = JSON.parse(accumulated.replace('__KYBER_COMPOSE__', ''));
+                        const kd = JSON.parse(accumulated.substring(accumulated.indexOf('__KYBER_COMPOSE__') + '__KYBER_COMPOSE__'.length) || '{}');
                         const msgCol = streamMsg.querySelector('.msg-col');
                         msgCol.innerHTML = `
                             <div class="msg-meta">
@@ -2250,9 +2250,9 @@ async function sendMessage() {
                                 streamBubble.innerHTML = renderMarkdown('Erro ao encriptar: ' + e.message);
                             }
                         // ── Kyber compose form card ──────────────────────────
-                        } else if (accumulated.startsWith('__KYBER_COMPOSE__')) {
+                        } else if (accumulated.includes('__KYBER_COMPOSE__')) {
                             try {
-                                const kd = JSON.parse(accumulated.replace('__KYBER_COMPOSE__', ''));
+                                const kd = JSON.parse(accumulated.substring(accumulated.indexOf('__KYBER_COMPOSE__') + '__KYBER_COMPOSE__'.length) || '{}');
                                 const msgCol = streamMsg.querySelector('.msg-col');
                                 msgCol.innerHTML = `
                                     <div class="msg-meta">
