@@ -1558,7 +1558,8 @@ function buildKyberEmailCard(data) {
         <div class="kyber-actions">
             <button class="kyber-send-btn" id="${id}_sendbtn"
                 onclick="kyberSendEmail('${id}','${esc(data.to)}','${esc(data.subject)}',this)"
-                data-html="${htmlB64}">
+                data-html="${htmlB64}"
+                data-decrypt-url="${esc(decryptUrl)}">
                 📤 Enviar via ClawYard
             </button>
             <button class="kyber-copy-btn2" onclick="kyberCopyDecryptLink('${hash}',this)">
@@ -1628,7 +1629,20 @@ async function kyberSendEmail(id, to, subject, btn) {
         if (d.success) {
             btn.textContent = '✅ Email enviado!';
             statusEl.className = 'kyber-status ok';
-            statusEl.textContent = '✅ Email encriptado enviado para ' + to;
+            const decryptUrl = btn.dataset.decryptUrl || '';
+            let statusHtml = '✅ Email encriptado (Kyber-1024) enviado para ' + to;
+            if (decryptUrl) {
+                statusHtml += `<br><br>
+                <div style="background:#0a1800;border:1px solid #1a3a00;border-radius:6px;padding:10px 12px;margin-top:4px;">
+                    <div style="font-size:11px;color:#76b900;font-weight:700;margin-bottom:6px;">🔗 Link de desencriptação — partilha com o destinatário via SMS/WhatsApp</div>
+                    <div style="font-size:10px;color:#888;word-break:break-all;margin-bottom:8px;font-family:monospace;">${decryptUrl}</div>
+                    <button onclick="navigator.clipboard.writeText('${decryptUrl.replace(/'/g,"\\'")}').then(()=>{this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar link',2000)})"
+                        style="background:none;border:1px solid #76b90055;color:#76b900;padding:5px 14px;border-radius:6px;font-size:11px;cursor:pointer;">
+                        📋 Copiar link
+                    </button>
+                </div>`;
+            }
+            statusEl.innerHTML = statusHtml;
         } else {
             btn.disabled = false;
             btn.textContent = '📤 Enviar via ClawYard';
