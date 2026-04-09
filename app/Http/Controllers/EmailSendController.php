@@ -24,9 +24,10 @@ class EmailSendController extends Controller
         $request->validate([
             'to'            => 'required|email',
             'subject'       => 'required|string|max:500',
-            'body'          => 'required|string|max:20000',
+            'body'          => 'nullable|string|max:20000',
             'cc'            => 'nullable|email',
             'encrypt'       => 'nullable|boolean',
+            'raw_html'      => 'nullable|string', // pre-built encrypted HTML (from Kyber agent)
             'attachments'   => 'nullable|array|max:5',
             'attachments.*' => 'file|max:20480', // 20 MB per file
         ]);
@@ -39,35 +40,41 @@ class EmailSendController extends Controller
             $from    = config('mail.from.address', 'info@clawyard.com');
             $name    = config('mail.from.name', 'ClawYard');
 
-            // ── Encryption path ────────────────────────────────────────────
-            // Priority: sender's own key → recipient's key → plaintext
-            // This allows encrypting to anyone: share the secret key out-of-band (SMS, etc.)
-            $wantsEncrypt = $request->boolean('encrypt', false);
-            $senderKey    = $this->encSvc->getPublicKey(auth()->user()->email);
-            $recipientKey = $this->encSvc->getPublicKey($to);
-            $encryptKey   = $wantsEncrypt
-                ? ($senderKey ?? $recipientKey)   // prefer sender's key when explicitly requested
-                : $recipientKey;                   // auto-encrypt only when recipient has key
-            $encrypted = $encryptKey !== null;
-
-            // ── Attachments ────────────────────────────────────────────────
-            $uploadedFiles    = $request->file('attachments') ?? [];
-            $plainAttachments = [];
-
-            if ($encrypted) {
-                // Embed attachments inside the AES-256-GCM payload (encrypted end-to-end)
-                $encAttachments = array_map(fn($f) => [
-                    'name' => $f->getClientOriginalName(),
-                    'mime' => $f->getMimeType(),
-                    'data' => base64_encode($f->get()),
-                ], $uploadedFiles);
-                $package      = $this->encSvc->encryptEmail($subject, $body, $encryptKey, $encAttachments);
-                $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
-                $emailSubject = '[Encrypted] ' . $subject;
+            // ── Pre-built encrypted HTML (from Kyber agent card) ───────────
+            if ($request->filled('raw_html')) {
+                $htmlBody     = $request->input('raw_html');
+                $emailSubject = str_starts_with($subject, '[Encrypted]') ? $subject : '[Encrypted] ' . $subject;
+                $encrypted    = true;
+                $plainAttachments = [];
             } else {
-                $plainAttachments = $uploadedFiles;
-                $htmlBody         = $this->wrapHtml($body, $subject);
-                $emailSubject     = $subject;
+                // ── Standard encryption path ────────────────────────────────
+                // Priority: sender's own key → recipient's key → plaintext
+                $wantsEncrypt = $request->boolean('encrypt', false);
+                $senderKey    = $this->encSvc->getPublicKey(auth()->user()->email);
+                $recipientKey = $this->encSvc->getPublicKey($to);
+                $encryptKey   = $wantsEncrypt
+                    ? ($senderKey ?? $recipientKey)
+                    : $recipientKey;
+                $encrypted = $encryptKey !== null;
+
+                // ── Attachments ────────────────────────────────────────────
+                $uploadedFiles    = $request->file('attachments') ?? [];
+                $plainAttachments = [];
+
+                if ($encrypted) {
+                    $encAttachments = array_map(fn($f) => [
+                        'name' => $f->getClientOriginalName(),
+                        'mime' => $f->getMimeType(),
+                        'data' => base64_encode($f->get()),
+                    ], $uploadedFiles);
+                    $package      = $this->encSvc->encryptEmail($subject, $body ?? '', $encryptKey, $encAttachments);
+                    $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
+                    $emailSubject = '[Encrypted] ' . $subject;
+                } else {
+                    $plainAttachments = $uploadedFiles;
+                    $htmlBody         = $this->wrapHtml($body ?? '', $subject);
+                    $emailSubject     = $subject;
+                }
             }
 
             // ── Send ───────────────────────────────────────────────────────

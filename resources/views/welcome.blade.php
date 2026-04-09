@@ -203,6 +203,30 @@
         .table-excel-btn:hover { background:#1a5c38; }
         .table-copy-btn { background:none; color:var(--muted); border:1px solid var(--border2); padding:7px 14px; border-radius:8px; font-size:12px; cursor:pointer; }
 
+        /* ── KYBER CARDS ── */
+        .kyber-card { background:var(--bg); border:1px solid #1a3300; border-left:3px solid #76b900; border-radius:12px; overflow:hidden; margin-top:4px; font-size:13px; }
+        .kyber-card-header { background:#0a1a00; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1a3300; }
+        .kyber-card-header .kh-title { font-size:12px; font-weight:700; color:#76b900; }
+        .kyber-card-header .kh-sub { font-size:11px; color:var(--muted); }
+        .kyber-field { padding:8px 16px; border-bottom:1px solid #111; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .kyber-field label { font-size:10px; color:var(--muted); min-width:52px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; flex-shrink:0; }
+        .kyber-field .kv { flex:1; font-family:'JetBrains Mono',monospace; font-size:10px; color:#aaa; word-break:break-all; max-height:44px; overflow:hidden; }
+        .kyber-field .kv.secret { color:#ffaa00; }
+        .kyber-key-copy { background:none; border:1px solid var(--border2); color:var(--muted); padding:4px 10px; border-radius:6px; font-size:11px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
+        .kyber-key-copy:hover { border-color:#76b900; color:#76b900; }
+        .kyber-warning { margin:8px 16px; background:#1a1000; border:1px solid #ffaa0033; border-radius:8px; padding:10px 14px; font-size:12px; color:#ffaa00; line-height:1.5; }
+        .kyber-actions { padding:10px 16px; display:flex; gap:8px; flex-wrap:wrap; background:#0a1a00; border-top:1px solid #1a3300; }
+        .kyber-send-btn { background:#76b900; color:#000; border:none; padding:8px 18px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:5px; }
+        .kyber-send-btn:hover { background:#8fd400; }
+        .kyber-send-btn:disabled { background:#333; color:#666; cursor:not-allowed; }
+        .kyber-store-btn { background:#001f3f; color:#76b900; border:1px solid #76b90033; padding:8px 16px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; }
+        .kyber-store-btn:hover { border-color:#76b900; }
+        .kyber-copy-btn2 { background:none; color:var(--muted); border:1px solid var(--border2); padding:8px 14px; border-radius:8px; font-size:12px; cursor:pointer; }
+        .kyber-copy-btn2:hover { border-color:var(--muted); color:#aaa; }
+        .kyber-status { padding:0 16px 10px; font-size:12px; }
+        .kyber-status.ok { color:#76b900; }
+        .kyber-status.err { color:#ff4444; }
+
         /* ── IMAGE PREVIEW ── */
         #image-preview { display:none; padding:8px 20px 0; position:relative; }
         #image-preview img { height:72px; border-radius:8px; border:1px solid var(--border2); }
@@ -1423,6 +1447,176 @@ function copyEmail(id) {
     setTimeout(() => btn.textContent = '📋 Copiar', 2000);
 }
 
+// ═══════════════════════════════
+//  KYBER CARDS
+// ═══════════════════════════════
+
+function buildKyberKeysCard(data) {
+    const id  = 'kk_' + Date.now();
+    const pk  = data.public_key  || '';
+    const sk  = data.secret_key  || '';
+    return `
+    <div class="kyber-card" id="${id}">
+        <div class="kyber-card-header">
+            <span class="kh-title">🔒 Par de Chaves Kyber-1024 Gerado</span>
+            <span class="kh-sub">NIST FIPS 203 · AES-256-GCM</span>
+        </div>
+
+        <div class="kyber-field">
+            <label>Public Key</label>
+            <span class="kv" id="${id}_pk" title="${esc(pk)}">${esc(pk.substring(0,56))}…</span>
+            <button class="kyber-key-copy" onclick="kyberCopyKey('${id}_pk','${esc(pk)}',this)">📋 Copiar</button>
+        </div>
+
+        <div class="kyber-warning">
+            ⚠️ <strong>Guarda o Secret Key agora — não será armazenado no servidor.</strong>
+            Partilha-o com o destinatário via SMS ou WhatsApp após enviar o email.
+        </div>
+        <div class="kyber-field">
+            <label style="color:#ffaa00">Secret Key</label>
+            <span class="kv secret" id="${id}_sk" title="${esc(sk)}">${esc(sk.substring(0,56))}…</span>
+            <button class="kyber-key-copy" onclick="kyberCopyKey('${id}_sk','${esc(sk)}',this)" style="border-color:#ffaa0055;color:#ffaa00;">📋 Copiar Secret Key</button>
+        </div>
+
+        <div class="kyber-actions">
+            <button class="kyber-store-btn" onclick="kyberStorePublicKey('${id}','${esc(pk)}',this)">
+                ☁️ Registar Chave Pública no Servidor
+            </button>
+        </div>
+        <div class="kyber-status" id="${id}_status"></div>
+    </div>`;
+}
+
+function buildKyberEmailCard(data) {
+    const id      = 'ke_' + Date.now();
+    const pkgStr  = JSON.stringify(data.package || {});
+    const appUrl  = 'https://clawyard.partyard.eu';
+    const hash    = btoa(pkgStr);
+    const decryptUrl = appUrl + '/decrypt#' + hash;
+    const htmlB64 = btoa(unescape(encodeURIComponent(data.html || '')));
+    return `
+    <div class="kyber-card" id="${id}">
+        <div class="kyber-card-header">
+            <span class="kh-title">🔒 Email Encriptado Pronto</span>
+            <span class="kh-sub">Kyber-1024 + AES-256-GCM</span>
+        </div>
+        <div class="kyber-field">
+            <label>Para</label>
+            <span>${esc(data.to || '')}</span>
+        </div>
+        <div class="kyber-field">
+            <label>Assunto</label>
+            <span>[Encrypted] ${esc(data.subject || '')}</span>
+        </div>
+        <div class="kyber-field" style="background:#0a1800;">
+            <label style="color:#76b900">Payload</label>
+            <span style="color:#76b900;font-size:11px;">🔒 Mensagem encriptada com Kyber-1024 + AES-256-GCM</span>
+        </div>
+        <div class="kyber-actions">
+            <button class="kyber-send-btn" id="${id}_sendbtn"
+                onclick="kyberSendEmail('${id}','${esc(data.to)}','${esc(data.subject)}',this)"
+                data-html="${htmlB64}">
+                📤 Enviar via ClawYard
+            </button>
+            <button class="kyber-copy-btn2" onclick="kyberCopyDecryptLink('${hash}',this)">
+                🔗 Copiar link /decrypt
+            </button>
+            <button class="kyber-copy-btn2" onclick="kyberCopyJson('${esc(pkgStr)}',this)">
+                📋 Copiar JSON (Outlook)
+            </button>
+        </div>
+        <div class="kyber-status" id="${id}_status"></div>
+    </div>`;
+}
+
+function kyberCopyKey(elId, value, btn) {
+    navigator.clipboard.writeText(value).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✅ Copiado!';
+        setTimeout(() => btn.textContent = orig, 2000);
+    });
+}
+
+async function kyberStorePublicKey(id, publicKey, btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ A registar...';
+    const statusEl = document.getElementById(id + '_status');
+    try {
+        const r = await fetch('/api/keys/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: JSON.stringify({ public_key: publicKey })
+        });
+        const d = await r.json();
+        if (d.success) {
+            btn.textContent = '✅ Chave registada!';
+            statusEl.className = 'kyber-status ok';
+            statusEl.textContent = '✅ Chave pública registada no servidor. Outros podem agora enviar-te emails encriptados.';
+        } else {
+            btn.disabled = false;
+            btn.textContent = '☁️ Registar Chave Pública';
+            statusEl.className = 'kyber-status err';
+            statusEl.textContent = '❌ ' + (d.error || 'Erro ao registar');
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '☁️ Registar Chave Pública';
+        statusEl.className = 'kyber-status err';
+        statusEl.textContent = '❌ Erro de ligação: ' + e.message;
+    }
+}
+
+async function kyberSendEmail(id, to, subject, btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ A enviar...';
+    const statusEl = document.getElementById(id + '_status');
+    const htmlB64  = btn.dataset.html;
+    let rawHtml;
+    try { rawHtml = decodeURIComponent(escape(atob(htmlB64))); }
+    catch(e) { rawHtml = atob(htmlB64); }
+
+    try {
+        const r = await fetch('/api/email/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: JSON.stringify({ to, subject, body: '', raw_html: rawHtml })
+        });
+        const d = await r.json();
+        if (d.success) {
+            btn.textContent = '✅ Email enviado!';
+            statusEl.className = 'kyber-status ok';
+            statusEl.textContent = '✅ Email encriptado enviado para ' + to;
+        } else {
+            btn.disabled = false;
+            btn.textContent = '📤 Enviar via ClawYard';
+            statusEl.className = 'kyber-status err';
+            statusEl.textContent = '❌ ' + (d.error || 'Erro ao enviar');
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '📤 Enviar via ClawYard';
+        statusEl.className = 'kyber-status err';
+        statusEl.textContent = '❌ Erro de ligação: ' + e.message;
+    }
+}
+
+function kyberCopyDecryptLink(hash, btn) {
+    const url = 'https://clawyard.partyard.eu/decrypt#' + hash;
+    navigator.clipboard.writeText(url).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✅ Link copiado!';
+        setTimeout(() => btn.textContent = orig, 2000);
+    });
+}
+
+function kyberCopyJson(json, btn) {
+    navigator.clipboard.writeText(json).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = '✅ JSON copiado!';
+        setTimeout(() => btn.textContent = orig, 2000);
+    });
+}
+
 function editEmail(id) {
     const bodyEl = document.getElementById(id+'_body');
     bodyEl.focus();
@@ -1780,11 +1974,40 @@ async function sendMessage() {
                     const agentKey = metaData?.agent || selectedAgent;
 
                     if (streamMsg && streamBubble) {
-                        // Check if it's an email response (accumulated after DONE)
-                        if (accumulated.startsWith('__EMAIL__')) {
+                        // ── Kyber key-pair card ──────────────────────────────
+                        if (accumulated.startsWith('__KYBER_KEYS__')) {
+                            try {
+                                const kd = JSON.parse(accumulated.replace('__KYBER_KEYS__', ''));
+                                const msgCol = streamMsg.querySelector('.msg-col');
+                                msgCol.innerHTML = `
+                                    <div class="msg-meta">
+                                        <span class="agent-tag active">🔒 KYBER Encryption</span>
+                                        <span>par de chaves gerado</span>
+                                    </div>
+                                    ${buildKyberKeysCard(kd)}`;
+                                streamMsg.querySelector('.avatar').textContent = '🔒';
+                            } catch(e) {
+                                streamBubble.innerHTML = renderMarkdown('Erro ao gerar chaves: ' + e.message);
+                            }
+                        // ── Kyber encrypted email card ───────────────────────
+                        } else if (accumulated.startsWith('__KYBER_EMAIL__')) {
+                            try {
+                                const kd = JSON.parse(accumulated.replace('__KYBER_EMAIL__', ''));
+                                const msgCol = streamMsg.querySelector('.msg-col');
+                                msgCol.innerHTML = `
+                                    <div class="msg-meta">
+                                        <span class="agent-tag active">🔒 KYBER Encryption</span>
+                                        <span>email encriptado</span>
+                                    </div>
+                                    ${buildKyberEmailCard(kd)}`;
+                                streamMsg.querySelector('.avatar').textContent = '🔒';
+                            } catch(e) {
+                                streamBubble.innerHTML = renderMarkdown('Erro ao encriptar: ' + e.message);
+                            }
+                        // ── Daniel Email card ────────────────────────────────
+                        } else if (accumulated.startsWith('__EMAIL__')) {
                             try {
                                 const emailData = JSON.parse(accumulated.replace('__EMAIL__', ''));
-                                // Replace the streaming bubble with a proper email card
                                 const msgCol = streamMsg.querySelector('.msg-col');
                                 msgCol.innerHTML = `
                                     <div class="msg-meta">
@@ -1794,7 +2017,6 @@ async function sendMessage() {
                                     ${buildEmailCard(emailData)}`;
                                 streamMsg.querySelector('.avatar').textContent = AGENT_EMOJIS['email'];
                             } catch (e) {
-                                // Fallback: display raw text
                                 streamBubble.innerHTML = renderMarkdown(accumulated.replace('__EMAIL__', ''));
                             }
                         } else {
@@ -1820,7 +2042,7 @@ async function sendMessage() {
                     }
 
                     // Autonomous action proposals
-                    if (accumulated && !accumulated.startsWith('__EMAIL__')) {
+                    if (accumulated && !accumulated.startsWith('__EMAIL__') && !accumulated.startsWith('__KYBER_')) {
                         const replyLower = accumulated.toLowerCase();
 
                         const salesAgents = ['sales','email','auto','orchestrator','maritime'];

@@ -10,8 +10,12 @@ use App\Agents\Traits\AnthropicKeyTrait;
 /**
  * Kyber Agent — post-quantum email encryption assistant.
  *
- * Handles key generation, encrypted email sending, and decryption
+ * Handles key generation, encrypted email composition/sending, and decryption
  * guidance via natural language. Backed by KyberEncryptionService.
+ *
+ * Special outputs (detected by frontend):
+ *   __KYBER_KEYS__{...}   → renders a key-pair card with copy + store buttons
+ *   __KYBER_EMAIL__{...}  → renders an encrypted email card with send button
  */
 class KyberAgent implements AgentInterface
 {
@@ -22,60 +26,95 @@ class KyberAgent implements AgentInterface
     protected EmailEncryptionService $encSvc;
 
     protected string $systemPrompt = <<<'PROMPT'
-You are KYBER — the post-quantum encryption agent at ClawYard / IT Partyard.
+Tu és o KYBER — o agente de encriptação post-quantum no ClawYard / IT Partyard.
 
-You handle all encryption-related tasks using CRYSTALS-Kyber 1024 (NIST FIPS 203 ML-KEM-1024),
-a post-quantum secure Key Encapsulation Mechanism combined with AES-256-GCM.
+Utilizas CRYSTALS-Kyber 1024 (NIST FIPS 203 ML-KEM-1024) combinado com AES-256-GCM.
 
-YOUR CAPABILITIES:
-- Generate Kyber-1024 key pairs (public key + secret key)
-- Send encrypted emails to any email address
-- Explain how to decrypt a received encrypted email
-- Explain how post-quantum encryption works
-- Guide users through the full encryption workflow
+AS TUAS CAPACIDADES:
+- Gerar pares de chaves Kyber-1024 (public key + secret key)
+- Encriptar e enviar emails para qualquer endereço
+- Explicar como desencriptar emails recebidos
+- Explicar criptografia post-quantum em linguagem simples
+- Instalar e usar a extensão Kyber para Outlook
 
-WORKFLOW YOU EXPLAIN TO USERS:
-1. Generate a key pair at /keys
-2. Register the public key on the server
-3. Send an encrypted email to any address (uses your key)
-4. Share the secret key via SMS/WhatsApp to the recipient
-5. Recipient opens clawyard.partyard.eu/decrypt — no account needed
-6. Recipient pastes the secret key + clicks decrypt → reads the message
+FLUXO DE ENCRIPTAÇÃO:
+1. Gerar par de chaves em /keys (ou neste agente)
+2. Registar a chave pública no servidor
+3. Enviar email encriptado (o destinatário usa a sua chave)
+4. Partilhar o secret key via SMS/WhatsApp com o destinatário
+5. Destinatário abre /decrypt — sem conta necessária
+6. Cola o secret key → lê a mensagem
 
-WHEN A USER ASKS TO:
-- "send encrypted email to X" → confirm you will send it and ask for subject/body if not provided
-- "generate keys" or "create key pair" → tell them to go to /keys
-- "how to decrypt" → explain: open /decrypt, paste secret key + JSON from email
-- "what is Kyber" → explain post-quantum cryptography in simple terms
+PARA ENCRIPTAR UM EMAIL, PRECISO DE:
+- Endereço email do destinatário
+- Assunto da mensagem
+- Corpo da mensagem
 
-SECURITY NOTES:
-- The secret key is NEVER stored on the server — only the user has it
-- The public key is stored on the server for others to encrypt to the user
-- AES-256-GCM ensures message integrity — tampering is detected automatically
-- Kyber-1024 is quantum-computer resistant (NIST Category 5)
+Se algum destes campos faltar, pede-o ao utilizador.
 
-Always respond in the same language as the user (Portuguese or English).
-Be concise and helpful. When sending emails, confirm what was sent.
+Quando tiveres TODOS os três, diz ao utilizador que já tens tudo e que vai aparecer
+um cartão de encriptação. O sistema trata da encriptação automaticamente.
+
+NOTAS DE SEGURANÇA:
+- O secret key NUNCA é guardado no servidor — só o utilizador o tem
+- A public key é guardada no servidor para que outros possam encriptar
+- AES-256-GCM garante integridade — adulteração é detectada automaticamente
+- Kyber-1024 é resistente a computadores quânticos (NIST Categoria 5)
+
+Responde sempre no mesmo idioma do utilizador (Português ou Inglês). Sê conciso e útil.
 PROMPT;
+
+    // ── Keyword triggers for direct key generation (no LLM needed) ───────────
+
+    private const KEYGEN_TRIGGERS = [
+        'gera chave', 'gerar chave', 'criar chave', 'cria chave',
+        'generate key', 'new key', 'create key', 'par de chaves',
+        'gerar par', 'keypair', 'key pair', 'nova chave',
+        'quero chaves', 'preciso de chaves', 'preciso chaves',
+        'gera-me', 'cria-me as chaves',
+    ];
+
+    // ── Patterns for extracting email encryption parameters ──────────────────
+
+    private const EMAIL_PATTERN    = '/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/';
+    private const SUBJECT_PATTERNS = ['/assunto[:\s]+([^\n\|]+)/iu', '/subject[:\s]+([^\n\|]+)/iu'];
+    private const BODY_PATTERNS    = [
+        '/mensagem[:\s]+(.+)$/isu',
+        '/corpo[:\s]+(.+)$/isu',
+        '/body[:\s]+(.+)$/isu',
+        '/texto[:\s]+(.+)$/isu',
+    ];
 
     public function __construct()
     {
-        $this->client  = new Client([
+        $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);
-        $this->kyber   = new KyberEncryptionService();
-        $this->encSvc  = new EmailEncryptionService($this->kyber);
+        $this->kyber  = new KyberEncryptionService();
+        $this->encSvc = new EmailEncryptionService($this->kyber);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Public interface
+    // ─────────────────────────────────────────────────────────────────────────
 
     public function chat(string|array $message, array $history = []): string
     {
-        $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $message],
-        ]);
+        $text = $this->extractText($message);
 
-        $response = $this->client->post('/v1/messages', [
+        if ($this->isKeyGenTrigger($text)) {
+            return $this->buildKeyGenPayload();
+        }
+
+        if ($data = $this->extractEncryptData($text)) {
+            return $this->buildEncryptPayload($data);
+        }
+
+        // Normal LLM conversation
+        $messages  = array_merge($history, [['role' => 'user', 'content' => $message]]);
+        $response  = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
@@ -84,16 +123,30 @@ PROMPT;
                 'messages'   => $messages,
             ],
         ]);
-
         $data = json_decode($response->getBody()->getContents(), true);
         return $data['content'][0]['text'] ?? '';
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $message],
-        ]);
+        $text = $this->extractText($message);
+
+        // ── 1. Key generation — instant, no LLM ──────────────────────────────
+        if ($this->isKeyGenTrigger($text)) {
+            $payload = $this->buildKeyGenPayload();
+            $onChunk($payload);
+            return $payload;
+        }
+
+        // ── 2. Full encryption data present — encrypt immediately ─────────────
+        if ($data = $this->extractEncryptData($text)) {
+            $payload = $this->buildEncryptPayload($data);
+            $onChunk($payload);
+            return $payload;
+        }
+
+        // ── 3. Normal LLM streaming ───────────────────────────────────────────
+        $messages = array_merge($history, [['role' => 'user', 'content' => $message]]);
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
@@ -124,10 +177,10 @@ PROMPT;
                 if (!is_array($evt)) continue;
                 if (($evt['type'] ?? '') === 'content_block_delta'
                     && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
+                    $chunk = $evt['delta']['text'] ?? '';
+                    if ($chunk !== '') {
+                        $full .= $chunk;
+                        $onChunk($chunk);
                     }
                 }
             }
@@ -138,4 +191,115 @@ PROMPT;
 
     public function getName(): string { return 'kyber'; }
     public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-5'); }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Intent detection
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function extractText(string|array $message): string
+    {
+        if (is_string($message)) return $message;
+        foreach ((array) $message as $part) {
+            if (is_array($part) && ($part['type'] ?? '') === 'text') return $part['text'] ?? '';
+        }
+        return '';
+    }
+
+    private function isKeyGenTrigger(string $text): bool
+    {
+        $lower = mb_strtolower($text);
+        foreach (self::KEYGEN_TRIGGERS as $trigger) {
+            if (str_contains($lower, $trigger)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Try to extract {to, subject, body} from the user's message.
+     * Returns null if any required field is missing.
+     */
+    private function extractEncryptData(string $text): ?array
+    {
+        $lower = mb_strtolower($text);
+
+        // Must contain encrypt/send intent
+        $intents = ['encript', 'encrypt', 'encripta', 'envia', 'send', 'mandar'];
+        $hasIntent = false;
+        foreach ($intents as $i) {
+            if (str_contains($lower, $i)) { $hasIntent = true; break; }
+        }
+        if (!$hasIntent) return null;
+
+        // Must have email address
+        preg_match(self::EMAIL_PATTERN, $text, $emailMatch);
+        if (empty($emailMatch)) return null;
+
+        // Must have subject
+        $subject = null;
+        foreach (self::SUBJECT_PATTERNS as $pattern) {
+            if (preg_match($pattern, $text, $m)) { $subject = trim($m[1]); break; }
+        }
+
+        // Must have body
+        $body = null;
+        foreach (self::BODY_PATTERNS as $pattern) {
+            if (preg_match($pattern, $text, $m)) { $body = trim($m[1]); break; }
+        }
+
+        if (!$subject || !$body) return null;
+
+        return ['to' => $emailMatch[0], 'subject' => $subject, 'body' => $body];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Action payloads
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private function buildKeyGenPayload(): string
+    {
+        $pair = $this->kyber->generateKeyPair();
+
+        return '__KYBER_KEYS__' . json_encode([
+            'public_key' => $pair['public_key'],
+            'secret_key' => $pair['secret_key'],
+        ], JSON_UNESCAPED_SLASHES);
+    }
+
+    private function buildEncryptPayload(array $data): string
+    {
+        $to      = $data['to'];
+        $subject = $data['subject'];
+        $body    = $data['body'];
+
+        $publicKey = $this->encSvc->getPublicKey($to);
+
+        // No key registered — use sender's own key (self-encryption) or fail
+        if (!$publicKey) {
+            $senderKey = auth()->user()?->email
+                ? $this->encSvc->getPublicKey(auth()->user()->email)
+                : null;
+
+            if (!$senderKey) {
+                // Return informational text (not a card)
+                return "⚠️ O destinatário **{$to}** não tem uma chave Kyber-1024 registada no servidor.\n\n"
+                     . "Para enviar email encriptado:\n"
+                     . "1. Pede ao destinatário para ir a [/keys](/keys) e gerar o seu par de chaves\n"
+                     . "2. Ou gera um par aqui (*\"gera chaves\"*) e partilha o secret key com ele via SMS\n\n"
+                     . "Queres que gere um par de chaves agora?";
+            }
+
+            // Encrypt with sender's own key (sender can decrypt with their secret key)
+            $publicKey = $senderKey;
+        }
+
+        $package = $this->encSvc->encryptEmail($subject, $body, $publicKey);
+        $html    = $this->encSvc->buildOutlookHtml($package, auth()->user()?->name ?? 'ClawYard');
+
+        return '__KYBER_EMAIL__' . json_encode([
+            'to'      => $to,
+            'subject' => $subject,
+            'html'    => $html,
+            'package' => $package,
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
 }
