@@ -179,7 +179,7 @@
 <div class="hero">
     <p class="hero-label">HP-Group · PartYard Marine · PartYard Military</p>
     <h1>Escolha o seu <span>Agente</span></h1>
-    <p>Powered by NVIDIA NeMo + Claude — 13 agentes especializados prontos a ajudar</p>
+    <p>Powered by NVIDIA NeMo + Claude — 14 agentes especializados prontos a ajudar</p>
 </div>
 
 <p class="section-title">Agentes Disponíveis</p>
@@ -206,6 +206,7 @@
         ['key' => 'engineer',    'name' => 'Eng. Victor I&D',       'emoji' => '🔩', 'role' => 'I&D e Desenvolvimento de Produto — planos TRL, CAPEX, roadmap para novos equipamentos PartYard', 'color' => '#f97316'],
         ['key' => 'patent',      'name' => 'Dra. Sofia IP',         'emoji' => '🏛️', 'role' => 'Propriedade Intelectual — validação de patentes, prior art EPO/USPTO, patenteabilidade e FTO', 'color' => '#8b5cf6'],
         ['key' => 'energy',      'name' => 'Eng. Sofia Energia',    'emoji' => '⚡', 'role' => 'Descarbonização marítima — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H2, Fleet Energy Management', 'color' => '#10b981'],
+        ['key' => 'kyber',       'name' => 'KYBER Encryption',      'emoji' => '🔒', 'role' => 'Encriptação post-quantum — Kyber-1024 + AES-256-GCM, geração de chaves e emails encriptados',    'color' => '#76b900'],
     ];
     @endphp
 
