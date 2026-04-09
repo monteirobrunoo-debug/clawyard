@@ -65,6 +65,43 @@ class EmailEncryptionService
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Package storage (short-token URLs — safe for email clients)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Persist an encrypted package and return a short token.
+     * Used when the payload is too large for a URL hash (e.g. has attachments).
+     */
+    public function storePackage(array $package): string
+    {
+        do {
+            $token = bin2hex(random_bytes(6)); // 12 hex chars
+        } while (DB::table('encrypted_email_packages')->where('token', $token)->exists());
+
+        DB::table('encrypted_email_packages')->insert([
+            'token'      => $token,
+            'package'    => json_encode($package, JSON_UNESCAPED_SLASHES),
+            'expires_at' => now()->addDays(30),
+            'created_at' => now(),
+        ]);
+
+        return $token;
+    }
+
+    /** Retrieve a stored package by token, or null if not found / expired. */
+    public function getPackageByToken(string $token): ?array
+    {
+        $row = DB::table('encrypted_email_packages')
+            ->where('token', $token)
+            ->where(function ($q) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>', now());
+            })
+            ->first();
+
+        return $row ? json_decode($row->package, true) : null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Encryption
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -180,14 +217,20 @@ class EmailEncryptionService
      * @param  string  $appUrl      Base URL of the ClawYard instance.
      * @return string  Complete HTML email body (inline styles, Outlook-safe).
      */
-    public function buildOutlookHtml(array $package, string $senderName = 'ClawYard', string $appUrl = ''): string
+    public function buildOutlookHtml(array $package, string $senderName = 'ClawYard', string $appUrl = '', string $token = ''): string
     {
-        $appUrl     = 'https://clawyard.partyard.eu';
-        // Encode JSON in URL hash — never sent to server, auto-fills /decrypt page
-        $jsonRaw    = json_encode($package, JSON_UNESCAPED_SLASHES);
-        $hash       = base64_encode($jsonRaw);
-        $decryptUrl = $appUrl . '/decrypt#' . $hash;
-        $json       = htmlspecialchars($jsonRaw, ENT_QUOTES, 'UTF-8');
+        $appUrl  = 'https://clawyard.partyard.eu';
+        $jsonRaw = json_encode($package, JSON_UNESCAPED_SLASHES);
+        $json    = htmlspecialchars($jsonRaw, ENT_QUOTES, 'UTF-8');
+
+        // Use short token URL when available (safe for email clients with large payloads)
+        // Otherwise fall back to URL hash (package entirely client-side, no server storage)
+        if ($token !== '') {
+            $decryptUrl = $appUrl . '/decrypt/' . $token;
+        } else {
+            $hash       = base64_encode($jsonRaw);
+            $decryptUrl = $appUrl . '/decrypt#' . $hash;
+        }
 
         return <<<HTML
 <!DOCTYPE html>

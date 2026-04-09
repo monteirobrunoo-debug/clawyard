@@ -169,6 +169,22 @@ class EmailEncryptionController extends Controller
     }
 
     /**
+     * GET /api/email/package/{token}
+     * Public: retrieve stored encrypted package by short token (for /decrypt/{token} page).
+     */
+    public function getPackage(string $token): JsonResponse
+    {
+        $token   = preg_replace('/[^a-f0-9]/i', '', $token);
+        $package = $this->encSvc->getPackageByToken($token);
+
+        if (!$package) {
+            return response()->json(['error' => 'Package not found or expired.'], 404);
+        }
+
+        return response()->json(['package' => $package]);
+    }
+
+    /**
      * POST /api/keys/encrypt-body
      * Outlook Add-in: encrypt subject+body with a given public key, return HTML.
      */

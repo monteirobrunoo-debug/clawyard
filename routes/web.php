@@ -20,6 +20,11 @@ Route::get('/decrypt', function () {
     return view('keys.decrypt');
 });
 
+// Kyber-1024 decrypt page with server-side token (for large payloads with attachments)
+Route::get('/decrypt/{token}', function (string $token) {
+    return view('keys.decrypt', ['token' => preg_replace('/[^a-f0-9]/i', '', $token)]);
+});
+
 // Outlook Add-in task panes
 Route::get('/outlook-addin/read',    function () { return response()->file(public_path('outlook-addin/read.html')); });
 Route::get('/outlook-addin/compose', function () { return response()->file(public_path('outlook-addin/compose.html')); });

@@ -114,31 +114,39 @@
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
 let jsonAutoLoaded = false;
 
-window.addEventListener('DOMContentLoaded', function () {
+function applyAutoLoad(jsonStr) {
+    document.getElementById('pkg').value = jsonStr;
+    jsonAutoLoaded = true;
+    document.getElementById('auto-notice').style.display = 'block';
+    document.getElementById('steps-manual').style.display = 'none';
+    const sec = document.getElementById('json-section');
+    sec.classList.add('auto-loaded');
+    const tog = document.getElementById('json-toggle');
+    tog.style.display = 'inline';
+    tog.textContent = 'ver JSON';
+    document.getElementById('sk').focus();
+}
+
+window.addEventListener('DOMContentLoaded', async function () {
+    // ── Server-side token (short URL for large payloads) ──────────────────
+    @if(isset($token) && $token)
+    try {
+        const r   = await fetch('/api/email/package/{{ $token }}', { headers: { Accept: 'application/json' } });
+        const d   = await r.json();
+        if (d.package) {
+            applyAutoLoad(JSON.stringify(d.package));
+            return;
+        }
+    } catch(e) {}
+    @endif
+
+    // ── URL hash fallback (small payloads without attachments) ───────────
     const hash = location.hash.slice(1);
     if (!hash) return;
-
     try {
         const json = atob(hash);
-        JSON.parse(json); // validate it's real JSON
-
-        // Fill the textarea
-        document.getElementById('pkg').value = json;
-        jsonAutoLoaded = true;
-
-        // Switch UI to "auto-loaded" mode
-        document.getElementById('auto-notice').style.display = 'block';
-        document.getElementById('steps-manual').style.display = 'none';
-
-        // Collapse JSON section — show toggle link instead
-        const sec = document.getElementById('json-section');
-        sec.classList.add('auto-loaded');
-        const tog = document.getElementById('json-toggle');
-        tog.style.display = 'inline';
-        tog.textContent = 'ver JSON';
-
-        // Focus Secret Key field
-        document.getElementById('sk').focus();
+        JSON.parse(json);
+        applyAutoLoad(json);
     } catch (e) {}
 });
 

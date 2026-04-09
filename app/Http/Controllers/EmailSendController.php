@@ -55,12 +55,12 @@ class EmailSendController extends Controller
                     'data' => base64_encode($f->get()),
                 ], $uploadedFiles);
                 $package      = $this->encSvc->encryptEmail($subject, $body ?? '', $pair['public_key'], $encAttachments);
-                $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name);
+                $token        = $this->encSvc->storePackage($package);
+                $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, '', $token);
                 $emailSubject = '[Encrypted] ' . $subject;
                 $encrypted    = true;
                 $secretKey    = $pair['secret_key'];
-                $decryptHash  = base64_encode(json_encode($package, JSON_UNESCAPED_SLASHES));
-                $decryptUrl   = 'https://clawyard.partyard.eu/decrypt#' . $decryptHash;
+                $decryptUrl   = 'https://clawyard.partyard.eu/decrypt/' . $token;
                 $plainAttachments = [];
 
             // ── Pre-built encrypted HTML (from Kyber agent card) ───────────
@@ -91,10 +91,10 @@ class EmailSendController extends Controller
                         'data' => base64_encode($f->get()),
                     ], $uploadedFiles);
                     $package      = $this->encSvc->encryptEmail($subject, $body ?? '', $encryptKey, $encAttachments);
-                    $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
+                    $token        = $this->encSvc->storePackage($package);
+                    $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, '', $token);
                     $emailSubject = '[Encrypted] ' . $subject;
-                    $decryptHash  = base64_encode(json_encode($package, JSON_UNESCAPED_SLASHES));
-                    $decryptUrl   = 'https://clawyard.partyard.eu/decrypt#' . $decryptHash;
+                    $decryptUrl   = 'https://clawyard.partyard.eu/decrypt/' . $token;
                 } else {
                     $plainAttachments = $uploadedFiles;
                     $htmlBody         = $this->wrapHtml($body ?? '', $subject);

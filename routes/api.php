@@ -21,6 +21,11 @@ Route::get('/company-profile', function () {
     ]);
 })->middleware('throttle:60,1');
 
+// Kyber: retrieve encrypted package by short token — public (recipient has no account)
+Route::get('/email/package/{token}', [EmailEncryptionController::class, 'getPackage'])
+    ->middleware('throttle:60,1')
+    ->where('token', '[a-f0-9]+');
+
 // WhatsApp webhook must remain public for Meta to verify
 Route::get('/whatsapp/webhook', [WhatsAppController::class, 'verify']);
 Route::post('/whatsapp/webhook', [WhatsAppController::class, 'webhook'])
