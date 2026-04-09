@@ -74,16 +74,20 @@ PROMPT;
         'gera-me', 'cria-me as chaves',
     ];
 
-    // ── Patterns for extracting email encryption parameters ──────────────────
+    // ── Keyword triggers for email compose form (shows editable card) ─────────
 
-    private const EMAIL_PATTERN    = '/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/';
-    private const SUBJECT_PATTERNS = ['/assunto[:\s]+([^\n\|]+)/iu', '/subject[:\s]+([^\n\|]+)/iu'];
-    private const BODY_PATTERNS    = [
-        '/mensagem[:\s]+(.+)$/isu',
-        '/corpo[:\s]+(.+)$/isu',
-        '/body[:\s]+(.+)$/isu',
-        '/texto[:\s]+(.+)$/isu',
+    private const COMPOSE_TRIGGERS = [
+        'encriptar email', 'encriptar um email', 'encripta email',
+        'enviar email', 'enviar um email', 'envia email',
+        'email seguro', 'email encriptado', 'email cifrado',
+        'encrypt email', 'send email', 'compose email',
+        'escrever email', 'escrever um email', 'novo email',
+        'mandar email', 'mandar um email',
     ];
+
+    // ── Pattern for extracting email address from message (optional pre-fill) ─
+
+    private const EMAIL_PATTERN = '/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/';
 
     public function __construct()
     {
@@ -108,8 +112,8 @@ PROMPT;
             return $this->buildKeyGenPayload();
         }
 
-        if ($data = $this->extractEncryptData($text)) {
-            return $this->buildEncryptPayload($data);
+        if ($this->isEmailComposeTrigger($text)) {
+            return $this->buildComposePayload($text);
         }
 
         // Normal LLM conversation
@@ -138,9 +142,9 @@ PROMPT;
             return $payload;
         }
 
-        // ── 2. Full encryption data present — encrypt immediately ─────────────
-        if ($data = $this->extractEncryptData($text)) {
-            $payload = $this->buildEncryptPayload($data);
+        // ── 2. Email compose intent — show editable form card ────────────────
+        if ($this->isEmailComposeTrigger($text)) {
+            $payload = $this->buildComposePayload($text);
             $onChunk($payload);
             return $payload;
         }
@@ -214,41 +218,13 @@ PROMPT;
         return false;
     }
 
-    /**
-     * Try to extract {to, subject, body} from the user's message.
-     * Returns null if any required field is missing.
-     */
-    private function extractEncryptData(string $text): ?array
+    private function isEmailComposeTrigger(string $text): bool
     {
         $lower = mb_strtolower($text);
-
-        // Must contain encrypt/send intent
-        $intents = ['encript', 'encrypt', 'encripta', 'envia', 'send', 'mandar'];
-        $hasIntent = false;
-        foreach ($intents as $i) {
-            if (str_contains($lower, $i)) { $hasIntent = true; break; }
+        foreach (self::COMPOSE_TRIGGERS as $trigger) {
+            if (str_contains($lower, $trigger)) return true;
         }
-        if (!$hasIntent) return null;
-
-        // Must have email address
-        preg_match(self::EMAIL_PATTERN, $text, $emailMatch);
-        if (empty($emailMatch)) return null;
-
-        // Must have subject
-        $subject = null;
-        foreach (self::SUBJECT_PATTERNS as $pattern) {
-            if (preg_match($pattern, $text, $m)) { $subject = trim($m[1]); break; }
-        }
-
-        // Must have body
-        $body = null;
-        foreach (self::BODY_PATTERNS as $pattern) {
-            if (preg_match($pattern, $text, $m)) { $body = trim($m[1]); break; }
-        }
-
-        if (!$subject || !$body) return null;
-
-        return ['to' => $emailMatch[0], 'subject' => $subject, 'body' => $body];
+        return false;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -265,41 +241,20 @@ PROMPT;
         ], JSON_UNESCAPED_SLASHES);
     }
 
-    private function buildEncryptPayload(array $data): string
+    /**
+     * Build a compose-form card payload. Optionally pre-fills the "to" field
+     * if an email address was detected in the user's message.
+     */
+    private function buildComposePayload(string $text): string
     {
-        $to      = $data['to'];
-        $subject = $data['subject'];
-        $body    = $data['body'];
-
-        $publicKey = $this->encSvc->getPublicKey($to);
-
-        // No key registered — use sender's own key (self-encryption) or fail
-        if (!$publicKey) {
-            $senderKey = auth()->user()?->email
-                ? $this->encSvc->getPublicKey(auth()->user()->email)
-                : null;
-
-            if (!$senderKey) {
-                // Return informational text (not a card)
-                return "⚠️ O destinatário **{$to}** não tem uma chave Kyber-1024 registada no servidor.\n\n"
-                     . "Para enviar email encriptado:\n"
-                     . "1. Pede ao destinatário para ir a [/keys](/keys) e gerar o seu par de chaves\n"
-                     . "2. Ou gera um par aqui (*\"gera chaves\"*) e partilha o secret key com ele via SMS\n\n"
-                     . "Queres que gere um par de chaves agora?";
-            }
-
-            // Encrypt with sender's own key (sender can decrypt with their secret key)
-            $publicKey = $senderKey;
+        $to = '';
+        preg_match(self::EMAIL_PATTERN, $text, $match);
+        if (!empty($match)) {
+            $to = $match[0];
         }
 
-        $package = $this->encSvc->encryptEmail($subject, $body, $publicKey);
-        $html    = $this->encSvc->buildOutlookHtml($package, auth()->user()?->name ?? 'ClawYard');
-
-        return '__KYBER_EMAIL__' . json_encode([
-            'to'      => $to,
-            'subject' => $subject,
-            'html'    => $html,
-            'package' => $package,
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return '__KYBER_COMPOSE__' . json_encode([
+            'to' => $to,
+        ], JSON_UNESCAPED_SLASHES);
     }
 }

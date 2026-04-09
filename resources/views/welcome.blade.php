@@ -226,6 +226,7 @@
         .kyber-status { padding:0 16px 10px; font-size:12px; }
         .kyber-status.ok { color:#76b900; }
         .kyber-status.err { color:#ff4444; }
+        [contenteditable][data-placeholder]:empty:before { content:attr(data-placeholder); color:#555; pointer-events:none; }
 
         /* ── IMAGE PREVIEW ── */
         #image-preview { display:none; padding:8px 20px 0; position:relative; }
@@ -1210,6 +1211,19 @@ function addMessage(role, text, agentName = '') {
         } catch(e) {}
     }
 
+    // Kyber compose form card
+    if (role === 'ai' && text.startsWith('__KYBER_COMPOSE__')) {
+        try {
+            const kd = JSON.parse(text.replace('__KYBER_COMPOSE__', ''));
+            msg.innerHTML = `<div class="avatar">🔒</div>
+                <div class="msg-col" style="max-width:560px">
+                    <div class="msg-meta"><span class="agent-tag active">🔒 KYBER Encryption</span><span>compor email encriptado</span></div>
+                    ${buildKyberComposeCard(kd)}
+                </div>`;
+            chat.appendChild(msg); chat.scrollTop = chat.scrollHeight; return msg;
+        } catch(e) {}
+    }
+
     // Email card
     if (role === 'ai' && text.startsWith('__EMAIL__')) {
         const emailData = JSON.parse(text.replace('__EMAIL__', ''));
@@ -1643,6 +1657,86 @@ function kyberCopyJson(json, btn) {
     });
 }
 
+function buildKyberComposeCard(data) {
+    const id = 'kc_' + Date.now();
+    const to = data.to || '';
+    return `
+    <div class="kyber-card" id="${id}" style="max-width:540px;">
+        <div class="kyber-card-header">
+            <span class="kh-title">🔒 Compor Email Encriptado</span>
+            <span class="kh-sub">Kyber-1024 + AES-256-GCM · NIST FIPS 203</span>
+        </div>
+        <div class="email-field" style="margin-bottom:8px;">
+            <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Para</label>
+            <input type="email" id="${id}_to" value="${esc(to)}" placeholder="destinatario@empresa.com"
+                style="width:100%;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:9px 12px;color:#e0e0e0;font-size:13px;outline:none;box-sizing:border-box;"
+                onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'">
+        </div>
+        <div class="email-field" style="margin-bottom:8px;">
+            <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Assunto</label>
+            <input type="text" id="${id}_subject" placeholder="Assunto da mensagem"
+                style="width:100%;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:9px 12px;color:#e0e0e0;font-size:13px;outline:none;box-sizing:border-box;"
+                onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'">
+        </div>
+        <div style="margin-bottom:12px;">
+            <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Mensagem</label>
+            <div id="${id}_body" contenteditable="true"
+                style="width:100%;min-height:100px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:9px 12px;color:#e0e0e0;font-size:13px;outline:none;box-sizing:border-box;line-height:1.6;white-space:pre-wrap;"
+                onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'"
+                data-placeholder="Escreve aqui a tua mensagem..."></div>
+        </div>
+        <div style="background:#0a1800;border:1px solid #1a3a00;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#76b900;">
+            🔒 A mensagem será encriptada com Kyber-1024 antes do envio. Só o destinatário com o secret key poderá ler.
+        </div>
+        <div class="kyber-actions">
+            <button class="kyber-send-btn" id="${id}_sendbtn" onclick="kyberSendCompose('${id}',this)">
+                🔒 Encriptar &amp; Enviar
+            </button>
+        </div>
+        <div class="kyber-status" id="${id}_status"></div>
+    </div>`;
+}
+
+async function kyberSendCompose(id, btn) {
+    const to      = document.getElementById(id + '_to')?.value.trim() || '';
+    const subject = document.getElementById(id + '_subject')?.value.trim() || '';
+    const body    = document.getElementById(id + '_body')?.innerText.trim() || '';
+    const statusEl = document.getElementById(id + '_status');
+
+    if (!to)      { statusEl.className = 'kyber-status err'; statusEl.textContent = '❌ Preenche o destinatário.'; return; }
+    if (!subject) { statusEl.className = 'kyber-status err'; statusEl.textContent = '❌ Preenche o assunto.'; return; }
+    if (!body)    { statusEl.className = 'kyber-status err'; statusEl.textContent = '❌ Escreve a mensagem.'; return; }
+
+    btn.disabled = true;
+    btn.textContent = '⏳ A encriptar e enviar...';
+    statusEl.className = '';
+    statusEl.textContent = '';
+
+    try {
+        const r = await fetch('/api/email/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: JSON.stringify({ to, subject, body, encrypt: true })
+        });
+        const d = await r.json();
+        if (d.success) {
+            btn.textContent = '✅ Email enviado!';
+            statusEl.className = 'kyber-status ok';
+            statusEl.textContent = '✅ Email encriptado enviado para ' + to + (d.encrypted ? ' (Kyber-1024)' : ' (texto simples)');
+        } else {
+            btn.disabled = false;
+            btn.textContent = '🔒 Encriptar & Enviar';
+            statusEl.className = 'kyber-status err';
+            statusEl.textContent = '❌ ' + (d.error || 'Erro ao enviar');
+        }
+    } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '🔒 Encriptar & Enviar';
+        statusEl.className = 'kyber-status err';
+        statusEl.textContent = '❌ Erro de ligação: ' + e.message;
+    }
+}
+
 function editEmail(id) {
     const bodyEl = document.getElementById(id+'_body');
     bodyEl.focus();
@@ -2009,6 +2103,23 @@ async function sendMessage() {
                     chat.scrollTop = chat.scrollHeight;
                     return;
                 }
+                if (accumulated.startsWith('__KYBER_COMPOSE__')) {
+                    try {
+                        const kd = JSON.parse(accumulated.replace('__KYBER_COMPOSE__', ''));
+                        const msgCol = streamMsg.querySelector('.msg-col');
+                        msgCol.innerHTML = `
+                            <div class="msg-meta">
+                                <span class="agent-tag active">🔒 KYBER Encryption</span>
+                                <span>compor email encriptado</span>
+                            </div>
+                            ${buildKyberComposeCard(kd)}`;
+                        streamMsg.querySelector('.avatar').textContent = '🔒';
+                    } catch(e) {
+                        streamBubble.innerHTML = '<span style="color:var(--green)">🔒 A preparar formulário…</span><span class="stream-cursor">▌</span>';
+                    }
+                    chat.scrollTop = chat.scrollHeight;
+                    return;
+                }
 
                 // Strip hidden DISCOVERIES_JSON block before rendering
                 const displayText = accumulated.replace(
@@ -2065,6 +2176,21 @@ async function sendMessage() {
                                 streamMsg.querySelector('.avatar').textContent = '🔒';
                             } catch(e) {
                                 streamBubble.innerHTML = renderMarkdown('Erro ao encriptar: ' + e.message);
+                            }
+                        // ── Kyber compose form card ──────────────────────────
+                        } else if (accumulated.startsWith('__KYBER_COMPOSE__')) {
+                            try {
+                                const kd = JSON.parse(accumulated.replace('__KYBER_COMPOSE__', ''));
+                                const msgCol = streamMsg.querySelector('.msg-col');
+                                msgCol.innerHTML = `
+                                    <div class="msg-meta">
+                                        <span class="agent-tag active">🔒 KYBER Encryption</span>
+                                        <span>compor email encriptado</span>
+                                    </div>
+                                    ${buildKyberComposeCard(kd)}`;
+                                streamMsg.querySelector('.avatar').textContent = '🔒';
+                            } catch(e) {
+                                streamBubble.innerHTML = renderMarkdown('Erro: ' + e.message);
                             }
                         // ── Daniel Email card ────────────────────────────────
                         } else if (accumulated.startsWith('__EMAIL__')) {
