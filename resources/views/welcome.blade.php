@@ -1722,7 +1722,19 @@ async function kyberSendCompose(id, btn) {
         if (d.success) {
             btn.textContent = '✅ Email enviado!';
             statusEl.className = 'kyber-status ok';
-            statusEl.textContent = '✅ Email encriptado enviado para ' + to + (d.encrypted ? ' (Kyber-1024)' : ' (texto simples)');
+            let statusHtml = '✅ Email ' + (d.encrypted ? 'encriptado (Kyber-1024)' : '') + ' enviado para ' + to;
+            if (d.decrypt_url) {
+                statusHtml += `<br><br>
+                <div style="background:#0a1800;border:1px solid #1a3a00;border-radius:6px;padding:10px 12px;margin-top:4px;">
+                    <div style="font-size:11px;color:#76b900;font-weight:700;margin-bottom:6px;">🔗 Link de desencriptação — partilha com o destinatário via SMS/WhatsApp</div>
+                    <div style="font-size:10px;color:#888;word-break:break-all;margin-bottom:8px;font-family:monospace;">${d.decrypt_url}</div>
+                    <button onclick="navigator.clipboard.writeText('${d.decrypt_url.replace(/'/g,"\\'")}').then(()=>{this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar link',2000)})"
+                        style="background:none;border:1px solid #76b90055;color:#76b900;padding:5px 14px;border-radius:6px;font-size:11px;cursor:pointer;">
+                        📋 Copiar link
+                    </button>
+                </div>`;
+            }
+            statusEl.innerHTML = statusHtml;
         } else {
             btn.disabled = false;
             btn.textContent = '🔒 Encriptar & Enviar';

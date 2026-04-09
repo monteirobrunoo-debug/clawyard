@@ -70,10 +70,13 @@ class EmailSendController extends Controller
                     $package      = $this->encSvc->encryptEmail($subject, $body ?? '', $encryptKey, $encAttachments);
                     $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name, config('app.url'));
                     $emailSubject = '[Encrypted] ' . $subject;
+                    $decryptHash  = base64_encode(json_encode($package, JSON_UNESCAPED_SLASHES));
+                    $decryptUrl   = 'https://clawyard.partyard.eu/decrypt#' . $decryptHash;
                 } else {
                     $plainAttachments = $uploadedFiles;
                     $htmlBody         = $this->wrapHtml($body ?? '', $subject);
                     $emailSubject     = $subject;
+                    $decryptUrl       = null;
                 }
             }
 
@@ -103,11 +106,12 @@ class EmailSendController extends Controller
                 'user'      => auth()->user()?->email,
             ]);
 
-            return response()->json([
-                'success'   => true,
-                'message'   => 'Email sent to ' . $to,
-                'encrypted' => $encrypted,
-            ]);
+            return response()->json(array_filter([
+                'success'      => true,
+                'message'      => 'Email sent to ' . $to,
+                'encrypted'    => $encrypted,
+                'decrypt_url'  => $decryptUrl ?? null,
+            ], fn($v) => $v !== null));
 
         } catch (\Exception $e) {
             \Log::error('ClawYard Email Error: ' . $e->getMessage());
