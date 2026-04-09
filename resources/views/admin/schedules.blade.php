@@ -63,7 +63,7 @@
 
 <header>
     <a href="/chat" class="back-btn">←</a>
-    <span class="logo">🐾 ClawYard</span>
+    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/setq-logo.svg" alt="SETQ.AI" style="height:32px;filter:drop-shadow(0 0 1px rgba(255,255,255,0.1));"></a>
     <span class="page-title">/ Tarefas Agendadas</span>
     <div class="hdr-right">
         <a href="/dashboard" class="btn-sm">Dashboard</a>
