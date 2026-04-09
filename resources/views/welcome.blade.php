@@ -1184,6 +1184,32 @@ function addMessage(role, text, agentName = '') {
         }
     }
 
+    // Kyber keys card
+    if (role === 'ai' && text.startsWith('__KYBER_KEYS__')) {
+        try {
+            const kd = JSON.parse(text.replace('__KYBER_KEYS__', ''));
+            msg.innerHTML = `<div class="avatar">🔒</div>
+                <div class="msg-col" style="max-width:560px">
+                    <div class="msg-meta"><span class="agent-tag active">🔒 KYBER Encryption</span><span>par de chaves gerado</span></div>
+                    ${buildKyberKeysCard(kd)}
+                </div>`;
+            chat.appendChild(msg); chat.scrollTop = chat.scrollHeight; return msg;
+        } catch(e) {}
+    }
+
+    // Kyber encrypted email card
+    if (role === 'ai' && text.startsWith('__KYBER_EMAIL__')) {
+        try {
+            const kd = JSON.parse(text.replace('__KYBER_EMAIL__', ''));
+            msg.innerHTML = `<div class="avatar">🔒</div>
+                <div class="msg-col" style="max-width:560px">
+                    <div class="msg-meta"><span class="agent-tag active">🔒 KYBER Encryption</span><span>email encriptado</span></div>
+                    ${buildKyberEmailCard(kd)}
+                </div>`;
+            chat.appendChild(msg); chat.scrollTop = chat.scrollHeight; return msg;
+        } catch(e) {}
+    }
+
     // Email card
     if (role === 'ai' && text.startsWith('__EMAIL__')) {
         const emailData = JSON.parse(text.replace('__EMAIL__', ''));
@@ -1946,9 +1972,45 @@ async function sendMessage() {
             // ── Chunk event ──
             if (evt.chunk !== undefined && streamBubble) {
                 accumulated += evt.chunk;
+
+                // ── Kyber action payloads — render card immediately, don't show raw JSON ──
+                if (accumulated.startsWith('__KYBER_KEYS__')) {
+                    try {
+                        const kd = JSON.parse(accumulated.replace('__KYBER_KEYS__', ''));
+                        const msgCol = streamMsg.querySelector('.msg-col');
+                        msgCol.innerHTML = `
+                            <div class="msg-meta">
+                                <span class="agent-tag active">🔒 KYBER Encryption</span>
+                                <span>par de chaves gerado</span>
+                            </div>
+                            ${buildKyberKeysCard(kd)}`;
+                        streamMsg.querySelector('.avatar').textContent = '🔒';
+                    } catch(e) {
+                        // JSON still arriving — show spinner while waiting
+                        streamBubble.innerHTML = '<span style="color:var(--green)">🔒 A gerar chaves Kyber-1024…</span><span class="stream-cursor">▌</span>';
+                    }
+                    chat.scrollTop = chat.scrollHeight;
+                    return;
+                }
+                if (accumulated.startsWith('__KYBER_EMAIL__')) {
+                    try {
+                        const kd = JSON.parse(accumulated.replace('__KYBER_EMAIL__', ''));
+                        const msgCol = streamMsg.querySelector('.msg-col');
+                        msgCol.innerHTML = `
+                            <div class="msg-meta">
+                                <span class="agent-tag active">🔒 KYBER Encryption</span>
+                                <span>email encriptado</span>
+                            </div>
+                            ${buildKyberEmailCard(kd)}`;
+                        streamMsg.querySelector('.avatar').textContent = '🔒';
+                    } catch(e) {
+                        streamBubble.innerHTML = '<span style="color:var(--green)">🔒 A encriptar email…</span><span class="stream-cursor">▌</span>';
+                    }
+                    chat.scrollTop = chat.scrollHeight;
+                    return;
+                }
+
                 // Strip hidden DISCOVERIES_JSON block before rendering
-                // (QuantumAgent sends it as an HTML comment; strip it so the
-                //  user never sees partial JSON during streaming)
                 const displayText = accumulated.replace(
                     /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
                 );
