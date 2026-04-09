@@ -183,7 +183,7 @@ class EmailEncryptionService
     public function buildOutlookHtml(array $package, string $senderName = 'ClawYard', string $appUrl = ''): string
     {
         $appUrl     = 'https://clawyard.partyard.eu';
-        // Encode JSON in URL hash — not sent to server, auto-fills /decrypt page
+        // Encode JSON in URL hash — never sent to server, auto-fills /decrypt page
         $jsonRaw    = json_encode($package, JSON_UNESCAPED_SLASHES);
         $hash       = base64_encode($jsonRaw);
         $decryptUrl = $appUrl . '/decrypt#' . $hash;
@@ -198,55 +198,82 @@ class EmailEncryptionService
 <!--[if gte mso 9]>
 <xml><o:OfficeDocumentSettings><o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
 <![endif]-->
-<style type="text/css">
-  body, #bodyTable { margin:0; padding:0; background:#f4f4f4; font-family:Arial,sans-serif; }
-  .wrapper  { max-width:620px; margin:30px auto; background:#fff; border-radius:8px; overflow:hidden; }
-  .header   { background:#001f3f; padding:24px 32px; }
-  .header p { margin:0; color:#76b900; font-size:20px; font-weight:bold; }
-  .header small { color:#aaa; font-size:11px; display:block; margin-top:3px; }
-  .content  { padding:28px 32px; }
-  .badge    { display:inline-block; background:#e8f5e9; color:#2e7d32; border:1px solid #a5d6a7;
-              border-radius:4px; padding:3px 10px; font-size:12px; font-weight:bold; margin-bottom:16px; }
-  p  { color:#444; font-size:14px; line-height:1.7; margin:0 0 12px; }
-  .cta-btn  { display:inline-block; background:#76b900; color:#fff !important; text-decoration:none;
-              padding:14px 36px; border-radius:6px; font-size:16px; font-weight:bold; margin:8px 0 20px; }
-  .copy-btn { display:inline-block; background:#f0f0f0; color:#333 !important; text-decoration:none;
-              padding:10px 24px; border-radius:6px; font-size:14px; margin-left:10px; }
-  .blob-box { background:#f8f9fa; border:1px solid #dee2e6; border-radius:6px;
-              padding:14px; font-family:'Courier New',monospace; font-size:10px;
-              color:#555; word-break:break-all; white-space:pre-wrap; margin:16px 0 8px; }
-  .footer   { border-top:1px solid #eee; padding:16px 32px; font-size:11px; color:#aaa; }
-</style>
 </head>
-<body>
-<table id="bodyTable" width="100%" cellpadding="0" cellspacing="0" border="0">
-<tr><td align="center" style="padding:20px 12px;">
-  <div class="wrapper">
-    <div class="header">
-      <p>🔒 Secure Channel</p>
-      <small>Kyber-1024 / AES-256-GCM / NIST FIPS 203 Compliant</small>
-    </div>
-    <div class="content">
-      <span class="badge">🔒 MENSAGEM ENCRIPTADA</span>
-      <p>Recebeste uma mensagem encriptada de <strong>{$senderName}</strong>.<br>
-         Clica no botão para a desencriptar — o conteúdo é carregado automaticamente.</p>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f4f4;">
+<tr><td align="center" style="padding:30px 12px;">
 
-      <a class="cta-btn" href="{$decryptUrl}" target="_blank">🔓 Abrir e Desencriptar →</a>
+  <!-- WRAPPER -->
+  <table width="620" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
 
-      <p style="font-size:12px;color:#999;margin:0 0 6px">Em alternativa, copia o bloco abaixo e cola em <a href="{$appUrl}/decrypt" style="color:#76b900">{$appUrl}/decrypt</a></p>
-      <div style="position:relative;">
-        <div class="blob-box" id="json-blob">{$json}</div>
-        <a href="{$decryptUrl}"
-           onclick="try{navigator.clipboard.writeText(document.getElementById('json-blob').innerText);this.textContent='✅ Copiado!';setTimeout(function(el){return function(){el.textContent='📋 Copiar JSON'}}(this),2000);}catch(e){}return false;"
-           style="display:block;margin-top:8px;background:#f0f0f0;color:#333;border:1px solid #ddd;padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;text-align:center;text-decoration:none;font-family:Arial,sans-serif;">
-          📋 Copiar JSON
-        </a>
-      </div>
-    </div>
-    <div class="footer">
-      ClawYard · IT Partyard LDA · Setúbal, Portugal
-    </div>
-  </div>
+    <!-- HEADER -->
+    <tr>
+      <td style="background:#001f3f;padding:24px 32px;">
+        <div style="color:#76b900;font-size:20px;font-weight:bold;margin:0;">🔒 Secure Channel</div>
+        <div style="color:#aaa;font-size:11px;margin-top:4px;">Kyber-1024 / AES-256-GCM / NIST FIPS 203 Compliant</div>
+      </td>
+    </tr>
+
+    <!-- CONTENT -->
+    <tr>
+      <td style="padding:32px 32px 24px;">
+
+        <!-- Badge -->
+        <div style="display:inline-block;background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:4px;padding:4px 12px;font-size:12px;font-weight:bold;margin-bottom:20px;">
+          🔒 MENSAGEM ENCRIPTADA
+        </div>
+
+        <!-- Intro text -->
+        <p style="color:#444;font-size:15px;line-height:1.7;margin:0 0 8px;">
+          Recebeste uma mensagem encriptada de <strong>{$senderName}</strong>.
+        </p>
+        <p style="color:#666;font-size:13px;line-height:1.6;margin:0 0 28px;">
+          Clica no botão abaixo — o conteúdo encriptado é carregado automaticamente.<br>
+          Só precisas de colar o teu <strong>Secret Key</strong> para desencriptar.
+        </p>
+
+        <!-- PRIMARY CTA — all inline styles, works in Outlook/Gmail/Apple Mail -->
+        <table cellpadding="0" cellspacing="0" border="0" style="margin-bottom:28px;">
+          <tr>
+            <td style="background:#76b900;border-radius:6px;" align="center">
+              <a href="{$decryptUrl}" target="_blank"
+                 style="display:inline-block;background:#76b900;color:#ffffff;text-decoration:none;padding:16px 44px;border-radius:6px;font-size:16px;font-weight:bold;font-family:Arial,sans-serif;letter-spacing:0.3px;">
+                🔓 Abrir e Desencriptar
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Divider -->
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:20px;">
+          <tr>
+            <td style="border-top:1px solid #eee;font-size:0;">&nbsp;</td>
+          </tr>
+        </table>
+
+        <!-- Fallback instructions -->
+        <p style="color:#999;font-size:12px;margin:0 0 8px;">
+          Se o botão não funcionar, vai a
+          <a href="{$appUrl}/decrypt" style="color:#76b900;text-decoration:none;">{$appUrl}/decrypt</a>
+          e cola manualmente o bloco JSON abaixo:
+        </p>
+
+        <!-- JSON blob — plain text fallback, no JS needed -->
+        <div style="background:#f8f9fa;border:1px solid #dee2e6;border-radius:6px;padding:14px;font-family:'Courier New',Courier,monospace;font-size:10px;color:#555;word-break:break-all;white-space:pre-wrap;line-height:1.5;">
+{$json}
+        </div>
+
+      </td>
+    </tr>
+
+    <!-- FOOTER -->
+    <tr>
+      <td style="border-top:1px solid #eee;padding:14px 32px;">
+        <p style="margin:0;font-size:11px;color:#aaa;">ClawYard · IT Partyard LDA · Setúbal, Portugal</p>
+      </td>
+    </tr>
+
+  </table>
 </td></tr>
 </table>
 </body>
