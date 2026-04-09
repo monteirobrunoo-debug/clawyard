@@ -1711,8 +1711,18 @@ function buildKyberComposeCard(data) {
                 onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'"
                 data-placeholder="Escreve aqui a tua mensagem..."></div>
         </div>
+        <div style="margin-bottom:12px;">
+            <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Anexos <span style="color:#555;font-weight:400;text-transform:none">(opcional · máx 5 ficheiros · 20 MB cada)</span></label>
+            <label style="display:inline-flex;align-items:center;gap:6px;background:#1a1a2e;border:1px dashed #444;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:12px;color:#888;transition:border-color .15s;"
+                onmouseover="this.style.borderColor='#76b900';this.style.color='#76b900'" onmouseout="this.style.borderColor='#444';this.style.color='#888'">
+                📎 Seleccionar ficheiros
+                <input type="file" id="${id}_files" multiple accept="*/*" style="display:none"
+                    onchange="kyberUpdateFileList('${id}')">
+            </label>
+            <div id="${id}_filelist" style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;"></div>
+        </div>
         <div style="background:#0a1800;border:1px solid #1a3a00;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:#76b900;">
-            🔒 A mensagem será encriptada com Kyber-1024 antes do envio. Só o destinatário com o secret key poderá ler.
+            🔒 Mensagem e anexos encriptados com Kyber-1024 antes do envio. Só o destinatário com o secret key poderá ler.
         </div>
         <div class="kyber-actions">
             <button class="kyber-send-btn" id="${id}_sendbtn" onclick="kyberSendCompose('${id}',this)">
@@ -1721,6 +1731,26 @@ function buildKyberComposeCard(data) {
         </div>
         <div class="kyber-status" id="${id}_status"></div>
     </div>`;
+}
+
+function kyberUpdateFileList(id) {
+    const input   = document.getElementById(id + '_files');
+    const listEl  = document.getElementById(id + '_filelist');
+    listEl.innerHTML = '';
+    Array.from(input.files).forEach((f, i) => {
+        const tag = document.createElement('span');
+        tag.style.cssText = 'background:#1a1a2e;border:1px solid #333;border-radius:4px;padding:3px 8px;font-size:11px;color:#aaa;display:inline-flex;align-items:center;gap:4px;';
+        tag.innerHTML = `📎 ${esc(f.name)} <button onclick="kyberRemoveFile('${id}',${i},this.parentElement)" style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:12px;padding:0 2px;">✕</button>`;
+        listEl.appendChild(tag);
+    });
+}
+
+function kyberRemoveFile(id, idx, tagEl) {
+    const input = document.getElementById(id + '_files');
+    const dt = new DataTransfer();
+    Array.from(input.files).forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+    input.files = dt.files;
+    kyberUpdateFileList(id);
 }
 
 async function kyberSendCompose(id, btn) {
@@ -1738,11 +1768,20 @@ async function kyberSendCompose(id, btn) {
     statusEl.className = '';
     statusEl.textContent = '';
 
+    // Use FormData to support file uploads
+    const fd = new FormData();
+    fd.append('to', to);
+    fd.append('subject', subject);
+    fd.append('body', body);
+    fd.append('generate_key', '1');
+    const files = document.getElementById(id + '_files')?.files || [];
+    Array.from(files).forEach(f => fd.append('attachments[]', f));
+
     try {
         const r = await fetch('/api/email/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
-            body: JSON.stringify({ to, subject, body, generate_key: true })
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
+            body: fd
         });
         const rawText = await r.text();
         console.log('[KyberCompose] HTTP', r.status, rawText.substring(0, 500));

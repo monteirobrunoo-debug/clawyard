@@ -47,8 +47,14 @@ class EmailSendController extends Controller
 
             // ── Generate-key path (compose card) — fresh keypair per email ──
             if ($request->boolean('generate_key', false)) {
-                $pair         = $this->kyber->generateKeyPair();
-                $package      = $this->encSvc->encryptEmail($subject, $body ?? '', $pair['public_key']);
+                $pair           = $this->kyber->generateKeyPair();
+                $uploadedFiles  = $request->file('attachments') ?? [];
+                $encAttachments = array_map(fn($f) => [
+                    'name' => $f->getClientOriginalName(),
+                    'mime' => $f->getMimeType(),
+                    'data' => base64_encode($f->get()),
+                ], $uploadedFiles);
+                $package      = $this->encSvc->encryptEmail($subject, $body ?? '', $pair['public_key'], $encAttachments);
                 $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name);
                 $emailSubject = '[Encrypted] ' . $subject;
                 $encrypted    = true;
