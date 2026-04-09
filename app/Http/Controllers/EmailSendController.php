@@ -3,13 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Services\EmailEncryptionService;
+use App\Services\KyberEncryptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 
 class EmailSendController extends Controller
 {
-    public function __construct(private EmailEncryptionService $encSvc) {}
+    public function __construct(
+        private EmailEncryptionService $encSvc,
+        private KyberEncryptionService $kyber,
+    ) {}
 
     /**
      * POST /api/email/send
@@ -27,6 +31,7 @@ class EmailSendController extends Controller
             'body'          => 'nullable|string|max:20000',
             'cc'            => 'nullable|email',
             'encrypt'       => 'nullable|boolean',
+            'generate_key'  => 'nullable|boolean', // generate fresh Kyber keypair for this email
             'raw_html'      => 'nullable|string', // pre-built encrypted HTML (from Kyber agent)
             'attachments'   => 'nullable|array|max:5',
             'attachments.*' => 'file|max:20480', // 20 MB per file
@@ -40,8 +45,20 @@ class EmailSendController extends Controller
             $from    = config('mail.from.address', 'info@clawyard.com');
             $name    = config('mail.from.name', 'ClawYard');
 
+            // ── Generate-key path (compose card) — fresh keypair per email ──
+            if ($request->boolean('generate_key', false)) {
+                $pair         = $this->kyber->generateKeyPair();
+                $package      = $this->encSvc->encryptEmail($subject, $body ?? '', $pair['public_key']);
+                $htmlBody     = $this->encSvc->buildOutlookHtml($package, $name);
+                $emailSubject = '[Encrypted] ' . $subject;
+                $encrypted    = true;
+                $secretKey    = $pair['secret_key'];
+                $decryptHash  = base64_encode(json_encode($package, JSON_UNESCAPED_SLASHES));
+                $decryptUrl   = 'https://clawyard.partyard.eu/decrypt#' . $decryptHash;
+                $plainAttachments = [];
+
             // ── Pre-built encrypted HTML (from Kyber agent card) ───────────
-            if ($request->filled('raw_html')) {
+            } elseif ($request->filled('raw_html')) {
                 $htmlBody     = $request->input('raw_html');
                 $emailSubject = str_starts_with($subject, '[Encrypted]') ? $subject : '[Encrypted] ' . $subject;
                 $encrypted    = true;
@@ -111,6 +128,7 @@ class EmailSendController extends Controller
                 'message'      => 'Email sent to ' . $to,
                 'encrypted'    => $encrypted,
                 'decrypt_url'  => $decryptUrl ?? null,
+                'secret_key'   => $secretKey ?? null,
             ], fn($v) => $v !== null));
 
         } catch (\Exception $e) {

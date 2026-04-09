@@ -1733,17 +1733,33 @@ async function kyberSendCompose(id, btn) {
         const r = await fetch('/api/email/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
-            body: JSON.stringify({ to, subject, body, encrypt: true })
+            body: JSON.stringify({ to, subject, body, generate_key: true })
         });
         const d = await r.json();
         if (d.success) {
             btn.textContent = '✅ Email enviado!';
             statusEl.className = 'kyber-status ok';
-            let statusHtml = '✅ Email ' + (d.encrypted ? 'encriptado (Kyber-1024)' : '') + ' enviado para ' + to;
-            if (d.decrypt_url) {
+            let statusHtml = '✅ Email encriptado (Kyber-1024) enviado para ' + to;
+
+            // Secret key — must be shared with recipient to decrypt
+            if (d.secret_key) {
+                const sk = d.secret_key;
                 statusHtml += `<br><br>
+                <div style="background:#1a1000;border:1px solid #ffaa0044;border-radius:6px;padding:10px 12px;margin-top:4px;">
+                    <div style="font-size:11px;color:#ffaa00;font-weight:700;margin-bottom:6px;">⚠️ Secret Key — partilha com o destinatário via SMS/WhatsApp</div>
+                    <div style="font-size:10px;color:#ccc;word-break:break-all;margin-bottom:8px;font-family:monospace;max-height:52px;overflow:hidden;">${sk.substring(0,80)}…</div>
+                    <button id="${id}_sk_btn" onclick="navigator.clipboard.writeText('${sk.replace(/'/g,"\\'")}').then(()=>{this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar Secret Key',2000)})"
+                        style="background:none;border:1px solid #ffaa0055;color:#ffaa00;padding:5px 14px;border-radius:6px;font-size:11px;cursor:pointer;">
+                        📋 Copiar Secret Key
+                    </button>
+                </div>`;
+            }
+
+            // Decrypt link — send alongside the secret key
+            if (d.decrypt_url) {
+                statusHtml += `<br>
                 <div style="background:#0a1800;border:1px solid #1a3a00;border-radius:6px;padding:10px 12px;margin-top:4px;">
-                    <div style="font-size:11px;color:#76b900;font-weight:700;margin-bottom:6px;">🔗 Link de desencriptação — partilha com o destinatário via SMS/WhatsApp</div>
+                    <div style="font-size:11px;color:#76b900;font-weight:700;margin-bottom:6px;">🔗 Link de desencriptação</div>
                     <div style="font-size:10px;color:#888;word-break:break-all;margin-bottom:8px;font-family:monospace;">${d.decrypt_url}</div>
                     <button onclick="navigator.clipboard.writeText('${d.decrypt_url.replace(/'/g,"\\'")}').then(()=>{this.textContent='✅ Copiado!';setTimeout(()=>this.textContent='📋 Copiar link',2000)})"
                         style="background:none;border:1px solid #76b90055;color:#76b900;padding:5px 14px;border-radius:6px;font-size:11px;cursor:pointer;">
