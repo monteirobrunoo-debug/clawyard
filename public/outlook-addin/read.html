@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kyber-1024 — Desencriptar</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; background: #f4f4f4; color: #222; padding: 12px; }
+  .header { background: #001f3f; color: #76b900; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-weight: bold; font-size: 14px; }
+  .header small { color: #aaa; font-size: 10px; display: block; margin-top: 2px; }
+  label { display: block; font-weight: bold; margin: 10px 0 4px; font-size: 12px; color: #333; }
+  textarea { width: 100%; font-family: monospace; font-size: 11px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; }
+  .btn { display: block; width: 100%; background: #76b900; color: #fff; border: none; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+  .btn:hover { background: #5a8f00; }
+  .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #ddd; margin-top: 6px; }
+  .btn-secondary:hover { background: #e0e0e0; }
+  .result { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 6px; padding: 12px; margin-top: 10px; display: none; }
+  .result .subj { font-weight: bold; color: #1b5e20; margin-bottom: 6px; font-size: 13px; }
+  .result .body { font-size: 12px; color: #333; white-space: pre-wrap; line-height: 1.5; max-height: 200px; overflow-y: auto; }
+  .att { margin-top: 8px; }
+  .att a { display: inline-block; background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 4px; padding: 4px 10px; font-size: 11px; color: #1b5e20; text-decoration: none; margin: 2px; }
+  .err { background: #ffebee; border: 1px solid #ef9a9a; border-radius: 6px; padding: 10px; margin-top: 10px; color: #c62828; font-size: 12px; display: none; }
+  .notice { background: #e3f2fd; border: 1px solid #90caf9; border-radius: 4px; padding: 8px 10px; font-size: 11px; color: #1565c0; margin-bottom: 8px; display: none; }
+  .loading { text-align: center; color: #76b900; font-size: 12px; margin-top: 8px; display: none; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  🔒 Kyber-1024 Encryption
+  <small>NIST FIPS 203 · AES-256-GCM</small>
+</div>
+
+<div class="notice" id="json-notice">📋 JSON encriptado detectado e copiado!</div>
+
+<label>Secret Key <small style="font-weight:normal;color:#999">(a tua chave privada Kyber-1024)</small></label>
+<textarea id="sk" rows="3" placeholder="Cola aqui o teu secret key (base64)..."></textarea>
+
+<label>JSON Encriptado</label>
+<textarea id="pkg" rows="4" placeholder='{"version":"kyber1024-aes256gcm-v1",...}'></textarea>
+
+<button class="btn" onclick="decrypt()">🔓 Desencriptar</button>
+<button class="btn btn-secondary" onclick="loadFromEmail()">📧 Carregar JSON do Email</button>
+<div class="loading" id="loading">A desencriptar...</div>
+
+<div class="result" id="result">
+  <div class="subj" id="out-subj"></div>
+  <div class="body" id="out-body"></div>
+  <div class="att" id="out-att"></div>
+</div>
+<div class="err" id="err"></div>
+
+<script>
+let jsonFromEmail = null;
+
+Office.onReady(function() {
+  loadFromEmail();
+});
+
+function loadFromEmail() {
+  Office.context.mailbox.item.body.getAsync('html', function(result) {
+    if (result.status !== Office.AsyncResultStatus.Succeeded) return;
+    const html = result.value;
+    // Extract JSON from blob-box or any pre/code block
+    const match = html.match(/\{"version"\s*:\s*"kyber1024[^}]+(?:\{[^}]*\}[^}]*)*/);
+    if (match) {
+      try {
+        // Try to extract full JSON object
+        const start = html.indexOf('{"version":"kyber1024');
+        if (start === -1) return;
+        let depth = 0, end = start;
+        for (let i = start; i < html.length; i++) {
+          if (html[i] === '{') depth++;
+          else if (html[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+        }
+        const raw = html.substring(start, end + 1)
+          .replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+          .replace(/<[^>]+>/g, '');
+        JSON.parse(raw); // validate
+        document.getElementById('pkg').value = raw;
+        jsonFromEmail = raw;
+        const notice = document.getElementById('json-notice');
+        notice.style.display = 'block';
+        setTimeout(() => notice.style.display = 'none', 3000);
+      } catch(e) {}
+    }
+  });
+}
+
+async function decrypt() {
+  const sk  = document.getElementById('sk').value.trim();
+  const pkg = document.getElementById('pkg').value.trim();
+  if (!sk)  return showErr('Cola o teu secret key.');
+  if (!pkg) return showErr('Cola o JSON encriptado.');
+  let package_obj;
+  try { package_obj = JSON.parse(pkg); } catch(e) { return showErr('JSON inválido.'); }
+
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('result').style.display = 'none';
+  document.getElementById('err').style.display = 'none';
+
+  try {
+    const r = await fetch('https://clawyard.partyard.eu/api/email/decrypt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ secret_key: sk, package: package_obj })
+    });
+    const d = await r.json();
+    document.getElementById('loading').style.display = 'none';
+    if (d.success) {
+      document.getElementById('out-subj').textContent = '📧 ' + d.subject;
+      document.getElementById('out-body').textContent = d.body;
+      // Attachments
+      const attDiv = document.getElementById('out-att');
+      attDiv.innerHTML = '';
+      if (d.attachments && d.attachments.length) {
+        d.attachments.forEach(a => {
+          const link = document.createElement('a');
+          link.href = 'data:' + a.mime + ';base64,' + a.data;
+          link.download = a.name;
+          link.textContent = '⬇ ' + a.name;
+          attDiv.appendChild(link);
+        });
+      }
+      document.getElementById('result').style.display = 'block';
+    } else {
+      showErr(d.error || 'Erro desconhecido.');
+    }
+  } catch(e) {
+    document.getElementById('loading').style.display = 'none';
+    showErr('Erro de ligação: ' + e.message);
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.textContent = '❌ ' + msg;
+  el.style.display = 'block';
+}
+</script>
+</body>
+</html>

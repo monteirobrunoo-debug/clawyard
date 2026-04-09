@@ -167,4 +167,29 @@ class EmailEncryptionController extends Controller
             ], 400);
         }
     }
+
+    /**
+     * POST /api/keys/encrypt-body
+     * Outlook Add-in: encrypt subject+body with a given public key, return HTML.
+     */
+    public function encryptBody(Request $request): JsonResponse
+    {
+        $request->validate([
+            'subject'    => 'required|string|max:500',
+            'body'       => 'required|string|max:20000',
+            'public_key' => 'required|string',
+        ]);
+
+        try {
+            $package = $this->encSvc->encryptEmail(
+                $request->input('subject'),
+                $request->input('body'),
+                $request->input('public_key')
+            );
+            $html = $this->encSvc->buildOutlookHtml($package, auth()->user()?->name ?? 'ClawYard');
+            return response()->json(['success' => true, 'html' => $html, 'package' => $package]);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
 }

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kyber-1024 — Encriptar</title>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; background: #f4f4f4; color: #222; padding: 12px; }
+  .header { background: #001f3f; color: #76b900; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-weight: bold; font-size: 14px; }
+  .header small { color: #aaa; font-size: 10px; display: block; margin-top: 2px; }
+  label { display: block; font-weight: bold; margin: 10px 0 4px; font-size: 12px; color: #333; }
+  input, textarea { width: 100%; font-family: monospace; font-size: 11px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+  input { font-family: Arial, sans-serif; font-size: 12px; }
+  .btn { display: block; width: 100%; background: #76b900; color: #fff; border: none; padding: 10px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+  .btn:hover { background: #5a8f00; }
+  .btn:disabled { background: #aaa; cursor: not-allowed; }
+  .btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #ddd; margin-top: 6px; }
+  .ok  { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 6px; padding: 10px; margin-top: 10px; color: #2e7d32; font-size: 12px; display: none; }
+  .err { background: #ffebee; border: 1px solid #ef9a9a; border-radius: 6px; padding: 10px; margin-top: 10px; color: #c62828; font-size: 12px; display: none; }
+  .sk-box { background: #fff3e0; border: 1px solid #ffcc80; border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 11px; display: none; }
+  .sk-box strong { color: #e65100; }
+  .sk-val { font-family: monospace; font-size: 10px; word-break: break-all; background: #fff; border: 1px solid #eee; padding: 6px; border-radius: 4px; margin-top: 4px; max-height: 60px; overflow-y: auto; }
+  .loading { text-align: center; color: #76b900; font-size: 12px; margin-top: 8px; display: none; }
+  .info { background: #e3f2fd; border: 1px solid #90caf9; border-radius: 4px; padding: 8px 10px; font-size: 11px; color: #1565c0; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  🔒 Kyber-1024 Encryption
+  <small>NIST FIPS 203 · AES-256-GCM</small>
+</div>
+
+<div class="info">
+  Encripta o email actual com Kyber-1024.<br>
+  Partilha o <strong>Secret Key</strong> com o destinatário por SMS/WhatsApp.
+</div>
+
+<label>Public Key do Destinatário (base64)</label>
+<textarea id="pub-key" rows="3" placeholder="Cola a public key do destinatário, ou clica em 'Carregar' para buscar do servidor..."></textarea>
+
+<label>Ou email do destinatário (para buscar chave)</label>
+<div style="display:flex;gap:6px;">
+  <input id="recip-email" type="email" placeholder="destinatario@email.com" style="flex:1;">
+  <button class="btn" style="width:auto;padding:8px 12px;margin-top:0;" onclick="loadKey()">Buscar</button>
+</div>
+
+<button class="btn" style="margin-top:12px;" id="gen-btn" onclick="generateKeys()">⚙️ Gerar novo Key Pair</button>
+
+<div class="sk-box" id="sk-box">
+  <strong>⚠️ Guarda o Secret Key!</strong> Envia ao destinatário por SMS/WhatsApp.<br>
+  <div class="sk-val" id="sk-val"></div>
+  <button class="btn btn-secondary" style="margin-top:6px;font-size:11px;padding:6px;" onclick="copySK()">📋 Copiar Secret Key</button>
+</div>
+
+<button class="btn" id="enc-btn" onclick="encrypt()" style="margin-top:12px;">🔒 Encriptar e Substituir Email</button>
+<div class="loading" id="loading">A encriptar...</div>
+
+<div class="ok"  id="ok"></div>
+<div class="err" id="err"></div>
+
+<script>
+let generatedSK = null;
+
+Office.onReady(function() {
+  // Auto-load recipient email from compose
+  try {
+    Office.context.mailbox.item.to.getAsync(function(r) {
+      if (r.status === Office.AsyncResultStatus.Succeeded && r.value.length > 0) {
+        document.getElementById('recip-email').value = r.value[0].emailAddress;
+        loadKey();
+      }
+    });
+  } catch(e) {}
+});
+
+function loadKey() {
+  const email = document.getElementById('recip-email').value.trim();
+  if (!email) return;
+  fetch('https://clawyard.partyard.eu/api/keys/' + encodeURIComponent(email), {
+    credentials: 'include'
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.public_key) {
+      document.getElementById('pub-key').value = d.public_key;
+      showOk('✅ Chave encontrada para ' + email);
+    } else {
+      showErr('Sem chave registada para ' + email + '. Usa "Gerar" para criar um par e partilhar a public key.');
+    }
+  })
+  .catch(() => showErr('Erro ao buscar chave.'));
+}
+
+function generateKeys() {
+  fetch('https://clawyard.partyard.eu/api/keys/generate', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      document.getElementById('pub-key').value = d.public_key;
+      generatedSK = d.secret_key;
+      document.getElementById('sk-val').textContent = d.secret_key;
+      document.getElementById('sk-box').style.display = 'block';
+      showOk('✅ Key pair gerado! Envia o secret key ao destinatário.');
+    } else {
+      showErr(d.error || 'Erro ao gerar chaves.');
+    }
+  })
+  .catch(() => showErr('Erro ao gerar chaves. Certifica-te que estás autenticado em clawyard.partyard.eu.'));
+}
+
+function copySK() {
+  const sk = document.getElementById('sk-val').textContent;
+  navigator.clipboard.writeText(sk).then(() => alert('Secret key copiado!')).catch(() => {
+    prompt('Copia manualmente:', sk);
+  });
+}
+
+async function encrypt() {
+  const pubKey = document.getElementById('pub-key').value.trim();
+  if (!pubKey) return showErr('Precisa de uma public key para encriptar.');
+
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('ok').style.display = 'none';
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('enc-btn').disabled = true;
+
+  try {
+    // Get current email subject and body
+    const [subjectResult, bodyResult, toResult] = await Promise.all([
+      new Promise(r => Office.context.mailbox.item.subject.getAsync(r)),
+      new Promise(r => Office.context.mailbox.item.body.getAsync('text', r)),
+      new Promise(r => Office.context.mailbox.item.to.getAsync(r)),
+    ]);
+
+    const subject = subjectResult.value || '(sem assunto)';
+    const body    = bodyResult.value || '';
+    const to      = toResult.value?.[0]?.emailAddress || '';
+
+    // Encrypt via ClawYard API
+    const r = await fetch('https://clawyard.partyard.eu/api/email/send', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Accept': 'application/json' },
+      body: (() => {
+        const fd = new FormData();
+        fd.append('to', to || 'noreply@clawyard.partyard.eu');
+        fd.append('subject', subject);
+        fd.append('body', body);
+        fd.append('encrypt', '1');
+        return fd;
+      })()
+    });
+
+    // Alternative: use encrypt-only endpoint to get the package
+    const encR = await fetch('https://clawyard.partyard.eu/api/keys/encrypt-body', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ subject, body, public_key: pubKey })
+    });
+
+    const encD = await encR.json();
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('enc-btn').disabled = false;
+
+    if (encD.success) {
+      // Replace email body with encrypted HTML
+      Office.context.mailbox.item.body.setAsync(encD.html, { coercionType: 'html' }, function(result) {
+        if (result.status === Office.AsyncResultStatus.Succeeded) {
+          Office.context.mailbox.item.subject.setAsync('[Encrypted] ' + subject);
+          showOk('✅ Email encriptado com Kyber-1024! O corpo foi substituído.');
+        } else {
+          showErr('Encriptado mas não foi possível substituir o corpo: ' + result.error.message);
+        }
+      });
+    } else {
+      showErr(encD.error || 'Erro ao encriptar.');
+    }
+  } catch(e) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('enc-btn').disabled = false;
+    showErr('Erro: ' + e.message);
+  }
+}
+
+function showOk(msg)  { const el = document.getElementById('ok');  el.textContent = msg; el.style.display = 'block'; }
+function showErr(msg) { const el = document.getElementById('err'); el.textContent = '❌ ' + msg; el.style.display = 'block'; }
+</script>
+</body>
+</html>

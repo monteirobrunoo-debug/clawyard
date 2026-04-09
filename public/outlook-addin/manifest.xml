@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
+           xsi:type="MailApp">
+
+  <Id>a1b2c3d4-e5f6-7890-abcd-ef1234567890</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>SETQ.AI / ClawYard</ProviderName>
+  <DefaultLocale>pt-PT</DefaultLocale>
+  <DisplayName DefaultValue="Kyber-1024 Encryption"/>
+  <Description DefaultValue="Encriptação post-quantum de emails com CRYSTALS-Kyber 1024 + AES-256-GCM (NIST FIPS 203)"/>
+
+  <IconUrl DefaultValue="https://clawyard.partyard.eu/outlook-addin/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://clawyard.partyard.eu/outlook-addin/icon-80.png"/>
+  <SupportUrl DefaultValue="https://clawyard.partyard.eu"/>
+
+  <AppDomains>
+    <AppDomain>https://clawyard.partyard.eu</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.1"/>
+    </Sets>
+  </Requirements>
+
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://clawyard.partyard.eu/outlook-addin/read"/>
+        <RequestedHeight>250</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://clawyard.partyard.eu/outlook-addin/compose"/>
+        <RequestedHeight>250</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+
+  <Permissions>ReadWriteItem</Permissions>
+
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>
+  </Rule>
+
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.3">
+        <bt:Set Name="Mailbox"/>
+      </bt:Sets>
+    </Requirements>
+
+    <Hosts>
+      <Host xsi:type="MailHost">
+
+        <!-- ── READ ── -->
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="msgReadGroup">
+                <Label resid="GroupLabel"/>
+                <Control xsi:type="Button" id="msgReadDecryptBtn">
+                  <Label resid="DecryptBtnLabel"/>
+                  <Supertip>
+                    <Title resid="DecryptBtnTitle"/>
+                    <Description resid="DecryptBtnDesc"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16"/>
+                    <bt:Image size="32" resid="Icon32"/>
+                    <bt:Image size="80" resid="Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>ReadTaskpane</TaskpaneId>
+                    <SourceLocation resid="ReadUrl"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+
+          <!-- ── COMPOSE ── -->
+          <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="msgComposeGroup">
+                <Label resid="GroupLabel"/>
+                <Control xsi:type="Button" id="msgComposeEncryptBtn">
+                  <Label resid="EncryptBtnLabel"/>
+                  <Supertip>
+                    <Title resid="EncryptBtnTitle"/>
+                    <Description resid="EncryptBtnDesc"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon16"/>
+                    <bt:Image size="32" resid="Icon32"/>
+                    <bt:Image size="80" resid="Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>ComposeTaskpane</TaskpaneId>
+                    <SourceLocation resid="ComposeUrl"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+
+      </Host>
+    </Hosts>
+
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon16" DefaultValue="https://clawyard.partyard.eu/outlook-addin/icon-16.png"/>
+        <bt:Image id="Icon32" DefaultValue="https://clawyard.partyard.eu/outlook-addin/icon-32.png"/>
+        <bt:Image id="Icon80" DefaultValue="https://clawyard.partyard.eu/outlook-addin/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="ReadUrl"    DefaultValue="https://clawyard.partyard.eu/outlook-addin/read"/>
+        <bt:Url id="ComposeUrl" DefaultValue="https://clawyard.partyard.eu/outlook-addin/compose"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GroupLabel"       DefaultValue="🔒 Kyber-1024"/>
+        <bt:String id="DecryptBtnLabel"  DefaultValue="🔓 Desencriptar"/>
+        <bt:String id="EncryptBtnLabel"  DefaultValue="🔒 Encriptar"/>
+        <bt:String id="DecryptBtnTitle"  DefaultValue="Desencriptar com Kyber-1024"/>
+        <bt:String id="EncryptBtnTitle"  DefaultValue="Encriptar com Kyber-1024"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="DecryptBtnDesc" DefaultValue="Desencripta mensagens Kyber-1024 + AES-256-GCM recebidas no Outlook."/>
+        <bt:String id="EncryptBtnDesc" DefaultValue="Encripta o email com CRYSTALS-Kyber 1024 antes de enviar."/>
+      </bt:LongStrings>
+    </Resources>
+
+  </VersionOverrides>
+</OfficeApp>

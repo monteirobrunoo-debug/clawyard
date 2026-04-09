@@ -20,6 +20,10 @@ Route::get('/decrypt', function () {
     return view('keys.decrypt');
 });
 
+// Outlook Add-in task panes
+Route::get('/outlook-addin/read',    function () { return response()->file(public_path('outlook-addin/read.html')); });
+Route::get('/outlook-addin/compose', function () { return response()->file(public_path('outlook-addin/compose.html')); });
+
 // Redirect root to dashboard (or login if not authenticated)
 Route::get('/', function () {
     return auth()->check() ? redirect('/dashboard') : redirect('/login');
