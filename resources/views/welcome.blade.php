@@ -1047,6 +1047,22 @@ function setAgentActive(agentName) {
     });
 }
 
+// Sidebar agent click → switch agent
+document.querySelectorAll('.agent-mini').forEach(el => {
+    el.addEventListener('click', () => {
+        const agent = el.dataset.agent;
+        if (agentSelect.querySelector(`option[value="${agent}"]`)) {
+            agentSelect.value = agent;
+        } else {
+            agentSelect.value = 'auto';
+        }
+        renderStarterChips(agentSelect.value);
+        applyAgentColor(agentSelect.value);
+        updateEmptyState(agentSelect.value);
+        setAgentActive(agent);
+    });
+});
+
 function clearAgentActive() {
     document.querySelectorAll('.agent-mini').forEach(el => el.classList.remove('active'));
 }
