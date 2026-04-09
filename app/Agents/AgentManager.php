@@ -28,6 +28,7 @@ class AgentManager
             'patent'    => new PatentAgent(),
             'energy'    => new EnergyAdvisorAgent(),
             'kyber'     => new KyberAgent(),
+            'seascan'   => new SeaScanAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -188,6 +189,19 @@ class AgentManager
         ];
         foreach ($researchKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['research'];
+        }
+
+        // SeaScan / quantum submarine detection keywords
+        $seaScanKeywords = [
+            'seascan', 'sea scan', 'submarine', 'submarino', 'deteção submarina',
+            'sensor quântico marinho', 'sonar quântico', 'qpe submarine', 'squid sensor',
+            'underwater detection', 'deteção subaquática', 'acoustic signature',
+            'assinatura acústica', 'magnetic anomaly', 'anomalia magnética',
+            'cp-aimd', 'electrochemical interface', 'interface eletroquímica',
+            'nó seascan', 'seascan node', '2604.07322',
+        ];
+        foreach ($seaScanKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['seascan'];
         }
 
         return $this->agents['claude'];

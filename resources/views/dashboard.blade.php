@@ -207,6 +207,7 @@
         ['key' => 'patent',      'name' => 'Dra. Sofia IP',         'emoji' => '🏛️', 'role' => 'Propriedade Intelectual — validação de patentes, prior art EPO/USPTO, patenteabilidade e FTO', 'color' => '#8b5cf6'],
         ['key' => 'energy',      'name' => 'Eng. Sofia Energia',    'emoji' => '⚡', 'role' => 'Descarbonização marítima — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H2, Fleet Energy Management', 'color' => '#10b981'],
         ['key' => 'kyber',       'name' => 'KYBER Encryption',      'emoji' => '🔒', 'role' => 'Encriptação post-quantum — Kyber-1024 + AES-256-GCM, geração de chaves e emails encriptados',    'color' => '#76b900'],
+        ['key' => 'seascan',     'name' => 'SeaScan Node',          'emoji' => '🌊', 'role' => 'Sensores quânticos marinhos — deteção submarina QPE, CP-AIMD (arxiv:2604.07322v1), NATO NCAGE P3527', 'color' => '#0e7490'],
     ];
     @endphp
 
