@@ -395,6 +395,7 @@
         <option value="engineer">🔩 Eng. Victor I&amp;D</option>
         <option value="patent">🏛️ Dra. Sofia IP</option>
         <option value="energy">⚡ Eng. Sofia Energia</option>
+        <option value="kyber">🔒 KYBER Encryption</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -447,6 +448,7 @@
                 <div class="agent-mini" data-agent="engineer"><div class="mini-avatar"><span>🔩</span><div class="dot-status"></div></div><span>Eng. Victor I&D</span></div>
                 <div class="agent-mini" data-agent="patent"><div class="mini-avatar"><span>🏛️</span><div class="dot-status"></div></div><span>Dra. Sofia IP</span></div>
                 <div class="agent-mini" data-agent="energy"><div class="mini-avatar"><span>⚡</span><div class="dot-status"></div></div><span>Eng. Sofia Energia</span></div>
+                <div class="agent-mini" data-agent="kyber"><div class="mini-avatar"><span>🔒</span><div class="dot-status"></div></div><span>KYBER Encryption</span></div>
             </div>
         </div>
     </div>
@@ -525,7 +527,7 @@ const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
-    capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️'
+    capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -554,7 +556,8 @@ const AGENT_NAMES = {
     acingov:'Dra. Ana Contratos',
     engineer:'Eng. Victor I&D',
     patent: 'Dra. Sofia IP',
-    energy: 'Eng. Sofia Energia'
+    energy: 'Eng. Sofia Energia',
+    kyber:  'KYBER Encryption'
 };
 
 const AGENT_COLORS = {
@@ -567,7 +570,8 @@ const AGENT_COLORS = {
     acingov:'#f59e0b',
     engineer:'#f97316',
     patent:'#8b5cf6',
-    energy:'#10b981'
+    energy:'#10b981',
+    kyber:'#76b900'
 };
 
 const AGENT_DESCRIPTIONS = {
