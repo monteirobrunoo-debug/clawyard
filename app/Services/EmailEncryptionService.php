@@ -223,8 +223,8 @@ class EmailEncryptionService
 <tr><td align="center" style="padding:20px 12px;">
   <div class="wrapper">
     <div class="header">
-      <p>🐾 ClawYard</p>
-      <small>Mensagem encriptada · Kyber-1024 + AES-256-GCM</small>
+      <p>🔒 Secure Channel</p>
+      <small>Kyber-1024 / AES-256-GCM / NIST FIPS 203 Compliant</small>
     </div>
     <div class="content">
       <span class="badge">🔒 MENSAGEM ENCRIPTADA</span>
