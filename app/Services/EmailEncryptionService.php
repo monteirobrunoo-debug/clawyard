@@ -234,7 +234,14 @@ class EmailEncryptionService
       <a class="cta-btn" href="{$decryptUrl}" target="_blank">🔓 Abrir e Desencriptar →</a>
 
       <p style="font-size:12px;color:#999;margin:0 0 6px">Em alternativa, copia o bloco abaixo e cola em <a href="{$appUrl}/decrypt" style="color:#76b900">{$appUrl}/decrypt</a></p>
-      <div class="blob-box">{$json}</div>
+      <div style="position:relative;">
+        <div class="blob-box" id="json-blob">{$json}</div>
+        <button onclick="
+          var t=document.getElementById('json-blob').innerText;
+          if(navigator.clipboard){navigator.clipboard.writeText(t).then(function(){var b=document.getElementById('copy-btn');b.textContent='✅ Copiado!';setTimeout(function(){b.textContent='📋 Copiar JSON';},2000)});}
+          else{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);var b=document.getElementById('copy-btn');b.textContent='✅ Copiado!';setTimeout(function(){b.textContent='📋 Copiar JSON';},2000);}
+        " id="copy-btn" style="margin-top:8px;background:#f0f0f0;color:#333;border:1px solid #ddd;padding:8px 20px;border-radius:6px;font-size:13px;cursor:pointer;width:100%;">📋 Copiar JSON</button>
+      </div>
     </div>
     <div class="footer">
       ClawYard · IT Partyard LDA · Setúbal, Portugal
