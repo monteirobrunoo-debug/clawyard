@@ -69,7 +69,7 @@
 <script>
 const csrf = document.querySelector('meta[name="csrf-token"]').content;
 
-// Auto-fill JSON from URL hash (set by email link)
+// Auto-fill JSON from URL hash (set by email link) + auto-copy to clipboard
 window.addEventListener('DOMContentLoaded', function() {
     const hash = location.hash.slice(1);
     if (hash) {
@@ -77,6 +77,17 @@ window.addEventListener('DOMContentLoaded', function() {
             const json = atob(hash);
             JSON.parse(json); // validate
             document.getElementById('pkg').value = json;
+
+            // Auto-copy to clipboard
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(json).then(function() {
+                    const notice = document.createElement('div');
+                    notice.textContent = '📋 JSON copiado para o clipboard!';
+                    notice.style.cssText = 'background:#e8f5e9;border:1px solid #a5d6a7;color:#2e7d32;padding:10px 16px;border-radius:6px;margin-bottom:12px;font-size:13px;text-align:center;';
+                    document.querySelector('.card').insertBefore(notice, document.querySelector('label'));
+                    setTimeout(() => notice.remove(), 4000);
+                }).catch(() => {});
+            }
         } catch(e) {}
     }
 });
