@@ -1744,7 +1744,15 @@ async function kyberSendCompose(id, btn) {
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
             body: JSON.stringify({ to, subject, body, generate_key: true })
         });
-        const d = await r.json();
+        const rawText = await r.text();
+        console.log('[KyberCompose] HTTP', r.status, rawText.substring(0, 500));
+        let d;
+        try { d = JSON.parse(rawText); }
+        catch(parseErr) {
+            const card = document.getElementById(id);
+            card.innerHTML = `<div style="padding:16px;color:#ff4444;font-size:13px;">❌ Resposta inválida do servidor (HTTP ${r.status}).<br><pre style="font-size:10px;margin-top:8px;color:#aaa;white-space:pre-wrap;word-break:break-all">${rawText.substring(0,300)}</pre></div>`;
+            return;
+        }
         if (d.success) {
             // Replace entire card with result view
             const card = document.getElementById(id);
@@ -1782,16 +1790,22 @@ async function kyberSendCompose(id, btn) {
             `;
             card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         } else {
-            btn.disabled = false;
-            btn.textContent = '🔒 Encriptar & Enviar';
-            statusEl.className = 'kyber-status err';
-            statusEl.textContent = '❌ ' + (d.error || 'Erro ao enviar');
+            const card = document.getElementById(id);
+            card.innerHTML = `<div style="padding:16px;">
+                <div style="color:#ff4444;font-size:13px;font-weight:600;margin-bottom:8px;">❌ Erro ao enviar</div>
+                <div style="color:#aaa;font-size:12px;">${esc(d.error || 'Erro desconhecido')}</div>
+                <button onclick="location.reload()" style="margin-top:12px;background:none;border:1px solid #555;color:#aaa;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;">Tentar de novo</button>
+            </div>`;
         }
     } catch(e) {
-        btn.disabled = false;
-        btn.textContent = '🔒 Encriptar & Enviar';
-        statusEl.className = 'kyber-status err';
-        statusEl.textContent = '❌ Erro de ligação: ' + e.message;
+        console.error('[KyberCompose] catch:', e);
+        const card = document.getElementById(id);
+        if (card) {
+            card.innerHTML = `<div style="padding:16px;">
+                <div style="color:#ff4444;font-size:13px;font-weight:600;margin-bottom:8px;">❌ Erro de ligação</div>
+                <div style="color:#aaa;font-size:12px;">${esc(e.message)}</div>
+            </div>`;
+        }
     }
 }
 
