@@ -60,27 +60,27 @@
         @keyframes spin { to { transform:rotate(360deg); } }
         @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
-        /* Agent live status */
-        .agent-live { padding:8px 12px; border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; }
-        .agent-live .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
-        .agent-cards-mini { display:flex; flex-direction:column; gap:2px; }
-        .agent-mini { display:flex; align-items:center; gap:9px; padding:5px 8px; border-radius:8px; font-size:12px; color:var(--muted); cursor:pointer; transition:background .12s, color .12s; }
-        .agent-mini:hover { background:var(--bg3); color:#bbb; }
-        .agent-mini.active { background:var(--bg3); color:var(--text); }
-        .agent-mini .mini-avatar {
-            width:28px; height:28px; border-radius:50%; flex-shrink:0;
-            display:flex; align-items:center; justify-content:center;
-            font-size:14px; background:var(--bg3); border:1.5px solid var(--border2);
-            overflow:hidden; position:relative; transition:border-color .15s;
+        /* Agent live status — compact 4-column grid */
+        .agent-live { padding:8px; border-top:1px solid var(--border); flex-shrink:0; background:var(--bg); }
+        .agent-live .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; padding:0 2px; }
+        .agent-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; }
+        .agent-grid-item {
+            position:relative; display:flex; flex-direction:column; align-items:center;
+            justify-content:center; gap:2px; padding:7px 2px 5px;
+            border-radius:8px; cursor:pointer;
+            background:var(--bg3); border:1.5px solid transparent;
+            transition:border-color .12s, background .12s;
         }
-        .agent-mini .mini-avatar img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
-        .agent-mini.active .mini-avatar { border-color:var(--green); }
-        .agent-mini .mini-avatar .dot-status {
-            position:absolute; bottom:0; right:0;
-            width:8px; height:8px; border-radius:50%;
-            background:var(--muted2); border:1.5px solid var(--bg2);
-        }
-        .agent-mini.active .mini-avatar .dot-status { background:var(--green); box-shadow:0 0 4px var(--green); animation:pulse-dot 1.5s infinite; }
+        .agent-grid-item:hover { border-color:var(--border2); background:#1f1f1f; }
+        .agent-grid-item.active { border-color:var(--agent-color); background:#0a1800; }
+        .agent-grid-item .ag-icon { font-size:17px; line-height:1; }
+        .agent-grid-item .ag-name { font-size:8.5px; color:var(--muted); text-align:center; max-width:56px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.2; }
+        .agent-grid-item.active .ag-name { color:#ccc; }
+        .agent-grid-item .ag-dot { position:absolute; top:3px; right:4px; width:5px; height:5px; border-radius:50%; background:var(--muted2); }
+        .agent-grid-item.active .ag-dot { background:var(--green); box-shadow:0 0 3px var(--green); animation:pulse-dot 1.5s infinite; }
+        /* Activity step per agent */
+        .agent-grid-item .ag-status { font-size:7.5px; color:#555; text-align:center; max-width:56px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.2; display:none; }
+        .agent-grid-item.active .ag-status { display:block; color:var(--green); }
         @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
         /* ── CHAT AREA ── */
@@ -431,24 +431,26 @@
             </div>
         </div>
         <div class="agent-live">
-            <div class="lbl">Agentes Disponíveis</div>
-            <div class="agent-cards-mini" id="agent-status-list">
-                <div class="agent-mini" data-agent="sales"><div class="mini-avatar"><img src="/images/agents/sales.png" alt=""><div class="dot-status"></div></div><span>Marco Sales</span></div>
-                <div class="agent-mini" data-agent="support"><div class="mini-avatar"><img src="/images/agents/support.png" alt=""><div class="dot-status"></div></div><span>Marcus Suporte</span></div>
-                <div class="agent-mini" data-agent="email"><div class="mini-avatar"><img src="/images/agents/email.png" alt=""><div class="dot-status"></div></div><span>Daniel Email</span></div>
-                <div class="agent-mini" data-agent="sap"><div class="mini-avatar"><img src="/images/agents/sap.png" alt=""><div class="dot-status"></div></div><span>Richard SAP</span></div>
-                <div class="agent-mini" data-agent="document"><div class="mini-avatar"><img src="/images/agents/document.png" alt=""><div class="dot-status"></div></div><span>Comandante Doc</span></div>
-                <div class="agent-mini" data-agent="claude"><div class="mini-avatar"><img src="/images/agents/claude.png" alt=""><div class="dot-status"></div></div><span>Bruno AI</span></div>
-                <div class="agent-mini" data-agent="nvidia"><div class="mini-avatar"><img src="/images/agents/nvidia.png" alt=""><div class="dot-status"></div></div><span>Carlos NVIDIA</span></div>
-                <div class="agent-mini" data-agent="aria"><div class="mini-avatar"><img src="/images/agents/aria.png" alt=""><div class="dot-status"></div></div><span>ARIA Security</span></div>
-                <div class="agent-mini" data-agent="quantum"><div class="mini-avatar"><img src="/images/agents/quantum.png" alt=""><div class="dot-status"></div></div><span>Prof. Quantum Leap</span></div>
-                <div class="agent-mini" data-agent="finance"><div class="mini-avatar"><img src="/images/agents/finance.png" alt=""><div class="dot-status"></div></div><span>Dr. Luís Financeiro</span></div>
-                <div class="agent-mini" data-agent="research"><div class="mini-avatar"><img src="/images/agents/maritime.png" alt=""><div class="dot-status"></div></div><span>Marina Research</span></div>
-                <div class="agent-mini" data-agent="acingov"><div class="mini-avatar"><img src="/images/agents/acingov.png" alt=""><div class="dot-status"></div></div><span>Dra. Ana Contratos</span></div>
-                <div class="agent-mini" data-agent="engineer"><div class="mini-avatar"><span>🔩</span><div class="dot-status"></div></div><span>Eng. Victor I&D</span></div>
-                <div class="agent-mini" data-agent="patent"><div class="mini-avatar"><span>🏛️</span><div class="dot-status"></div></div><span>Dra. Sofia IP</span></div>
-                <div class="agent-mini" data-agent="energy"><div class="mini-avatar"><span>⚡</span><div class="dot-status"></div></div><span>Eng. Sofia Energia</span></div>
-                <div class="agent-mini" data-agent="kyber"><div class="mini-avatar"><span>🔒</span><div class="dot-status"></div></div><span>KYBER Encryption</span></div>
+            <div class="lbl">Agentes · clica para selecionar</div>
+            <div class="agent-grid" id="agent-grid">
+                <div class="agent-grid-item" data-agent="auto"       title="Auto Route"><span class="ag-icon">🤖</span><span class="ag-name">Auto</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="sales"      title="Marco Sales"><span class="ag-icon">💼</span><span class="ag-name">Marco</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="support"    title="Marcus Suporte"><span class="ag-icon">🔧</span><span class="ag-name">Marcus</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="email"      title="Daniel Email"><span class="ag-icon">📧</span><span class="ag-name">Daniel</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="sap"        title="Richard SAP"><span class="ag-icon">📊</span><span class="ag-name">Richard</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="document"   title="Comandante Doc"><span class="ag-icon">📄</span><span class="ag-name">Doc</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="claude"     title="Bruno AI"><span class="ag-icon">🧠</span><span class="ag-name">Bruno</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="nvidia"     title="Carlos NVIDIA"><span class="ag-icon">⚡</span><span class="ag-name">Carlos</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="aria"       title="ARIA Security"><span class="ag-icon">🔐</span><span class="ag-name">ARIA</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="quantum"    title="Prof. Quantum Leap"><span class="ag-icon">⚛️</span><span class="ag-name">Quantum</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="finance"    title="Dr. Luís Financeiro"><span class="ag-icon">💰</span><span class="ag-name">Luís</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="research"   title="Marina Research"><span class="ag-icon">🔍</span><span class="ag-name">Marina</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="acingov"    title="Dra. Ana Contratos"><span class="ag-icon">🏛️</span><span class="ag-name">Ana</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="engineer"   title="Eng. Victor I&D"><span class="ag-icon">🔩</span><span class="ag-name">Victor</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="patent"     title="Dra. Sofia IP"><span class="ag-icon">🏛️</span><span class="ag-name">Sofia IP</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="energy"     title="Eng. Sofia Energia"><span class="ag-icon">🌱</span><span class="ag-name">Energia</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon">🔒</span><span class="ag-name">KYBER</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="capitao"    title="Capitão Porto"><span class="ag-icon">⚓</span><span class="ag-name">Capitão</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
             </div>
         </div>
     </div>
@@ -593,6 +595,8 @@ const AGENT_DESCRIPTIONS = {
     engineer: 'I&D e desenvolvimento de produto — planos, TRL, CAPEX e roadmap para novos equipamentos PartYard',
     patent:   'Propriedade Intelectual — validação de patentes, prior art EPO/USPTO/WIPO, patenteabilidade e Freedom to Operate',
     energy:   'Descarbonização marítima — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H₂, Fleet Energy Management (PeerJ CS 3625)',
+    kyber:    'Encriptação post-quantum de emails — CRYSTALS-Kyber 1024 + AES-256-GCM (NIST FIPS 203)',
+    capitao:  'Operações portuárias, escalas, documentação e logística marítima',
 };
 
 const AGENT_CHIPS = {
@@ -758,6 +762,15 @@ const AGENT_CHIPS = {
         '⚓ Documentação completa para exportação de peças via sea freight para Pireu (Grécia)',
         '⚓ Inspeção Port State Control (Paris MOU) amanhã — checklist de preparação para o Chief',
     ],
+    // ── KYBER Encryption ──────────────────────────────────────────────────
+    kyber: [
+        '🔒 Gera um par de chaves Kyber-1024 para mim e explica como guardar o secret key',
+        '🔒 Explica como enviar um email encriptado com Kyber-1024 passo a passo',
+        '🔒 O que é o CRYSTALS-Kyber? Porque é resistente a computadores quânticos?',
+        '🔒 Como funciona o esquema KEM + AES-256-GCM usado nos emails encriptados?',
+        '🔒 Como instalar a extensão Kyber no Outlook para Mac e Windows?',
+        '🔒 Qual a diferença entre Kyber-512, Kyber-768 e Kyber-1024? Qual usar?',
+    ],
 };
 
 function applyAgentColor(agent) {
@@ -825,9 +838,14 @@ if (urlAgent && agentSelect.querySelector(`option[value="${urlAgent}"]`)) {
 }
 
 // Init on page load (after URL agent is applied)
-renderStarterChips(agentSelect.value || 'auto');
-applyAgentColor(agentSelect.value || 'auto');
-updateEmptyState(agentSelect.value || 'auto');
+const initAgent = agentSelect.value || 'auto';
+renderStarterChips(initAgent);
+applyAgentColor(initAgent);
+updateEmptyState(initAgent);
+// Mark initial agent in grid
+document.querySelectorAll('.agent-grid-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.agent === initAgent);
+});
 
 // Update when agent changes
 agentSelect.addEventListener('change', () => {
@@ -835,6 +853,11 @@ agentSelect.addEventListener('change', () => {
     renderStarterChips(agent);
     applyAgentColor(agent);
     updateEmptyState(agent);
+    document.querySelectorAll('.agent-grid-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.agent === agent);
+        const statusEl = el.querySelector('.ag-status');
+        if (statusEl && el.dataset.agent !== agent) statusEl.textContent = 'pronto';
+    });
 });
 
 // ── Toggle activity panel ──
@@ -1042,13 +1065,26 @@ function resolveStep(step, icon = '✅') {
 }
 
 function setAgentActive(agentName) {
-    document.querySelectorAll('.agent-mini').forEach(el => {
-        el.classList.toggle('active', el.dataset.agent === agentName);
+    document.querySelectorAll('.agent-grid-item').forEach(el => {
+        const isActive = el.dataset.agent === agentName;
+        el.classList.toggle('active', isActive);
+        const statusEl = el.querySelector('.ag-status');
+        if (statusEl) statusEl.textContent = isActive ? 'a trabalhar…' : 'pronto';
+    });
+}
+
+function setAgentDone(agentName) {
+    document.querySelectorAll('.agent-grid-item').forEach(el => {
+        if (el.dataset.agent === agentName) {
+            el.classList.remove('active');
+            const statusEl = el.querySelector('.ag-status');
+            if (statusEl) statusEl.textContent = 'pronto';
+        }
     });
 }
 
 // Sidebar agent click → switch agent
-document.querySelectorAll('.agent-mini').forEach(el => {
+document.querySelectorAll('.agent-grid-item').forEach(el => {
     el.addEventListener('click', () => {
         const agent = el.dataset.agent;
         if (agentSelect.querySelector(`option[value="${agent}"]`)) {
@@ -1059,12 +1095,18 @@ document.querySelectorAll('.agent-mini').forEach(el => {
         renderStarterChips(agentSelect.value);
         applyAgentColor(agentSelect.value);
         updateEmptyState(agentSelect.value);
-        setAgentActive(agent);
+        // Mark selected (not active/working — just selected)
+        document.querySelectorAll('.agent-grid-item').forEach(e => e.classList.remove('active'));
+        el.classList.add('active');
     });
 });
 
 function clearAgentActive() {
-    document.querySelectorAll('.agent-mini').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.agent-grid-item').forEach(el => {
+        el.classList.remove('active');
+        const statusEl = el.querySelector('.ag-status');
+        if (statusEl) statusEl.textContent = 'pronto';
+    });
 }
 
 // ═══════════════════════════════
@@ -1570,7 +1612,8 @@ async function sendMessage() {
     // ── Activity log ──
     logActivity('📨', 'Mensagem recebida: "' + text.substring(0,50) + (text.length>50?'…':'') + '"', 'done');
     const stepRAG   = logActivity('📚', 'A consultar base de conhecimento (RAG)…');
-    const stepAgent = logActivity('🤖', 'A encaminhar para agente ' + (AGENT_NAMES[selectedAgent]||selectedAgent) + '…');
+    const agentEmoji = AGENT_EMOJIS[selectedAgent] || '🤖';
+    const stepAgent = logActivity(agentEmoji, (AGENT_NAMES[selectedAgent]||selectedAgent) + ' a processar…');
     setAgentActive(selectedAgent);
     modelBadge.textContent = '⏳ ' + (AGENT_NAMES[selectedAgent]||selectedAgent);
 
@@ -1661,8 +1704,9 @@ async function sendMessage() {
 
                 const agentKey = evt.agent || selectedAgent;
 
-                // Apply agent color
+                // Apply agent color and mark correct grid item active
                 applyAgentColor(agentKey);
+                if (agentKey !== selectedAgent) setAgentActive(agentKey);
 
                 // Log agent actions
                 if (evt.agent_log) {
