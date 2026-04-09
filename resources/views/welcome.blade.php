@@ -1295,8 +1295,11 @@ function useSuggestion(btn, agentName) {
     const text = btn.textContent;
     // Remove emoji prefix for input
     input.value = text.replace(/^[\p{Emoji}\s]+/u, '').trim() || text;
-    // Auto-select the matching agent
-    if (text.includes('email') || text.includes('Email')) agentSelect.value = 'email';
+    // Switch to the agent that generated this suggestion
+    if (agentName && agentSelect.querySelector(`option[value="${agentName}"]`)) {
+        agentSelect.value = agentName;
+        setAgentActive(agentName);
+    }
     btn.closest('.message').remove();
     sendMessage();
 }

@@ -593,14 +593,27 @@ class NvidiaController extends Controller
                 '💡 Professor\'s strategic insight',
                 '🔬 Analisar paper específico do arXiv',
             ],
+            'kyber'    => [
+                '🔒 Gerar par de chaves Kyber-1024',
+                '📧 Encriptar e enviar email',
+                '🔓 Como desencriptar um email recebido?',
+                '🛡️ Explica o esquema KEM + AES-256-GCM',
+            ],
+            'maritime' => [
+                '🚢 Ver portos disponíveis',
+                '📊 Analisar concorrentes',
+                '📧 Contactar armador por email',
+                '🗺️ Ver rotas marítimas',
+            ],
+            'auto'     => [
+                '📧 Criar email sobre este tema',
+                '📊 Análise mais detalhada',
+                '🔄 Reformular',
+                '🚢 Pesquisar portos relacionados',
+            ],
         ];
 
-        $default = [
-            '📧 Criar email sobre este tema',
-            '📊 Análise mais detalhada',
-            '🔄 Reformular',
-            '🚢 Pesquisar portos relacionados',
-        ];
+        $default = $suggestions['auto'];
 
         $list = $suggestions[$agent] ?? $default;
         shuffle($list);
