@@ -254,7 +254,7 @@ PROMPT;
             'headers' => $this->headersForMessage($augmented),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 8192,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -292,7 +292,7 @@ PROMPT;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 8192,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
@@ -324,7 +324,7 @@ PROMPT;
                     }
                 }
             }
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
+            if ($heartbeat && (time() - $lastBeat) >= 3) {
                 $heartbeat('Eng. Victor a planear');
                 $lastBeat = time();
             }

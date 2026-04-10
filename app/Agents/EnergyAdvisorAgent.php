@@ -409,7 +409,7 @@ MSG;
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 8192,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -437,7 +437,7 @@ MSG;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 8192,
+                'max_tokens' => 4096,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
@@ -469,7 +469,7 @@ MSG;
                     }
                 }
             }
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
+            if ($heartbeat && (time() - $lastBeat) >= 3) {
                 $heartbeat('Eng. Sofia a calcular');
                 $lastBeat = time();
             }
