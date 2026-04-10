@@ -58,14 +58,14 @@ class WebSearchService
             $answer  = $data['answer'] ?? null;
 
             if ($answer) {
-                $lines[] = "**Summary:** {$answer}";
+                $lines[] = "**Summary:** " . $this->safeUtf8($answer);
                 $lines[] = '';
             }
 
             foreach ($data['results'] ?? [] as $i => $r) {
-                $title   = $r['title']   ?? 'No title';
-                $url     = $r['url']     ?? '';
-                $content = substr($r['content'] ?? '', 0, 400);
+                $title   = $this->safeUtf8($r['title']   ?? 'No title');
+                $url     = $this->safeUtf8($r['url']     ?? '');
+                $content = mb_substr($this->safeUtf8($r['content'] ?? ''), 0, 400);
                 $score   = isset($r['score']) ? round($r['score'] * 100) . '%' : '';
                 $lines[] = ($i + 1) . ". **{$title}** {$score}";
                 $lines[] = "   URL: {$url}";
@@ -95,5 +95,18 @@ class WebSearchService
     public function deepSearch(string $query): string
     {
         return $this->search($query, 8, 'advanced');
+    }
+
+    /**
+     * Sanitize a string to valid UTF-8, replacing or removing invalid byte sequences.
+     * Prevents "Malformed UTF-8" errors when Guzzle JSON-encodes the API request body.
+     */
+    private function safeUtf8(string $str): string
+    {
+        // Convert from detected encoding to UTF-8; ignore/replace invalid sequences
+        $converted = @mb_convert_encoding($str, 'UTF-8', 'UTF-8');
+        // As a second pass, strip any remaining invalid bytes via iconv
+        $clean = @iconv('UTF-8', 'UTF-8//IGNORE', $converted ?? $str);
+        return $clean !== false ? $clean : '';
     }
 }

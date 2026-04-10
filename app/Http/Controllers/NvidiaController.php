@@ -323,7 +323,7 @@ class NvidiaController extends Controller
                     'agents'     => array_column($results, 'agent'),
                     'session_id' => $sessionId,
                 ];
-                echo 'data: ' . json_encode($meta) . "\n\n";
+                echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                 flush();
 
                 // Single chunk with full reply
@@ -382,7 +382,7 @@ class NvidiaController extends Controller
                 'agent_log'   => $resolvedAgentLog,
                 'suggestions' => $suggestions,
             ];
-            echo 'data: ' . json_encode($meta) . "\n\n";
+            echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
             flush();
 
             // Heartbeat: keeps Nginx/Cloudflare alive during slow external fetches
@@ -411,7 +411,7 @@ class NvidiaController extends Controller
                 $errMsg = app()->environment('production')
                     ? 'Erro ao processar: ' . $e->getMessage()
                     : $e->getMessage();
-                echo 'data: ' . json_encode(['error' => $errMsg]) . "\n\n";
+                echo 'data: ' . json_encode(['error' => $errMsg], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                 flush();
                 echo "data: [DONE]\n\n";
                 flush();
