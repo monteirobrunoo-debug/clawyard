@@ -8,6 +8,7 @@ use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Models\Discovery;
 use App\Models\Report;
+use App\Services\PatentPdfService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -440,10 +441,35 @@ MSG;
                     }
                 }
             }
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
+            if ($heartbeat && (time() - $lastBeat) >= 3) {
                 $heartbeat('Dra. Sofia a analisar');
                 $lastBeat = time();
             }
+        }
+
+        // ── Auto-download PDFs found in the response ───────────────────────
+        try {
+            $pdfService = new PatentPdfService();
+            $patents    = $pdfService->extractPatentNumbers($full);
+            if ($patents) {
+                if ($heartbeat) $heartbeat('a fazer download de ' . count($patents) . ' patente(s) em PDF');
+                $results  = $pdfService->downloadMultiple($patents);
+                $ok       = array_filter($results);
+                $failed   = array_diff_key($results, $ok);
+
+                $summary = "\n\n---\n📥 **PDFs descarregados automaticamente:** " . count($ok) . "/" . count($patents);
+                foreach ($ok as $pn => $path) {
+                    $summary .= "\n- ✅ [{$pn}](/patents/download/{$pn})";
+                }
+                foreach (array_keys($failed) as $pn) {
+                    $summary .= "\n- ⚠️ {$pn} — não disponível online";
+                }
+
+                $onChunk($summary);
+                $full .= $summary;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('PatentAgent PDF download failed: ' . $e->getMessage());
         }
 
         return $full;

@@ -9,6 +9,8 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\SapTableController;
 use Illuminate\Support\Facades\Route;
+use App\Services\PatentPdfService;
+use Illuminate\Support\Facades\Storage;
 
 // Kyber-1024 key management UI
 Route::get('/keys', function () {
@@ -33,6 +35,28 @@ Route::get('/outlook-addin/compose', function () { return response()->file(publi
 Route::get('/', function () {
     return auth()->check() ? redirect('/dashboard') : redirect('/login');
 });
+
+// ─── Patent PDF routes ────────────────────────────────────────────────────
+
+// List all downloaded patents
+Route::get('/patents', function () {
+    $svc  = new PatentPdfService();
+    $list = $svc->listDownloaded();
+    return response()->json($list);
+})->middleware(['auth']);
+
+// Download a specific patent PDF
+Route::get('/patents/download/{patent}', function (string $patent) {
+    $patent = strtoupper(preg_replace('/[^A-Z0-9\/\-]/', '', $patent));
+    $path   = 'patents/' . $patent . '.pdf';
+    if (!Storage::disk('local')->exists($path)) {
+        abort(404, 'Patent PDF not found');
+    }
+    return response()->file(
+        Storage::disk('local')->path($path),
+        ['Content-Type' => 'application/pdf', 'Content-Disposition' => 'inline; filename="' . $patent . '.pdf"']
+    );
+})->middleware(['auth']);
 
 // SAP diagnostic — temporary, remove after fix
 Route::get('/sap-diag', function () {
