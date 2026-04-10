@@ -36,29 +36,46 @@ class PatentPdfService
 
     /**
      * Extract all patent numbers from a text string.
-     * Supports: US1234567B2, EP1234567A1, WO2023/123456, PT1234567
+     * Supports:
+     *   US1234567B2, US 1234567 B2  (USPTO)
+     *   EP1234567A1, EP 1234567     (EPO — with or without kind code)
+     *   WO2023/123456, WO2023123456 (WIPO PCT)
+     *   PT1234567                   (INPI Portugal)
+     *   EPO:EP1234567B1             (EPO_NUMBER field format from QuantumAgent)
      */
     public function extractPatentNumbers(string $text): array
     {
         $patterns = [
+            // EPO_NUMBER= format from QuantumAgent: EPO_NUMBER=EP1234567B1
+            'EPO_FIELD' => '/EPO_NUMBER\s*[=:]\s*([A-Z]{2}\s*\d{5,10}\s*[A-Z]\d?)/i',
+            // EPO: prefix format: EPO:EP1234567B1
+            'EPO_PREFIX' => '/EPO\s*:\s*([A-Z]{2}\s*\d{5,10}\s*[A-Z]\d?)/i',
+            // Standard US with kind code
             'US' => '/\b(US\s*\d{6,8}\s*[A-Z]\d?)\b/i',
-            'EP' => '/\b(EP\s*\d{6,8}\s*[A-Z]\d?)\b/i',
-            'WO' => '/\b(WO\s*\d{4}[\/\-]\d{5,6})\b/i',
-            'PT' => '/\b(PT\s*\d{5,7}\s*[A-Z]?)\b/i',
+            // EP with optional kind code
+            'EP' => '/\b(EP\s*\d{5,8}(?:\s*[A-Z]\d?)?)\b/i',
+            // WO/PCT
+            'WO' => '/\b(WO\s*\d{4}\s*[\/\-]?\s*\d{5,6})\b/i',
+            // PT
+            'PT' => '/\b(PT\s*\d{5,7}(?:\s*[A-Z])?)\b/i',
         ];
 
         $found = [];
-        foreach ($patterns as $type => $pattern) {
+        foreach ($patterns as $pattern) {
             if (preg_match_all($pattern, $text, $matches)) {
                 foreach ($matches[1] as $m) {
-                    $clean = strtoupper(preg_replace('/\s+/', '', $m));
-                    if (!in_array($clean, $found)) {
+                    $clean = strtoupper(preg_replace('/[\s\-]/', '', $m));
+                    // Normalise WO: WO2023123456 → WO2023/123456
+                    if (str_starts_with($clean, 'WO') && !str_contains($clean, '/')) {
+                        $clean = 'WO' . substr($clean, 2, 4) . '/' . substr($clean, 6);
+                    }
+                    if (!in_array($clean, $found) && strlen($clean) >= 7) {
                         $found[] = $clean;
                     }
                 }
             }
         }
-        return $found;
+        return array_values(array_unique($found));
     }
 
     /**
@@ -162,24 +179,35 @@ class PatentPdfService
         return $this->downloadGooglePatents($patentNumber);
     }
 
-    // ─── EP Patent (EPO Espacenet) ─────────────────────────────────────────
+    // ─── EP Patent (EPO) ──────────────────────────────────────────────────
 
     protected function downloadEp(string $patentNumber): ?string
     {
-        // EP1234567A1 → EP1234567A1
-        $url = "https://worldwide.espacenet.com/patent/pdf/{$patentNumber}";
+        // Try Google Patents first (most reliable for EP)
+        $pdf = $this->downloadGooglePatents($patentNumber);
+        if ($pdf) return $pdf;
 
+        // Try EPO OPS v3.2 fulltext endpoint (no auth needed for bibliographic data)
         try {
-            $response = $this->http->get($url);
+            $url      = "https://ops.epo.org/3.2/rest-services/published-data/publication/epodoc/{$patentNumber}/fulltext";
+            $response = $this->http->get($url, ['headers' => ['Accept' => 'application/pdf']]);
             $body     = (string) $response->getBody();
-            if (str_starts_with($body, '%PDF')) {
-                return $body;
-            }
+            if (str_starts_with($body, '%PDF')) return $body;
         } catch (\Throwable $e) {
-            Log::info("PatentPdf EP Espacenet failed: " . $e->getMessage());
+            Log::info("PatentPdf EPO OPS failed for {$patentNumber}: " . $e->getMessage());
         }
 
-        return $this->downloadGooglePatents($patentNumber);
+        // Try Espacenet direct PDF (works for some numbers)
+        try {
+            $url      = "https://worldwide.espacenet.com/patent/pdf/{$patentNumber}";
+            $response = $this->http->get($url);
+            $body     = (string) $response->getBody();
+            if (str_starts_with($body, '%PDF')) return $body;
+        } catch (\Throwable $e) {
+            Log::info("PatentPdf Espacenet failed for {$patentNumber}: " . $e->getMessage());
+        }
+
+        return null;
     }
 
     // ─── WO Patent (WIPO PatentScope) ─────────────────────────────────────
