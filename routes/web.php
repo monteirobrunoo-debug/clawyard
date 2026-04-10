@@ -38,6 +38,11 @@ Route::get('/', function () {
 
 // ─── Patent PDF routes ────────────────────────────────────────────────────
 
+// Patent library page
+Route::get('/patents/library', function () {
+    return view('patents.index');
+})->middleware(['auth'])->name('patents.library');
+
 // List all downloaded patents
 Route::get('/patents', function () {
     $svc  = new PatentPdfService();
