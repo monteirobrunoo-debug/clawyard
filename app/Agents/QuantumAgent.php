@@ -8,6 +8,7 @@ use App\Agents\Traits\WebSearchTrait;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PatentPdfService;
 
 class QuantumAgent implements AgentInterface
 {
@@ -665,8 +666,8 @@ MSG;
                     }
                 }
             }
-            // Heartbeat every 10s during Claude streaming to keep Nginx alive
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
+            // Heartbeat every 3s to keep mobile connections alive
+            if ($heartbeat && (time() - $lastBeat) >= 3) {
                 $heartbeat('streaming');
                 $lastBeat = time();
             }
@@ -677,6 +678,30 @@ MSG;
                 \Log::warning('QuantumAgent stream: could not save discoveries — ' . $e->getMessage());
             }
             $this->saveDigestReport($full);
+        }
+
+        // ── Auto-download patent PDFs found in the response ────────────────
+        try {
+            $pdfService = new PatentPdfService();
+            $patents    = $pdfService->extractPatentNumbers($full);
+            if ($patents) {
+                if ($heartbeat) $heartbeat('a fazer download de ' . count($patents) . ' patente(s) em PDF');
+                $results = $pdfService->downloadMultiple($patents);
+                $ok      = array_filter($results);
+                $failed  = array_diff_key($results, $ok);
+
+                $summary = "\n\n---\n📥 **PDFs descarregados:** " . count($ok) . "/" . count($patents);
+                foreach ($ok as $pn => $path) {
+                    $summary .= "\n- ✅ [{$pn}](/patents/download/{$pn})";
+                }
+                foreach (array_keys($failed) as $pn) {
+                    $summary .= "\n- ⚠️ {$pn} — não disponível online";
+                }
+                $onChunk($summary);
+                $full .= $summary;
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent PDF download: ' . $e->getMessage());
         }
 
         return trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $full));
