@@ -573,6 +573,7 @@ const AGENT_PHOTOS = {
     quantum:      '/images/agents/quantum.png',
     finance:      '/images/agents/finance.png',
     research:     '/images/agents/maritime.png',
+    capitao:      '/images/agents/maritime.png',
     acingov:      '/images/agents/acingov.png',
 };
 

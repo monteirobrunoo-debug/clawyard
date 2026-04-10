@@ -196,7 +196,7 @@
         ['key' => 'email',       'name' => 'Daniel Email',          'emoji' => '📧', 'role' => 'Email marítimo — armadores, agentes e navios',                                          'color' => '#8b5cf6'],
         ['key' => 'sap',         'name' => 'Richard SAP',           'emoji' => '📊', 'role' => 'SAP B1 — stock, facturas e ERP',                                                        'color' => '#06b6d4'],
         ['key' => 'document',    'name' => 'Comandante Doc',        'emoji' => '📄', 'role' => 'Documentos — analisa PDFs, contratos e certificados técnicos',                          'color' => '#94a3b8'],
-        ['key' => 'maritime',    'name' => 'Capitão Porto',         'emoji' => '🚢', 'role' => 'Marítimo — portos europeus e concorrentes',                                             'color' => '#0ea5e9'],
+        ['key' => 'capitao',     'name' => 'Capitão Porto',         'emoji' => '⚓', 'role' => 'Operações portuárias — escalas, documentação e logística marítima',              'color' => '#0ea5e9'],
         ['key' => 'claude',      'name' => 'Bruno AI',              'emoji' => '🧠', 'role' => 'Claude — raciocínio avançado e análise complexa',                                       'color' => '#a855f7'],
         ['key' => 'nvidia',      'name' => 'Carlos NVIDIA',         'emoji' => '⚡', 'role' => 'NVIDIA NeMo — velocidade e eficiência máxima',                                          'color' => '#76b900'],
         ['key' => 'aria',        'name' => 'ARIA Security',         'emoji' => '🔐', 'role' => 'Cibersegurança — STRIDE, OWASP, scan diário dos sites',                                 'color' => '#ef4444'],
