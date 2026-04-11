@@ -81,6 +81,9 @@
         /* Activity step per agent */
         .agent-grid-item .ag-status { font-size:7.5px; color:#555; text-align:center; max-width:56px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; line-height:1.2; display:none; }
         .agent-grid-item.active .ag-status { display:block; color:var(--green); }
+        .agent-grid-item.working .ag-status { display:block; color:#f59e0b; animation:status-pulse 1.2s ease-in-out infinite; }
+        .agent-grid-item.working .ag-dot { background:#f59e0b; box-shadow:0 0 4px #f59e0b; animation:pulse-dot 1s infinite; }
+        @keyframes status-pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
         @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
         /* ── CHAT AREA ── */
@@ -1160,21 +1163,30 @@ function resolveStep(step, icon = '✅') {
 
 function setAgentActive(agentName) {
     document.querySelectorAll('.agent-grid-item').forEach(el => {
-        const isActive = el.dataset.agent === agentName;
-        el.classList.toggle('active', isActive);
-        const statusEl = el.querySelector('.ag-status');
-        if (statusEl) statusEl.textContent = isActive ? 'a trabalhar…' : 'pronto';
+        const isTarget = el.dataset.agent === agentName;
+        if (isTarget) {
+            el.classList.add('active', 'working');
+            const statusEl = el.querySelector('.ag-status');
+            if (statusEl) statusEl.textContent = 'working…';
+        }
+        // Don't touch other agents — they may be working too
     });
 }
 
+function setAgentStatus(agentName, text) {
+    const el = document.querySelector(`.agent-grid-item[data-agent="${agentName}"]`);
+    if (!el) return;
+    const statusEl = el.querySelector('.ag-status');
+    if (statusEl) statusEl.textContent = text;
+}
+
 function setAgentDone(agentName) {
-    document.querySelectorAll('.agent-grid-item').forEach(el => {
-        if (el.dataset.agent === agentName) {
-            el.classList.remove('active');
-            const statusEl = el.querySelector('.ag-status');
-            if (statusEl) statusEl.textContent = 'pronto';
-        }
-    });
+    const el = document.querySelector(`.agent-grid-item[data-agent="${agentName}"]`);
+    if (!el) return;
+    el.classList.remove('working');
+    const statusEl = el.querySelector('.ag-status');
+    if (statusEl) statusEl.textContent = 'ready';
+    // Keep .active if this is still the selected agent
 }
 
 // Sidebar agent click → switch agent
@@ -1189,7 +1201,7 @@ document.querySelectorAll('.agent-grid-item').forEach(el => {
         renderStarterChips(agentSelect.value);
         applyAgentColor(agentSelect.value);
         updateEmptyState(agentSelect.value);
-        // Mark selected (not active/working — just selected)
+        // Remove .active from all but keep .working — working agents stay visible
         document.querySelectorAll('.agent-grid-item').forEach(e => e.classList.remove('active'));
         el.classList.add('active');
     });
@@ -1197,9 +1209,9 @@ document.querySelectorAll('.agent-grid-item').forEach(el => {
 
 function clearAgentActive() {
     document.querySelectorAll('.agent-grid-item').forEach(el => {
-        el.classList.remove('active');
+        el.classList.remove('active', 'working');
         const statusEl = el.querySelector('.ag-status');
-        if (statusEl) statusEl.textContent = 'pronto';
+        if (statusEl) statusEl.textContent = 'ready';
     });
 }
 
@@ -2184,6 +2196,12 @@ async function sendMessage() {
         // Process one SSE line
         function handleLine(line) {
             line = line.trim();
+            // Heartbeat comment lines carry agent status: ": heartbeat searching docs"
+            if (line.startsWith(': heartbeat')) {
+                const status = line.slice(11).trim();
+                if (status && agentKey) setAgentStatus(agentKey, status);
+                return;
+            }
             if (!line.startsWith('data: ')) return;
             const raw = line.slice(6);
 
@@ -2418,6 +2436,7 @@ async function sendMessage() {
                     // after the response is complete — handled in handleLine above.
 
                     logActivity('✅', 'Resposta pronta', 'done');
+                    setAgentDone(agentKey);
                     continue;
                 }
 
