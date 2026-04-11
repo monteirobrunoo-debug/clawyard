@@ -478,7 +478,7 @@
                 <div class="agent-grid-item" data-agent="finance"    title="Dr. Luís Finance"><span class="ag-icon"><img src="/images/agents/finance.png" class="ag-photo" alt="Luís"></span><span class="ag-name">Luís</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="research"   title="Marina Research"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Marina"></span><span class="ag-name">Marina</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="acingov"    title="Dr. Ana Contracts"><span class="ag-icon"><img src="/images/agents/acingov.png" class="ag-photo" alt="Ana"></span><span class="ag-name">Ana</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="engineer"   title="Eng. Victor R&D"><span class="ag-icon">🔩</span><span class="ag-name">Victor</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="engineer"   title="Eng. Victor R&D"><span class="ag-icon"><img src="/images/agents/engineer.png" class="ag-photo" alt="Victor"></span><span class="ag-name">Victor</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="patent"     title="Dr. Sofia IP"><span class="ag-icon">🏛️</span><span class="ag-name">Sofia IP</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="energy"     title="Eng. Sofia Energy"><span class="ag-icon">🌱</span><span class="ag-name">Energy</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon">🔒</span><span class="ag-name">KYBER</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
@@ -609,6 +609,7 @@ const AGENT_PHOTOS = {
     research:     '/images/agents/maritime.png',
     capitao:      '/images/agents/maritime.png',
     acingov:      '/images/agents/acingov.png',
+    engineer:     '/images/agents/engineer.png',
 };
 
 const AGENT_NAMES = {
