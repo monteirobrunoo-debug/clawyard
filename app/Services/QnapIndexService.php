@@ -203,12 +203,17 @@ class QnapIndexService
     protected function extractExcel(string $path): ?string
     {
         // Skip very large files — PhpSpreadsheet is memory hungry
-        if (filesize($path) > 10 * 1024 * 1024) { // 10MB limit
+        if (filesize($path) > 5 * 1024 * 1024) { // 5MB limit
             Log::info("QnapIndex: skipping large Excel {$path} (" . round(filesize($path)/1048576,1) . "MB)");
             return null;
         }
 
-        ini_set('memory_limit', '512M');
+        // Only increase memory limit, never decrease it
+        $current = ini_get('memory_limit');
+        $currentBytes = $this->parseMemoryLimit($current);
+        if ($currentBytes < 536870912) { // < 512M
+            ini_set('memory_limit', '512M');
+        }
 
         try {
             // Use read filter to load only first 500 rows per sheet
@@ -309,6 +314,20 @@ class QnapIndexService
         $clean = @mb_convert_encoding($str, 'UTF-8', 'UTF-8');
         $clean = @iconv('UTF-8', 'UTF-8//IGNORE', $clean ?? $str);
         return $clean !== false ? $clean : '';
+    }
+
+    protected function parseMemoryLimit(string $val): int
+    {
+        $val = trim($val);
+        if ($val === '-1') return PHP_INT_MAX;
+        $unit = strtolower(substr($val, -1));
+        $num  = (int) $val;
+        return match($unit) {
+            'g' => $num * 1073741824,
+            'm' => $num * 1048576,
+            'k' => $num * 1024,
+            default => $num,
+        };
     }
 
     protected function chunkText(string $text, int $size = 800): array
