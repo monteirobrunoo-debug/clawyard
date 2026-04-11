@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AgentShareController;
 use App\Http\Controllers\BriefingController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\DiscoveryController;
@@ -142,6 +143,24 @@ Route::middleware(['auth'])->group(function () {
 Route::get('/schedules', function () {
     return view('admin.schedules');
 })->middleware(['auth'])->name('schedules');
+
+// ─── Agent Shares — public client chat ───────────────────────────────────────
+// Public: no auth needed (token-based access)
+Route::get('/a/{token}',          [AgentShareController::class, 'show']);
+Route::post('/a/{token}/password', [AgentShareController::class, 'verifyPassword']);
+Route::post('/a/{token}/stream',   [AgentShareController::class, 'stream'])->middleware('throttle:60,1');
+
+// Authenticated: manage shares
+Route::middleware(['auth'])->group(function () {
+    Route::get('/shares', [AgentShareController::class, 'index'])->name('shares.index');
+});
+
+// Admin: create/delete shares (any authenticated user can manage their own)
+Route::middleware(['auth'])->prefix('admin')->group(function () {
+    Route::post('/shares',           [AgentShareController::class, 'store'])->name('shares.store');
+    Route::patch('/shares/{share}/toggle', [AgentShareController::class, 'toggle'])->name('shares.toggle');
+    Route::delete('/shares/{share}', [AgentShareController::class, 'destroy'])->name('shares.destroy');
+});
 
 // Admin Portal
 Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {

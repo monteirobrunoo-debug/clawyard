@@ -1,0 +1,211 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\AgentShare;
+use App\Agents\AgentManager;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+
+class AgentShareController extends Controller
+{
+    // ── ADMIN: List all shares ───────────────────────────────────────────────
+    public function index()
+    {
+        $shares = AgentShare::where('created_by', auth()->id())
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('agent-shares.index', [
+            'shares'    => $shares,
+            'agentMeta' => AgentShare::agentMeta(),
+        ]);
+    }
+
+    // ── ADMIN: Create new share ──────────────────────────────────────────────
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'agent_key'       => 'required|string|max:50',
+            'client_name'     => 'required|string|max:100',
+            'client_email'    => 'nullable|email|max:150',
+            'password'        => 'nullable|string|min:4|max:100',
+            'custom_title'    => 'nullable|string|max:100',
+            'welcome_message' => 'nullable|string|max:500',
+            'show_branding'   => 'nullable|boolean',
+            'expires_at'      => 'nullable|date|after:now',
+        ]);
+
+        $share = AgentShare::create([
+            'token'           => AgentShare::generateToken(),
+            'agent_key'       => $data['agent_key'],
+            'client_name'     => $data['client_name'],
+            'client_email'    => $data['client_email'] ?? null,
+            'password_hash'   => isset($data['password']) ? password_hash($data['password'], PASSWORD_DEFAULT) : null,
+            'custom_title'    => $data['custom_title'] ?? null,
+            'welcome_message' => $data['welcome_message'] ?? null,
+            'show_branding'   => $request->boolean('show_branding', true),
+            'expires_at'      => $data['expires_at'] ?? null,
+            'created_by'      => auth()->id(),
+        ]);
+
+        return response()->json([
+            'ok'  => true,
+            'url' => $share->getUrl(),
+            'id'  => $share->id,
+        ]);
+    }
+
+    // ── ADMIN: Toggle active ─────────────────────────────────────────────────
+    public function toggle(AgentShare $share)
+    {
+        $this->authorize_owner($share);
+        $share->update(['is_active' => !$share->is_active]);
+        return response()->json(['ok' => true, 'is_active' => $share->is_active]);
+    }
+
+    // ── ADMIN: Delete ────────────────────────────────────────────────────────
+    public function destroy(AgentShare $share)
+    {
+        $this->authorize_owner($share);
+        $share->delete();
+        return response()->json(['ok' => true]);
+    }
+
+    // ── PUBLIC: Show shared agent chat page ──────────────────────────────────
+    public function show(string $token)
+    {
+        $share = AgentShare::where('token', $token)->firstOrFail();
+
+        if (!$share->isValid()) {
+            return view('agent-shares.expired');
+        }
+
+        // Password check — if set and not yet verified in session
+        if ($share->password_hash) {
+            $sessionKey = 'share_auth_' . $share->token;
+            if (!session($sessionKey)) {
+                return view('agent-shares.password', ['token' => $token]);
+            }
+        }
+
+        $meta = AgentShare::agentMeta()[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900'];
+
+        return view('agent-shares.chat', [
+            'share' => $share,
+            'meta'  => $meta,
+        ]);
+    }
+
+    // ── PUBLIC: Password verification ────────────────────────────────────────
+    public function verifyPassword(Request $request, string $token)
+    {
+        $share = AgentShare::where('token', $token)->firstOrFail();
+
+        if (!$share->password_hash) {
+            return redirect('/a/' . $token);
+        }
+
+        $password = $request->input('password', '');
+        if ($share->checkPassword($password)) {
+            session(['share_auth_' . $token => true]);
+            return redirect('/a/' . $token);
+        }
+
+        return back()->withErrors(['password' => 'Palavra-passe incorrecta.']);
+    }
+
+    // ── PUBLIC: SSE Stream for shared agent ──────────────────────────────────
+    public function stream(Request $request, string $token)
+    {
+        $share = AgentShare::where('token', $token)->firstOrFail();
+
+        if (!$share->isValid()) {
+            return response()->json(['error' => 'Link expirado ou desactivado.'], 403);
+        }
+
+        // Password check
+        if ($share->password_hash) {
+            $sessionKey = 'share_auth_' . $share->token;
+            if (!session($sessionKey)) {
+                return response()->json(['error' => 'Autenticação necessária.'], 401);
+            }
+        }
+
+        $message   = $request->input('message', '');
+        $history   = $request->input('history', []);
+        $sessionId = $request->input('session_id', 'shared_' . uniqid());
+
+        if (empty(trim($message))) {
+            return response()->json(['error' => 'Mensagem vazia.'], 422);
+        }
+
+        // Sanitize history
+        $history = collect($history)
+            ->filter(fn($m) => isset($m['role'], $m['content']))
+            ->map(fn($m) => ['role' => $m['role'], 'content' => $m['content']])
+            ->values()
+            ->toArray();
+
+        $agentManager = app(AgentManager::class);
+        $agent        = $agentManager->agent($share->agent_key);
+        $agentName    = $agent->getName();
+        $agentModel   = $agent->getModel();
+
+        // Record usage
+        $share->recordUsage();
+
+        return response()->stream(function () use ($agent, $message, $history, $agentName, $agentModel, $sessionId) {
+            while (ob_get_level() > 0) { ob_end_flush(); }
+            flush();
+
+            $meta = [
+                'type'       => 'meta',
+                'mode'       => 'single',
+                'agent'      => $agentName,
+                'model'      => $agentModel,
+                'session_id' => $sessionId,
+            ];
+            echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
+            flush();
+
+            $heartbeat = function (string $status = '') {
+                echo ': heartbeat' . ($status ? " {$status}" : '') . "\n\n";
+                flush();
+            };
+
+            try {
+                $agent->stream(
+                    $message,
+                    $history,
+                    function (string $chunk) {
+                        echo 'data: ' . json_encode(['chunk' => $chunk], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
+                        flush();
+                    },
+                    $heartbeat
+                );
+            } catch (\Throwable $e) {
+                Log::error('AgentShare stream error', ['token' => request()->route('token'), 'error' => $e->getMessage()]);
+                echo 'data: ' . json_encode(['error' => 'Erro ao processar. Tenta novamente.'], JSON_UNESCAPED_UNICODE) . "\n\n";
+                flush();
+            }
+
+            echo "data: [DONE]\n\n";
+            flush();
+
+        }, 200, [
+            'Content-Type'      => 'text/event-stream',
+            'Cache-Control'     => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+            'Connection'        => 'keep-alive',
+        ]);
+    }
+
+    // ── Helper ───────────────────────────────────────────────────────────────
+    private function authorize_owner(AgentShare $share): void
+    {
+        if ($share->created_by !== auth()->id() && !auth()->user()->isAdmin()) {
+            abort(403);
+        }
+    }
+}

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{{ $share->custom_title ?: $meta['name'] }}</title>
+    <style>
+        *{box-sizing:border-box;margin:0;padding:0}
+        :root{
+            --agent-color: {{ $meta['color'] }};
+            --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--bg4:#0f0f18;
+            --border:#2a2a3a;--text:#e2e8f0;--muted:#64748b;
+        }
+        html,body{height:100%;overflow:hidden}
+        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column}
+
+        /* HEADER */
+        .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;height:54px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+        .agent-avatar{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(0,0,0,.3);border:1px solid var(--agent-color)44;flex-shrink:0}
+        .agent-info{flex:1;min-width:0}
+        .agent-name{font-size:14px;font-weight:700;color:var(--text)}
+        .agent-status{font-size:11px;color:var(--agent-color);display:flex;align-items:center;gap:4px}
+        .status-dot{width:6px;height:6px;border-radius:50%;background:var(--agent-color);animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        @if($share->show_branding)
+        .branding{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px}
+        .branding a{color:var(--muted);text-decoration:none}
+        .branding a:hover{color:var(--text)}
+        @endif
+
+        /* CHAT AREA */
+        .chat-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column}
+        .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
+        .messages::-webkit-scrollbar{width:4px}
+        .messages::-webkit-scrollbar-track{background:transparent}
+        .messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+        /* MESSAGES */
+        .message{display:flex;gap:10px;align-items:flex-start;max-width:800px}
+        .message.user{flex-direction:row-reverse;margin-left:auto}
+        .avatar{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;font-weight:700}
+        .message.user .avatar{background:var(--agent-color)22;border:1px solid var(--agent-color)44;color:var(--agent-color)}
+        .message.assistant .avatar{background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:16px}
+        .bubble{padding:12px 16px;border-radius:12px;font-size:14px;line-height:1.6;max-width:680px}
+        .message.user .bubble{background:var(--agent-color)18;border:1px solid var(--agent-color)30;border-radius:12px 4px 12px 12px;color:var(--text)}
+        .message.assistant .bubble{background:var(--bg2);border:1px solid var(--border);border-radius:4px 12px 12px 12px;color:var(--text)}
+        .bubble p{margin-bottom:.5em}.bubble p:last-child{margin-bottom:0}
+        .bubble strong{color:var(--text);font-weight:700}
+        .bubble code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:4px;font-size:12px;font-family:monospace}
+        .bubble pre{background:rgba(0,0,0,.4);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;overflow-x:auto}
+        .bubble pre code{background:none;padding:0;font-size:12px}
+        .bubble ul,
+        .bubble ol{padding-left:20px;margin:.4em 0}
+        .bubble li{margin-bottom:.25em}
+        .bubble h1,.bubble h2,.bubble h3{margin:.6em 0 .3em;line-height:1.3}
+        .bubble h1{font-size:17px}.bubble h2{font-size:15px}.bubble h3{font-size:14px}
+        .bubble hr{border:none;border-top:1px solid var(--border);margin:.8em 0}
+        .bubble a{color:var(--agent-color);text-decoration:none}
+        .bubble a:hover{text-decoration:underline}
+
+        /* TYPING */
+        .typing .bubble{padding:14px 18px}
+        .typing-dots{display:flex;gap:4px}
+        .typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:bounce .8s infinite}
+        .typing-dots span:nth-child(2){animation-delay:.15s}
+        .typing-dots span:nth-child(3){animation-delay:.3s}
+        @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
+
+        /* WELCOME */
+        .welcome{text-align:center;padding:40px 20px;max-width:500px;margin:0 auto}
+        .welcome-avatar{font-size:52px;margin-bottom:12px;filter:drop-shadow(0 0 20px var(--agent-color))}
+        .welcome-name{font-size:22px;font-weight:800;color:var(--agent-color);margin-bottom:8px}
+        .welcome-msg{font-size:14px;color:var(--muted);line-height:1.6}
+
+        /* INPUT */
+        .input-area{background:var(--bg2);border-top:1px solid var(--border);padding:16px 20px;flex-shrink:0}
+        .input-row{display:flex;gap:10px;align-items:flex-end;max-width:800px;margin:0 auto}
+        .input-box{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:10px 14px;color:var(--text);font-size:14px;resize:none;outline:none;max-height:140px;min-height:44px;line-height:1.5;transition:border-color .15s;font-family:inherit}
+        .input-box:focus{border-color:var(--agent-color)}
+        .send-btn{width:44px;height:44px;background:var(--agent-color);border:none;border-radius:10px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.15s}
+        .send-btn:hover{filter:brightness(1.1)}
+        .send-btn:disabled{opacity:.4;cursor:not-allowed}
+        .input-hint{text-align:center;font-size:11px;color:var(--muted);margin-top:8px;max-width:800px;margin:8px auto 0}
+
+        /* MARKDOWN render */
+        @media(max-width:640px){
+            .header{padding:0 12px}
+            .messages{padding:12px}
+            .input-area{padding:12px}
+            .bubble{font-size:13px}
+        }
+    </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+    <div class="agent-avatar">{{ $meta['emoji'] }}</div>
+    <div class="agent-info">
+        <div class="agent-name">{{ $share->custom_title ?: $meta['name'] }}</div>
+        <div class="agent-status"><span class="status-dot"></span> Online</div>
+    </div>
+    @if($share->show_branding)
+    <div class="branding">Powered by <a href="https://partyard.eu" target="_blank">PartYard AI</a></div>
+    @endif
+</div>
+
+<!-- CHAT -->
+<div class="chat-wrap">
+    <div class="messages" id="messages">
+        <div class="welcome" id="welcome">
+            <div class="welcome-avatar">{{ $meta['emoji'] }}</div>
+            <div class="welcome-name">{{ $share->custom_title ?: $meta['name'] }}</div>
+            <div class="welcome-msg">
+                @if($share->welcome_message)
+                    {{ $share->welcome_message }}
+                @else
+                    Olá! Como posso ajudar?
+                @endif
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-row">
+            <textarea
+                id="input"
+                class="input-box"
+                placeholder="Escreve a tua mensagem…"
+                rows="1"
+                onkeydown="handleKey(event)"
+                oninput="autoResize(this)"
+            ></textarea>
+            <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+        </div>
+        @if($share->show_branding)
+        <div class="input-hint">Powered by <strong>PartYard AI</strong> · ClawYard</div>
+        @endif
+    </div>
+</div>
+
+<script>
+const TOKEN      = '{{ $share->token }}';
+const CSRF       = document.querySelector('meta[name="csrf-token"]').content;
+const SESSION_ID = 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+const AGENT_EMOJI = '{{ $meta['emoji'] }}';
+const AGENT_COLOR = '{{ $meta['color'] }}';
+let history = [];
+let isStreaming = false;
+
+// ── Auto-resize textarea ──
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+}
+
+// ── Send message ──
+async function sendMessage() {
+    const input = document.getElementById('input');
+    const text  = input.value.trim();
+    if (!text || isStreaming) return;
+
+    input.value = '';
+    autoResize(input);
+    document.getElementById('welcome')?.remove();
+    document.getElementById('send-btn').disabled = true;
+    isStreaming = true;
+
+    addMessage('user', text);
+    history.push({ role: 'user', content: text });
+
+    const typingEl = addTyping();
+
+    try {
+        const resp = await fetch(`/a/${TOKEN}/stream`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'text/event-stream' },
+            body: JSON.stringify({ message: text, history: history.slice(-20), session_id: SESSION_ID }),
+        });
+
+        typingEl.remove();
+        const bubble = addAssistantBubble();
+
+        let full = '';
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const lines = buf.split('\n');
+            buf = lines.pop();
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const raw = line.slice(6).trim();
+                if (raw === '[DONE]') break;
+                if (raw.startsWith(':')) continue;
+                try {
+                    const evt = JSON.parse(raw);
+                    if (evt.chunk) {
+                        full += evt.chunk;
+                        bubble.innerHTML = renderMarkdown(full);
+                        scrollBottom();
+                    }
+                    if (evt.error) {
+                        bubble.innerHTML = '<span style="color:#ef4444">❌ ' + evt.error + '</span>';
+                    }
+                } catch(e) {}
+            }
+        }
+
+        if (full) history.push({ role: 'assistant', content: full });
+
+    } catch(e) {
+        typingEl?.remove();
+        addMessage('assistant', '❌ Erro de ligação. Tenta novamente.');
+    }
+
+    document.getElementById('send-btn').disabled = false;
+    isStreaming = false;
+}
+
+function addMessage(role, text) {
+    const msgs = document.getElementById('messages');
+    const div  = document.createElement('div');
+    div.className = 'message ' + role;
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = role === 'user' ? 'Tu' : AGENT_EMOJI;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = role === 'user' ? escapeHtml(text) : renderMarkdown(text);
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    msgs.appendChild(div);
+    scrollBottom();
+    return bubble;
+}
+
+function addAssistantBubble() {
+    const msgs = document.getElementById('messages');
+    const div  = document.createElement('div');
+    div.className = 'message assistant';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = AGENT_EMOJI;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    msgs.appendChild(div);
+    scrollBottom();
+    return bubble;
+}
+
+function addTyping() {
+    const msgs = document.getElementById('messages');
+    const div  = document.createElement('div');
+    div.className = 'message assistant typing';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    avatar.textContent = AGENT_EMOJI;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+    msgs.appendChild(div);
+    scrollBottom();
+    return div;
+}
+
+function scrollBottom() {
+    const msgs = document.getElementById('messages');
+    msgs.scrollTop = msgs.scrollHeight;
+}
+
+function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+// ── Simple markdown renderer ──
+function renderMarkdown(md) {
+    let html = md
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        // Code blocks
+        .replace(/```[\w]*\n?([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+        // Inline code
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        // Bold
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+        // HR
+        .replace(/^---$/gm, '<hr>')
+        // H3
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        // H2
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        // H1
+        .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+        // Bullet lists
+        .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
+        // Numbered lists
+        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+        // Links
+        .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+        // Newlines → paragraphs
+        .split(/\n{2,}/).map(p => {
+            if (p.startsWith('<h') || p.startsWith('<pre') || p.startsWith('<hr')) return p;
+            if (p.includes('<li>')) return '<ul>' + p + '</ul>';
+            return '<p>' + p.replace(/\n/g,'<br>') + '</p>';
+        }).join('');
+
+    return html;
+}
+</script>
+</body>
+</html>
