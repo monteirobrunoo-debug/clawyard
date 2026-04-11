@@ -202,25 +202,47 @@ class QnapIndexService
 
     protected function extractExcel(string $path): ?string
     {
+        // Skip very large files — PhpSpreadsheet is memory hungry
+        if (filesize($path) > 10 * 1024 * 1024) { // 10MB limit
+            Log::info("QnapIndex: skipping large Excel {$path} (" . round(filesize($path)/1048576,1) . "MB)");
+            return null;
+        }
+
+        ini_set('memory_limit', '512M');
+
         try {
-            $spreadsheet = IOFactory::load($path);
+            // Use read filter to load only first 500 rows per sheet
+            $reader = IOFactory::createReaderForFile($path);
+            $reader->setReadDataOnly(true);
+
+            $spreadsheet = $reader->load($path);
             $lines       = [];
+            $maxRows     = 500;
 
             foreach ($spreadsheet->getAllSheets() as $sheet) {
-                $lines[] = '=== Sheet: ' . $sheet->getTitle() . ' ===';
-                foreach ($sheet->getRowIterator() as $row) {
+                $lines[]  = '=== Sheet: ' . $sheet->getTitle() . ' ===';
+                $rowCount = 0;
+
+                foreach ($sheet->getRowIterator(1, $maxRows) as $row) {
                     $cells = [];
-                    foreach ($row->getCellIterator() as $cell) {
-                        $val = $cell->getFormattedValue();
-                        if ($val !== '' && $val !== null) {
-                            $cells[] = $val;
-                        }
+                    $ci    = $row->getCellIterator();
+                    $ci->setIterateOnlyExistingCells(true);
+
+                    foreach ($ci as $cell) {
+                        $val = (string) $cell->getValue();
+                        if ($val !== '') $cells[] = $val;
                     }
+
                     if (!empty($cells)) {
                         $lines[] = implode(' | ', $cells);
                     }
+
+                    if (++$rowCount >= $maxRows) break;
                 }
             }
+
+            $spreadsheet->disconnectWorksheets();
+            unset($spreadsheet);
 
             return implode("\n", $lines);
         } catch (\Throwable $e) {

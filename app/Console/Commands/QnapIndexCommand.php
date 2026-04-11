@@ -12,6 +12,7 @@ class QnapIndexCommand extends Command
 
     public function handle(): int
     {
+        ini_set('memory_limit', '1G');
         $path = $this->option('path');
         $this->info("🗂️  Indexing QNAP files from: {$path}");
         $this->newLine();
