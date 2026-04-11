@@ -96,7 +96,13 @@
 
 <!-- HEADER -->
 <div class="header">
-    <div class="agent-avatar">{{ $meta['emoji'] }}</div>
+    <div class="agent-avatar" style="{{ ($meta['photo'] ?? null) ? 'padding:0;overflow:hidden' : '' }}">
+        @if($meta['photo'] ?? null)
+            <img src="{{ $meta['photo'] }}" alt="{{ $meta['name'] }}" style="width:100%;height:100%;object-fit:cover;border-radius:7px">
+        @else
+            {{ $meta['emoji'] }}
+        @endif
+    </div>
     <div class="agent-info">
         <div class="agent-name">{{ $share->custom_title ?: $meta['name'] }}</div>
         <div class="agent-status"><span class="status-dot"></span> Online</div>
@@ -110,7 +116,13 @@
 <div class="chat-wrap">
     <div class="messages" id="messages">
         <div class="welcome" id="welcome">
-            <div class="welcome-avatar">{{ $meta['emoji'] }}</div>
+            <div class="welcome-avatar" style="{{ ($meta['photo'] ?? null) ? 'font-size:0' : '' }}">
+                @if($meta['photo'] ?? null)
+                    <img src="{{ $meta['photo'] }}" alt="{{ $meta['name'] }}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:3px solid var(--agent-color);box-shadow:0 0 24px color-mix(in srgb,var(--agent-color) 33%,transparent)">
+                @else
+                    {{ $meta['emoji'] }}
+                @endif
+            </div>
             <div class="welcome-name">{{ $share->custom_title ?: $meta['name'] }}</div>
             <div class="welcome-msg">
                 @if($share->welcome_message)
@@ -145,6 +157,7 @@ const TOKEN      = '{{ $share->token }}';
 const CSRF       = document.querySelector('meta[name="csrf-token"]').content;
 const SESSION_ID = 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
 const AGENT_EMOJI = '{{ $meta['emoji'] }}';
+const AGENT_PHOTO = '{{ $meta['photo'] ?? '' }}';
 const AGENT_COLOR = '{{ $meta['color'] }}';
 let history = [];
 let isStreaming = false;
@@ -230,14 +243,29 @@ async function sendMessage() {
     isStreaming = false;
 }
 
+function makeAgentAvatar() {
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    if (AGENT_PHOTO) {
+        avatar.style.cssText = 'padding:0;overflow:hidden;border:1.5px solid var(--border)';
+        avatar.innerHTML = `<img src="${AGENT_PHOTO}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+    } else {
+        avatar.textContent = AGENT_EMOJI;
+    }
+    return avatar;
+}
+
 function addMessage(role, text) {
     const msgs = document.getElementById('messages');
     const div  = document.createElement('div');
     div.className = 'message ' + role;
 
-    const avatar = document.createElement('div');
-    avatar.className = 'avatar';
-    avatar.textContent = role === 'user' ? 'Tu' : AGENT_EMOJI;
+    const avatar = role === 'user' ? (() => {
+        const a = document.createElement('div');
+        a.className = 'avatar';
+        a.textContent = 'You';
+        return a;
+    })() : makeAgentAvatar();
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
@@ -255,14 +283,10 @@ function addAssistantBubble() {
     const div  = document.createElement('div');
     div.className = 'message assistant';
 
-    const avatar = document.createElement('div');
-    avatar.className = 'avatar';
-    avatar.textContent = AGENT_EMOJI;
-
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
 
-    div.appendChild(avatar);
+    div.appendChild(makeAgentAvatar());
     div.appendChild(bubble);
     msgs.appendChild(div);
     scrollBottom();
@@ -274,9 +298,7 @@ function addTyping() {
     const div  = document.createElement('div');
     div.className = 'message assistant typing';
 
-    const avatar = document.createElement('div');
-    avatar.className = 'avatar';
-    avatar.textContent = AGENT_EMOJI;
+    const avatar = makeAgentAvatar();
 
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
