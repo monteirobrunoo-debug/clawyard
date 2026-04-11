@@ -2415,8 +2415,7 @@ async function sendMessage() {
 //  SHARE AGENT MODAL
 // ═══════════════════════════════════════════════════════
 function openShareModal() {
-    const agent = agentSelect.value;
-    if (!agent || agent === 'auto') return;
+    const agent = agentSelect.value || 'auto';
     document.getElementById('share-modal-agent').value = agent;
     document.getElementById('share-modal-agent-label').textContent =
         (AGENT_EMOJIS[agent] || '🤖') + ' ' + (AGENT_NAMES[agent] || agent);
@@ -2475,10 +2474,8 @@ function copyShareUrl() {
 // Show/hide share button based on selected agent
 agentSelect.addEventListener('change', updateShareBtn);
 function updateShareBtn() {
-    const agent = agentSelect.value;
-    const btn   = document.getElementById('share-agent-btn');
-    if (!btn) return;
-    btn.style.display = (agent && agent !== 'auto' && agent !== 'orchestrator') ? 'block' : 'none';
+    const btn = document.getElementById('share-agent-btn');
+    if (btn) btn.style.display = 'block';
 }
 updateShareBtn();
 </script>
