@@ -182,7 +182,7 @@ async function sendMessage() {
     try {
         const resp = await fetch(`/a/${TOKEN}/stream`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'text/event-stream' },
+            headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
             body: JSON.stringify({ message: text, history: history.slice(-20), session_id: SESSION_ID }),
         });
 
