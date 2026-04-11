@@ -175,6 +175,40 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/schedules', function () { return view('admin.schedules'); })->name('admin.schedules');
 });
 
+// QNAP File download — serve files from /var/www/qnapbackup (auth required)
+Route::middleware(['auth'])->get('/qnap/file', function (\Illuminate\Http\Request $request) {
+    $encoded = $request->query('p', '');
+    if (!$encoded) abort(400, 'Missing path');
+
+    $path = base64_decode(strtr($encoded, '-_', '+/'));
+
+    // Security: must be inside /var/www/qnapbackup and no path traversal
+    $realBase = realpath('/var/www/qnapbackup');
+    $realPath = realpath($path);
+    if (!$realPath || !$realBase || !str_starts_with($realPath, $realBase)) {
+        abort(403, 'Access denied');
+    }
+    if (!is_file($realPath)) abort(404, 'File not found');
+
+    $mime = match(strtolower(pathinfo($realPath, PATHINFO_EXTENSION))) {
+        'pdf'  => 'application/pdf',
+        'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'xls'  => 'application/vnd.ms-excel',
+        'csv'  => 'text/csv',
+        'txt'  => 'text/plain',
+        'msg'  => 'application/vnd.ms-outlook',
+        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'doc'  => 'application/msword',
+        default => 'application/octet-stream',
+    };
+
+    $filename = basename($realPath);
+    return response()->file($realPath, [
+        'Content-Type'        => $mime,
+        'Content-Disposition' => 'inline; filename="' . $filename . '"',
+    ]);
+})->name('qnap.file');
+
 // QNAP Index — trigger from browser (admin only)
 Route::middleware(['auth'])->get('/admin/qnap-index', function () {
     $svc   = new \App\Services\QnapIndexService();

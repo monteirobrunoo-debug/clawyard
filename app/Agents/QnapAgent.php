@@ -53,10 +53,11 @@ CAPACIDADES:
 
 🔍 COMO RESPONDER:
 Quando encontras informação relevante nos documentos:
-1. Cita o documento fonte (nome do ficheiro / fornecedor)
+1. Cita o documento fonte como link markdown clicável: [Nome do ficheiro](URL)
 2. Apresenta os dados de forma estruturada
 3. Indica a data do documento quando disponível
 4. Sugere documentos relacionados se existirem
+5. Termina SEMPRE com uma secção "📎 Fontes" com todos os links dos documentos utilizados
 
 Se não encontrares informação suficiente nos documentos indexados, diz claramente e sugere alternativas.
 
@@ -176,15 +177,29 @@ PROMPT;
                 return "ℹ️ Nenhum documento encontrado no arquivo para: \"{$query}\"\n";
             }
 
+            $baseUrl = config('app.url', 'https://clawyard-pwu9ouye.on-forge.com');
+
             $ctx = "## 📁 Documentos encontrados no Arquivo PartYard:\n\n";
             foreach ($docs as $doc) {
                 $meta     = $doc['metadata'] ?? [];
                 $category = $meta['category'] ?? 'document';
                 $path     = $meta['path'] ?? $doc['title'];
+
+                // Build a signed download URL for this file
+                $fullPath   = '/var/www/qnapbackup/' . ltrim($path, '/');
+                $encoded    = strtr(base64_encode($fullPath), '+/', '-_');
+                $fileUrl    = $baseUrl . '/qnap/file?p=' . $encoded;
+
                 $ctx .= "### 📄 " . $doc['title'] . "\n";
-                $ctx .= "**Ficheiro:** `{$path}` | **Categoria:** {$category}\n\n";
+                $ctx .= "**Ficheiro:** [{$path}]({$fileUrl}) | **Categoria:** {$category}\n";
+                $ctx .= "**URL de acesso:** {$fileUrl}\n\n";
                 $ctx .= mb_substr($doc['content'], 0, 2000) . "\n\n---\n";
             }
+
+            $ctx .= "\n⚠️ INSTRUÇÕES IMPORTANTES:\n";
+            $ctx .= "- Sempre que citares um documento, inclui o link de acesso como markdown: [nome do ficheiro](URL)\n";
+            $ctx .= "- Coloca os links no final da resposta numa secção '📎 Fontes'\n";
+
             return $ctx;
         } catch (\Throwable $e) {
             Log::error('QnapAgent context error: ' . $e->getMessage());
