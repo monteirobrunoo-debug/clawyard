@@ -2455,7 +2455,7 @@ async function restoreHistory(agent) {
         document.getElementById('empty-state')?.remove();
 
         for (const m of msgs) {
-            const role     = m.role === 'user' ? 'user' : 'assistant';
+            const role     = m.role === 'user' ? 'user' : 'ai';
             const agentKey = m.agent || agent;
             addMessage(role, m.content, agentKey);
         }
