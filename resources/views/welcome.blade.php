@@ -421,6 +421,7 @@
         <option value="patent">🏛️ Dra. Sofia IP</option>
         <option value="energy">⚡ Eng. Sofia Energia</option>
         <option value="kyber">🔒 KYBER Encryption</option>
+        <option value="qnap">🗄️ Arquivo PartYard</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -476,6 +477,7 @@
                 <div class="agent-grid-item" data-agent="patent"     title="Dra. Sofia IP"><span class="ag-icon">🏛️</span><span class="ag-name">Sofia IP</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="energy"     title="Eng. Sofia Energia"><span class="ag-icon">🌱</span><span class="ag-name">Energia</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon">🔒</span><span class="ag-name">KYBER</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="qnap"       title="Arquivo PartYard"><span class="ag-icon">🗄️</span><span class="ag-name">Arquivo</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="capitao"    title="Capitão Porto"><span class="ag-icon">⚓</span><span class="ag-name">Capitão</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
             </div>
         </div>
@@ -555,7 +557,7 @@ const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
-    capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒'
+    capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -586,7 +588,8 @@ const AGENT_NAMES = {
     engineer:'Eng. Victor I&D',
     patent: 'Dra. Sofia IP',
     energy: 'Eng. Sofia Energia',
-    kyber:  'KYBER Encryption'
+    kyber:  'KYBER Encryption',
+    qnap:   'Arquivo PartYard'
 };
 
 const AGENT_COLORS = {
@@ -600,7 +603,8 @@ const AGENT_COLORS = {
     engineer:'#f97316',
     patent:'#8b5cf6',
     energy:'#10b981',
-    kyber:'#76b900'
+    kyber:'#76b900',
+    qnap: '#f59e0b'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -624,6 +628,7 @@ const AGENT_DESCRIPTIONS = {
     energy:   'Descarbonização marítima — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H₂, Fleet Energy Management (PeerJ CS 3625)',
     kyber:    'Encriptação post-quantum de emails — CRYSTALS-Kyber 1024 + AES-256-GCM (NIST FIPS 203)',
     capitao:  'Operações portuárias, escalas, documentação e logística marítima',
+    qnap:     'Arquivo documental PartYard — pesquisa preços, códigos, invoices, licenças e contratos',
 };
 
 const AGENT_CHIPS = {
@@ -797,6 +802,15 @@ const AGENT_CHIPS = {
         '🔒 Como funciona o esquema KEM + AES-256-GCM usado nos emails encriptados?',
         '🔒 Como instalar a extensão Kyber no Outlook para Mac e Windows?',
         '🔒 Qual a diferença entre Kyber-512, Kyber-768 e Kyber-1024? Qual usar?',
+    ],
+    // ── Arquivo PartYard ──────────────────────────────────────────────────
+    qnap: [
+        '🗄️ Que fornecedores da Collins Aerospace temos no arquivo e quais as condições de licença?',
+        '🗄️ Mostra-me todas as invoices de 2023 e os valores totais por fornecedor',
+        '🗄️ Pesquisa documentos sobre o programa NP2000 — preços e códigos de peças',
+        '🗄️ Que condições de crédito temos com os nossos fornecedores? (net 30, net 60...)',
+        '🗄️ Lista todos os contratos e declarações relacionados com o Min. Defesa Nacional',
+        '🗄️ Analisa os ficheiros CONCURSOS Excel e resume as oportunidades',
     ],
 };
 

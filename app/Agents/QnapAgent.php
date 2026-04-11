@@ -1,0 +1,197 @@
+<?php
+
+namespace App\Agents;
+
+use GuzzleHttp\Client;
+use App\Agents\Traits\AnthropicKeyTrait;
+use App\Services\QnapIndexService;
+use App\Services\PartYardProfileService;
+use Illuminate\Support\Facades\Log;
+
+/**
+ * QnapAgent — "Arquivo PartYard"
+ *
+ * Searches the indexed QNAP backup documents (PDFs, invoices,
+ * emails, Excel files) and answers procurement/price/code questions.
+ */
+class QnapAgent implements AgentInterface
+{
+    use AnthropicKeyTrait;
+
+    protected Client $client;
+    protected QnapIndexService $indexer;
+
+    protected string $systemPrompt = <<<'PROMPT'
+Você é o **Arquivo PartYard** — Assistente de Pesquisa Documental do HP-Group / PartYard.
+
+Tem acesso a um repositório de documentos internos da PartYard indexado a partir do servidor QNAP:
+invoices, emails, licenças de exportação, termos e condições de fornecedores, contratos, propostas, tabelas de preços e muito mais.
+
+EMPRESA:
+[PROFILE_PLACEHOLDER]
+
+CAPACIDADES:
+
+📁 PESQUISA DOCUMENTAL:
+- Pesquisa por fornecedor (ex: "Collins Aerospace", "Krauss Maffei", "NU-WAY")
+- Pesquisa por código de peça / part number (ex: "NP2000", "A400M")
+- Pesquisa por tipo de documento (invoice, licença, contrato, proposta)
+- Pesquisa por valor / preço / condições de pagamento
+- Pesquisa por data ou período
+
+💰 ANÁLISE DE PREÇOS E PROCUREMENT:
+- Extrai preços de invoices e propostas
+- Compara condições de fornecedores
+- Identifica condições de crédito (net 30, net 60, etc.)
+- Analisa histórico de compras
+
+📋 ANÁLISE DE DOCUMENTOS:
+- Lê e resume contratos e termos
+- Extrai dados-chave de licenças de exportação (EAR, Collins Aerospace)
+- Analisa tabelas Excel de concursos
+- Resume correspondência por email (ficheiros .msg)
+
+🔍 COMO RESPONDER:
+Quando encontras informação relevante nos documentos:
+1. Cita o documento fonte (nome do ficheiro / fornecedor)
+2. Apresenta os dados de forma estruturada
+3. Indica a data do documento quando disponível
+4. Sugere documentos relacionados se existirem
+
+Se não encontrares informação suficiente nos documentos indexados, diz claramente e sugere alternativas.
+
+FORMATO DE RESPOSTA:
+- Usa tabelas quando há dados comparativos (preços, fornecedores, códigos)
+- Usa listas para múltiplos documentos encontrados
+- Sê preciso com valores monetários e códigos de referência
+- Responde no idioma do utilizador
+PROMPT;
+
+    public function __construct()
+    {
+        $profile = PartYardProfileService::toPromptContext();
+        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+
+        $this->indexer = new QnapIndexService();
+        $this->client  = new Client([
+            'base_uri'        => 'https://api.anthropic.com',
+            'timeout'         => 120,
+            'connect_timeout' => 10,
+        ]);
+    }
+
+    // ── chat() ────────────────────────────────────────────────────────────────
+    public function chat(string|array $message, array $history = []): string
+    {
+        $text     = is_array($message) ? ($message[0]['text'] ?? '') : $message;
+        $context  = $this->buildContext($text);
+        $augmented = $context ? $context . "\n\n---\nPergunta: " . $text : $text;
+
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $augmented],
+        ]);
+
+        $response = $this->client->post('/v1/messages', [
+            'headers' => $this->headersForMessage($augmented),
+            'json'    => [
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
+                'max_tokens' => 4096,
+                'system'     => $this->systemPrompt,
+                'messages'   => $messages,
+            ],
+        ]);
+
+        $data = json_decode($response->getBody()->getContents(), true);
+        return $data['content'][0]['text'] ?? '';
+    }
+
+    // ── stream() ─────────────────────────────────────────────────────────────
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    {
+        $text = is_array($message) ? ($message[0]['text'] ?? '') : $message;
+
+        if ($heartbeat) $heartbeat('a pesquisar arquivo');
+        $context = $this->buildContext($text);
+
+        $augmented = $context
+            ? $context . "\n\n---\nPergunta do utilizador: " . $text
+            : $text;
+
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $augmented],
+        ]);
+
+        $response = $this->client->post('/v1/messages', [
+            'headers' => $this->headersForMessage($augmented),
+            'stream'  => true,
+            'json'    => [
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
+                'max_tokens' => 4096,
+                'system'     => $this->systemPrompt,
+                'messages'   => $messages,
+                'stream'     => true,
+            ],
+        ]);
+
+        $body     = $response->getBody();
+        $full     = '';
+        $buf      = '';
+        $lastBeat = time();
+
+        while (!$body->eof()) {
+            $buf .= $body->read(1024);
+            while (($pos = strpos($buf, "\n")) !== false) {
+                $line = substr($buf, 0, $pos);
+                $buf  = substr($buf, $pos + 1);
+                $line = trim($line);
+                if (!str_starts_with($line, 'data: ')) continue;
+                $json = substr($line, 6);
+                if ($json === '[DONE]') break 2;
+                $evt = json_decode($json, true);
+                if (!is_array($evt)) continue;
+                if (($evt['type'] ?? '') === 'content_block_delta'
+                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
+                    $text_chunk = $evt['delta']['text'] ?? '';
+                    if ($text_chunk !== '') {
+                        $full .= $text_chunk;
+                        $onChunk($text_chunk);
+                    }
+                }
+            }
+            if ($heartbeat && (time() - $lastBeat) >= 5) {
+                $heartbeat('a analisar documentos');
+                $lastBeat = time();
+            }
+        }
+
+        return $full;
+    }
+
+    // ── Context builder ───────────────────────────────────────────────────────
+    protected function buildContext(string $query): string
+    {
+        try {
+            $docs = $this->indexer->search($query, 6);
+            if (empty($docs)) {
+                return "ℹ️ Nenhum documento encontrado no arquivo para: \"{$query}\"\n";
+            }
+
+            $ctx = "## 📁 Documentos encontrados no Arquivo PartYard:\n\n";
+            foreach ($docs as $doc) {
+                $meta     = $doc['metadata'] ?? [];
+                $category = $meta['category'] ?? 'document';
+                $path     = $meta['path'] ?? $doc['title'];
+                $ctx .= "### 📄 " . $doc['title'] . "\n";
+                $ctx .= "**Ficheiro:** `{$path}` | **Categoria:** {$category}\n\n";
+                $ctx .= mb_substr($doc['content'], 0, 2000) . "\n\n---\n";
+            }
+            return $ctx;
+        } catch (\Throwable $e) {
+            Log::error('QnapAgent context error: ' . $e->getMessage());
+            return '';
+        }
+    }
+
+    public function getName(): string  { return 'qnap'; }
+    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-5'); }
+}

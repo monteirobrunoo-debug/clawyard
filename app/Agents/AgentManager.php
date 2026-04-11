@@ -28,6 +28,7 @@ class AgentManager
             'patent'    => new PatentAgent(),
             'energy'    => new EnergyAdvisorAgent(),
             'kyber'     => new KyberAgent(),
+            'qnap'      => new QnapAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);

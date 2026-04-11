@@ -175,6 +175,13 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/schedules', function () { return view('admin.schedules'); })->name('admin.schedules');
 });
 
+// QNAP Index — trigger from browser (admin only)
+Route::middleware(['auth'])->get('/admin/qnap-index', function () {
+    $svc   = new \App\Services\QnapIndexService();
+    $stats = $svc->indexAll();
+    return response()->json(['ok' => true, 'stats' => $stats]);
+})->name('qnap.index');
+
 // OPcache reset — called by Forge deploy script with secret token
 Route::get('/opcache-reset', function () {
     $token = config('services.deploy_token', '');
