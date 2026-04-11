@@ -497,11 +497,11 @@
         <div id="chat">
             <div class="empty-state" id="empty-state">
                 <div class="empty-state-hero">
-                    <div style="position:relative;display:inline-block">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
                         <div class="empty-state-avatar" id="empty-avatar">🤖</div>
-                        <button id="share-agent-btn" onclick="openShareModal()" title="Emprestar este agente a um cliente"
-                            style="display:none;position:absolute;bottom:-6px;right:-6px;background:var(--agent-color);border:2px solid var(--bg);color:#000;font-size:11px;font-weight:800;padding:4px 8px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">
-                            🔗 Emprestar
+                        <button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client"
+                            style="display:none;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">
+                            🔗 Share Agent
                         </button>
                     </div>
                     <h2 id="empty-title">ClawYard <span>AI</span></h2>
@@ -931,9 +931,9 @@ agentSelect.addEventListener('change', () => {
     document.getElementById('chat').innerHTML = '';
     document.getElementById('chat').insertAdjacentHTML('beforeend',
         '<div class="empty-state" id="empty-state"><div class="empty-state-hero">' +
-        '<div style="position:relative;display:inline-block">' +
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' +
         '<div class="empty-state-avatar" id="empty-avatar">🤖</div>' +
-        '<button id="share-agent-btn" onclick="openShareModal()" title="Emprestar este agente a um cliente" style="display:block;position:absolute;bottom:-6px;right:-6px;background:var(--agent-color);border:2px solid var(--bg);color:#000;font-size:11px;font-weight:800;padding:4px 8px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">🔗 Emprestar</button>' +
+        '<button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client" style="display:block;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">🔗 Share Agent</button>' +
         '</div>' +
         '<h2 id="empty-title">ClawYard <span>AI</span></h2>' +
         '<p id="empty-desc"></p></div>' +
@@ -2540,49 +2540,49 @@ updateShareBtn();
      onclick="if(event.target===this)closeShareModal()">
     <div style="background:#111118;border:1px solid #2a2a3a;border-radius:16px;width:100%;max-width:460px;padding:28px;position:relative">
         <button onclick="closeShareModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#64748b;font-size:18px;cursor:pointer">✕</button>
-        <div style="font-size:17px;font-weight:800;margin-bottom:4px">🔗 Emprestar Agente</div>
+        <div style="font-size:17px;font-weight:800;margin-bottom:4px">🔗 Share Agent</div>
         <div id="share-modal-agent-label" style="font-size:13px;color:var(--agent-color,#76b900);margin-bottom:20px;font-weight:600"></div>
         <input type="hidden" id="share-modal-agent">
 
         <!-- Success -->
         <div id="share-success-box" style="display:none;background:rgba(118,185,0,.1);border:1px solid rgba(118,185,0,.3);border-radius:10px;padding:16px;margin-bottom:16px">
-            <div style="font-size:12px;color:#76b900;font-weight:700;margin-bottom:8px">✅ Link criado!</div>
+            <div style="font-size:12px;color:#76b900;font-weight:700;margin-bottom:8px">✅ Link created!</div>
             <div id="share-url-display" style="font-size:12px;color:#76b900;word-break:break-all;margin-bottom:10px"></div>
-            <button id="copy-share-url" onclick="copyShareUrl()" style="background:rgba(118,185,0,.2);border:1px solid rgba(118,185,0,.4);color:#76b900;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">📋 Copiar Link</button>
+            <button id="copy-share-url" onclick="copyShareUrl()" style="background:rgba(118,185,0,.2);border:1px solid rgba(118,185,0,.4);color:#76b900;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">📋 Copy Link</button>
         </div>
 
         <!-- Form -->
         <div id="share-form-body">
             <div style="margin-bottom:14px">
-                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nome do Cliente *</label>
-                <input id="share-client" type="text" placeholder="ex: Armadores Silva Lda."
+                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Client Name *</label>
+                <input id="share-client" type="text" placeholder="e.g. Armadores Silva Ltd."
                     style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                 <div>
                     <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email</label>
-                    <input id="share-email" type="email" placeholder="cliente@empresa.com"
+                    <input id="share-email" type="email" placeholder="client@company.com"
                         style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
                 </div>
                 <div>
                     <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Password</label>
-                    <input id="share-pass" type="password" placeholder="Opcional"
+                    <input id="share-pass" type="password" placeholder="Optional"
                         style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
                 </div>
             </div>
             <div style="margin-bottom:14px">
-                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Título personalizado</label>
-                <input id="share-title" type="text" placeholder="ex: Assistente de Segurança — Silva Lda."
+                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Custom Title</label>
+                <input id="share-title" type="text" placeholder="e.g. Security Assistant — Silva Ltd."
                     style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                 <div>
-                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Mensagem boas-vindas</label>
-                    <input id="share-welcome" type="text" placeholder="Olá! Como posso ajudar?"
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Welcome Message</label>
+                    <input id="share-welcome" type="text" placeholder="Hello! How can I help?"
                         style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
                 </div>
                 <div>
-                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Expira em</label>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Expires at</label>
                     <input id="share-expires" type="datetime-local"
                         style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:13px;outline:none">
                 </div>
@@ -2590,8 +2590,8 @@ updateShareBtn();
         </div>
 
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
-            <button onclick="closeShareModal()" style="background:none;border:1px solid #2a2a3a;color:#64748b;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px">Cancelar</button>
-            <button id="share-submit-btn" onclick="submitShareModal()" style="background:var(--agent-color,#76b900);color:#000;font-weight:700;padding:8px 20px;border:none;border-radius:8px;cursor:pointer;font-size:13px">Criar Link</button>
+            <button onclick="closeShareModal()" style="background:none;border:1px solid #2a2a3a;color:#64748b;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px">Cancel</button>
+            <button id="share-submit-btn" onclick="submitShareModal()" style="background:var(--agent-color,#76b900);color:#000;font-weight:700;padding:8px 20px;border:none;border-radius:8px;cursor:pointer;font-size:13px">Create Link</button>
         </div>
     </div>
 </div>
