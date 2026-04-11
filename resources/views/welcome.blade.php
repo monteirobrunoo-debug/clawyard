@@ -499,10 +499,18 @@
                 <div class="empty-state-hero">
                     <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
                         <div class="empty-state-avatar" id="empty-avatar">🤖</div>
-                        <button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client"
-                            style="display:none;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">
-                            🔗 Share Agent
-                        </button>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client"
+                                style="display:none;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">
+                                🔗 Share Agent
+                            </button>
+                            <a id="manage-shares-btn" href="/shares" title="Manage shared links"
+                                style="display:none;background:none;border:1px solid #2a2a3a;color:#64748b;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:.15s"
+                                onmouseover="this.style.borderColor='#60a5fa';this.style.color='#60a5fa'"
+                                onmouseout="this.style.borderColor='#2a2a3a';this.style.color='#64748b'">
+                                ⚙️ Manage
+                            </a>
+                        </div>
                     </div>
                     <h2 id="empty-title">ClawYard <span>AI</span></h2>
                     <p id="empty-desc">Routing inteligente — vai ao agente certo automaticamente</p>
@@ -933,7 +941,10 @@ agentSelect.addEventListener('change', () => {
         '<div class="empty-state" id="empty-state"><div class="empty-state-hero">' +
         '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' +
         '<div class="empty-state-avatar" id="empty-avatar">🤖</div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
         '<button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client" style="display:block;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">🔗 Share Agent</button>' +
+        '<a id="manage-shares-btn" href="/shares" title="Manage shared links" style="display:block;background:none;border:1px solid #2a2a3a;color:#64748b;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:.15s">⚙️ Manage</a>' +
+        '</div>' +
         '</div>' +
         '<h2 id="empty-title">ClawYard <span>AI</span></h2>' +
         '<p id="empty-desc"></p></div>' +
@@ -2529,8 +2540,10 @@ function copyShareUrl() {
 // Show/hide share button based on selected agent
 agentSelect.addEventListener('change', updateShareBtn);
 function updateShareBtn() {
-    const btn = document.getElementById('share-agent-btn');
-    if (btn) btn.style.display = 'block';
+    const btn     = document.getElementById('share-agent-btn');
+    const manage  = document.getElementById('manage-shares-btn');
+    if (btn)    btn.style.display    = 'block';
+    if (manage) manage.style.display = 'block';
 }
 updateShareBtn();
 </script>

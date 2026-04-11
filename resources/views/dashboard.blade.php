@@ -166,7 +166,7 @@
         <a href="/patents/library" class="nav-link">🏛️ Patentes</a>
         <a href="/reports" class="nav-link">📋 Relatórios</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
-        <a href="/shares" class="nav-link">🔗 Partilhas</a>
+        <a href="/shares" class="nav-link" style="color:#60a5fa;border-color:#1e3a5f;background:#0a1a2e">🔗 Shared Agents</a>
         @if(Auth::user()->isAdmin())
             <a href="/admin/users" class="nav-link admin">⚙️ Admin</a>
         @endif
