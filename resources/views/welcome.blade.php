@@ -883,6 +883,7 @@ function updateEmptyState(agent) {
 }
 
 let isRecording  = false;
+let isStreaming   = false;
 let recognition  = null;
 let currentImg      = null;
 let currentImgType  = 'image/jpeg'; // MIME type of attached image
@@ -2084,6 +2085,7 @@ async function sendMessage() {
     input.value = '';
     input.style.height = 'auto';
     sendBtn.disabled = true;
+    isStreaming       = true;
 
     const selectedAgent = agentSelect.value;
     document.getElementById('empty-state')?.remove();
@@ -2159,7 +2161,7 @@ async function sendMessage() {
             }
             addMessage('ai', errMsg);
             logActivity('❌', `HTTP ${res.status}`, 'done');
-            sendBtn.disabled = false; clearAgentActive(); modelBadge.textContent = 'pronto'; input.focus();
+            sendBtn.disabled = false; isStreaming = false; clearAgentActive(); modelBadge.textContent = 'pronto'; input.focus();
             return;
         }
 
@@ -2440,6 +2442,7 @@ async function sendMessage() {
         console.error('sendMessage error:', err);
     } finally {
         sendBtn.disabled = false;
+        isStreaming       = false;
         clearAgentActive();
         modelBadge.textContent = 'pronto';
         input.focus();
