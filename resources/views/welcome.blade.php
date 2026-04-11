@@ -2139,6 +2139,7 @@ async function sendMessage() {
     let accumulated  = '';     // full reply text built chunk by chunk
     let streamMsg    = null;   // the AI message DOM element
     let streamBubble = null;   // the bubble div inside that message
+    let agentKey     = selectedAgent; // resolved agent (may change after meta)
 
     try {
         const res = await fetch('/api/chat', {
@@ -2186,7 +2187,7 @@ async function sendMessage() {
                 typing.remove();
                 resolveStep(stepAgent);
 
-                const agentKey = evt.agent || selectedAgent;
+                agentKey = evt.agent || selectedAgent;
 
                 // Apply agent color and mark correct grid item active
                 applyAgentColor(agentKey);
@@ -2222,6 +2223,14 @@ async function sendMessage() {
 
                 streamMsg    = msgEl;
                 streamBubble = msgEl.querySelector('.stream-bubble');
+                return;
+            }
+
+            // ── Smart suggestions event (arrives after response is complete) ──
+            if (evt.type === 'suggestions') {
+                if (evt.suggestions && evt.suggestions.length) {
+                    addSuggestions(evt.suggestions, evt.agent || agentKey);
+                }
                 return;
             }
 
@@ -2394,37 +2403,8 @@ async function sendMessage() {
                         chat.scrollTop = chat.scrollHeight;
                     }
 
-                    // Suggestions
-                    if (metaData?.suggestions) {
-                        addSuggestions(metaData.suggestions, agentKey);
-                    }
-
-                    // Autonomous action proposals
-                    if (accumulated && !accumulated.startsWith('__EMAIL__') && !accumulated.startsWith('__KYBER_')) {
-                        const replyLower = accumulated.toLowerCase();
-
-                        const salesAgents = ['sales','email','auto','orchestrator','maritime'];
-                        if (salesAgents.includes(agentKey) && (replyLower.includes('concorrente') || replyLower.includes('competitor'))) {
-                            setTimeout(() => addActionApproval({
-                                icon: '🔍',
-                                title: 'Análise de concorrentes detectada',
-                                description: 'Posso pesquisar automaticamente os concorrentes mencionados na base de dados de portos e enviar-lhe um email com o relatório completo.',
-                                agent: 'email',
-                                prompt: encodeURIComponent('Escreve um email com análise dos concorrentes nos portos europeus para enviar ao CEO'),
-                            }), 800);
-                        }
-
-                        const noEmailAgents = ['aria','quantum','nvidia','claude','document'];
-                        if ((replyLower.includes('proposta') || replyLower.includes('proposal')) && !noEmailAgents.includes(agentKey)) {
-                            setTimeout(() => addActionApproval({
-                                icon: '📧',
-                                title: 'Transformar em email profissional?',
-                                description: 'O agente gerou uma proposta. Queres que o Daniel Email a transforme num email profissional pronto a enviar?',
-                                agent: 'email',
-                                prompt: encodeURIComponent('Transforma em email profissional: ' + accumulated.substring(0,300)),
-                            }), 800);
-                        }
-                    }
+                    // Suggestions arrive via their own SSE event (type:'suggestions')
+                    // after the response is complete — handled in handleLine above.
 
                     logActivity('✅', 'Resposta pronta', 'done');
                     continue;

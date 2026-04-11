@@ -117,6 +117,10 @@ class NvidiaController extends Controller
                 'content' => $reply,
             ]);
 
+            $smartSuggestions = strlen($reply) > 80
+                ? $this->generateSmartSuggestions($agent->getName(), $message, $reply)
+                : [];
+
             return response()->json([
                 'success'      => true,
                 'mode'         => 'single',
@@ -125,7 +129,7 @@ class NvidiaController extends Controller
                 'model'        => $agent->getModel(),
                 'session_id'   => $sessionId,
                 'agent_log'    => $agentLog,
-                'suggestions'  => $this->getSuggestions($agent->getName(), $message),
+                'suggestions'  => $smartSuggestions,
             ]);
 
         } catch (\Exception $e) {
@@ -354,15 +358,14 @@ class NvidiaController extends Controller
         $resolvedHistory  = $history;
         $resolvedMessage  = $augmentedMessage; // pass array as-is for multimodal (PDF/image)
         $resolvedAgentLog = $agentLog;
-        $suggestions      = $this->getSuggestions($agent->getName(), $message);
         $agentModel       = $agent->getModel();
         $agentName_final  = $agent->getName();
         $conversationRef  = $conversation;
 
         return response()->stream(function () use (
             $resolvedAgent, $resolvedMessage, $resolvedHistory,
-            $resolvedAgentLog, $suggestions, $agentModel, $agentName_final,
-            $conversationRef, $sessionId, $userId
+            $resolvedAgentLog, $agentModel, $agentName_final,
+            $conversationRef, $sessionId, $userId, $message
         ) {
             // Release session lock so other tabs don't block waiting for this stream
             session()->save();
@@ -380,7 +383,7 @@ class NvidiaController extends Controller
                 'model'       => $agentModel,
                 'session_id'  => $sessionId,
                 'agent_log'   => $resolvedAgentLog,
-                'suggestions' => $suggestions,
+                'suggestions' => [], // sent later after response is complete
             ];
             echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
             flush();
@@ -458,6 +461,27 @@ class NvidiaController extends Controller
                 }
             }
 
+            // Generate smart contextual suggestions based on the actual response
+            if (strlen($fullReply) > 80) {
+                try {
+                    $smartSuggestions = $this->generateSmartSuggestions(
+                        $agentName_final,
+                        is_array($message) ? ($message[0]['text'] ?? '') : $message,
+                        $fullReply
+                    );
+                    if (!empty($smartSuggestions)) {
+                        echo 'data: ' . json_encode([
+                            'type'        => 'suggestions',
+                            'suggestions' => $smartSuggestions,
+                            'agent'       => $agentName_final,
+                        ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
+                        flush();
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning('ClawYard: smart suggestions failed — ' . $e->getMessage());
+                }
+            }
+
             echo "data: [DONE]\n\n";
             flush();
         }, 200, [
@@ -522,102 +546,84 @@ class NvidiaController extends Controller
     }
 
     /**
-     * Generate contextual suggestions based on agent and message.
+     * Generate smart contextual suggestions based on the actual agent response.
+     * Uses a fast Claude call with the response snippet to produce 3 relevant actions.
      */
-    protected function getSuggestions(string $agent, string $message): array
+    protected function generateSmartSuggestions(string $agent, string $question, string $response): array
     {
-        $suggestions = [
-            'email'    => [
-                '📧 Enviar este email agora',
-                '🌍 Traduzir para inglês',
-                '📋 Criar versão formal',
-                '📤 Enviar para outro destinatário',
-            ],
-            'sales'    => [
-                '💰 Gerar proposta comercial completa',
-                '📧 Enviar proposta por email',
-                '🏷️ Ver lista de preços',
-                '📊 Comparar com concorrentes',
-            ],
-            'support'  => [
-                '📄 Ver documentação técnica',
-                '🔧 Abrir ticket de suporte',
-                '📞 Escalar para técnico',
-                '📧 Enviar relatório por email',
-            ],
-            'sap'      => [
-                '📦 Ver stock actual',
-                '🧾 Gerar ordem de compra',
-                '📊 Relatório financeiro',
-                '📧 Enviar relatório SAP',
-            ],
-            'document' => [
-                '📤 Carregar outro documento',
-                '📧 Enviar resumo por email',
-                '🔍 Pesquisar mais documentos',
-                '📋 Exportar análise',
-            ],
-            'maritime' => [
-                '🚢 Ver portos disponíveis',
-                '📊 Analisar concorrentes',
-                '📧 Contactar armador por email',
-                '🗺️ Ver rotas marítimas',
-            ],
-            'claude'   => [
-                '🔄 Reformular resposta',
-                '📧 Criar email com este conteúdo',
-                '📊 Análise mais detalhada',
-                '🌍 Traduzir',
-            ],
-            'nvidia'   => [
-                '🔄 Gerar alternativa',
-                '📧 Enviar resultado por email',
-                '📊 Ver mais detalhes',
-                '🤖 Modo multi-agente',
-            ],
-            'cyber'    => [
-                '🔴 Ver vulnerabilidades críticas',
-                '🛡️ Gerar patch de segurança',
-                '📋 Relatório OWASP completo',
-                '🔒 Verificar autenticação e API',
-            ],
-            'aria'     => [
-                '🔐 Scan STRIDE completo ao partyard.eu',
-                '🛡️ Relatório OWASP Top 10',
-                '🔒 Verificar certificados SSL',
-                '📋 Gerar threat model da API',
-            ],
-            'quantum'  => [
-                '⚛️ Ver papers de quantum de hoje',
-                '🏛️ Top 7 patentes USPTO para PartYard',
-                '💡 Professor\'s strategic insight',
-                '🔬 Analisar paper específico do arXiv',
-            ],
-            'kyber'    => [
-                '🔒 Gerar par de chaves Kyber-1024',
-                '📧 Encriptar e enviar email',
-                '🔓 Como desencriptar um email recebido?',
-                '🛡️ Explica o esquema KEM + AES-256-GCM',
-            ],
-            'maritime' => [
-                '🚢 Ver portos disponíveis',
-                '📊 Analisar concorrentes',
-                '📧 Contactar armador por email',
-                '🗺️ Ver rotas marítimas',
-            ],
-            'auto'     => [
-                '📧 Criar email sobre este tema',
-                '📊 Análise mais detalhada',
-                '🔄 Reformular',
-                '🚢 Pesquisar portos relacionados',
-            ],
-        ];
+        $agentContext = match($agent) {
+            'email'    => 'email writer (Daniel)',
+            'sales'    => 'sales & commercial proposals',
+            'support'  => 'technical support',
+            'sap'      => 'SAP ERP & inventory',
+            'document' => 'document analysis',
+            'maritime' => 'maritime & shipping (Capitão Porto)',
+            'capitao'  => 'maritime & shipping (Capitão Porto)',
+            'quantum'  => 'quantum research & patents',
+            'aria'     => 'cybersecurity (ARIA)',
+            'kyber'    => 'post-quantum encryption (Kyber)',
+            'qnap'     => 'company document archive (invoices, prices, contracts)',
+            'acingov'  => 'government & ACI procurement',
+            'engineer' => 'engineering & technical analysis',
+            'patent'   => 'patent research',
+            'energy'   => 'energy sector analysis',
+            default    => 'general assistant',
+        };
 
-        $default = $suggestions['auto'];
+        $snippet  = mb_substr(strip_tags($response), 0, 800);
+        $q        = mb_substr($question, 0, 200);
 
-        $list = $suggestions[$agent] ?? $default;
-        shuffle($list);
-        return array_slice($list, 0, 3);
+        $prompt = <<<PROMPT
+You are a UX assistant. Given this AI agent response, suggest exactly 3 specific follow-up actions the user can take next.
+
+Agent type: {$agentContext}
+User asked: {$q}
+Agent response (excerpt): {$snippet}
+
+Rules:
+- Each suggestion must be SPECIFIC to what was found in the response (mention real names, values, or items if present)
+- Start each with a relevant emoji
+- Max 60 chars each
+- No generic "send email" unless the content is specifically an email
+- Return ONLY a JSON array of 3 strings, nothing else
+- Language: same as the response (Portuguese if response is in Portuguese)
+
+Example format: ["🔍 Pesquisar mais sobre fornecedor X", "📊 Comparar preços com Y", "📋 Ver contrato completo Z"]
+PROMPT;
+
+        try {
+            $apiKey = config('services.anthropic.api_key');
+            if (!$apiKey) return [];
+
+            $client = new \GuzzleHttp\Client(['base_uri' => 'https://api.anthropic.com', 'timeout' => 8]);
+            $res    = $client->post('/v1/messages', [
+                'headers' => [
+                    'x-api-key'         => $apiKey,
+                    'anthropic-version' => '2023-06-01',
+                    'content-type'      => 'application/json',
+                ],
+                'json' => [
+                    'model'      => 'claude-haiku-4-5',
+                    'max_tokens' => 120,
+                    'messages'   => [['role' => 'user', 'content' => $prompt]],
+                ],
+            ]);
+
+            $data = json_decode($res->getBody()->getContents(), true);
+            $text = trim($data['content'][0]['text'] ?? '');
+
+            // Extract JSON array from response
+            if (preg_match('/\[.*?\]/s', $text, $m)) {
+                $suggestions = json_decode($m[0], true);
+                if (is_array($suggestions) && count($suggestions) >= 2) {
+                    return array_slice($suggestions, 0, 3);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('ClawYard smart suggestions API error: ' . $e->getMessage());
+        }
+
+        return [];
     }
 
     protected function combineReplies(array $results): string
