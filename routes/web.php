@@ -145,10 +145,13 @@ Route::get('/schedules', function () {
 })->middleware(['auth'])->name('schedules');
 
 // ─── Agent Shares — public client chat ───────────────────────────────────────
-// Public: no auth needed (token-based access)
-Route::get('/a/{token}',          [AgentShareController::class, 'show']);
-Route::post('/a/{token}/password', [AgentShareController::class, 'verifyPassword']);
-Route::post('/a/{token}/stream',   [AgentShareController::class, 'stream'])->middleware('throttle:60,1');
+// Public: no auth needed (token-based access), CSRF exempt
+Route::get('/a/{token}', [AgentShareController::class, 'show']);
+Route::post('/a/{token}/password', [AgentShareController::class, 'verifyPassword'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
+Route::post('/a/{token}/stream', [AgentShareController::class, 'stream'])
+    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
+    ->middleware('throttle:60,1');
 
 // Authenticated: manage shares
 Route::middleware(['auth'])->group(function () {

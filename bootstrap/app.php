@@ -15,11 +15,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => \App\Http\Middleware\AdminMiddleware::class,
         ]);
-        // Public agent share endpoints — no CSRF (URL token is the auth mechanism)
-        $middleware->validateCsrfTokens(except: [
-            'a/*/stream',
-            'a/*/password',
-        ]);
         // Security headers on all web responses
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeadersMiddleware::class,
