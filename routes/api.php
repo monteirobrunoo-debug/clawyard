@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AgentShareController;
 use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\EmailEncryptionController;
 use App\Http\Controllers\EmailSendController;
@@ -12,6 +13,10 @@ use App\Services\PartYardProfileService;
 use Illuminate\Support\Facades\Route;
 
 // ─── PUBLIC (unauthenticated) ──────────────────────────────────────────────
+
+// Agent Shares — public SSE stream (no CSRF in API routes)
+Route::post('/a/{token}/stream', [AgentShareController::class, 'stream'])
+    ->middleware('throttle:60,1');
 
 // Company profile JSON — readable by AI agents, crawlers, and integrations
 Route::get('/company-profile', function () {

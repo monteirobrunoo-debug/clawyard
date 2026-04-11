@@ -145,13 +145,11 @@ Route::get('/schedules', function () {
 })->middleware(['auth'])->name('schedules');
 
 // ─── Agent Shares — public client chat ───────────────────────────────────────
-// Public: no auth needed (token-based access), CSRF exempt
+// GET page + password POST: web routes (need session)
+// POST stream: handled in api.php (no CSRF)
 Route::get('/a/{token}', [AgentShareController::class, 'show']);
 Route::post('/a/{token}/password', [AgentShareController::class, 'verifyPassword'])
-    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class]);
-Route::post('/a/{token}/stream', [AgentShareController::class, 'stream'])
-    ->withoutMiddleware([\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class])
-    ->middleware('throttle:60,1');
+    ->withoutMiddleware('App\Http\Middleware\VerifyCsrfToken');
 
 // Authenticated: manage shares
 Route::middleware(['auth'])->group(function () {

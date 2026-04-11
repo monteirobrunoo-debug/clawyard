@@ -180,7 +180,7 @@ async function sendMessage() {
     const typingEl = addTyping();
 
     try {
-        const resp = await fetch(`/a/${TOKEN}/stream`, {
+        const resp = await fetch(`/api/a/${TOKEN}/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
             body: JSON.stringify({ message: text, history: history.slice(-20), session_id: SESSION_ID }),
