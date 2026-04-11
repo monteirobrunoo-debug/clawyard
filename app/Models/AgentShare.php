@@ -81,7 +81,7 @@ class AgentShare extends Model
             'engineer'     => ['name' => 'Eng. Victor I&D',    'emoji' => '🔩', 'color' => '#f97316', 'photo' => '/images/agents/engineer.png'],
             'patent'       => ['name' => 'Dra. Sofia IP',      'emoji' => '🏛️', 'color' => '#8b5cf6', 'photo' => null],
             'energy'       => ['name' => 'Eng. Sofia Energia', 'emoji' => '⚡', 'color' => '#10b981', 'photo' => null],
-            'kyber'        => ['name' => 'KYBER Encryption',   'emoji' => '🔒', 'color' => '#76b900', 'photo' => null],
+            'kyber'        => ['name' => 'KYBER Encryption',   'emoji' => '🔒', 'color' => '#76b900', 'photo' => '/images/agents/kyber.png'],
             'claude'       => ['name' => 'Bruno AI',           'emoji' => '🧠', 'color' => '#a855f7', 'photo' => '/images/agents/claude.png'],
             'nvidia'       => ['name' => 'Carlos NVIDIA',      'emoji' => '⚡', 'color' => '#76b900', 'photo' => '/images/agents/nvidia.png'],
             'qnap'         => ['name' => 'Arquivo PartYard',   'emoji' => '🗄️', 'color' => '#f59e0b', 'photo' => null],

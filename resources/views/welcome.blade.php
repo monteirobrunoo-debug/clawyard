@@ -481,10 +481,9 @@
                 <div class="agent-grid-item" data-agent="engineer"   title="Eng. Victor R&D"><span class="ag-icon"><img src="/images/agents/engineer.png" class="ag-photo" alt="Victor"></span><span class="ag-name">Victor</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="patent"     title="Dr. Sofia IP"><span class="ag-icon">🏛️</span><span class="ag-name">Sofia IP</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="energy"     title="Eng. Sofia Energy"><span class="ag-icon">🌱</span><span class="ag-name">Energy</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon">🔒</span><span class="ag-name">KYBER</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon"><img src="/images/agents/kyber.png" class="ag-photo" alt="KYBER"></span><span class="ag-name">KYBER</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="qnap"       title="PartYard Archive"><span class="ag-icon">🗄️</span><span class="ag-name">Archive</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="capitao"    title="Captain Porto"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Capitão"></span><span class="ag-name">Capitão</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="capitao"    title="Capitão Porto"><span class="ag-icon">⚓</span><span class="ag-name">Capitão</span><span class="ag-status">pronto</span><span class="ag-dot"></span></div>
             </div>
         </div>
     </div>
@@ -610,6 +609,7 @@ const AGENT_PHOTOS = {
     capitao:      '/images/agents/maritime.png',
     acingov:      '/images/agents/acingov.png',
     engineer:     '/images/agents/engineer.png',
+    kyber:        '/images/agents/kyber.png',
 };
 
 const AGENT_NAMES = {
