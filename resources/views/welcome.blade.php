@@ -1197,17 +1197,11 @@ function setAgentDone(agentName) {
 document.querySelectorAll('.agent-grid-item').forEach(el => {
     el.addEventListener('click', () => {
         const agent = el.dataset.agent;
-        if (agentSelect.querySelector(`option[value="${agent}"]`)) {
-            agentSelect.value = agent;
-        } else {
-            agentSelect.value = 'auto';
+        const target = agentSelect.querySelector(`option[value="${agent}"]`) ? agent : 'auto';
+        if (agentSelect.value !== target) {
+            agentSelect.value = target;
+            agentSelect.dispatchEvent(new Event('change')); // triggers full switch logic
         }
-        renderStarterChips(agentSelect.value);
-        applyAgentColor(agentSelect.value);
-        updateEmptyState(agentSelect.value);
-        // Remove .active from all but keep .working — working agents stay visible
-        document.querySelectorAll('.agent-grid-item').forEach(e => e.classList.remove('active'));
-        el.classList.add('active');
     });
 });
 
