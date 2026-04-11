@@ -557,7 +557,19 @@ const activityLog = document.getElementById('activity-log');
 const actPanel    = document.getElementById('activity-panel');
 
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
-const SESSION_ID = 'cyw_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+
+// ── Persistent SESSION_ID per agent (survives page navigation) ──────────────
+function getSessionId(agent) {
+    const key = 'cyw_session_' + (agent || 'auto');
+    let id = localStorage.getItem(key);
+    if (!id) {
+        id = 'cyw_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+        localStorage.setItem(key, id);
+    }
+    return id;
+}
+let selectedAgent = agentSelect.value || 'auto';
+let SESSION_ID    = getSessionId(selectedAgent);
 
 const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
@@ -886,25 +898,48 @@ if (urlAgent && agentSelect.querySelector(`option[value="${urlAgent}"]`)) {
 
 // Init on page load (after URL agent is applied)
 const initAgent = agentSelect.value || 'auto';
+selectedAgent = initAgent;
+SESSION_ID    = getSessionId(initAgent);
 renderStarterChips(initAgent);
 applyAgentColor(initAgent);
 updateEmptyState(initAgent);
+updateShareBtn();
 // Mark initial agent in grid
 document.querySelectorAll('.agent-grid-item').forEach(el => {
     el.classList.toggle('active', el.dataset.agent === initAgent);
 });
 
+// Restore history on page load
+restoreHistory(initAgent);
+
 // Update when agent changes
 agentSelect.addEventListener('change', () => {
     const agent = agentSelect.value;
+    selectedAgent = agent;
+    SESSION_ID    = getSessionId(agent);
     renderStarterChips(agent);
     applyAgentColor(agent);
     updateEmptyState(agent);
+    updateShareBtn();
     document.querySelectorAll('.agent-grid-item').forEach(el => {
         el.classList.toggle('active', el.dataset.agent === agent);
         const statusEl = el.querySelector('.ag-status');
         if (statusEl && el.dataset.agent !== agent) statusEl.textContent = 'pronto';
     });
+    // Clear chat and restore history for new agent
+    document.getElementById('chat').innerHTML = '';
+    document.getElementById('chat').insertAdjacentHTML('beforeend',
+        '<div class="empty-state" id="empty-state"><div class="empty-state-hero">' +
+        '<div style="position:relative;display:inline-block">' +
+        '<div class="empty-state-avatar" id="empty-avatar">🤖</div>' +
+        '<button id="share-agent-btn" onclick="openShareModal()" title="Emprestar este agente a um cliente" style="display:block;position:absolute;bottom:-6px;right:-6px;background:var(--agent-color);border:2px solid var(--bg);color:#000;font-size:11px;font-weight:800;padding:4px 8px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">🔗 Emprestar</button>' +
+        '</div>' +
+        '<h2 id="empty-title">ClawYard <span>AI</span></h2>' +
+        '<p id="empty-desc"></p></div>' +
+        '<div class="starter-chips" id="starter-chips"></div></div>');
+    updateEmptyState(agent);
+    renderStarterChips(agent);
+    restoreHistory(agent);
 });
 
 // ── Toggle activity panel ──
@@ -2410,6 +2445,43 @@ async function sendMessage() {
         input.focus();
     }
 }
+
+// ═══════════════════════════════════════════════════════
+//  HISTORY RESTORE
+// ═══════════════════════════════════════════════════════
+async function restoreHistory(agent) {
+    const sid = getSessionId(agent);
+    try {
+        const r    = await fetch(`/api/history/${sid}`);
+        const data = await r.json();
+        const msgs = data.messages || [];
+        if (!msgs.length) return;
+
+        // Remove empty state
+        document.getElementById('empty-state')?.remove();
+
+        for (const m of msgs) {
+            const role     = m.role === 'user' ? 'user' : 'assistant';
+            const agentKey = m.agent || agent;
+            addMessage(role, m.content, agentKey);
+        }
+
+        // Log restoration
+        const step = logActivity('📂', 'Histórico restaurado — ' + msgs.length + ' mensagens');
+        setTimeout(() => resolveStep(step), 1500);
+    } catch(e) {
+        // silently ignore — no history or network error
+    }
+}
+
+// Warn before leaving if agent is streaming
+window.addEventListener('beforeunload', (e) => {
+    if (isStreaming) {
+        e.preventDefault();
+        e.returnValue = 'O agente ainda está a processar. Tens a certeza que queres sair?';
+        return e.returnValue;
+    }
+});
 
 // ═══════════════════════════════════════════════════════
 //  SHARE AGENT MODAL
