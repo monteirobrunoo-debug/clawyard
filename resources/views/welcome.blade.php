@@ -540,6 +540,7 @@
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
             <label for="image-input" class="icon-btn" id="image-btn" title="Anexar ficheiro (imagem, PDF, Word, Excel, TXT)" style="cursor:pointer;display:flex;align-items:center;justify-content:center">📎</label>
             <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none">
+            <button class="icon-btn" id="clear-btn" title="Limpar histórico desta conversa" onclick="clearHistory()">🗑️</button>
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -940,7 +941,7 @@ agentSelect.addEventListener('change', () => {
     document.querySelectorAll('.agent-grid-item').forEach(el => {
         el.classList.toggle('active', el.dataset.agent === agent);
         const statusEl = el.querySelector('.ag-status');
-        if (statusEl && el.dataset.agent !== agent) statusEl.textContent = 'pronto';
+        if (statusEl && el.dataset.agent !== agent && !el.classList.contains('working')) statusEl.textContent = 'ready';
     });
     // Clear chat and restore history for new agent
     document.getElementById('chat').innerHTML = '';
@@ -2483,6 +2484,37 @@ async function restoreHistory(agent) {
     } catch(e) {
         // silently ignore — no history or network error
     }
+}
+
+// Clear current agent's history
+async function clearHistory() {
+    if (isStreaming) return;
+    const sid = SESSION_ID;
+    if (!confirm('Limpar o histórico desta conversa?')) return;
+    try {
+        await fetch(`/api/history/${sid}`, {
+            method: 'DELETE',
+            headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json' }
+        });
+    } catch(e) { /* ignore */ }
+    // Clear UI
+    const agent = agentSelect.value;
+    document.getElementById('chat').innerHTML = '';
+    document.getElementById('chat').insertAdjacentHTML('beforeend',
+        '<div class="empty-state" id="empty-state"><div class="empty-state-hero">' +
+        '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' +
+        '<div class="empty-state-avatar" id="empty-avatar">🤖</div>' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+        '<button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client" style="display:block;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">🔗 Share Agent</button>' +
+        '<a id="manage-shares-btn" href="/shares" title="Manage shared links" style="display:block;background:none;border:1px solid #2a2a3a;color:#64748b;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:.15s">⚙️ Manage</a>' +
+        '</div></div>' +
+        '<h2 id="empty-title">ClawYard <span>AI</span></h2>' +
+        '<p id="empty-desc"></p></div>' +
+        '<div class="starter-chips" id="starter-chips"></div></div>');
+    updateEmptyState(agent);
+    renderStarterChips(agent);
+    const step = logActivity('🗑️', 'Histórico limpo');
+    setTimeout(() => resolveStep(step), 1000);
 }
 
 // Warn before leaving if agent is streaming

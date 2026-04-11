@@ -546,6 +546,24 @@ class NvidiaController extends Controller
     }
 
     /**
+     * DELETE /api/history/{session_id}
+     * Clears all messages for the given session (auth-scoped).
+     */
+    public function clearHistory(string $sessionId): JsonResponse
+    {
+        $userId   = auth()->id();
+        $prefixed = 'u' . $userId . '_' . $sessionId;
+
+        $conversation = Conversation::where('session_id', $prefixed)->first();
+
+        if ($conversation) {
+            $conversation->messages()->delete();
+        }
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
      * Generate smart contextual suggestions based on the actual agent response.
      * Uses a fast Claude call with the response snippet to produce 3 relevant actions.
      */

@@ -47,6 +47,7 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
 
     // Conversation history — only own sessions
     Route::get('/history/{sessionId}', [NvidiaController::class, 'history']);
+    Route::delete('/history/{sessionId}', [NvidiaController::class, 'clearHistory']);
 
     // Reports — save agent output
     Route::post('/reports', [ReportController::class, 'store']);
