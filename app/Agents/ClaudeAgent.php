@@ -32,7 +32,7 @@ class ClaudeAgent implements AgentInterface
             'headers' => $this->headersForMessage($message),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 4096,
+                'max_tokens' => 8192,
                 'messages'   => $messages,
             ],
         ]);
@@ -53,7 +53,7 @@ class ClaudeAgent implements AgentInterface
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 4096,
+                'max_tokens' => 8192,
                 'messages'   => $messages,
                 'stream'     => true,
             ],

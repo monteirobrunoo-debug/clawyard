@@ -29,7 +29,7 @@ class NvidiaAgent implements AgentInterface
             'json' => [
                 'model'       => config('services.nvidia.model'),
                 'messages'    => $messages,
-                'max_tokens'  => 1024,
+                'max_tokens'  => 8192,
                 'temperature' => 0.7,
             ],
         ]);
@@ -49,7 +49,7 @@ class NvidiaAgent implements AgentInterface
             'json'   => [
                 'model'       => config('services.nvidia.model'),
                 'messages'    => $messages,
-                'max_tokens'  => 1024,
+                'max_tokens'  => 8192,
                 'temperature' => 0.7,
                 'stream'      => true,
             ],

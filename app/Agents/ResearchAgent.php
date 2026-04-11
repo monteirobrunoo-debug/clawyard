@@ -146,7 +146,7 @@ PROMPT;
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 4096,
+                'max_tokens' => 8192,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
@@ -170,7 +170,7 @@ PROMPT;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 4096,
+                'max_tokens' => 8192,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,

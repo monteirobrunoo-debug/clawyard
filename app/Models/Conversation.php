@@ -22,9 +22,13 @@ class Conversation extends Model
 
     public function getHistoryAttribute(): array
     {
+        // Keep last 40 messages (20 turns) to stay well within context limits
         return $this->messages()
-            ->orderBy('created_at')
+            ->orderBy('created_at', 'desc')
+            ->limit(40)
             ->get()
+            ->reverse()
+            ->values()
             ->map(fn($m) => ['role' => $m->role, 'content' => $m->content])
             ->toArray();
     }
