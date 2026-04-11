@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClawYard — Agentes</title>
+    <title>ClawYard — Agents</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -161,10 +161,10 @@
     <span class="badge">Powered by SETQ.AI Team</span>
     <div class="nav-links">
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
-        <a href="/agents/activity" class="nav-link" style="color:#76b900;border-color:#1e3300;background:#0d1a00">🤖 Actividade</a>
-        <a href="/discoveries" class="nav-link">🔬 Descobertas</a>
-        <a href="/patents/library" class="nav-link">🏛️ Patentes</a>
-        <a href="/reports" class="nav-link">📋 Relatórios</a>
+        <a href="/agents/activity" class="nav-link" style="color:#76b900;border-color:#1e3300;background:#0d1a00">🤖 Activity</a>
+        <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
+        <a href="/patents/library" class="nav-link">🏛️ Patents</a>
+        <a href="/reports" class="nav-link">📋 Reports</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
         <a href="/shares" class="nav-link" style="color:#60a5fa;border-color:#1e3a5f;background:#0a1a2e">🔗 Shared Agents</a>
         @if(Auth::user()->isAdmin())
@@ -173,43 +173,43 @@
         <span class="user-name">{{ Auth::user()->name }}</span>
         <form method="POST" action="{{ route('logout') }}" class="logout-form">
             @csrf
-            <button type="submit" class="logout-btn">Sair</button>
+            <button type="submit" class="logout-btn">Log out</button>
         </form>
     </div>
 </header>
 
 <div class="hero">
     <p class="hero-label">HP-Group · PartYard Marine · PartYard Military</p>
-    <h1>Escolha o seu <span>Agente</span></h1>
-    <p>Powered by SETQ.AI Team — 14 agentes especializados prontos a ajudar</p>
+    <h1>Choose your <span>Agent</span></h1>
+    <p>Powered by SETQ.AI Team — 14 specialised agents ready to help</p>
 </div>
 
-<p class="section-title">Agentes Disponíveis</p>
+<p class="section-title">Available Agents</p>
 
 <div class="agents-grid">
 
     @php
     $agents = [
-        ['key' => 'briefing',   'name' => 'Estratega Renato',       'emoji' => '📊', 'role' => 'Briefing executivo — reúne Quantum, ARIA, Sales e todos os agentes num plano de acção', 'color' => '#00aaff',  'special' => true],
-        ['key' => 'orchestrator','name' => 'Todos os Agentes',      'emoji' => '🌐', 'role' => 'Orquestrador — activa múltiplos agentes em paralelo',                                   'color' => '#76b900'],
-        ['key' => 'sales',       'name' => 'Marco Sales',           'emoji' => '💼', 'role' => 'Vendas MTU · CAT · MAK · Jenbacher · SKF · Schottel',                                  'color' => '#3b82f6'],
-        ['key' => 'support',     'name' => 'Marcus Suporte',        'emoji' => '🔧', 'role' => 'Suporte Técnico — avarias de motores e sistemas',                                       'color' => '#f59e0b'],
-        ['key' => 'email',       'name' => 'Daniel Email',          'emoji' => '📧', 'role' => 'Email marítimo — armadores, agentes e navios',                                          'color' => '#8b5cf6'],
-        ['key' => 'sap',         'name' => 'Richard SAP',           'emoji' => '📊', 'role' => 'SAP B1 — stock, facturas e ERP',                                                        'color' => '#06b6d4'],
-        ['key' => 'document',    'name' => 'Comandante Doc',        'emoji' => '📄', 'role' => 'Documentos — analisa PDFs, contratos e certificados técnicos',                          'color' => '#94a3b8'],
-        ['key' => 'capitao',     'name' => 'Capitão Porto',         'emoji' => '⚓', 'role' => 'Operações portuárias — escalas, documentação e logística marítima',              'color' => '#0ea5e9'],
-        ['key' => 'claude',      'name' => 'Bruno AI',              'emoji' => '🧠', 'role' => 'Claude — raciocínio avançado e análise complexa',                                       'color' => '#a855f7'],
-        ['key' => 'nvidia',      'name' => 'Carlos NVIDIA',         'emoji' => '⚡', 'role' => 'NVIDIA NeMo — velocidade e eficiência máxima',                                          'color' => '#76b900'],
-        ['key' => 'aria',        'name' => 'ARIA Security',         'emoji' => '🔐', 'role' => 'Cibersegurança — STRIDE, OWASP, scan diário dos sites',                                 'color' => '#ef4444'],
-        ['key' => 'quantum',     'name' => 'Prof. Quantum Leap',    'emoji' => '⚛️', 'role' => 'Quantum — papers arXiv + patentes USPTO para PartYard',                                 'color' => '#22d3ee'],
-        ['key' => 'finance',     'name' => 'Dr. Luís Financeiro',   'emoji' => '💰', 'role' => 'ROC · TOC · PhD Gestão Bancária — Contabilidade, Auditoria e Fiscalidade',              'color' => '#10b981'],
-        ['key' => 'research',    'name' => 'Marina Research',       'emoji' => '🔍', 'role' => 'Inteligência competitiva — benchmarking, mercado e melhorias do site',                  'color' => '#f97316'],
-        ['key' => 'acingov',     'name' => 'Dra. Ana Contratos',    'emoji' => '🏛️', 'role' => 'Contratação pública — concursos Acingov classificados por relevância para PartYard',       'color' => '#f59e0b'],
-        ['key' => 'engineer',    'name' => 'Eng. Victor I&D',       'emoji' => '🔩', 'role' => 'I&D e Desenvolvimento de Produto — planos TRL, CAPEX, roadmap para novos equipamentos PartYard', 'color' => '#f97316'],
-        ['key' => 'patent',      'name' => 'Dra. Sofia IP',         'emoji' => '🏛️', 'role' => 'Propriedade Intelectual — validação de patentes, prior art EPO/USPTO, patenteabilidade e FTO', 'color' => '#8b5cf6'],
-        ['key' => 'energy',      'name' => 'Eng. Sofia Energia',    'emoji' => '⚡', 'role' => 'Descarbonização marítima — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H2, Fleet Energy Management', 'color' => '#10b981'],
-        ['key' => 'kyber',       'name' => 'KYBER Encryption',      'emoji' => '🔒', 'role' => 'Encriptação post-quantum — Kyber-1024 + AES-256-GCM, geração de chaves e emails encriptados',    'color' => '#76b900'],
-        ['key' => 'qnap',        'name' => 'Arquivo PartYard',      'emoji' => '🗄️', 'role' => 'Arquivo documental — pesquisa preços, códigos, invoices, licenças e contratos no servidor QNAP', 'color' => '#f59e0b'],
+        ['key' => 'briefing',   'name' => 'Strategist Renato',      'emoji' => '📊', 'role' => 'Executive briefing — combines Quantum, ARIA, Sales and all agents into an action plan', 'color' => '#00aaff',  'special' => true],
+        ['key' => 'orchestrator','name' => 'All Agents',            'emoji' => '🌐', 'role' => 'Orchestrator — activates multiple agents in parallel',                                  'color' => '#76b900'],
+        ['key' => 'sales',       'name' => 'Marco Sales',           'emoji' => '💼', 'role' => 'Sales MTU · CAT · MAK · Jenbacher · SKF · Schottel',                                   'color' => '#3b82f6'],
+        ['key' => 'support',     'name' => 'Marcus Support',        'emoji' => '🔧', 'role' => 'Technical Support — engine and system fault diagnosis',                                 'color' => '#f59e0b'],
+        ['key' => 'email',       'name' => 'Daniel Email',          'emoji' => '📧', 'role' => 'Maritime email — shipowners, agents and vessels',                                       'color' => '#8b5cf6'],
+        ['key' => 'sap',         'name' => 'Richard SAP',           'emoji' => '📊', 'role' => 'SAP B1 — stock, invoices and ERP',                                                      'color' => '#06b6d4'],
+        ['key' => 'document',    'name' => 'Commander Doc',         'emoji' => '📄', 'role' => 'Documents — analyses PDFs, contracts and technical certificates',                       'color' => '#94a3b8'],
+        ['key' => 'capitao',     'name' => 'Captain Porto',         'emoji' => '⚓', 'role' => 'Port operations — port calls, documentation and maritime logistics',                    'color' => '#0ea5e9'],
+        ['key' => 'claude',      'name' => 'Bruno AI',              'emoji' => '🧠', 'role' => 'Claude — advanced reasoning and complex analysis',                                      'color' => '#a855f7'],
+        ['key' => 'nvidia',      'name' => 'Carlos NVIDIA',         'emoji' => '⚡', 'role' => 'NVIDIA NeMo — maximum speed and efficiency',                                            'color' => '#76b900'],
+        ['key' => 'aria',        'name' => 'ARIA Security',         'emoji' => '🔐', 'role' => 'Cybersecurity — STRIDE, OWASP, daily site scanning',                                   'color' => '#ef4444'],
+        ['key' => 'quantum',     'name' => 'Prof. Quantum Leap',    'emoji' => '⚛️', 'role' => 'Quantum — arXiv papers + USPTO patents for PartYard',                                   'color' => '#22d3ee'],
+        ['key' => 'finance',     'name' => 'Dr. Luís Finance',      'emoji' => '💰', 'role' => 'ROC · TOC · PhD Banking Management — Accounting, Audit and Taxation',                  'color' => '#10b981'],
+        ['key' => 'research',    'name' => 'Marina Research',       'emoji' => '🔍', 'role' => 'Competitive intelligence — benchmarking, market analysis and site improvements',        'color' => '#f97316'],
+        ['key' => 'acingov',     'name' => 'Dr. Ana Contracts',     'emoji' => '🏛️', 'role' => 'Public procurement — Acingov tenders ranked by relevance for PartYard',               'color' => '#f59e0b'],
+        ['key' => 'engineer',    'name' => 'Eng. Victor R&D',       'emoji' => '🔩', 'role' => 'R&D and Product Development — TRL plans, CAPEX, roadmap for new PartYard equipment',   'color' => '#f97316'],
+        ['key' => 'patent',      'name' => 'Dr. Sofia IP',          'emoji' => '🏛️', 'role' => 'Intellectual Property — patent validation, prior art EPO/USPTO, patentability and FTO','color' => '#8b5cf6'],
+        ['key' => 'energy',      'name' => 'Eng. Sofia Energy',     'emoji' => '⚡', 'role' => 'Maritime decarbonisation — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H2, Fleet Energy Mgmt', 'color' => '#10b981'],
+        ['key' => 'kyber',       'name' => 'KYBER Encryption',      'emoji' => '🔒', 'role' => 'Post-quantum encryption — Kyber-1024 + AES-256-GCM, key generation and encrypted email','color' => '#76b900'],
+        ['key' => 'qnap',        'name' => 'PartYard Archive',      'emoji' => '🗄️', 'role' => 'Document archive — search prices, codes, invoices, licences and contracts on QNAP',   'color' => '#f59e0b'],
     ];
     @endphp
 
@@ -240,11 +240,11 @@
         <div class="agent-name">{{ $agent['name'] }}</div>
         <div class="agent-role">{{ $agent['role'] }}</div>
         @if($agent['key'] === 'sap')
-            <span class="talk-btn">Falar</span>
+            <span class="talk-btn">Chat</span>
         @elseif($isSpecial)
-            <span class="talk-btn">Gerar Briefing →</span>
+            <span class="talk-btn">Generate Briefing →</span>
         @else
-            <span class="talk-btn">Falar</span>
+            <span class="talk-btn">Chat</span>
         @endif
     </a>
     @if($agent['key'] === 'sap')
@@ -254,7 +254,7 @@
            onmouseover="this.style.background='rgba(6,182,212,.14)'"
            onmouseout="this.style.background='rgba(6,182,212,.07)'"
            onclick="event.stopPropagation()">
-            🗂️ Documentos
+            🗂️ Documents
         </a>
         <a href="https://sld.partyard.privatcloud.biz/webx/index.html" target="_blank"
            style="flex:1;text-align:center;font-size:11px;font-weight:600;color:#06b6d4;text-decoration:none;padding:5px 0;background:rgba(6,182,212,.07);transition:background .15s;"
