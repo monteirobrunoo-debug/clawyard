@@ -497,7 +497,13 @@
         <div id="chat">
             <div class="empty-state" id="empty-state">
                 <div class="empty-state-hero">
-                    <div class="empty-state-avatar" id="empty-avatar">🤖</div>
+                    <div style="position:relative;display:inline-block">
+                        <div class="empty-state-avatar" id="empty-avatar">🤖</div>
+                        <button id="share-agent-btn" onclick="openShareModal()" title="Emprestar este agente a um cliente"
+                            style="display:none;position:absolute;bottom:-6px;right:-6px;background:var(--agent-color);border:2px solid var(--bg);color:#000;font-size:11px;font-weight:800;padding:4px 8px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">
+                            🔗 Emprestar
+                        </button>
+                    </div>
                     <h2 id="empty-title">ClawYard <span>AI</span></h2>
                     <p id="empty-desc">Routing inteligente — vai ao agente certo automaticamente</p>
                 </div>
@@ -2404,7 +2410,139 @@ async function sendMessage() {
         input.focus();
     }
 }
+
+// ═══════════════════════════════════════════════════════
+//  SHARE AGENT MODAL
+// ═══════════════════════════════════════════════════════
+function openShareModal() {
+    const agent = agentSelect.value;
+    if (!agent || agent === 'auto') return;
+    document.getElementById('share-modal-agent').value = agent;
+    document.getElementById('share-modal-agent-label').textContent =
+        (AGENT_EMOJIS[agent] || '🤖') + ' ' + (AGENT_NAMES[agent] || agent);
+    document.getElementById('share-modal').style.display = 'flex';
+    document.getElementById('share-success-box').style.display = 'none';
+    document.getElementById('share-form-body').style.display = '';
+    document.getElementById('share-submit-btn').style.display = '';
+    document.getElementById('share-submit-btn').textContent = 'Criar Link';
+    document.getElementById('share-submit-btn').disabled = false;
+    // Reset fields
+    ['share-client','share-email','share-title','share-welcome','share-pass','share-expires']
+        .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+}
+function closeShareModal() {
+    document.getElementById('share-modal').style.display = 'none';
+}
+async function submitShareModal() {
+    const btn = document.getElementById('share-submit-btn');
+    const client = document.getElementById('share-client').value.trim();
+    if (!client) { alert('Introduz o nome do cliente.'); return; }
+    btn.textContent = 'A criar…'; btn.disabled = true;
+
+    const payload = {
+        agent_key:       document.getElementById('share-modal-agent').value,
+        client_name:     client,
+        client_email:    document.getElementById('share-email').value.trim() || null,
+        custom_title:    document.getElementById('share-title').value.trim() || null,
+        welcome_message: document.getElementById('share-welcome').value.trim() || null,
+        password:        document.getElementById('share-pass').value || null,
+        expires_at:      document.getElementById('share-expires').value || null,
+        show_branding:   true,
+    };
+
+    try {
+        const r    = await fetch('/admin/shares', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF}, body:JSON.stringify(payload) });
+        const data = await r.json();
+        if (data.ok) {
+            document.getElementById('share-url-display').textContent = data.url;
+            document.getElementById('share-success-box').style.display = 'block';
+            document.getElementById('share-form-body').style.display = 'none';
+            document.getElementById('share-submit-btn').style.display = 'none';
+            window._shareUrl = data.url;
+        } else {
+            alert('Erro: ' + JSON.stringify(data));
+            btn.textContent = 'Criar Link'; btn.disabled = false;
+        }
+    } catch(e) { alert('Erro de rede.'); btn.textContent = 'Criar Link'; btn.disabled = false; }
+}
+function copyShareUrl() {
+    navigator.clipboard.writeText(window._shareUrl || '');
+    const btn = document.getElementById('copy-share-url');
+    btn.textContent = '✅ Copiado!';
+    setTimeout(() => btn.textContent = '📋 Copiar Link', 2000);
+}
+
+// Show/hide share button based on selected agent
+agentSelect.addEventListener('change', updateShareBtn);
+function updateShareBtn() {
+    const agent = agentSelect.value;
+    const btn   = document.getElementById('share-agent-btn');
+    if (!btn) return;
+    btn.style.display = (agent && agent !== 'auto' && agent !== 'orchestrator') ? 'block' : 'none';
+}
+updateShareBtn();
 </script>
+
+<!-- ── SHARE AGENT MODAL ── -->
+<div id="share-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:9999;align-items:center;justify-content:center;padding:20px;flex-direction:column"
+     onclick="if(event.target===this)closeShareModal()">
+    <div style="background:#111118;border:1px solid #2a2a3a;border-radius:16px;width:100%;max-width:460px;padding:28px;position:relative">
+        <button onclick="closeShareModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#64748b;font-size:18px;cursor:pointer">✕</button>
+        <div style="font-size:17px;font-weight:800;margin-bottom:4px">🔗 Emprestar Agente</div>
+        <div id="share-modal-agent-label" style="font-size:13px;color:var(--agent-color,#76b900);margin-bottom:20px;font-weight:600"></div>
+        <input type="hidden" id="share-modal-agent">
+
+        <!-- Success -->
+        <div id="share-success-box" style="display:none;background:rgba(118,185,0,.1);border:1px solid rgba(118,185,0,.3);border-radius:10px;padding:16px;margin-bottom:16px">
+            <div style="font-size:12px;color:#76b900;font-weight:700;margin-bottom:8px">✅ Link criado!</div>
+            <div id="share-url-display" style="font-size:12px;color:#76b900;word-break:break-all;margin-bottom:10px"></div>
+            <button id="copy-share-url" onclick="copyShareUrl()" style="background:rgba(118,185,0,.2);border:1px solid rgba(118,185,0,.4);color:#76b900;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600">📋 Copiar Link</button>
+        </div>
+
+        <!-- Form -->
+        <div id="share-form-body">
+            <div style="margin-bottom:14px">
+                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Nome do Cliente *</label>
+                <input id="share-client" type="text" placeholder="ex: Armadores Silva Lda."
+                    style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email</label>
+                    <input id="share-email" type="email" placeholder="cliente@empresa.com"
+                        style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
+                </div>
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Password</label>
+                    <input id="share-pass" type="password" placeholder="Opcional"
+                        style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
+                </div>
+            </div>
+            <div style="margin-bottom:14px">
+                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Título personalizado</label>
+                <input id="share-title" type="text" placeholder="ex: Assistente de Segurança — Silva Lda."
+                    style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Mensagem boas-vindas</label>
+                    <input id="share-welcome" type="text" placeholder="Olá! Como posso ajudar?"
+                        style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
+                </div>
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Expira em</label>
+                    <input id="share-expires" type="datetime-local"
+                        style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:13px;outline:none">
+                </div>
+            </div>
+        </div>
+
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+            <button onclick="closeShareModal()" style="background:none;border:1px solid #2a2a3a;color:#64748b;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px">Cancelar</button>
+            <button id="share-submit-btn" onclick="submitShareModal()" style="background:var(--agent-color,#76b900);color:#000;font-weight:700;padding:8px 20px;border:none;border-radius:8px;cursor:pointer;font-size:13px">Criar Link</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>
