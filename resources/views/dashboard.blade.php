@@ -158,7 +158,7 @@
 
 <header class="header">
     <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/setq-logo.svg" alt="SETQ.AI" style="height:32px;filter:drop-shadow(0 0 1px rgba(255,255,255,0.1));"></a>
-    <span class="badge">NVIDIA NeMo</span>
+    <span class="badge">Powered by SETQ.AI Team</span>
     <div class="nav-links">
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
         <a href="/agents/activity" class="nav-link" style="color:#76b900;border-color:#1e3300;background:#0d1a00">🤖 Actividade</a>
@@ -181,7 +181,7 @@
 <div class="hero">
     <p class="hero-label">HP-Group · PartYard Marine · PartYard Military</p>
     <h1>Escolha o seu <span>Agente</span></h1>
-    <p>Powered by NVIDIA NeMo + Claude — 14 agentes especializados prontos a ajudar</p>
+    <p>Powered by SETQ.AI Team — 14 agentes especializados prontos a ajudar</p>
 </div>
 
 <p class="section-title">Agentes Disponíveis</p>
