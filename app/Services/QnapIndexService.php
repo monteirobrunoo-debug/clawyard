@@ -138,17 +138,35 @@ class QnapIndexService
 
     /**
      * Full-text search across indexed QNAP documents.
+     * Searches title + summary (fast) then fetches content of matches.
      */
     public function search(string $query, int $limit = 8): array
     {
-        $terms = array_filter(explode(' ', strtolower($query)));
+        $terms = array_values(array_filter(explode(' ', strtolower($query)), fn($t) => strlen($t) > 2));
 
+        if (empty($terms)) return [];
+
+        // Try PostgreSQL full-text search first (fast, uses index if available)
+        try {
+            $tsQuery = implode(' | ', array_map(fn($t) => $t . ':*', $terms));
+            $results = Document::where('source', 'qnap')
+                ->whereRaw("to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(summary,'')) @@ to_tsquery('simple', ?)", [$tsQuery])
+                ->limit($limit)
+                ->get(['id', 'title', 'content', 'summary', 'metadata'])
+                ->toArray();
+
+            if (!empty($results)) return $results;
+        } catch (\Throwable $e) {
+            // fallback to LIKE below
+        }
+
+        // Fallback: LIKE on title + summary only (NOT content — too slow)
         return Document::where('source', 'qnap')
             ->where(function ($q) use ($terms) {
                 foreach ($terms as $term) {
-                    $q->where(function ($inner) use ($term) {
-                        $inner->whereRaw('LOWER(content) LIKE ?', ["%{$term}%"])
-                              ->orWhereRaw('LOWER(title) LIKE ?', ["%{$term}%"]);
+                    $q->orWhere(function ($inner) use ($term) {
+                        $inner->whereRaw('LOWER(title) LIKE ?', ["%{$term}%"])
+                              ->orWhereRaw('LOWER(summary) LIKE ?', ["%{$term}%"]);
                     });
                 }
             })
