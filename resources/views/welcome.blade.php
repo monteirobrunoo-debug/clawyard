@@ -863,6 +863,42 @@ const AGENT_CHIPS = {
         '🗄️ Lista todos os contratos e declarações relacionados com o Min. Defesa Nacional',
         '🗄️ Analisa os ficheiros CONCURSOS Excel e resume as oportunidades',
     ],
+    // ── Prof. Deep Thought ────────────────────────────────────────────────
+    thinking: [
+        '🧠 Qual a estratégia óptima para a PartYard dominar o mercado de peças navais na Europa Meridional nos próximos 5 anos?',
+        '🧠 Analisa em profundidade os riscos geopolíticos que afectam o supply chain marítimo europeu em 2026',
+        '🧠 Faz um raciocínio primeiro-princípios: porque é que os motores MTU dominam o mercado naval militar?',
+        '🧠 Modela o impacto de uma recessão europeia de 18 meses no negócio da PartYard — 3 cenários',
+        '🧠 Qual o argumento mais forte para a PartYard entrar no mercado de MRO aeronáutico militar?',
+        '🧠 Decompõe o problema: como aumentar a margem bruta de 22% para 35% em 24 meses?',
+    ],
+    // ── Max Batch ─────────────────────────────────────────────────────────
+    batch: [
+        '📦 Processa esta lista de 50 referências MTU e gera descrições de produto em PT/EN/ES para cada uma',
+        '📦 Analisa em paralelo estes 10 PDFs de fornecedores e extrai preços, prazos e condições',
+        '📦 Gera 20 cold emails personalizados para armadores gregos — adapta por empresa e frota',
+        '📦 Classifica e resume estes 30 concursos BASE.gov por relevância para a PartYard',
+        '📦 Cria fichas técnicas para 15 peças CAT 3516 — formato SAP B1 pronto a importar',
+        '📦 Traduz 25 documentos técnicos Schottel do alemão para português e inglês em paralelo',
+    ],
+    // ── RoboDesk ──────────────────────────────────────────────────────────
+    computer: [
+        '🖥️ Pesquisa os preços actuais de peças MTU 4000 nos 5 maiores distribuidores online europeus',
+        '🖥️ Verifica se o site partyard.eu tem erros, links quebrados ou páginas lentas — relatório',
+        '🖥️ Pesquisa concursos NATO abertos agora para fornecimento de peças navais e motores',
+        '🖥️ Encontra todos os armadores portugueses com frota acima de 5 navios e os seus contactos',
+        '🖥️ Compara os preços de frete marítimo Rotterdam→Sines nos principais forwarding agents',
+        '🖥️ Pesquisa os últimos press releases dos concorrentes Wärtsilä, Rolls-Royce Marine e Kongsberg',
+    ],
+    // ── Capitão Vasco ─────────────────────────────────────────────────────
+    vessel: [
+        '⚓ Procura navio fluvial automotor 2300+ DWT, máx 112m, máx €2M — Rhine/Danube flag',
+        '⚓ Lista estaleiros em Portugal e Holanda capazes de colocar navio de 110m em dique seco',
+        '⚓ Verifica no mercado actual navios com bow thruster e autopilot disponíveis abaixo de €1.5M',
+        '⚓ Quais os contactos dos brokers neerlandeses especializados em motorvrachtschepen 110m?',
+        '⚓ Analisa a oferta Mi Vida (ENI 08023148) — especificações, preço e gap de certificação',
+        '⚓ Empresas de reparação naval no Reno/Main para overhaul de motor e renovação de casco',
+    ],
 };
 
 function applyAgentColor(agent) {
