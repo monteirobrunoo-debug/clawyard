@@ -41,7 +41,9 @@ class Discovery extends Model
 
     public static array $sourceLabels = [
         'arxiv'          => ['label' => 'arXiv',          'icon' => '📰', 'color' => '#ff6600'],
-        'uspto'          => ['label' => 'USPTO',          'icon' => '🏛️', 'color' => '#4499ff'],
+        'epo'            => ['label' => 'EPO Patents',    'icon' => '🏛️', 'color' => '#4499ff'],
+        'peerj'          => ['label' => 'PeerJ',          'icon' => '🔬', 'color' => '#44ddaa'],
+        'uspto'          => ['label' => 'USPTO',          'icon' => '🏛️', 'color' => '#6688ff'],
         'google_patents' => ['label' => 'Google Patents', 'icon' => '🔍', 'color' => '#44aa66'],
     ];
 

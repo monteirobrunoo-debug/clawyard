@@ -47,7 +47,7 @@ class DiscoveryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'source'         => 'required|string|in:arxiv,uspto,google_patents',
+            'source'         => 'required|string|in:arxiv,epo,peerj,uspto,google_patents',
             'title'          => 'required|string|max:500',
             'summary'        => 'required|string',
             'category'       => 'required|string',

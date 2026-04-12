@@ -49,8 +49,10 @@
 
         /* Source badge */
         .source-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:600; padding:3px 10px; border-radius:20px; white-space:nowrap; }
-        .src-arxiv        { background:#1a0a00; color:#ff9955; border:1px solid #331500; }
-        .src-uspto         { background:#001020; color:#66aaff; border:1px solid #003366; }
+        .src-arxiv         { background:#1a0a00; color:#ff9955; border:1px solid #331500; }
+        .src-epo           { background:#001020; color:#66aaff; border:1px solid #003366; }
+        .src-peerj         { background:#001a10; color:#44ddaa; border:1px solid #00331a; }
+        .src-uspto         { background:#001030; color:#8899ff; border:1px solid #002266; }
         .src-google_patents { background:#001a0a; color:#66ddaa; border:1px solid #003311; }
 
         /* Priority badge */
