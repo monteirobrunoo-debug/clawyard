@@ -79,16 +79,16 @@ class AgentShare extends Model
             'research'     => ['name' => 'Marina Research',    'emoji' => '🔍', 'color' => '#f97316', 'photo' => '/images/agents/research.png'],
             'acingov'      => ['name' => 'Dra. Ana Contratos', 'emoji' => '🏛️', 'color' => '#f59e0b', 'photo' => '/images/agents/acingov.png'],
             'engineer'     => ['name' => 'Eng. Victor I&D',    'emoji' => '🔩', 'color' => '#f97316', 'photo' => '/images/agents/engineer.png'],
-            'patent'       => ['name' => 'Dra. Sofia IP',      'emoji' => '🏛️', 'color' => '#8b5cf6', 'photo' => null],
-            'energy'       => ['name' => 'Eng. Sofia Energia', 'emoji' => '⚡', 'color' => '#10b981', 'photo' => null],
+            'patent'       => ['name' => 'Dra. Sofia IP',      'emoji' => '🏛️', 'color' => '#8b5cf6', 'photo' => '/images/agents/patent.png'],
+            'energy'       => ['name' => 'Eng. Sofia Energia', 'emoji' => '⚡', 'color' => '#10b981', 'photo' => '/images/agents/energy.png'],
             'kyber'        => ['name' => 'KYBER Encryption',   'emoji' => '🔒', 'color' => '#76b900', 'photo' => '/images/agents/kyber.png'],
             'claude'       => ['name' => 'Bruno AI',           'emoji' => '🧠', 'color' => '#a855f7', 'photo' => '/images/agents/claude.png'],
             'nvidia'       => ['name' => 'Carlos NVIDIA',      'emoji' => '⚡', 'color' => '#76b900', 'photo' => '/images/agents/nvidia.png'],
             'qnap'         => ['name' => 'Arquivo PartYard',   'emoji' => '🗄️', 'color' => '#f59e0b', 'photo' => null],
             'thinking'     => ['name' => 'Prof. Deep Thought', 'emoji' => '🧠', 'color' => '#a855f7', 'photo' => null],
-            'batch'        => ['name' => 'Max Batch',          'emoji' => '📦', 'color' => '#06b6d4', 'photo' => null],
+            'batch'        => ['name' => 'Max Batch',          'emoji' => '📦', 'color' => '#06b6d4', 'photo' => '/images/agents/batch.png'],
             'computer'     => ['name' => 'RoboDesk',           'emoji' => '🖥️', 'color' => '#22c55e', 'photo' => null],
-            'vessel'       => ['name' => 'Capitão Vasco',      'emoji' => '⚓', 'color' => '#0ea5e9', 'photo' => null],
+            'vessel'       => ['name' => 'Capitão Vasco',      'emoji' => '⚓', 'color' => '#0ea5e9', 'photo' => '/images/agents/vessel.png'],
         ];
     }
 }
