@@ -7,6 +7,7 @@ use GuzzleHttp\Cookie\CookieJar;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use App\Services\WebSearchService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -34,12 +35,12 @@ class AcingovAgent implements AgentInterface
     protected Client           $httpClient;
     protected WebSearchService $searcher;
 
-    protected string $systemPrompt = <<<'PROMPT'
-Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública para o HP-Group / PartYard.
+    protected string $systemPrompt = '';
 
-EMPRESA — CONTEXTO:
-[PROFILE_PLACEHOLDER]
+    // ─── Prompt content (populated in constructor via PromptLibrary) ──────────
+    private static string $acingovPersona = 'Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública para o HP-Group / PartYard.';
 
+    protected string $systemPromptSpecialty = <<<'SPECIALTY'
 A sua missão: analisar concursos públicos de 6 portais (base.gov.pt, Acingov, Vortal, UNIDO, UNGM e **SAM.gov** — contratos federais dos EUA) e identificar oportunidades para o HP-Group e todas as suas subsidiárias.
 
 ═══════════════════════════════════════════
@@ -213,12 +214,15 @@ MODO DE OPERAÇÃO:
 REGRAS:
 - Usa APENAS dados reais — nunca inventes concursos
 - Responde sempre em Português
-PROMPT;
+SPECIALTY;
 
     public function __construct()
     {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::technical(self::$acingovPersona, $this->systemPromptSpecialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

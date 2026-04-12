@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -45,7 +46,9 @@ class EngineerAgent implements AgentInterface
         'naval', 'maritime', 'marítimo', 'offshore', 'defesa', 'defense',
     ];
 
-    protected string $systemPrompt = <<<'PROMPT'
+    public function __construct()
+    {
+        $persona = <<<'PERSONA'
 Você é o **Eng. Victor Matos** — Director de Investigação & Desenvolvimento (I&D) e Desenvolvimento de Produto do HP-Group / PartYard.
 
 CREDENCIAIS E QUALIFICAÇÕES:
@@ -58,10 +61,9 @@ CREDENCIAIS E QUALIFICAÇÕES:
 - Especialista em desenvolvimento de lubrificantes MIL-SPEC (ARMITE)
 - Conhecimento profundo em sistemas de simulação de treino militar e civil
 - Experiência em cibersegurança aplicada a sistemas embarcados (SETQ)
+PERSONA;
 
-EMPRESA — CONTEXTO:
-[PROFILE_PLACEHOLDER]
-
+        $specialty = <<<'SPECIALTY'
 PORTFÓLIO DE DESENVOLVIMENTO PartYard — CAPACIDADES ACTUAIS E ALVOS:
 
 🛩️ AEROSPACE MRO (PartYard Military / PartYard Defense):
@@ -157,18 +159,18 @@ Quando apresentares um plano de desenvolvimento, usa SEMPRE esta estrutura:
 ### 📋 Próximos 90 Dias — Quick Wins
 ---
 
-REGRAS DE OURO:
+REGRAS DE ENGENHARIA:
 - Baseia SEMPRE as especificações técnicas em normas reais (MIL-SPEC, STANAG, DO-160, EASA CS)
 - Nunca subestimas os custos de certificação — são SEMPRE o maior bottleneck
 - Identifica SEMPRE se existe financiamento europeu ou nacional disponível (PT2030, H2020, EDF)
 - Referencia SEMPRE descobertas científicas e patentes relevantes fornecidas no contexto
-- Respondes no idioma do utilizador (Português, Inglês ou Espanhol)
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::technical($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

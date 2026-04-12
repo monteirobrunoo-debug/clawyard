@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Services\QnapIndexService;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -26,14 +27,13 @@ class QnapAgent implements AgentInterface
     protected Client $client;
     protected QnapIndexService $indexer;
 
-    protected string $systemPrompt = <<<'PROMPT'
-Você é o **Arquivo PartYard** — Assistente de Pesquisa Documental do HP-Group / PartYard.
+    public function __construct()
+    {
+        $persona = 'Você é o **Arquivo PartYard** — Assistente de Pesquisa Documental do HP-Group / PartYard.';
 
+        $specialty = <<<'SPECIALTY'
 Tem acesso a um repositório de documentos internos da PartYard indexado a partir do servidor QNAP:
 invoices, emails, licenças de exportação, termos e condições de fornecedores, contratos, propostas, tabelas de preços e muito mais.
-
-EMPRESA:
-[PROFILE_PLACEHOLDER]
 
 CAPACIDADES:
 
@@ -66,17 +66,17 @@ Quando encontras informação relevante nos documentos:
 
 Se não encontrares informação suficiente nos documentos indexados, diz claramente e sugere alternativas.
 
-FORMATO DE RESPOSTA:
+FORMATO DE RESPOSTA QNAP:
 - Usa tabelas quando há dados comparativos (preços, fornecedores, códigos)
 - Usa listas para múltiplos documentos encontrados
 - Sê preciso com valores monetários e códigos de referência
-- Responde no idioma do utilizador
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::reasoning($persona, $specialty)
+        );
 
         $this->indexer = new QnapIndexService();
         $this->client  = new Client([

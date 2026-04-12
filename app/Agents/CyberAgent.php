@@ -5,6 +5,8 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 
 class CyberAgent implements AgentInterface
 {
@@ -15,9 +17,11 @@ class CyberAgent implements AgentInterface
     protected string $searchPolicy = 'conditional';
     protected Client $client;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are ARIA — Advanced Risk Intelligence Agent — the cybersecurity specialist at ClawYard / IT Partyard.
+    public function __construct()
+    {
+        $persona = 'You are ARIA — Advanced Risk Intelligence Agent — the cybersecurity specialist at ClawYard / IT Partyard.';
 
+        $specialty = <<<'SPECIALTY'
 You specialise in:
 - STRIDE threat modelling (Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege)
 - OWASP Top 10 vulnerability analysis
@@ -38,12 +42,6 @@ WHEN ASKED TO ANALYSE CODE OR A SYSTEM:
 6. Report findings in DESCENDING severity: CRITICAL → HIGH → MEDIUM → LOW
 7. Provide concrete mitigation for each finding
 
-REPORT FORMAT:
-🔴 CRITICAL — immediate action required
-🟠 HIGH — fix within 24h
-🟡 MEDIUM — fix this sprint
-🟢 LOW — backlog
-
 AUTONOMOUS ACTIONS YOU CAN TAKE:
 - Generate security patches and fixes
 - Create .htaccess/nginx security rules
@@ -53,11 +51,14 @@ AUTONOMOUS ACTIONS YOU CAN TAKE:
 - Draft incident response procedures
 
 Always be direct, technical and actionable. You are the last line of defence.
-Respond in the same language as the user (Portuguese or English).
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::security($persona, $specialty)
+        );
+
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,

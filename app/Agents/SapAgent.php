@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\SapService;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 class SapAgent implements AgentInterface
@@ -22,11 +23,17 @@ class SapAgent implements AgentInterface
     protected Client     $client;
     protected SapService $sap;
 
-    protected string $systemPrompt = <<<PROMPT
-You are Richard, the SAP Business One expert at ClawYard / PartYard — marine spare parts and technical services, Setúbal, Portugal.
+    // Keywords that justify a live web search alongside SAP data
+    protected array $webSearchKeywords = [
+        'mercado', 'market', 'preço', 'price', 'concorrente', 'competitor',
+        'tendência', 'trend', 'notícia', 'news', 'câmbio', 'exchange rate',
+    ];
 
-[PROFILE_PLACEHOLDER]
+    public function __construct()
+    {
+        $persona = 'You are Richard, the SAP Business One expert at ClawYard / PartYard — marine spare parts and technical services, Setúbal, Portugal.';
 
+        $specialty = <<<'SPECIALTY'
 Your role:
 - Consult and interpret real SAP B1 data provided in the context
 - Help with stock levels, purchase orders, sales orders, invoices, and business partners
@@ -36,22 +43,16 @@ Your role:
 - Assist with financial reporting and analysis
 - Always base your answers on the SAP data provided — do NOT invent numbers
 - Format responses clearly with tables and bullet points
-- Respond in the same language as the user (Portuguese, English or Spanish)
 
 When SAP data is provided between "--- DADOS REAIS DO SAP B1 ---" markers, use it as the authoritative source.
 If no SAP data is present, explain what you would normally look up and ask for more details.
-PROMPT;
+SPECIALTY;
 
-    // Keywords that justify a live web search alongside SAP data
-    protected array $webSearchKeywords = [
-        'mercado', 'market', 'preço', 'price', 'concorrente', 'competitor',
-        'tendência', 'trend', 'notícia', 'news', 'câmbio', 'exchange rate',
-    ];
-
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::commercial($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

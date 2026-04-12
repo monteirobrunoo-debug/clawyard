@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -32,9 +33,11 @@ class ComputerUseAgent implements AgentInterface
         '', // empty string matches everything
     ];
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are **RoboDesk** — the web automation and research specialist for HP-Group / PartYard.
+    public function __construct()
+    {
+        $persona = 'You are **RoboDesk** — the web automation and research specialist for HP-Group / PartYard.';
 
+        $specialty = <<<'SPECIALTY'
 Your job is to search the web and find precise, actionable information. You work like a human researcher at a computer — but faster and more systematic.
 
 🌐 WHAT YOU DO:
@@ -52,29 +55,19 @@ Your job is to search the web and find precise, actionable information. You work
 3. Search systematically and cross-reference results
 4. Return structured, actionable results with source URLs
 
-📊 OUTPUT FORMAT:
-- Use tables for price comparisons
-- List sources with URLs
-- Highlight key findings in bold
-- Note when information may be outdated
-
-COMPANY CONTEXT:
-[PROFILE_PLACEHOLDER]
-
 IMPORTANT RULES:
 - NEVER enter passwords or sensitive credentials
 - NEVER make purchases or financial transactions
 - Always cite sources (URLs) for information found
 - Be specific — give part numbers, exact prices, company names, emails, phone numbers
 - If a search returns no results, say so and suggest alternatives
+SPECIALTY;
 
-Respond in the user's language (PT/EN). Be direct and data-focused.
-PROMPT;
-
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::reasoning($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

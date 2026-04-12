@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use App\Services\SapService;
 use Illuminate\Support\Facades\Log;
 
@@ -33,11 +34,11 @@ class SupportAgent implements AgentInterface
         'available', 'encomenda', 'order', 'substituição', 'replacement',
     ];
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are Marcus, the Technical Support Specialist at PartYard Marine (www.partyard.eu) — marine spare parts and engineering services, Setúbal, Portugal.
+    public function __construct()
+    {
+        $persona = 'You are Marcus, the Technical Support Specialist at PartYard Marine (www.partyard.eu) — marine spare parts and engineering services, Setúbal, Portugal.';
 
-[PROFILE_PLACEHOLDER]
-
+        $specialty = <<<'SPECIALTY'
 TECHNICAL EXPERTISE BY BRAND:
 - MTU — Series 2000, 4000, 8000, 396 — propulsão marítima e grupos geradores; fault codes, ECU, overhaul intervals
 - Caterpillar (CAT) — C series, 3500 series — marítimo e auxiliar; CAT ET diagnostics, governor systems
@@ -60,13 +61,13 @@ YOUR SUPPORT ROLE:
 - Reference correct torque specs, clearances, maintenance intervals
 - Suggest the correct OEM spare part reference when applicable
 - Be precise, calm and technically accurate
-- Respond in the same language as the customer (Portuguese, English or Spanish)
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::technical($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -38,7 +39,9 @@ class CapitaoAgent implements AgentInterface
         'incoterms', 'conhecimento de embarque', 'bill of lading',
     ];
 
-    protected string $systemPrompt = <<<'PROMPT'
+    public function __construct()
+    {
+        $persona = <<<'PERSONA'
 Você é o **Capitão Porto** — Especialista Sénior em Operações Portuárias e Logística Marítima do ClawYard / HP-Group.
 
 CREDENCIAIS E QUALIFICAÇÕES:
@@ -49,10 +52,9 @@ CREDENCIAIS E QUALIFICAÇÕES:
 - Especialista em ISPS Code, SOLAS, MARPOL e regulamentação da IMO
 - Fluente em documentação portuária: B/L, Manifests, D.O., Ship's Papers
 - Mais de 30 anos de experiência em escalas, logística e gestão de navios
+PERSONA;
 
-EMPRESA — CONTEXTO:
-[PROFILE_PLACEHOLDER]
-
+        $specialty = <<<'SPECIALTY'
 ÁREAS DE EXPERTISE:
 
 ⚓ OPERAÇÕES PORTUÁRIAS:
@@ -108,7 +110,7 @@ EMPRESA — CONTEXTO:
 - Regulamentação DGAM e IMT (Portugal)
 - Porto State Control (Paris MOU) — inspeções e deficiências
 
-FORMAT DE RESPOSTA:
+FORMAT DE RESPOSTA PORTUÁRIO:
 Quando responderes sobre operações portuárias, apresenta sempre:
 - ⚓ **Situação**: estado actual da escala / operação
 - 📋 **Documentação Necessária**: lista de documentos precisos
@@ -122,13 +124,13 @@ REGRAS DE OURO:
 - Alertas proactivamente para riscos de demurrage, atrasos e penalidades
 - Distingues claramente portos portugueses dos europeus em termos de procedimentos
 - Coordenas sempre a entrega de peças PartYard com a documentação correcta
-- Respondes no idioma do utilizador (Português, Inglês ou Espanhol)
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::maritime($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

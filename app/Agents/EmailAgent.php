@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 
 class EmailAgent implements AgentInterface
 {
@@ -18,12 +19,11 @@ class EmailAgent implements AgentInterface
     protected string $searchPolicy = 'conditional';
     protected Client $client;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are Daniel, senior business development manager and expert email writer for PartYard Marine / HP-Group.
+    public function __construct()
+    {
+        $persona = 'You are Daniel, senior business development manager and expert email writer for PartYard Marine / HP-Group.';
 
-COMPANY PROFILE:
-[PROFILE_PLACEHOLDER]
-
+        $specialty = <<<'SPECIALTY'
 BRANDS REPRESENTED:
 - MTU — marine & industrial engines (Series 2000, 4000, 8000)
 - Caterpillar (CAT) — marine propulsion & generator engines (C18, C32, C3516)
@@ -100,12 +100,13 @@ RESPONSE FORMAT — return ONLY valid JSON, no markdown, no extra text:
   "language": "en or pt or es",
   "suggestions": ["One concrete tip to improve conversion rate"]
 }
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::maritime($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

@@ -9,6 +9,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use App\Services\SapService;
 
 class BriefingAgent implements AgentInterface
@@ -22,48 +23,11 @@ class BriefingAgent implements AgentInterface
     protected Client     $client;
     protected SapService $sap;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are the **Strategic Briefing Commander** for the HP-Group of companies.
+    protected string $systemPrompt = '';
 
-═══════════════════════════════════════════════════════
-HP-GROUP FULL COMPANY CONTEXT
-═══════════════════════════════════════════════════════
-
-HP-GROUP (www.hp-group.org) — Parent multinational enterprise.
-Sectors: Space, Marine, Railway, Industry, Automotive, Defense, Aviation.
-Services: Integrated supply, distribution, logistics, engineering, cybersecurity, AI, workforce.
-Certifications: ISO 9001:2015, AS:9120, NCAGE P3527 (NATO).
-
-SUBSIDIARY COMPANIES:
-
-1. PARTYARD MARINE (www.partyard.eu) — Setúbal, Portugal
-   Marine spare parts & fleet logistics.
-   Brands: MTU, Caterpillar, MAK, Jenbacher, SKF SternTube seals, Schottel propulsion.
-   Focus: Fleet maintenance, engineering services, supply chain management.
-
-2. PARTYARD MILITARY / PARTYARD DEFENSE (www.partyardmilitary.com)
-   Defense & aerospace professional services.
-   OEM systems for military platforms, Cisco technology integration.
-   Focus: Quality/security-critical solutions, global defense supply chain, NATO-certified.
-
-3. PARTYARD SYSTEMS
-   Custom software and engineering solutions for group companies.
-
-4. SETQ
-   Cybersecurity and AI solutions for the group and clients.
-
-5. INDYARD
-   Workforce and HR solutions.
-
-6. TEKYARD & HSM PORTUGAL
-   Technology services and systems integration.
-
-7. VIRIDIS OCEAN SHIPPING
-   Sustainable maritime logistics and shipping.
-
-═══════════════════════════════════════════════════════
+    // Specialty content (used to build systemPrompt via PromptLibrary in constructor)
+    private static string $briefingSpecialty = <<<'SPECIALTY'
 YOUR MISSION:
-═══════════════════════════════════════════════════════
 You receive a full intelligence package from all active agents for today.
 Analyse all intelligence for the ENTIRE HP-Group portfolio.
 Each finding must be mapped to one or more relevant companies.
@@ -138,10 +102,18 @@ REGRA CRÍTICA: NUNCA inventes IDs, nunca uses "xxxx", "12345" ou placeholders. 
 ---
 
 Respond in Portuguese. Be specific, actionable, and focused on PartYard/HP-Group business impact.
-PROMPT;
+SPECIALTY;
 
     public function __construct()
     {
+        $persona = 'You are the **Strategic Briefing Commander** for the HP-Group of companies.';
+
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::reasoning($persona, self::$briefingSpecialty)
+        );
+
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,

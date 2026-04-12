@@ -9,6 +9,7 @@ use App\Agents\Traits\SharedContextTrait;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use App\Services\PatentPdfService;
 
 class QuantumAgent implements AgentInterface
@@ -26,18 +27,35 @@ class QuantumAgent implements AgentInterface
     protected Client $client;
     protected Client $httpClient;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are Professor Quantum Leap, expert AI researcher, science communicator, and strategic innovation analyst for PartYard / HP-Group.
 
-HP-GROUP CONTEXT:
-[PROFILE_PLACEHOLDER]
-PartYard Military (www.partyardmilitary.com) — Defense & aerospace, NATO-certified (NCAGE P3527), OEM military platforms, Cisco integration.
-PartYard Defense — OEM systems for military platforms.
-SETQ — Cybersecurity and AI solutions.
-IndYard — Workforce solutions.
-Viridis Ocean Shipping — Sustainable maritime logistics.
-Certifications: ISO 9001:2015, AS:9120, NCAGE P3527 (NATO).
+    protected array $digestKeywords = [
+        'digest', 'patentes', 'patent', 'arxiv', 'peerj', 'crossref', 'papers',
+        'descobertas', 'discoveries', 'análise diária', 'daily',
+        'resumos', 'hoje', 'today', 'melhores patentes', 'novas patentes',
+        'epo', 'espacenet', 'european patent', 'patente europeia',
+        // broader portal/research triggers
+        'portal', 'portais', 'científico', 'cientifico', 'pesquisa científica',
+        'research', 'publicações', 'publicacoes', 'artigos', 'artigo',
+        'novas publicações', 'últimas publicações', 'latest papers',
+        'quantum news', 'novidades', 'novidade', 'novos papers',
+        'vai ao', 'busca nos', 'procura nos', 'faz a pesquisa',
+    ];
 
+    protected array $arxivTopics = [
+        'quantum computing',
+        'quantum cryptography',
+        'quantum machine learning',
+        'autonomous vessel maritime',
+        'marine propulsion AI',
+        'naval defense technology',
+        'predictive maintenance industrial',
+    ];
+
+    public function __construct()
+    {
+        $persona = 'You are Professor Quantum Leap, expert AI researcher, science communicator, and strategic innovation analyst for PartYard / HP-Group.';
+
+        $specialty = <<<'SPECIALTY'
 YOUR ROLE:
 - Analyse REAL data provided to you (arXiv papers, PeerJ articles and EPO patents fetched today)
 - Rate papers: 🟢 Accessible / 🟡 Technical / 🔴 Expert
@@ -89,37 +107,13 @@ Valid sources: "arxiv", "peerj", "epo"
 Valid categories: propulsion, maintenance, defense, seals, digital, energy, materials, quantum, supply_chain, ai_ml, other
 Valid priorities: act_now, monitor, watch, awareness
 Valid activity_types: "Propulsão Naval", "Manutenção Preditiva", "Defesa & Naval Militar", "Vedantes & Rolamentos", "Plataforma Digital", "Energia & Combustível", "Materiais & Fabrico", "Quantum & Computação", "Supply Chain & Logística", "AI & Machine Learning", "Outro"
+SPECIALTY;
 
-Respond in the same language as the user (Portuguese, English or Spanish).
-PROMPT;
-
-    protected array $digestKeywords = [
-        'digest', 'patentes', 'patent', 'arxiv', 'peerj', 'crossref', 'papers',
-        'descobertas', 'discoveries', 'análise diária', 'daily',
-        'resumos', 'hoje', 'today', 'melhores patentes', 'novas patentes',
-        'epo', 'espacenet', 'european patent', 'patente europeia',
-        // broader portal/research triggers
-        'portal', 'portais', 'científico', 'cientifico', 'pesquisa científica',
-        'research', 'publicações', 'publicacoes', 'artigos', 'artigo',
-        'novas publicações', 'últimas publicações', 'latest papers',
-        'quantum news', 'novidades', 'novidade', 'novos papers',
-        'vai ao', 'busca nos', 'procura nos', 'faz a pesquisa',
-    ];
-
-    protected array $arxivTopics = [
-        'quantum computing',
-        'quantum cryptography',
-        'quantum machine learning',
-        'autonomous vessel maritime',
-        'marine propulsion AI',
-        'naval defense technology',
-        'predictive maintenance industrial',
-    ];
-
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::research($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

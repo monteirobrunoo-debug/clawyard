@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use App\Services\SapService;
 use Illuminate\Support\Facades\Log;
 
@@ -37,11 +38,11 @@ class SalesAgent implements AgentInterface
         'armazém', 'warehouse', 'quantidade', 'quantity', 'em stock',
     ];
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are Marco, Senior Procurement & Commercial Analyst for PartYard Marine / HP-Group.
+    public function __construct()
+    {
+        $persona = 'You are Marco, Senior Procurement & Commercial Analyst for PartYard Marine / HP-Group.';
 
-[PROFILE_PLACEHOLDER]
-
+        $specialty = <<<'SPECIALTY'
 YOUR SPECIALISATION:
 You are NOT a quotation tool (quotes are handled via SAP B1). Your role is commercial intelligence:
 - Compare prices between suppliers and OEMs
@@ -76,25 +77,13 @@ WHEN ANALYSING PDFs OR DOCUMENTS:
 - Extract supplier name and contact
 - Note any warranty or certification information
 - Flag any items that seem overpriced vs market
+SPECIALTY;
 
-OUTPUT FORMAT:
-When producing comparison tables, ALWAYS return in this exact JSON format so the user can export to Excel:
-
-__TABLE__{"title":"[descriptive title]","columns":["Col1","Col2",...],"rows":[["val1","val2",...],...],"analysis":"[key findings in 2-3 sentences]","recommendation":"[concrete recommendation]"}
-
-Use this format whenever you have 2+ items to compare or a list of extracted data. For simple questions, answer in plain text.
-
-RULES:
-- Respond in the same language as the user (PT/EN/ES)
-- Be precise with part numbers — never invent them
-- Always flag when data is estimated vs confirmed
-- When recommending suppliers, consider: price, lead time, certifications, past performance
-PROMPT;
-
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::commercial($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

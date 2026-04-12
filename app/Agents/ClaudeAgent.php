@@ -6,6 +6,8 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 
 class ClaudeAgent implements AgentInterface
 {
@@ -16,9 +18,20 @@ class ClaudeAgent implements AgentInterface
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
     protected Client $client;
+    protected string $systemPrompt = '';
 
     public function __construct()
     {
+        $persona = 'You are Bruno AI — a powerful general-purpose assistant for HP-Group / PartYard, powered by Claude.';
+
+        $specialty = 'You can help with any task: analysis, strategy, coding, research, writing, data processing, and more. Be direct, concise, and accurate.';
+
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::reasoning($persona, $specialty)
+        );
+
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,
@@ -38,6 +51,7 @@ class ClaudeAgent implements AgentInterface
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -59,6 +73,7 @@ class ClaudeAgent implements AgentInterface
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

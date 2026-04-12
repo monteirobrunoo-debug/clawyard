@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -25,9 +26,11 @@ class BatchAgent implements AgentInterface
 
     protected Client $client;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are **Max Batch** — the bulk processing specialist for HP-Group / PartYard.
+    public function __construct()
+    {
+        $persona = 'You are **Max Batch** — the bulk processing specialist for HP-Group / PartYard.';
 
+        $specialty = <<<'SPECIALTY'
 You excel at processing large volumes of items efficiently. Your capabilities:
 
 📦 BULK PROCESSING:
@@ -51,20 +54,17 @@ You excel at processing large volumes of items efficiently. Your capabilities:
 - Tell me what you want done with each item
 - I'll process all items and return structured results
 
-COMPANY CONTEXT:
-[PROFILE_PLACEHOLDER]
-
 FORMAT:
 - Process each item clearly labeled (Item 1, Item 2, etc.)
 - Provide a summary at the end
 - Flag any items that need human review
-- Respond in the user's language
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::reasoning($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

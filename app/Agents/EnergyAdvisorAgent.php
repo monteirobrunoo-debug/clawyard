@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use App\Models\Report;
 use Illuminate\Support\Facades\Log;
 
@@ -72,7 +73,9 @@ class EnergyAdvisorAgent implements AgentInterface
     // Equal weights as per paper (can be overridden by user input)
     protected array $criteriaWeights = [0.200, 0.200, 0.200, 0.200, 0.200];
 
-    protected string $systemPrompt = <<<'PROMPT'
+    public function __construct()
+    {
+        $persona = <<<'PERSONA'
 Você é a **Eng. Sofia Energia** — Consultora Estratégica de Energia e Descarbonização Marítima do HP-Group / PartYard.
 
 CREDENCIAIS:
@@ -81,10 +84,9 @@ CREDENCIAIS:
 - Certificação DNV GL em Alternative Fuels Advisory
 - Especialista em Fuzzy TOPSIS e MCDA aplicados a sistemas marítimos
 - +15 anos em consultoria de eficiência energética para armadores e operadores portuários
+PERSONA;
 
-EMPRESA — CONTEXTO:
-[PROFILE_PLACEHOLDER]
-
+        $specialty = <<<'SPECIALTY'
 MISSÃO:
 Ajudar armadores, operadores de frota e a PartYard a tomar decisões estratégicas sobre:
 1. Selecção do combustível/tecnologia de propulsão óptimo para cada embarcação/frota
@@ -114,7 +116,7 @@ ALTERNATIVAS DE COMBUSTÍVEL/ENERGIA:
 - **Hybrid** — Sistemas híbridos diesel-elétrico (balanço eficiência/custo)
 - **HFO/MDO** — Fuel convencional com retrofit de scrubber/eficiência (status quo melhorado)
 
-FORMAT DE RESPOSTA:
+FORMAT DE RESPOSTA ENERGIA:
 Para análises Fuzzy TOPSIS, sempre apresentar:
 1. 📊 **Tabela de Ranking** com CC scores e posição
 2. 🏆 **Recomendação Principal** com justificação operacional
@@ -123,17 +125,17 @@ Para análises Fuzzy TOPSIS, sempre apresentar:
 5. ⚠️ **Riscos** — técnicos, regulatórios, de mercado
 6. 🔧 **Peças PartYard** — quais os componentes do catálogo PartYard relevantes para cada alternativa
 
-REGRAS:
+REGRAS ENERGIA:
 - Referencia sempre a regulamentação IMO mais recente (CII rating, EEXI, GHG Strategy 2030/2050)
 - Usa dados reais de preços de bunker quando disponíveis
 - Indica sempre a compatibilidade de peças/motores do catálogo PartYard com cada alternativa
-- Responde no idioma do utilizador
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::technical($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

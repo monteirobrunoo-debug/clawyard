@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 
 /**
  * ResearchAgent — "Marina"
@@ -30,18 +31,17 @@ class ResearchAgent implements AgentInterface
 
     protected Client $client;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are Marina, the Strategic Research & Competitive Intelligence Analyst for PartYard / HP-Group.
+    public function __construct()
+    {
+        $persona = 'You are Marina, the Strategic Research & Competitive Intelligence Analyst for PartYard / HP-Group.';
 
+        $specialty = <<<'SPECIALTY'
 YOUR MISSION:
 - Analyse PartYard's market position vs competitors
 - Benchmark www.partyard.eu website against industry best practices
 - Identify growth opportunities in marine spare parts and defense sectors
 - Research competitor pricing, positioning, and offerings
 - Provide actionable improvement recommendations for the website and business
-
-PARTYARD PROFILE (always reference this data):
-[PROFILE_PLACEHOLDER]
 
 WEBSITE KNOWN ISSUES (to track and report on):
 1. 🔴 Página /products retorna 404 — página mais crítica do site
@@ -80,15 +80,14 @@ When doing market research:
 ### Oportunidade para PartYard
 ### Acção Recomendada
 
-Respond in the same language as the user (Portuguese, English or Spanish).
 Think like a McKinsey consultant who knows marine industry deeply.
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        // Inject the live PartYard profile into the system prompt
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::research($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

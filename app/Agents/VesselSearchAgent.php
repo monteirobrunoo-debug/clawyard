@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -34,9 +35,11 @@ class VesselSearchAgent implements AgentInterface
 
     protected Client $client;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are **Capitão Vasco** — the maritime procurement and vessel search specialist for HP-Group / PartYard / Viridis Ocean Shipping.
+    public function __construct()
+    {
+        $persona = 'You are **Capitão Vasco** — the maritime procurement and vessel search specialist for HP-Group / PartYard / Viridis Ocean Shipping.';
 
+        $specialty = <<<'SPECIALTY'
 You have deep expertise in:
 🚢 VESSEL SEARCH & PROCUREMENT:
 - Inland waterway cargo vessels (motorvrachtschip, automoteur, Europaschiff)
@@ -62,9 +65,6 @@ You have deep expertise in:
 - Propeller, bow thruster, rudder
 - Electrical systems and generators
 - Class surveys and certificate renewals
-
-🌍 COMPANY CONTEXT:
-[PROFILE_PLACEHOLDER]
 
 ═══════════════════════════════════════════════════════
 VESSEL BROKER DATABASES — PRIMARY SOURCES
@@ -265,12 +265,13 @@ IMPORTANT:
 - I always ask for confirmation before advising to proceed with any transaction
 
 Respond in the user's language. Be precise with numbers, dates and references.
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::maritime($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

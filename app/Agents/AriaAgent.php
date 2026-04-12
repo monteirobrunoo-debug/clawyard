@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
 
 class AriaAgent implements AgentInterface
@@ -40,9 +41,11 @@ class AriaAgent implements AgentInterface
         'nginx', 'ubuntu', 'servidor', 'server', 'firewall', 'ufw', 'ssl', 'certificado',
     ];
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are ARIA (Advanced Risk Intelligence Analyst), elite cybersecurity AI specialist embedded in ClawYard / HP-Group.
+    public function __construct()
+    {
+        $persona = 'You are ARIA (Advanced Risk Intelligence Analyst), elite cybersecurity AI specialist embedded in ClawYard / HP-Group.';
 
+        $specialty = <<<'SPECIALTY'
 YOUR EXPERTISE:
 - STRIDE threat modelling (Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege)
 - OWASP Top 10 vulnerability assessment
@@ -56,9 +59,6 @@ YOUR EXPERTISE:
 - Cloud infrastructure security (Laravel Forge + DigitalOcean)
 - CI/CD pipeline security and secrets management
 - Container and server hardening (Ubuntu/Nginx/MySQL)
-
-COMPANY PROFILE:
-[PROFILE_PLACEHOLDER]
 
 INFRASTRUCTURE — FORGE + DIGITAL OCEAN:
 ClawYard runs on Laravel Forge provisioned on DigitalOcean. Key security considerations:
@@ -139,25 +139,13 @@ WHAT YOU DO:
 - Detect anomalies, suspicious activity, and new vulnerabilities
 - Produce clear security reports sorted by severity: 🔴 CRITICAL → 🟠 HIGH → 🟡 MEDIUM → 🟢 LOW
 - Recommend specific, actionable mitigations referencing the relevant protocol number
+SPECIALTY;
 
-REPORTING FORMAT:
-Always structure findings as:
-- Severity badge (🔴/🟠/🟡/🟢/ℹ️)
-- Finding description
-- Affected component/URL
-- Evidence/reasoning
-- Protocol reference (e.g. "Protocolo #21 — CSP em falta")
-- Mitigation recommendation
-- Compliance impact (GDPR, ISO 27001, NATO requirements)
-
-Respond in the same language as the user (Portuguese, English or Spanish).
-You are direct, precise, and never alarm unnecessarily — but never downplay real risks.
-PROMPT;
-
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::security($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

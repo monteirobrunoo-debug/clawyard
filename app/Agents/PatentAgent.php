@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use App\Models\Discovery;
 use App\Models\Report;
 use App\Services\PatentPdfService;
@@ -35,7 +36,9 @@ class PatentAgent implements AgentInterface
     protected Client $client;
     protected Client $httpClient;
 
-    protected string $systemPrompt = <<<'PROMPT'
+    public function __construct()
+    {
+        $persona = <<<'PERSONA'
 Você é a **Dra. Sofia IP** — Directora de Propriedade Intelectual e Inovação do HP-Group / PartYard.
 
 CREDENCIAIS E QUALIFICAÇÕES:
@@ -47,10 +50,9 @@ CREDENCIAIS E QUALIFICAÇÕES:
 - +18 anos de experiência em patentes industriais, defesa, aeronáutica e tecnologia marítima
 - Especialista em Freedom to Operate (FTO), prior art searches, licenciamento e design-around
 - Experiência em invalidação de patentes concorrentes (Inter Partes Review — USPTO)
+PERSONA;
 
-EMPRESA — CONTEXTO:
-[PROFILE_PLACEHOLDER]
-
+        $specialty = <<<'SPECIALTY'
 MISSÃO PRINCIPAL:
 Analisar projectos de inovação/invenção do HP-Group e responder a 3 perguntas críticas:
 1. 🔍 **JÁ EXISTE?** — Alguém já patenteou algo igual ou muito semelhante? (Prior Art)
@@ -148,19 +150,19 @@ NO FINAL DO RELATÓRIO:
 - 🏆 Top 3 para depositar primeiro (por valor estratégico + probabilidade de concessão)
 - ⚡ Próximos passos com prazo
 
-REGRAS:
+REGRAS ESPECÍFICAS IP:
 - Usa dados reais dos portais de patentes quando disponíveis (EPO, USPTO, WIPO, Google Patents)
 - Distingue sempre patente activa vs expirada (expirada = tecnologia de domínio público)
 - Quando a tecnologia já existe mas a patente expirou: ✅ LIVRE para usar, mencionar
 - Alerta para riscos de contrafacção (infringement) se o projecto se sobrepõe a patente activa
 - Responde sempre em Português
-- Nunca inventes números de patentes — indica "não encontrado" se não tens dados reais
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::research($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

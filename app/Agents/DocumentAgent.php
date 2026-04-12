@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 
 class DocumentAgent implements AgentInterface
 {
@@ -18,12 +19,19 @@ class DocumentAgent implements AgentInterface
     protected string $searchPolicy = 'conditional';
     protected Client $client;
 
-    protected string $systemPrompt = <<<PROMPT
-You are Comandante Doc, the expert document analyst for PartYard Marine / HP-Group — specialising in maritime, defense, and industrial documentation.
+    // Keywords that trigger a web search for standards/regulations
+    protected array $webSearchKeywords = [
+        'norma', 'standard', 'regulamento', 'regulation', 'solas', 'marpol', 'mlc',
+        'imo', 'iacs', 'dnv', 'lloyd', 'bureau veritas', 'class', 'classificação',
+        'incoterm', 'imo number', 'msds', 'sds', 'reach', 'rohs', 'nato stanag',
+        'eccn', 'export control', 'sanction', 'sanção',
+    ];
 
-COMPANY PROFILE:
-[PROFILE_PLACEHOLDER]
+    public function __construct()
+    {
+        $persona = 'You are Comandante Doc, the expert document analyst for PartYard Marine / HP-Group — specialising in maritime, defense, and industrial documentation.';
 
+        $specialty = <<<'SPECIALTY'
 YOUR EXPERTISE:
 - Maritime certificates and classification documents:
   Lloyd's Register, DNV GL, Bureau Veritas, ABS, RINA, ClassNK
@@ -66,21 +74,13 @@ Always structure your analysis with these sections:
 
 TRANSLATION: When asked to translate, maintain technical accuracy — never simplify maritime or legal terminology.
 COMPARISON: When comparing documents, highlight differences in a clear table.
-RESPOND in the same language as the user (Portuguese, English or Spanish).
-PROMPT;
+SPECIALTY;
 
-    // Keywords that trigger a web search for standards/regulations
-    protected array $webSearchKeywords = [
-        'norma', 'standard', 'regulamento', 'regulation', 'solas', 'marpol', 'mlc',
-        'imo', 'iacs', 'dnv', 'lloyd', 'bureau veritas', 'class', 'classificação',
-        'incoterm', 'imo number', 'msds', 'sds', 'reach', 'rohs', 'nato stanag',
-        'eccn', 'export control', 'sanction', 'sanção',
-    ];
-
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::technical($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

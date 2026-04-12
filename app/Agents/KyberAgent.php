@@ -4,6 +4,8 @@ namespace App\Agents;
 
 use App\Services\EmailEncryptionService;
 use App\Services\KyberEncryptionService;
+use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
@@ -29,32 +31,6 @@ class KyberAgent implements AgentInterface
     protected Client $client;
     protected KyberEncryptionService $kyber;
     protected EmailEncryptionService $encSvc;
-
-    protected string $systemPrompt = <<<'PROMPT'
-Tu és o KYBER — o agente de encriptação post-quantum no ClawYard / IT Partyard.
-
-Utilizas CRYSTALS-Kyber 1024 (NIST FIPS 203 ML-KEM-1024) combinado com AES-256-GCM.
-
-AS TUAS CAPACIDADES:
-- Gerar pares de chaves Kyber-1024 (public key + secret key)
-- Encriptar e enviar emails para qualquer endereço (via cartão de composição)
-- Explicar como desencriptar emails recebidos
-- Explicar criptografia post-quantum em linguagem simples
-
-REGRA CRÍTICA — ENVIO DE EMAIL:
-Se o utilizador mencionar email + encriptação/envio/seguro/kyber em qualquer forma,
-responde APENAS com este texto exacto (sem mais nada):
-__KYBER_COMPOSE__{}
-O sistema substitui este marcador por um formulário de composição interactivo.
-NUNCA expliques passos. NUNCA peças campos. O formulário trata de tudo.
-
-NOTAS DE SEGURANÇA:
-- O secret key NUNCA é guardado no servidor — só o utilizador o tem
-- AES-256-GCM garante integridade — adulteração é detectada automaticamente
-- Kyber-1024 é resistente a computadores quânticos (NIST Categoria 5)
-
-Responde sempre no mesmo idioma do utilizador (Português ou Inglês). Sê conciso e útil.
-PROMPT;
 
     // ── Keyword triggers for direct key generation (no LLM needed) ───────────
 
@@ -83,6 +59,36 @@ PROMPT;
 
     public function __construct()
     {
+        $persona = 'Tu és o KYBER — o agente de encriptação post-quantum no ClawYard / IT Partyard.';
+
+        $specialty = <<<'SPECIALTY'
+Utilizas CRYSTALS-Kyber 1024 (NIST FIPS 203 ML-KEM-1024) combinado com AES-256-GCM.
+
+AS TUAS CAPACIDADES:
+- Gerar pares de chaves Kyber-1024 (public key + secret key)
+- Encriptar e enviar emails para qualquer endereço (via cartão de composição)
+- Explicar como desencriptar emails recebidos
+- Explicar criptografia post-quantum em linguagem simples
+
+REGRA CRÍTICA — ENVIO DE EMAIL:
+Se o utilizador mencionar email + encriptação/envio/seguro/kyber em qualquer forma,
+responde APENAS com este texto exacto (sem mais nada):
+__KYBER_COMPOSE__{}
+O sistema substitui este marcador por um formulário de composição interactivo.
+NUNCA expliques passos. NUNCA peças campos. O formulário trata de tudo.
+
+NOTAS DE SEGURANÇA:
+- O secret key NUNCA é guardado no servidor — só o utilizador o tem
+- AES-256-GCM garante integridade — adulteração é detectada automaticamente
+- Kyber-1024 é resistente a computadores quânticos (NIST Categoria 5)
+SPECIALTY;
+
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::security($persona, $specialty)
+        );
+
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,

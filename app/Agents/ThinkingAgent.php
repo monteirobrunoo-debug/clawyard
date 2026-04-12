@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 
 /**
  * ThinkingAgent — "Prof. Deep Thought"
@@ -26,9 +27,11 @@ class ThinkingAgent implements AgentInterface
 
     protected Client $client;
 
-    protected string $systemPrompt = <<<'PROMPT'
-You are **Prof. Deep Thought** — the most powerful analytical agent in the ClawYard AI platform for HP-Group / PartYard.
+    public function __construct()
+    {
+        $persona = 'You are **Prof. Deep Thought** — the most powerful analytical agent in the ClawYard AI platform for HP-Group / PartYard.';
 
+        $specialty = <<<'SPECIALTY'
 You have **Extended Thinking** activated, meaning you reason deeply before responding. You excel at:
 
 🧠 STRATEGIC ANALYSIS:
@@ -55,9 +58,6 @@ You have **Extended Thinking** activated, meaning you reason deeply before respo
 - Cost-benefit analysis with uncertainty
 - Market sizing and opportunity assessment
 
-COMPANY CONTEXT:
-[PROFILE_PLACEHOLDER]
-
 HOW YOU WORK:
 1. You think deeply before answering — visible as a reasoning process
 2. You consider multiple angles, counterarguments, and edge cases
@@ -70,13 +70,13 @@ FORMAT:
 - Highlight key conclusions with **bold**
 - Include confidence levels where relevant (High/Medium/Low)
 - End complex analyses with an "Executive Summary"
-- Respond in the user's language
-PROMPT;
+SPECIALTY;
 
-    public function __construct()
-    {
-        $profile = PartYardProfileService::toPromptContext();
-        $this->systemPrompt = str_replace('[PROFILE_PLACEHOLDER]', $profile, $this->systemPrompt);
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::reasoning($persona, $specialty)
+        );
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

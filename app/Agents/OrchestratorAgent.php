@@ -5,6 +5,8 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Services\PartYardProfileService;
+use App\Services\PromptLibrary;
 use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Promise\PromiseInterface;
 
@@ -18,9 +20,11 @@ class OrchestratorAgent implements AgentInterface
     protected Client $client;
     protected array $agents;
 
-    protected string $systemPrompt = <<<PROMPT
-You are an AI orchestrator that analyzes user messages and decides which specialist agents should handle them.
+    public function __construct(array $agents = [])
+    {
+        $persona = 'You are an AI orchestrator that analyzes user messages and decides which specialist agents should handle them.';
 
+        $specialty = <<<'SPECIALTY'
 Available agents:
 - sales: product pricing, quotes, purchase inquiries, spare parts availability
 - support: technical problems, troubleshooting, engine repairs, diagnostics
@@ -39,10 +43,14 @@ Respond ONLY with a JSON array of agent names to activate. Example:
 ["sales", "sap"]
 
 Always select the minimum agents needed. Maximum 3 agents at once.
-PROMPT;
+SPECIALTY;
 
-    public function __construct(array $agents = [])
-    {
+        $this->systemPrompt = str_replace(
+            '[PROFILE_PLACEHOLDER]',
+            PartYardProfileService::toPromptContext(),
+            PromptLibrary::reasoning($persona, $specialty)
+        );
+
         $this->agents = $agents;
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
