@@ -239,15 +239,20 @@ PROMPT;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 8192,
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'max_tokens' => 16000,
+                'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
             ],
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $text = '';
+        foreach ($data['content'] ?? [] as $block) {
+            if (($block['type'] ?? '') === 'text') $text .= $block['text'];
+        }
+        return $text;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -257,12 +262,15 @@ PROMPT;
             ['role' => 'user', 'content' => $message],
         ]);
 
+        if ($heartbeat) $heartbeat('a activar análise de segurança avançada 🔐');
+
         $response = $this->client->post('/v1/messages', [
             'stream'  => true,
             'headers' => $this->headersForMessage($message),
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
-                'max_tokens' => 8192,
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'max_tokens' => 16000,
+                'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
@@ -299,5 +307,5 @@ PROMPT;
     }
 
     public function getName(): string { return 'aria'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-5'); }
+    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
 }

@@ -427,6 +427,8 @@
         <option value="energy">⚡ Eng. Sofia Energia</option>
         <option value="kyber">🔒 KYBER Encryption</option>
         <option value="qnap">🗄️ Arquivo PartYard</option>
+        <option value="thinking">🧠 Prof. Deep Thought</option>
+        <option value="batch">📦 Max Batch</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -483,6 +485,8 @@
                 <div class="agent-grid-item" data-agent="energy"     title="Eng. Sofia Energy"><span class="ag-icon">🌱</span><span class="ag-name">Energy</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon"><img src="/images/agents/kyber.png" class="ag-photo" alt="KYBER"></span><span class="ag-name">KYBER</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="qnap"       title="PartYard Archive"><span class="ag-icon">🗄️</span><span class="ag-name">Archive</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="thinking"   title="Prof. Deep Thought — Extended Thinking"><span class="ag-icon">🧠</span><span class="ag-name">Deep Thought</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="batch"      title="Max Batch — Bulk Processing"><span class="ag-icon">📦</span><span class="ag-name">Max Batch</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="capitao"    title="Captain Porto"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Capitão"></span><span class="ag-name">Capitão</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
             </div>
         </div>
@@ -589,7 +593,8 @@ const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
-    capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️'
+    capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
+    thinking:'🧠', batch:'📦'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -622,8 +627,10 @@ const AGENT_NAMES = {
     engineer:'Eng. Victor I&D',
     patent: 'Dra. Sofia IP',
     energy: 'Eng. Sofia Energia',
-    kyber:  'KYBER Encryption',
-    qnap:   'Arquivo PartYard'
+    kyber:    'KYBER Encryption',
+    qnap:     'Arquivo PartYard',
+    thinking: 'Prof. Deep Thought',
+    batch:    'Max Batch'
 };
 
 const AGENT_COLORS = {
@@ -638,7 +645,9 @@ const AGENT_COLORS = {
     patent:'#8b5cf6',
     energy:'#10b981',
     kyber:'#76b900',
-    qnap: '#f59e0b'
+    qnap: '#f59e0b',
+    thinking:'#a855f7',
+    batch:'#06b6d4'
 };
 
 const AGENT_DESCRIPTIONS = {

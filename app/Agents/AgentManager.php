@@ -29,6 +29,8 @@ class AgentManager
             'energy'    => new EnergyAdvisorAgent(),
             'kyber'     => new KyberAgent(),
             'qnap'      => new QnapAgent(),
+            'thinking'  => new ThinkingAgent(),
+            'batch'     => new BatchAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -189,6 +191,27 @@ class AgentManager
         ];
         foreach ($researchKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['research'];
+        }
+
+        // Deep thinking keywords
+        $thinkingKeywords = [
+            'deep thought', 'raciocínio profundo', 'análise complexa', 'complex analysis',
+            'estratégia', 'strategy', 'dilema', 'dilemma', 'decidir', 'decide',
+            'trade-off', 'pros and cons', 'prós e contras', 'melhor opção',
+            'thinking agent', 'prof. deep', 'deep thought',
+        ];
+        foreach ($thinkingKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['thinking'];
+        }
+
+        // Batch processing keywords
+        $batchKeywords = [
+            'batch', 'lote', 'bulk', 'em massa', 'multiple', 'múltiplos',
+            'lista de', 'list of', 'vários emails', 'several emails',
+            'processar lista', 'process list', 'max batch',
+        ];
+        foreach ($batchKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['batch'];
         }
 
         return $this->agents['claude'];

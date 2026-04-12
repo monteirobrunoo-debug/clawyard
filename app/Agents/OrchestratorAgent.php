@@ -55,7 +55,7 @@ PROMPT;
             $response = $this->client->post('/v1/messages', [
                 'headers' => $this->apiHeaders(),
                 'json'    => [
-                    'model'      => 'claude-haiku-4-5-20251001',
+                    'model'      => 'claude-haiku-4-6',
                     'max_tokens' => 100,
                     'system'     => $this->systemPrompt,
                     'messages'   => [

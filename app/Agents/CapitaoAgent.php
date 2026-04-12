@@ -139,7 +139,7 @@ PROMPT;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
@@ -162,7 +162,7 @@ PROMPT;
             'headers' => $this->headersForMessage($message),
             'stream'  => true,
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-5'),
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
                 'system'     => $this->systemPrompt,
                 'messages'   => $messages,
@@ -205,5 +205,5 @@ PROMPT;
     }
 
     public function getName(): string  { return 'capitao'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-5'); }
+    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
 }

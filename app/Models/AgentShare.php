@@ -85,6 +85,8 @@ class AgentShare extends Model
             'claude'       => ['name' => 'Bruno AI',           'emoji' => '🧠', 'color' => '#a855f7', 'photo' => '/images/agents/claude.png'],
             'nvidia'       => ['name' => 'Carlos NVIDIA',      'emoji' => '⚡', 'color' => '#76b900', 'photo' => '/images/agents/nvidia.png'],
             'qnap'         => ['name' => 'Arquivo PartYard',   'emoji' => '🗄️', 'color' => '#f59e0b', 'photo' => null],
+            'thinking'     => ['name' => 'Prof. Deep Thought', 'emoji' => '🧠', 'color' => '#a855f7', 'photo' => null],
+            'batch'        => ['name' => 'Max Batch',          'emoji' => '📦', 'color' => '#06b6d4', 'photo' => null],
         ];
     }
 }
