@@ -76,7 +76,7 @@ class AgentShare extends Model
             'aria'         => ['name' => 'ARIA Security',      'emoji' => '🔐', 'color' => '#ef4444', 'photo' => '/images/agents/aria.png'],
             'quantum'      => ['name' => 'Prof. Quantum Leap', 'emoji' => '⚛️', 'color' => '#22d3ee', 'photo' => '/images/agents/quantum.png'],
             'finance'      => ['name' => 'Dr. Luís Financeiro','emoji' => '💰', 'color' => '#10b981', 'photo' => '/images/agents/finance.png'],
-            'research'     => ['name' => 'Marina Research',    'emoji' => '🔍', 'color' => '#f97316', 'photo' => '/images/agents/maritime.png'],
+            'research'     => ['name' => 'Marina Research',    'emoji' => '🔍', 'color' => '#f97316', 'photo' => '/images/agents/research.png'],
             'acingov'      => ['name' => 'Dra. Ana Contratos', 'emoji' => '🏛️', 'color' => '#f59e0b', 'photo' => '/images/agents/acingov.png'],
             'engineer'     => ['name' => 'Eng. Victor I&D',    'emoji' => '🔩', 'color' => '#f97316', 'photo' => '/images/agents/engineer.png'],
             'patent'       => ['name' => 'Dra. Sofia IP',      'emoji' => '🏛️', 'color' => '#8b5cf6', 'photo' => null],

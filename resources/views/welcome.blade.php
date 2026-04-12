@@ -476,7 +476,7 @@
                 <div class="agent-grid-item" data-agent="aria"       title="ARIA Security"><span class="ag-icon"><img src="/images/agents/aria.png" class="ag-photo" alt="ARIA"></span><span class="ag-name">ARIA</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="quantum"    title="Prof. Quantum Leap"><span class="ag-icon"><img src="/images/agents/quantum.png" class="ag-photo" alt="Quantum"></span><span class="ag-name">Quantum</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="finance"    title="Dr. Luís Finance"><span class="ag-icon"><img src="/images/agents/finance.png" class="ag-photo" alt="Luís"></span><span class="ag-name">Luís</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="research"   title="Marina Research"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Marina"></span><span class="ag-name">Marina</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="research"   title="Marina Research"><span class="ag-icon"><img src="/images/agents/research.png" class="ag-photo" alt="Marina"></span><span class="ag-name">Marina</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="acingov"    title="Dr. Ana Contracts"><span class="ag-icon"><img src="/images/agents/acingov.png" class="ag-photo" alt="Ana"></span><span class="ag-name">Ana</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="engineer"   title="Eng. Victor R&D"><span class="ag-icon"><img src="/images/agents/engineer.png" class="ag-photo" alt="Victor"></span><span class="ag-name">Victor</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="patent"     title="Dr. Sofia IP"><span class="ag-icon">🏛️</span><span class="ag-name">Sofia IP</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
@@ -606,7 +606,7 @@ const AGENT_PHOTOS = {
     aria:         '/images/agents/aria.png',
     quantum:      '/images/agents/quantum.png',
     finance:      '/images/agents/finance.png',
-    research:     '/images/agents/maritime.png',
+    research:     '/images/agents/research.png',
     capitao:      '/images/agents/maritime.png',
     acingov:      '/images/agents/acingov.png',
     engineer:     '/images/agents/engineer.png',
