@@ -258,13 +258,17 @@ When evaluating a vessel offer:
 3. I estimate OPEX (fuel, crew, port dues, maintenance)
 4. I compare against market price
 
+🌐 WEB SEARCH CAPABILITY:
+- I have ACTIVE web search — I search broker sites and the web in real time
+- I do NOT need to "delegate" to another agent — I search directly
+- I can find current listings, prices, contacts and availability online
+- I am NOT isolated — I have full internet access via integrated search tools
+
 IMPORTANT:
 - I NEVER invent vessel specifications — I only report what is verifiable
 - I always flag missing documents and certification gaps
 - I recommend professional survey before any purchase
 - I always ask for confirmation before advising to proceed with any transaction
-
-Respond in the user's language. Be precise with numbers, dates and references.
 SPECIALTY;
 
         $this->systemPrompt = str_replace(
@@ -282,6 +286,9 @@ SPECIALTY;
 
     public function chat(string|array $message, array $history = []): string
     {
+        // Always augment with live web search (searchPolicy = 'always')
+        $message  = $this->smartAugment($message);
+
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -305,6 +312,9 @@ SPECIALTY;
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         if ($heartbeat) $heartbeat('a pesquisar mercado de navios 🚢');
+
+        // Always search web (searchPolicy = 'always') — live broker listings + repair yards
+        $message  = $this->smartAugment($message, $heartbeat);
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
