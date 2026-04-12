@@ -251,7 +251,7 @@
             <span class="talk-btn">Chat</span>
         @endif
     </a>
-    @if($agent['key'] === 'sap')
+    {{-- @if($agent['key'] === 'sap')
     <div style="display:flex;margin-top:-8px;margin-bottom:4px;border:1px solid rgba(6,182,212,.15);border-top:none;border-radius:0 0 12px 12px;overflow:hidden;">
         <a href="/sap/documents"
            style="flex:1;text-align:center;font-size:11px;font-weight:600;color:#06b6d4;text-decoration:none;padding:5px 0;background:rgba(6,182,212,.07);border-right:1px solid rgba(6,182,212,.15);transition:background .15s;"
@@ -268,7 +268,7 @@
             🔗 SAP WebClient
         </a>
     </div>
-    @endif
+    @endif --}}
     @endforeach
 
 </div>
