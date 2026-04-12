@@ -210,6 +210,10 @@
         ['key' => 'energy',      'name' => 'Eng. Sofia Energy',     'emoji' => '⚡', 'role' => 'Maritime decarbonisation — Fuzzy TOPSIS, CII/EEXI, LNG/Biofuel/H2, Fleet Energy Mgmt', 'color' => '#10b981'],
         ['key' => 'kyber',       'name' => 'KYBER Encryption',      'emoji' => '🔒', 'role' => 'Post-quantum encryption — Kyber-1024 + AES-256-GCM, key generation and encrypted email','color' => '#76b900'],
         ['key' => 'qnap',        'name' => 'PartYard Archive',      'emoji' => '🗄️', 'role' => 'Document archive — search prices, codes, invoices, licences and contracts on QNAP',   'color' => '#f59e0b'],
+        ['key' => 'vessel',      'name' => 'Capitão Vasco',         'emoji' => '⚓', 'role' => 'Vessel search + naval repair — ship brokers, drydocks, IACS class, inland waterways',    'color' => '#0ea5e9'],
+        ['key' => 'computer',    'name' => 'RoboDesk',              'emoji' => '🖥️', 'role' => 'Web automation — Computer Use API, browser control and desktop tasks',                  'color' => '#22c55e'],
+        ['key' => 'thinking',    'name' => 'Prof. Deep Thought',    'emoji' => '🧠', 'role' => 'Extended thinking — complex multi-step reasoning and deep analysis',                    'color' => '#a855f7'],
+        ['key' => 'batch',       'name' => 'Max Batch',             'emoji' => '📦', 'role' => 'Batch processing — run multiple tasks in parallel with async queues',                   'color' => '#06b6d4'],
     ];
     @endphp
 
