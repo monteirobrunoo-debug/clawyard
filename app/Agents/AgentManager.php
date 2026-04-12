@@ -31,6 +31,7 @@ class AgentManager
             'qnap'      => new QnapAgent(),
             'thinking'  => new ThinkingAgent(),
             'batch'     => new BatchAgent(),
+            'computer'  => new ComputerUseAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -212,6 +213,18 @@ class AgentManager
         ];
         foreach ($batchKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['batch'];
+        }
+
+        // Computer Use / web automation keywords
+        $computerKeywords = [
+            'robodesk', 'computer use', 'navegar website', 'navigate website',
+            'preencher formulário', 'fill form', 'web automation', 'automação web',
+            'extrair dados', 'extract data', 'monitorizar site', 'monitor website',
+            'base.gov', 'joue', 'tender portal', 'portal concursos',
+            'pesquisar fornecedor', 'search supplier', 'web scraping',
+        ];
+        foreach ($computerKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['computer'];
         }
 
         return $this->agents['claude'];

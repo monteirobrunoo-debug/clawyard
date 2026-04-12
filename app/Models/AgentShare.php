@@ -87,6 +87,7 @@ class AgentShare extends Model
             'qnap'         => ['name' => 'Arquivo PartYard',   'emoji' => '🗄️', 'color' => '#f59e0b', 'photo' => null],
             'thinking'     => ['name' => 'Prof. Deep Thought', 'emoji' => '🧠', 'color' => '#a855f7', 'photo' => null],
             'batch'        => ['name' => 'Max Batch',          'emoji' => '📦', 'color' => '#06b6d4', 'photo' => null],
+            'computer'     => ['name' => 'RoboDesk',           'emoji' => '🖥️', 'color' => '#22c55e', 'photo' => null],
         ];
     }
 }

@@ -429,6 +429,7 @@
         <option value="qnap">🗄️ Arquivo PartYard</option>
         <option value="thinking">🧠 Prof. Deep Thought</option>
         <option value="batch">📦 Max Batch</option>
+        <option value="computer">🖥️ RoboDesk</option>
     </select>
     <div class="hdr-right">
         <span id="model-badge">pronto</span>
@@ -487,6 +488,7 @@
                 <div class="agent-grid-item" data-agent="qnap"       title="PartYard Archive"><span class="ag-icon">🗄️</span><span class="ag-name">Archive</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="thinking"   title="Prof. Deep Thought — Extended Thinking"><span class="ag-icon">🧠</span><span class="ag-name">Deep Thought</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="batch"      title="Max Batch — Bulk Processing"><span class="ag-icon">📦</span><span class="ag-name">Max Batch</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="computer"   title="RoboDesk — Web Automation"><span class="ag-icon">🖥️</span><span class="ag-name">RoboDesk</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="capitao"    title="Captain Porto"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Capitão"></span><span class="ag-name">Capitão</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
             </div>
         </div>
@@ -594,7 +596,7 @@ const AGENT_EMOJIS = {
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
-    thinking:'🧠', batch:'📦'
+    thinking:'🧠', batch:'📦', computer:'🖥️'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -630,7 +632,8 @@ const AGENT_NAMES = {
     kyber:    'KYBER Encryption',
     qnap:     'Arquivo PartYard',
     thinking: 'Prof. Deep Thought',
-    batch:    'Max Batch'
+    batch:    'Max Batch',
+    computer: 'RoboDesk'
 };
 
 const AGENT_COLORS = {
@@ -647,7 +650,8 @@ const AGENT_COLORS = {
     kyber:'#76b900',
     qnap: '#f59e0b',
     thinking:'#a855f7',
-    batch:'#06b6d4'
+    batch:'#06b6d4',
+    computer:'#22c55e'
 };
 
 const AGENT_DESCRIPTIONS = {
