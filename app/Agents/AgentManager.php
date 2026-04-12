@@ -32,6 +32,7 @@ class AgentManager
             'thinking'  => new ThinkingAgent(),
             'batch'     => new BatchAgent(),
             'computer'  => new ComputerUseAgent(),
+            'vessel'    => new VesselSearchAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -213,6 +214,22 @@ class AgentManager
         ];
         foreach ($batchKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['batch'];
+        }
+
+        // Vessel search / naval procurement keywords
+        $vesselKeywords = [
+            'vessel', 'navio', 'embarcação', 'ship for sale', 'navio à venda',
+            'motorvrachtschip', 'automoteur', 'inland waterway', 'waterway vessel',
+            'dwt', 'deadweight', 'hold capacity', 'capacidade porão',
+            'bow thruster', 'thruster', 'eni number', 'numero eni',
+            'drydock', 'estaleiro', 'shipyard', 'reparação naval', 'naval repair',
+            'classificação navio', 'iacs class', 'union certificate', 'cvo',
+            'broker navio', 'ship broker', 'vessel broker', 'capitão vasco',
+            'bunker consumption', 'moulded depth', 'loa beam draught',
+            'grain capacity', 'europaschiff', 'rhine vessel',
+        ];
+        foreach ($vesselKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['vessel'];
         }
 
         // Computer Use / web automation keywords

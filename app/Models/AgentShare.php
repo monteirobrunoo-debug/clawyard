@@ -88,6 +88,7 @@ class AgentShare extends Model
             'thinking'     => ['name' => 'Prof. Deep Thought', 'emoji' => '🧠', 'color' => '#a855f7', 'photo' => null],
             'batch'        => ['name' => 'Max Batch',          'emoji' => '📦', 'color' => '#06b6d4', 'photo' => null],
             'computer'     => ['name' => 'RoboDesk',           'emoji' => '🖥️', 'color' => '#22c55e', 'photo' => null],
+            'vessel'       => ['name' => 'Capitão Vasco',      'emoji' => '⚓', 'color' => '#0ea5e9', 'photo' => null],
         ];
     }
 }
