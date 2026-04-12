@@ -165,17 +165,25 @@ class PatentPdfService
         $docid = preg_replace('/^US/', '', $patentNumber);
         $docid = preg_replace('/[A-Z]\d?$/', '', $docid);
 
-        $url = "https://pdfpiw.uspto.gov/.piw?PageNum=0&docid=" . urlencode($docid);
+        // 1) USPTO Direct PDF URL (most reliable, no redirect)
+        $directUrls = [
+            "https://pdfpiw.uspto.gov/patents/pdf/{$docid}.pdf",
+            "https://pdfpiw.uspto.gov/.piw?PageNum=0&docid=" . urlencode($docid),
+        ];
 
-        $response = $this->http->get($url);
-        $body     = (string) $response->getBody();
-
-        // USPTO returns HTML that redirects to the actual PDF
-        if (str_starts_with($body, '%PDF')) {
-            return $body;
+        foreach ($directUrls as $url) {
+            try {
+                $response = $this->http->get($url, [
+                    'headers' => ['User-Agent' => 'Mozilla/5.0 (compatible; ClawYard/1.0; research@hp-group.org)'],
+                ]);
+                $body = (string) $response->getBody();
+                if (str_starts_with($body, '%PDF')) return $body;
+            } catch (\Throwable $e) {
+                Log::info("PatentPdf USPTO direct failed ({$url}): " . $e->getMessage());
+            }
         }
 
-        // Try direct Google Patents PDF (more reliable)
+        // 2) Google Patents fallback
         return $this->downloadGooglePatents($patentNumber);
     }
 
@@ -183,24 +191,121 @@ class PatentPdfService
 
     protected function downloadEp(string $patentNumber): ?string
     {
-        // Try Google Patents first (most reliable for EP)
+        // Strip kind code to get base number: EP3456789B1 → EP3456789
+        $baseNumber = preg_replace('/^(EP\d+)[A-Z]\d*$/', '$1', $patentNumber);
+        $numOnly    = preg_replace('/^EP/', '', $baseNumber);
+
+        // 1) EPO Register REST API — lists actual patent documents (no auth required)
+        try {
+            $regUrl  = "https://register.epo.org/rest-services/application/EP{$numOnly}/documents";
+            $regResp = $this->http->get($regUrl, [
+                'headers' => [
+                    'Accept'     => 'application/json',
+                    'User-Agent' => 'Mozilla/5.0 (compatible; ClawYard/1.0; research@hp-group.org)',
+                ],
+            ]);
+            $regData = json_decode((string) $regResp->getBody(), true);
+
+            // Find the granted patent or B-document PDF in the document list
+            if (!empty($regData['documents'])) {
+                foreach ($regData['documents'] as $doc) {
+                    $docType = strtolower($doc['type'] ?? '');
+                    $docUrl  = $doc['url'] ?? '';
+                    if (str_contains($docType, 'patent') || str_contains($docType, 'b1') || str_contains($docType, 'b2')) {
+                        if ($docUrl) {
+                            $pdfResp = $this->http->get($docUrl);
+                            $pdfBody = (string) $pdfResp->getBody();
+                            if (str_starts_with($pdfBody, '%PDF')) return $pdfBody;
+                        }
+                    }
+                }
+                // If no specific match, try first document
+                foreach ($regData['documents'] as $doc) {
+                    $docUrl = $doc['url'] ?? '';
+                    if ($docUrl) {
+                        $pdfResp = $this->http->get($docUrl);
+                        $pdfBody = (string) $pdfResp->getBody();
+                        if (str_starts_with($pdfBody, '%PDF')) return $pdfBody;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::info("PatentPdf EPO Register API failed for {$patentNumber}: " . $e->getMessage());
+        }
+
+        // 2) EPO OPS v3.2 — correct images endpoint (different from fulltext)
+        try {
+            // First get the list of image links
+            $opsUrl  = "https://ops.epo.org/3.2/rest-services/published-data/publication/epodoc/{$patentNumber}/images";
+            $opsResp = $this->http->get($opsUrl, [
+                'headers' => [
+                    'Accept'     => 'application/json',
+                    'User-Agent' => 'Mozilla/5.0 (compatible; ClawYard/1.0; research@hp-group.org)',
+                ],
+            ]);
+            $opsData = json_decode((string) $opsResp->getBody(), true);
+
+            // EPO OPS images response has @link arrays pointing to actual pages
+            $opsLink = $opsData['ops:world-patent-data']['ops:patent-family']['ops:family-member'][0]['ops:document-instance'][0]['@link'] ?? null;
+            if (!$opsLink) {
+                // Try direct published-data path
+                $instances = $opsData['ops:world-patent-data']['ops:biblio-search']['ops:search-result']['exchange-documents'][0]['exchange-document']['document-instance'] ?? [];
+                foreach ($instances as $inst) {
+                    if (($inst['@desc'] ?? '') === 'Drawing' || ($inst['@desc'] ?? '') === 'DRAWING') continue;
+                    $opsLink = $inst['@link'] ?? null;
+                    if ($opsLink) break;
+                }
+            }
+
+            if ($opsLink) {
+                // Download as PDF directly
+                $pdfUrl  = "https://ops.epo.org/3.2/rest-services/" . ltrim($opsLink, '/') . "?Range=1-30";
+                $pdfResp = $this->http->get($pdfUrl, ['headers' => ['Accept' => 'application/pdf']]);
+                $pdfBody = (string) $pdfResp->getBody();
+                if (str_starts_with($pdfBody, '%PDF')) return $pdfBody;
+            }
+        } catch (\Throwable $e) {
+            Log::info("PatentPdf EPO OPS images failed for {$patentNumber}: " . $e->getMessage());
+        }
+
+        // 3) Lens.org — free patent API (no key required for basic access)
+        try {
+            $lensUrl  = "https://api.lens.org/patent/search";
+            $lensResp = $this->http->post($lensUrl, [
+                'headers' => ['Content-Type' => 'application/json'],
+                'json'    => [
+                    'query'   => ['term' => ['publication_number' => $patentNumber]],
+                    'include' => ['lens_id', 'publication_number'],
+                    'size'    => 1,
+                ],
+            ]);
+            $lensData = json_decode((string) $lensResp->getBody(), true);
+            $lensId   = $lensData['data'][0]['lens_id'] ?? null;
+            if ($lensId) {
+                // Try direct Lens PDF download
+                $lensPdf  = $this->http->get("https://lens.org/api/patent/{$lensId}/pdf");
+                $lensBody = (string) $lensPdf->getBody();
+                if (str_starts_with($lensBody, '%PDF')) return $lensBody;
+            }
+        } catch (\Throwable $e) {
+            Log::info("PatentPdf Lens.org failed for {$patentNumber}: " . $e->getMessage());
+        }
+
+        // 4) Google Patents (best-effort — may be blocked)
         $pdf = $this->downloadGooglePatents($patentNumber);
         if ($pdf) return $pdf;
 
-        // Try EPO OPS v3.2 fulltext endpoint (no auth needed for bibliographic data)
-        try {
-            $url      = "https://ops.epo.org/3.2/rest-services/published-data/publication/epodoc/{$patentNumber}/fulltext";
-            $response = $this->http->get($url, ['headers' => ['Accept' => 'application/pdf']]);
-            $body     = (string) $response->getBody();
-            if (str_starts_with($body, '%PDF')) return $body;
-        } catch (\Throwable $e) {
-            Log::info("PatentPdf EPO OPS failed for {$patentNumber}: " . $e->getMessage());
-        }
-
-        // Try Espacenet direct PDF (works for some numbers)
+        // 5) Espacenet direct (best-effort)
         try {
             $url      = "https://worldwide.espacenet.com/patent/pdf/{$patentNumber}";
-            $response = $this->http->get($url);
+            $response = $this->http->get($url, [
+                'headers' => [
+                    'User-Agent'      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Accept'          => 'application/pdf,*/*',
+                    'Accept-Language' => 'en-GB,en;q=0.9',
+                    'Referer'         => 'https://worldwide.espacenet.com/',
+                ],
+            ]);
             $body     = (string) $response->getBody();
             if (str_starts_with($body, '%PDF')) return $body;
         } catch (\Throwable $e) {

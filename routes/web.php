@@ -11,6 +11,7 @@ use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\SapTableController;
 use Illuminate\Support\Facades\Route;
 use App\Services\PatentPdfService;
+use App\Models\Discovery;
 use Illuminate\Support\Facades\Storage;
 
 // Kyber-1024 key management UI
@@ -44,11 +45,56 @@ Route::get('/patents/library', function () {
     return view('patents.index');
 })->middleware(['auth'])->name('patents.library');
 
-// List all downloaded patents
+// List all downloaded patents + EPO/USPTO discoveries from DB
 Route::get('/patents', function () {
-    $svc  = new PatentPdfService();
-    $list = $svc->listDownloaded();
-    return response()->json($list);
+    $svc       = new PatentPdfService();
+    $downloaded = collect($svc->listDownloaded())->keyBy('patent');
+
+    // Also pull EPO/USPTO discoveries from DB (patent research results)
+    $discoveries = Discovery::whereIn('source', ['epo', 'uspto', 'google_patents'])
+        ->orderBy('published_date', 'desc')
+        ->limit(100)
+        ->get();
+
+    // Merge: downloaded PDFs first, then DB-only discoveries without duplicates
+    $list = collect($downloaded->values());
+
+    foreach ($discoveries as $d) {
+        // Extract patent number from reference_id or title
+        $pn = strtoupper(trim($d->reference_id ?? ''));
+        // Normalise: remove spaces
+        $pn = preg_replace('/\s+/', '', $pn);
+
+        if (!$pn || strlen($pn) < 5) continue;
+
+        // Skip if already in downloaded list
+        if ($downloaded->has($pn)) continue;
+
+        // Build external URL
+        $extUrl = '#';
+        if (str_starts_with($pn, 'EP')) {
+            $extUrl = "https://worldwide.espacenet.com/patent/search?q=pn%3D{$pn}";
+        } elseif (str_starts_with($pn, 'US')) {
+            $extUrl = "https://patents.google.com/patent/{$pn}/en";
+        } elseif (str_starts_with($pn, 'WO')) {
+            $extUrl = "https://patentscope.wipo.int/search/en/detail.jsf?docId=" . str_replace(['/', '-'], '', $pn);
+        } else {
+            $extUrl = $d->url ?? '#';
+        }
+
+        $list->push([
+            'patent'   => $pn,
+            'title'    => $d->title ?? null,
+            'size_kb'  => null,
+            'date'     => $d->published_date ? \Carbon\Carbon::parse($d->published_date)->format('d/m/Y') : null,
+            'url'      => null,   // no local PDF
+            'ext_url'  => $extUrl,
+            'from_db'  => true,
+            'summary'  => $d->summary ?? null,
+        ]);
+    }
+
+    return response()->json($list->values());
 })->middleware(['auth']);
 
 // Download a specific patent PDF

@@ -120,10 +120,10 @@
     <div class="page-subtitle">PDFs descarregados automaticamente pela Dra. Sofia IP e Prof. Quantum Leap</div>
 
     <div class="stats" id="stats">
-        <div class="stat-card"><div class="num" id="stat-total">—</div><div class="label">Total de patentes</div></div>
-        <div class="stat-card"><div class="num" id="stat-us">—</div><div class="label">🇺🇸 USPTO (US)</div></div>
+        <div class="stat-card"><div class="num" id="stat-total">—</div><div class="label">Total patentes</div></div>
+        <div class="stat-card"><div class="num" id="stat-downloaded">—</div><div class="label">📥 PDFs locais</div></div>
         <div class="stat-card"><div class="num" id="stat-ep">—</div><div class="label">🇪🇺 EPO (EP)</div></div>
-        <div class="stat-card"><div class="num" id="stat-wo">—</div><div class="label">🌍 WIPO (WO)</div></div>
+        <div class="stat-card"><div class="num" id="stat-us">—</div><div class="label">🇺🇸 USPTO (US)</div></div>
         <div class="stat-card"><div class="num" id="stat-size">—</div><div class="label">Espaço total</div></div>
     </div>
 
@@ -178,9 +178,9 @@ async function loadPatents() {
 
 function renderStats(data) {
     document.getElementById('stat-total').textContent = data.length;
-    document.getElementById('stat-us').textContent = data.filter(p => p.patent.startsWith('US')).length;
+    document.getElementById('stat-downloaded').textContent = data.filter(p => !p.from_db).length;
     document.getElementById('stat-ep').textContent = data.filter(p => p.patent.startsWith('EP')).length;
-    document.getElementById('stat-wo').textContent = data.filter(p => p.patent.startsWith('WO')).length;
+    document.getElementById('stat-us').textContent = data.filter(p => p.patent.startsWith('US')).length;
     const totalKb = data.reduce((s, p) => s + (p.size_kb || 0), 0);
     document.getElementById('stat-size').textContent = totalKb > 1024
         ? (totalKb/1024).toFixed(1) + ' MB'
@@ -204,34 +204,57 @@ function renderGrid(data) {
         const prefix = p.patent.match(/^[A-Z]+/)?.[0] || 'XX';
         const flag   = FLAGS[prefix] || '📄';
         const cls    = prefix.toLowerCase();
+        const isDB   = !!p.from_db;
 
-        // Build Espacenet/Google Patents link
-        let extUrl = '#';
-        if (prefix === 'EP') extUrl = `https://worldwide.espacenet.com/patent/search?q=pn%3D${p.patent}`;
-        else if (prefix === 'US') extUrl = `https://patents.google.com/patent/${p.patent}/en`;
-        else if (prefix === 'WO') extUrl = `https://patentscope.wipo.int/search/en/detail.jsf?docId=${p.patent.replace('/','').replace('-','')}`;
-        else extUrl = `https://patents.google.com/patent/${p.patent}/en`;
+        // Build external link
+        let extUrl = p.ext_url || '#';
+        if (extUrl === '#') {
+            if (prefix === 'EP') extUrl = `https://worldwide.espacenet.com/patent/search?q=pn%3D${p.patent}`;
+            else if (prefix === 'US') extUrl = `https://patents.google.com/patent/${p.patent}/en`;
+            else if (prefix === 'WO') extUrl = `https://patentscope.wipo.int/search/en/detail.jsf?docId=${p.patent.replace('/','').replace('-','')}`;
+            else extUrl = `https://patents.google.com/patent/${p.patent}/en`;
+        }
+
+        const titleHtml = p.title
+            ? `<div style="font-size:11px;color:#aaa;margin-top:4px;line-height:1.4;max-height:40px;overflow:hidden">${p.title}</div>`
+            : '';
+
+        const summaryHtml = (isDB && p.summary)
+            ? `<div style="font-size:10px;color:#555;margin-top:4px;line-height:1.4;max-height:32px;overflow:hidden">${p.summary}</div>`
+            : '';
+
+        const metaHtml = isDB
+            ? `<div class="patent-meta">
+                <div class="patent-meta-item"><strong>Fonte</strong>🔬 Descoberta</div>
+                ${p.date ? `<div class="patent-meta-item"><strong>Data</strong>${p.date}</div>` : ''}
+               </div>`
+            : `<div class="patent-meta">
+                <div class="patent-meta-item"><strong>Tamanho</strong>${p.size_kb} KB</div>
+                <div class="patent-meta-item"><strong>Descarregado</strong>${p.date}</div>
+               </div>`;
+
+        const actionsHtml = isDB
+            ? `<a href="${extUrl}" target="_blank" class="btn-view">🔗 Ver Online</a>
+               <span style="font-size:10px;color:#555;align-self:center">PDF não disponível</span>`
+            : `<a href="${p.url}" class="btn-view" onclick="openModal(event, '${p.patent}', '${p.url}', '${flag}')">📄 Ver PDF</a>
+               <a href="${p.url}" download="${p.patent}.pdf" class="btn-espacenet">⬇️ Download</a>
+               <a href="${extUrl}" target="_blank" class="btn-espacenet">🔗 Online</a>`;
+
+        const cardStyle = isDB ? 'opacity:0.75' : '';
 
         return `
-        <div class="patent-card ${cls}" data-patent="${p.patent}" data-prefix="${prefix}">
+        <div class="patent-card ${cls}" data-patent="${p.patent}" data-prefix="${prefix}" style="${cardStyle}">
             <div class="patent-header">
                 <span class="patent-flag">${flag}</span>
                 <span class="patent-number">${p.patent}</span>
-                <span class="patent-type ${cls}">${prefix}</span>
+                <span class="patent-type ${cls}">${isDB ? '🔬' : '📄'} ${prefix}</span>
             </div>
             <div class="patent-body">
-                <div class="patent-meta">
-                    <div class="patent-meta-item"><strong>Tamanho</strong>${p.size_kb} KB</div>
-                    <div class="patent-meta-item"><strong>Descarregado</strong>${p.date}</div>
-                </div>
+                ${metaHtml}
+                ${titleHtml}
+                ${summaryHtml}
             </div>
-            <div class="patent-actions">
-                <a href="${p.url}" class="btn-view" onclick="openModal(event, '${p.patent}', '${p.url}', '${flag}')">
-                    📄 Ver PDF
-                </a>
-                <a href="${p.url}" download="${p.patent}.pdf" class="btn-espacenet">⬇️ Download</a>
-                <a href="${extUrl}" target="_blank" class="btn-espacenet">🔗 Base de dados</a>
-            </div>
+            <div class="patent-actions">${actionsHtml}</div>
         </div>`;
     }).join('');
 }
