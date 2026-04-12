@@ -180,6 +180,14 @@ Route::middleware(['auth'])->group(function () {
 // Agent Activity — live status cards
 Route::middleware(['auth'])->get('/agents/activity', [AgentActivityController::class, 'index'])->name('agents.activity');
 
+// PSI Intel Bus viewer — live shared context from all agents
+Route::middleware(['auth'])->get('/intel', function () {
+    $entries = \App\Models\SharedContext::active()
+        ->orderBy('created_at', 'desc')
+        ->get();
+    return view('intel.index', compact('entries'));
+})->name('intel');
+
 // SAP Documents — interactive table (Richard SAP)
 Route::middleware(['auth'])->group(function () {
     Route::get('/sap/documents', [SapTableController::class, 'index'])->name('sap.documents');

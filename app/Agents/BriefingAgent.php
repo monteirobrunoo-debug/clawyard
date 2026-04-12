@@ -140,11 +140,23 @@ SPECIALTY;
         $progress("**Renato — Estratega HP-Group · ClawYard AI**\n\n");
         $progress("⏳ A recolher inteligência de todas as fontes...\n\n");
 
+        // ── Step 0b: PSI Shared Context Bus ──────────────────────────────────
+        $progress("  `0/5` 🔗 Intel Bus (agentes activos)...\n");
+        $sections  = [];
+
+        try {
+            $sharedIntel = (new \App\Services\SharedContextService())->getContextBlock();
+            if ($sharedIntel) {
+                $sections[] = "## INTEL BUS — DESCOBERTAS RECENTES DOS AGENTES (PSI):\n" . $sharedIntel;
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('BriefingAgent: SharedContext read failed — ' . $e->getMessage());
+        }
+
         // ── Step 1: DB — Discoveries ─────────────────────────────────────────
-        $progress("  `1/4` 🔭 Discoveries (arXiv / PeerJ)...\n");
+        $progress("  `1/5` 🔭 Discoveries (arXiv / PeerJ)...\n");
         if ($heartbeat) $heartbeat('a ler discoveries');
 
-        $sections  = [];
         $today_ts  = now()->startOfDay();
 
         $discoveries = \App\Models\Discovery::where('created_at', '>=', $today_ts)
@@ -177,7 +189,7 @@ SPECIALTY;
         }
 
         // ── Step 2: DB — Agent Reports ────────────────────────────────────────
-        $progress("  `2/4` 📋 Relatórios dos agentes...\n");
+        $progress("  `2/5` 📋 Relatórios dos agentes...\n");
         if ($heartbeat) $heartbeat('a ler relatórios');
 
         $reports = \App\Models\Report::where('created_at', '>=', $today_ts)
@@ -204,7 +216,7 @@ SPECIALTY;
         }
 
         // ── Step 3: SAP snapshot (external API — pode demorar) ───────────────
-        $progress("  `3/4` 💼 SAP B1 (financeiro/operacional)...\n");
+        $progress("  `3/5` 💼 SAP B1 (financeiro/operacional)...\n");
         if ($heartbeat) $heartbeat('a ler SAP');
 
         try {
@@ -217,7 +229,7 @@ SPECIALTY;
         }
 
         // ── Step 4: Live news (Tavily — pode demorar) ────────────────────────
-        $progress("  `4/4` 🌐 Notícias de mercado...\n\n");
+        $progress("  `5/5` 🌐 Notícias de mercado...\n\n");
         if ($heartbeat) $heartbeat('a pesquisar notícias');
 
         try {

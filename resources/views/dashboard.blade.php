@@ -161,6 +161,7 @@
     <span class="badge">Powered by SETQ.AI Team</span>
     <div class="nav-links">
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
+        <a href="/intel" class="nav-link" style="color:#a855f7;border-color:#3b1a5f;background:#0f0a1e">🔗 Intel Bus</a>
         <a href="/agents/activity" class="nav-link" style="color:#76b900;border-color:#1e3300;background:#0d1a00">🤖 Activity</a>
         <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
         <a href="/patents/library" class="nav-link">🏛️ Patents</a>
