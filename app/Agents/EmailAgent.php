@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 
@@ -11,6 +12,10 @@ class EmailAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'conditional';
     protected Client $client;
 
     protected string $systemPrompt = <<<'PROMPT'
@@ -132,7 +137,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -156,7 +161,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

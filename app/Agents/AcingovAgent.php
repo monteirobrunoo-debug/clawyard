@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Services\PartYardProfileService;
 use App\Services\WebSearchService;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,14 @@ use Illuminate\Support\Facades\Cache;
 class AcingovAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'always';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'tender_intel';
+    protected array  $contextTags = ['concurso','tender','acingov','base.gov','procurement','NATO','contrato público'];
 
     protected Client           $client;
     protected Client           $httpClient;
@@ -956,13 +965,15 @@ MSG;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     // ─── streamClaudeOnce() — single Claude streaming call ─────────────────
@@ -978,7 +989,7 @@ MSG;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -1230,6 +1241,7 @@ MSG;
         $analysis = $this->streamClaudeOnce($analysisPrompt, $history, $onChunk, $heartbeat, 'Dra. Ana a analisar');
         $full .= $analysis;
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

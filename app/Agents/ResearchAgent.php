@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 
@@ -18,6 +19,14 @@ class ResearchAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'always';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'competitive_intel';
+    protected array  $contextTags = ['concorrente','competitor','mercado','market','benchmark','pricing','análise','empresa'];
 
     protected Client $client;
 
@@ -147,13 +156,15 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     // ─── stream() ──────────────────────────────────────────────────────────
@@ -171,7 +182,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -208,6 +219,7 @@ PROMPT;
             }
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

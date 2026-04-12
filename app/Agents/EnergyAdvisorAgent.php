@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Models\Report;
@@ -25,6 +26,14 @@ class EnergyAdvisorAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'conditional';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'energy_intel';
+    protected array  $contextTags = ['energia','energy','CII','EEXI','LNG','biofuel','decarbonisation','emissões','GHG'];
 
     protected Client $client;
 
@@ -410,13 +419,15 @@ MSG;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     // ─── stream() ──────────────────────────────────────────────────────────
@@ -438,7 +449,7 @@ MSG;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -475,6 +486,7 @@ MSG;
             }
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

@@ -6,6 +6,7 @@ use App\Models\Discovery;
 use App\Models\Report;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Services\SapService;
@@ -14,6 +15,10 @@ class BriefingAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use WebSearchTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'never';
     protected Client     $client;
     protected SapService $sap;
 
@@ -283,7 +288,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

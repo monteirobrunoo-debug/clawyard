@@ -4,12 +4,17 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Promise\PromiseInterface;
 
 class OrchestratorAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'never';
     protected Client $client;
     protected array $agents;
 
@@ -57,7 +62,7 @@ PROMPT;
                 'json'    => [
                     'model'      => 'claude-haiku-4-6',
                     'max_tokens' => 100,
-                    'system'     => $this->systemPrompt,
+                    'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                     'messages'   => [
                         ['role' => 'user', 'content' => $message],
                     ],

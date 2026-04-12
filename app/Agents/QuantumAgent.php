@@ -5,6 +5,7 @@ namespace App\Agents;
 use App\Models\Discovery;
 use App\Models\Report;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\SharedContextTrait;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Services\PartYardProfileService;
@@ -14,6 +15,14 @@ class QuantumAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'conditional';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'research_intel';
+    protected array  $contextTags = ['arXiv','paper','investigação','ciência','patent','USPTO','EPO','quantum','descoberta'];
     protected Client $client;
     protected Client $httpClient;
 
@@ -584,7 +593,7 @@ MSG;
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 7000],
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -602,7 +611,9 @@ MSG;
             }
         }
 
-        return trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $text));
+        $cleanText = trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $text));
+        $this->publishSharedContext($cleanText);
+        return $cleanText;
     }
 
     // ─── stream() ──────────────────────────────────────────────────────────
@@ -639,7 +650,7 @@ MSG;
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 7000],
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -712,7 +723,9 @@ MSG;
             \Log::warning('QuantumAgent PDF download: ' . $e->getMessage());
         }
 
-        return trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $full));
+        $streamResult = trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $full));
+        $this->publishSharedContext($streamResult);
+        return $streamResult;
     }
 
     // ─── Helpers ───────────────────────────────────────────────────────────

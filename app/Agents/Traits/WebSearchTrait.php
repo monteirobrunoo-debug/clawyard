@@ -6,10 +6,43 @@ use App\Services\WebSearchService;
 
 trait WebSearchTrait
 {
-    // NOTE: $webSearchKeywords is intentionally NOT declared here.
-    // Each agent that uses this trait declares its own $webSearchKeywords array.
-    // Agents that don't declare one get the defaults from needsWebSearch() below.
-    // This avoids the PHP 8.4 fatal error for conflicting trait/class property definitions.
+    // NOTE: $webSearchKeywords and $searchPolicy are intentionally NOT declared here.
+    // Each agent declares its own. This avoids PHP 8.4 fatal errors for conflicting
+    // trait/class property definitions.
+    //
+    // searchPolicy values (HDPO-inspired meta-cognitive tool use):
+    //   'always'      → always search (web-specialist agents: RoboDesk, VesselSearch, Research)
+    //   'never'       → never search (knowledge-only agents: Kyber, Batch, Orchestrator)
+    //   'conditional' → keyword-gated search (default for most agents)
+    //
+    // Inspired by: "Act Wisely: Cultivating Meta-Cognitive Tool Use in
+    // Agentic Multimodal Models" (arXiv:2604.08545) — HDPO framework
+
+    /**
+     * Meta-cognitive search gate.
+     * Respects $searchPolicy: 'always' | 'never' | 'conditional' (default).
+     * Replaces direct calls to needsWebSearch() for policy-aware agents.
+     */
+    protected function shouldUseWebSearch(string|array $message): bool
+    {
+        $policy = property_exists($this, 'searchPolicy') ? $this->searchPolicy : 'conditional';
+
+        return match($policy) {
+            'always'  => (new WebSearchService())->isAvailable(),
+            'never'   => false,
+            default   => $this->needsWebSearch($message), // conditional: keyword gate
+        };
+    }
+
+    /**
+     * Smart augment: only searches if shouldUseWebSearch() returns true.
+     * Prefer this over augmentWithWebSearch() for policy-aware agents.
+     */
+    protected function smartAugment(string|array $message, ?callable $heartbeat = null): string|array
+    {
+        if (!$this->shouldUseWebSearch($message)) return $message;
+        return $this->augmentWithWebSearch($message, $heartbeat);
+    }
 
     /**
      * Append a string suffix to a string|array message.

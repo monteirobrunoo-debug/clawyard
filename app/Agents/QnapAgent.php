@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Services\QnapIndexService;
 use App\Services\PartYardProfileService;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +18,10 @@ use Illuminate\Support\Facades\Log;
 class QnapAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'never';
 
     protected Client $client;
     protected QnapIndexService $indexer;
@@ -97,7 +102,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -128,7 +133,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

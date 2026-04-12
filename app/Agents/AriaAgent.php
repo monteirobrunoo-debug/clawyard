@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use Illuminate\Support\Facades\Log;
@@ -12,6 +13,14 @@ class AriaAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'conditional';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'security_intel';
+    protected array  $contextTags = ['security','segurança','vulnerabilidade','CVE','OWASP','STRIDE','scan','firewall'];
     protected Client $client;
     protected Client $httpClient;
 
@@ -242,7 +251,7 @@ PROMPT;
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -252,6 +261,7 @@ PROMPT;
         foreach ($data['content'] ?? [] as $block) {
             if (($block['type'] ?? '') === 'text') $text .= $block['text'];
         }
+        $this->publishSharedContext($text);
         return $text;
     }
 
@@ -271,7 +281,7 @@ PROMPT;
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -303,6 +313,7 @@ PROMPT;
             }
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

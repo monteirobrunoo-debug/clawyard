@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Models\Discovery;
@@ -22,6 +23,14 @@ class PatentAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'conditional';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'patent_intel';
+    protected array  $contextTags = ['patente','patent','EPO','USPTO','IP','FTO','prior art','invenção','SmartShield','UXS'];
 
     protected Client $client;
     protected Client $httpClient;
@@ -380,13 +389,15 @@ MSG;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     // ─── stream() ──────────────────────────────────────────────────────────
@@ -410,7 +421,7 @@ MSG;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -472,6 +483,7 @@ MSG;
             Log::warning('PatentAgent PDF download failed: ' . $e->getMessage());
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

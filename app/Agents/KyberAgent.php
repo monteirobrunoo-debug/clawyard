@@ -6,6 +6,7 @@ use App\Services\EmailEncryptionService;
 use App\Services\KyberEncryptionService;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 
 /**
  * Kyber Agent — post-quantum email encryption assistant.
@@ -20,6 +21,10 @@ use App\Agents\Traits\AnthropicKeyTrait;
 class KyberAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'never';
 
     protected Client $client;
     protected KyberEncryptionService $kyber;
@@ -110,7 +115,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -145,7 +150,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

@@ -3,9 +3,14 @@
 namespace App\Agents;
 
 use GuzzleHttp\Client;
+use App\Agents\Traits\SharedContextTrait;
 
 class NvidiaAgent implements AgentInterface
 {
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'conditional';
     protected Client $client;
 
     public function __construct()

@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use Illuminate\Support\Facades\Log;
@@ -22,6 +23,14 @@ class VesselSearchAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use WebSearchTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'always';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'vessel_intel';
+    protected array  $contextTags = ['navio','vessel','ship','barco','ENI','DWT','LOA','broker','estaleiro','drydock','IACS','reparação naval'];
 
     protected Client $client;
 
@@ -281,13 +290,15 @@ PROMPT;
             'json'    => [
                 'model'      => 'claude-sonnet-4-6',
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -305,7 +316,7 @@ PROMPT;
                 'json'    => [
                     'model'      => 'claude-sonnet-4-6',
                     'max_tokens' => 8192,
-                    'system'     => $this->systemPrompt,
+                    'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                     'messages'   => $messages,
                     'stream'     => true,
                 ],
@@ -343,6 +354,7 @@ PROMPT;
                 }
             }
 
+            $this->publishSharedContext($full);
             return $full;
 
         } catch (\Throwable $e) {

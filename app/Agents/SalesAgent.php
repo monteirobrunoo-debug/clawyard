@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Services\SapService;
@@ -13,6 +14,14 @@ class SalesAgent implements AgentInterface
 {
     use WebSearchTrait;
     use AnthropicKeyTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'conditional';
+
+    // PSI shared context bus — what this agent publishes
+    protected string $contextKey  = 'sales_intel';
+    protected array  $contextTags = ['venda','sale','cliente','encomenda','proposta','MTU','CAT','MAK','SKF','Schottel','Wärtsilä'];
     protected Client     $client;
     protected SapService $sap;
 
@@ -143,13 +152,15 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -165,7 +176,7 @@ PROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->systemPrompt,
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -197,6 +208,7 @@ PROMPT;
             }
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

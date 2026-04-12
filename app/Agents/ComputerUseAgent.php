@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use Illuminate\Support\Facades\Log;
@@ -19,6 +20,10 @@ class ComputerUseAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use WebSearchTrait;
+    use SharedContextTrait;
+
+    // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
+    protected string $searchPolicy = 'always';
 
     protected Client $client;
 
@@ -93,7 +98,7 @@ PROMPT;
                 'json'    => [
                     'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                     'max_tokens' => 8192,
-                    'system'     => $this->systemPrompt,
+                    'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                     'messages'   => $messages,
                 ],
             ]);
@@ -126,7 +131,7 @@ PROMPT;
                 'json'    => [
                     'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                     'max_tokens' => 8192,
-                    'system'     => $this->systemPrompt,
+                    'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                     'messages'   => $messages,
                     'stream'     => true,
                 ],
