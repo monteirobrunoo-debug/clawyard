@@ -123,46 +123,108 @@ VESSEL BROKER DATABASES — PRIMARY SOURCES
 NAVAL REPAIR & SHIPYARD SERVICES — BY LOCATION
 ═══════════════════════════════════════════════════════
 
-🇵🇹 PORTUGAL (Lisbon / Tagus area):
+🇵🇹 PORTUGAL — ESTALEIROS (Verified April 2026):
 • Lisnave Estaleiros Navais — Mitrena, Setúbal — https://www.lisnave.pt
-  Services: drydock, steel, painting, engine, full repairs (up to 350m)
-• Navalrocha — Lisboa — https://www.navalrocha.pt
-  Services: drydock, floating dock up to 5,000 DWT, inland/coastal vessels
-• Porto de Lisboa Shipyard (PTL) — Rocha do Conde de Óbidos
-• SOCARMAR — Setúbal — hull painting, anti-corrosion
-• Estaleiros de Vila Franca de Xira — inland vessels on Tagus
-• IMAR — maintenance and repairs, Lisbon
-• Tecnonaval — technical services, marine electronics
-• Tejo Marítimo — hull services, Tagus area
+  6 drydocks up to 450m LOA • 9 repair berths • 1,500,000 m² • ISO 9001/14001
+  Services: full ship repair, hull blasting/painting, steel/welding, engine overhaul, propeller, conversion
+• Navalrocha — Margem Norte do Tejo, Lisboa — https://navalrocha.pt
+  Drydock 1: 173.5m × 22.1m (calado 9.6m) | Drydock 2: 104m × 12.4m (⭐ ideal para 110m inland)
+  Services: drydock, hull, steel, engine, propeller | ~30 navios/ano
+• NAVALTAGUS — Seixal, Margem Sul Tejo — https://www.navaltagus.pt
+  3 rampas até 100m • 30,000 m² • Drydock margem norte
+  Specialization: inland waterway, small coastal
+• Navalria — Porto Comercial, Aveiro — https://www.navalria.pt | Tel: +351 234 378 970
+  Drydock + floating dock + slipway + ship elevator
+• West Sea Viana Shipyard — Viana do Castelo — https://west-sea.pt
+  2 drydocks • 700m repair berths • cranes 60t • up to 190m × 29m / 37,000t
+  50+ ships repaired since 2014
+• Repropel — Setúbal (nas instalações Lisnave) — https://repropel.com
+  Propeller repair specialist: up to 130t / 12m diameter | Flying Squad worldwide | 48 years
+• Afonso O'Neill — múltiplos portos PT — https://oneill.pt/en/ship-repair/
+  Hull, steel/welding, ship repair
 
-🇳🇱 NETHERLANDS:
-• Damen Shiprepair Rotterdam — https://www.damen.com/shiprepair — full drydock
-• Damen Shiprepair Vlissingen — floating dock, coastal + ocean
-• Van der Vliet Marine Works — Rotterdam — engine, propulsion
-• Bijlsma Shipyard — Wartena — inland vessels, specialized
-• Grave Scheepsbouw — Grave — inland motorvracht repair
-• Scheepswerf Peters — Kampen — inland dry cargo
-• Ameco Rotterdam — marine electrics/electronics
-• Wijnne & Barends — Delfzijl — coastal + inland
+🇳🇱 NETHERLANDS — 110m CAPABLE INLAND YARDS (Verified):
+• Kooiman Hoebee Shipyard — Dordrecht (Merwedestraat 56) — https://kooimanmarinegroup.com
+  ⭐ CONFIRMED 110m+ capable | Slipway 150m × 41m / 4,200t | Propeller dock 40m × 23m
+  Founded 1815 | Barges, tankers, coasters, dredgers, passenger ships
+• Holland Shipyards Group — Werkendam (Beatrixhaven 13) — https://hollandshipyardsgroup.com
+  ⭐ Inland waterway specialist 40 years | Waal/Merwede rivers access | Hydrogen conversions
+• Damen Shiprepair Oranjewerf — Amsterdão (Canal Reno) — https://www.damen.com
+  Floating dock 6,000t | Slipway 100m | Up to 250m | Turnover 6h for passenger vessels
+• Scheepswerf De Gerlien-Van Tiem — Druten (Nijmegen area) — via dredgepoint.org
+  Inland waterway + dredging vessels since 1967
+• Damen Verolme Rotterdam — Rotterdam Botlek — https://www.damen.com
+  Europe's largest drydock: 405m × 90m | Deep sea / offshore scale
+• Dutch Propeller Repairs BV — Rotterdam area — https://www.dutchpropeller.repair
+  Fixed and CPP propeller inspection and repair
+• Radio Holland Netherlands — Rotterdam — https://www.radioholland.com
+  GMDSS, radar, ECDIS, SAT-C, VDR | Hatteland Certified European Repair Centre
+• Subsea Global Solutions — Rotterdam — https://subseaglobalsolutions.com
+  Hull cleaning, UWILD inspections, propeller polishing, ECO C-ROV, 24/7
+• Holland Ship Repair Network — ARA Zone — https://www.hollandsrn.nl
+  Technical support all disciplines across Antwerp-Rotterdam-Amsterdam
 
-🇧🇪 BELGIUM:
-• Antwerp Shiprepair — Antwerp — https://www.antwerpshiprepair.be
-• Scheepswerf Gebroeders Boedhout — Ghent — inland vessels
-• EXMAR Shipmanagement — Antwerp
+🇧🇪 BELGIUM (Verified):
+• EDR Antwerp Shipyard — Antuérpia — https://www.trusteddocks.com/shipyards/5055-edr-antwerp-shipyard
+  ⭐ Largest drydock site Belgium | 4 drydocks (180m–312m) | 2,500m private berths
+  Services: planned + emergency, propeller retrofits, hydro blasting, collision repair
+• DM Group Services — Ghent / Zeebrugge — https://dmgroupservices.com
+  Multi-port hull work, specialist diving, vessel repair
+• Radio Holland Belgium — Antuérpia + Zeebrugge — https://www.radioholland.com
+  GMDSS, ECDIS, radar, VDR, navigation/communication on-the-spot service
+• Subsea Global Solutions — Antuérpia — https://subseaglobalsolutions.com
+  Underwater inspections, propeller polishing, ROV, 24/7
 
-🇩🇪 GERMANY:
-• MWB Motorenwerke Bremerhaven — engine overhaul
-• Jadewerft Wilhelmshaven — drydock
-• Neptun Ship Design — Rostock
-• Deutsche Binnenreederei — Duisburg — inland fleet services
-• Schiffswerft Bolle — Rhineland — inland vessel repair
+🇩🇪 GERMANY — INLAND WATERWAY (Rhine/Main — Verified):
+• Meidericher Schiffswerft (MSW) — Duisburgo — https://www.meidericher-schiffswerft.de
+  ⭐ CONFIRMED 110m capable | Slipway 110m | Stevensdocks 500t / 16m width | Crane 50t
+  Founded 1898 | Rhine + Rhine-Sea vessels
+• Erlenbacher Schiffswerft — Erlenbach am Main — https://www.die-schiffswerft.com
+  ⭐ 135m SLIPWAY — ONLY such facility between Duisburg and Linz | 50,000 m²
+  1,100+ vessels built | 7,200+ repaired | River Main
+• Neue Ruhrorter Schiffswerft — Duisburg-Ruhrort — https://www.nrsw.de
+  Inland ships + coastal motor ships + floating equipment | Re-motorization | Founded 1921
+• KSD Kölner Schiffswerft Deutz — Colónia (Porto Mülheim) — https://www.ksd-koeln.de
+  45+ years Rhine | Compact repair yard for modern inland navigation
+• Blohm+Voss (NVL Group) — Hamburgo — https://nvl.de/en/shipyards-and-docks/blohmvoss
+  5 docks up to 320,000 DWT | Europe's largest drydock 352m (Elbe 17)
+• Radio Holland Germany — Bremerhaven + Hamburgo — https://www.radioholland.com
+  Full marine electronics, GMDSS, ECDIS, navigation systems
 
-IACS CLASSIFICATION OFFICES IN PORTUGAL:
-• Bureau Veritas Portugal — Lisboa — https://marine.bureauveritas.com/contact/portugal
-• DNV Portugal — Lisboa — https://www.dnv.com/local/portugal/
-• RINA Portugal — Lisboa — https://www.rina.org/en/countries/portugal
-• Lloyd's Register Portugal — Lisbon area
-• ABS Portugal — contact via ABS Madrid or London
+🇫🇷 FRANCE:
+• HAROPA PORT (Seine Axis) — https://haropaport.com/en/ship-repairs
+  Floating dock up to 140m / 10,000t | Inland waterway + coastal | Paris/Le Havre/Rouen
+• Lyon Shipyard — Lyon (Rhône) — https://lyonshipyard.com
+  Inland waterway focus on Rhône-Saône corridor
+
+🇪🇸 SPAIN:
+• Zamakona Yards — Bilbao (Santurce) — https://zamakonayards.com | Tel: +34 944 61 82 00
+  Vessels up to 110m | 35,000 m² | 400+ employees
+  Pasajes yard: floating dock 4,900t / 100m LOA
+• Freire Shipyard — Vigo — https://freireshipyard.com | Founded 1895
+  Gantry crane 110t | 42,000 m² | Newbuilding + repair/conversion
+
+🏛️ IACS CLASSIFICATION OFFICES — PORTUGAL (Verified addresses):
+• Bureau Veritas — Rua Laura Ayres nº3, Lisboa | +351 217 100 900 | comercial@pt.bureauveritas.com
+• DNV — Av. Infante Santo nº43 – 1ºDt, 1350-177 Lisboa | +351 213 929 300 | lisbon.maritime@dnv.com
+• RINA Portugal — via rina.org/en/contacts
+• Lloyd's Register — via lr.org/en/about-us/office-finder
+• ABS — via eagle.org/en/about-us/find-us (70+ países)
+
+🏛️ IACS CLASSIFICATION — NETHERLANDS (Rotterdam):
+• ABS Europe — Boompjes 55, 3011 XB Rotterdam
+• DNV Netherlands — Rotterdam | dnv.com/maritime/contact
+• Bureau Veritas — Rotterdam | bureauveritas.com
+• Lloyd's Register EMEA — Port of Rotterdam | lr.org office finder
+• All recognized societies: nlflag.nl/recognized-classification-societies
+
+📚 DIRECTORY REFERENCES (TrustedDocks):
+• Portugal: trusteddocks.com/catalog/country/173-portugal
+• Netherlands: trusteddocks.com/shipyards/country/nl
+• Belgium: trusteddocks.com/catalog/country/24-belgium
+• Germany: trusteddocks.com/catalog/country/1-germany
+• Spain: trusteddocks.com/catalog/country/200-spain
+• France: trusteddocks.com/shipyards/country/fr
 
 ═══════════════════════════════════════════════════════
 HOW I WORK
