@@ -31,7 +31,7 @@
         header { display:flex; align-items:center; gap:10px; padding:12px 20px; border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; }
         .logo { font-size:18px; font-weight:800; color:var(--green); letter-spacing:-0.5px; }
         .badge { font-size:10px; background:var(--green); color:#000; padding:2px 8px; border-radius:20px; font-weight:700; }
-        .hdr-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+        .hdr-right { display:flex; align-items:center; gap:8px; }
         #agent-select { background:var(--bg3); border:1px solid var(--border2); color:var(--text); padding:5px 10px; border-radius:8px; font-size:12px; cursor:pointer; outline:none; }
         #agent-select:focus { border-color:var(--green); }
         #model-badge { font-size:11px; color:var(--muted); background:var(--bg3); padding:3px 10px; border-radius:20px; border:1px solid var(--border); }
@@ -432,7 +432,8 @@
         <option value="computer">🖥️ RoboDesk</option>
         <option value="vessel">⚓ Capitão Vasco</option>
     </select>
-    <div class="hdr-right">
+    <button id="share-agent-btn" onclick="openShareModal()" title="Partilhar este agente com um cliente" style="background:var(--agent-color,#76b900);border:none;color:#000;font-size:12px;font-weight:800;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;flex-shrink:0;margin-left:auto;">🔗 Share</button>
+    <div class="hdr-right" style="margin-left:8px;">
         <span id="model-badge">pronto</span>
         <a href="/discoveries" title="Descobertas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🔬 Descobertas</a>
         <a href="/patents/library" title="Biblioteca de Patentes" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🏛️ Patentes</a>
@@ -440,7 +441,6 @@
         <a href="/conversations" title="Histórico de Conversas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">💬 Histórico</a>
         <a href="/briefing" title="Briefing Executivo Diário" style="background:#0d1a00;border:1px solid #1e3300;color:#76b900;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:700;">📊 Briefing</a>
         <a href="/schedules" title="Tarefas Agendadas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🗓️ Schedule</a>
-        <button id="share-agent-btn" onclick="openShareModal()" title="Partilhar este agente com um cliente" style="background:var(--agent-color,#76b900);border:none;color:#000;font-size:12px;font-weight:800;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;">🔗 Share</button>
         <a id="manage-shares-btn" href="/shares" title="Gerir links partilhados" style="background:var(--bg3);border:1px solid #1e3a5f;color:#60a5fa;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:600;">⚙️ Shares</a>
         <button onclick="clearHistory()" title="Nova conversa (limpar histórico)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;">🗑️ Novo</button>
         @if(Auth::user()->isAdmin())
@@ -1145,17 +1145,7 @@ async function fileInputChangeHandler(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    // Warn about oversized binary files (won't be text-embedded)
-    const tooBig = files.filter(f => {
-        const ext = f.name.split('.').pop().toLowerCase();
-        const isText = ['txt','csv','md','eml','msg'].includes(ext) || f.type.startsWith('image/');
-        return !isText && f.size > MAX_FILE_BYTES;
-    });
-    if (tooBig.length) {
-        const names = tooBig.map(f => `${f.name} (${humanSize(f.size)})`).join(', ');
-        const go = confirm(`⚠️ Ficheiro(s) grandes:\n${names}\n\nO limite actual do servidor é ~700 KB por ficheiro binário.\n\nPodes continuar mas pode dar erro 413.\nPara aumentar o limite: Forge → Nginx → adiciona "client_max_body_size 50M;"\n\nContinuar mesmo assim?`);
-        if (!go) { e.target.value = ''; return; }
-    }
+    // Note: large files are sent as-is; server will return error in chat bubble if too big
 
     // Read all files in parallel
     const read = await Promise.all(files.map(f => readOneFile(f)));
