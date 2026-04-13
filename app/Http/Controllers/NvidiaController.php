@@ -631,6 +631,20 @@ PROMPT;
      * Extract text content from an Excel XLSX file (no external library required).
      * Deletes the temp file when done.
      */
+    /**
+     * Sanitize a string to valid UTF-8.
+     * Prevents "Malformed UTF-8" errors when Guzzle JSON-encodes the API request body.
+     * Excel/Word files often contain Windows-1252 or Latin-1 bytes inside XML.
+     */
+    private function safeUtf8(string $s): string
+    {
+        // First pass: convert from any detected encoding to UTF-8
+        $out = @mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+        // Second pass: strip any remaining invalid bytes via iconv
+        $out = @iconv('UTF-8', 'UTF-8//IGNORE', $out ?? $s);
+        return $out !== false ? $out : '';
+    }
+
     private function extractExcelText(string $path, string $name): string
     {
         try {
@@ -642,7 +656,10 @@ PROMPT;
                 if ($ssXml) {
                     $ssXml = preg_replace('/<r>.*?<\/r>/s', '', $ssXml);
                     preg_match_all('/<t[^>]*>(.*?)<\/t>/s', $ssXml, $m);
-                    $sharedStrings = array_map('html_entity_decode', $m[1]);
+                    $sharedStrings = array_map(
+                        fn($v) => $this->safeUtf8(html_entity_decode($v, ENT_QUOTES | ENT_XML1, 'UTF-8')),
+                        $m[1]
+                    );
                 }
                 // Parse sheet1 (main sheet)
                 $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
@@ -657,7 +674,7 @@ PROMPT;
                         preg_match('/<v>([^<]*)<\/v>/', $cell[3], $vMatch);
                         $val = $vMatch[1] ?? '';
                         if ($isStr) $val = $sharedStrings[(int)$val] ?? $val;
-                        $cells[] = $val;
+                        $cells[] = $this->safeUtf8((string)$val);
                     }
                     if (array_filter($cells, fn($c) => $c !== '')) {
                         $lines[] = implode(' | ', $cells);
@@ -691,6 +708,7 @@ PROMPT;
                 $text = strip_tags($xml);
                 $text = preg_replace('/[ \t]+/', ' ', $text);
                 $text = preg_replace('/\n{3,}/', "\n\n", trim($text));
+                $text = $this->safeUtf8($text);
                 return "\n\n---\n**Ficheiro Word: {$name}**\n" . substr($text, 0, 15000);
             } else {
                 return "\n\n[Word: não foi possível abrir o ficheiro]";
