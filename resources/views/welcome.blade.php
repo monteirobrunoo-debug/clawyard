@@ -64,6 +64,8 @@
         .agent-live { padding:8px; border-top:1px solid var(--border); flex-shrink:0; background:var(--bg); max-height:400px; overflow-y:auto; }
         .agent-live .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; padding:0 2px; }
         .agent-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; }
+        .ag-section-hdr { grid-column:1/-1; font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:1.2px; color:#3a3a4a; padding:6px 2px 2px; border-top:1px solid #1a1a2a; margin-top:2px; }
+        .ag-section-hdr:first-child { border-top:none; padding-top:0; margin-top:0; }
         .agent-grid-item {
             position:relative; display:flex; flex-direction:column; align-items:center;
             justify-content:center; gap:2px; padding:7px 2px 5px;
@@ -473,30 +475,49 @@
         <div class="agent-live">
             <div class="lbl">Agentes · clica para selecionar</div>
             <div class="agent-grid" id="agent-grid">
+
+                <!-- ── GERAL ── -->
+                <div class="ag-section-hdr">🤖 Geral</div>
                 <div class="agent-grid-item" data-agent="auto"       title="Auto Route"><span class="ag-icon">🤖</span><span class="ag-name">Auto</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="mildef"     title="Cor. Rodrigues — Military Procurement"><span class="ag-icon"><img src="/images/agents/mildef.png" class="ag-photo" alt="Rodrigues"></span><span class="ag-name">Rodrigues</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="claude"     title="Bruno AI"><span class="ag-icon"><img src="/images/agents/claude.png" class="ag-photo" alt="Bruno"></span><span class="ag-name">Bruno</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="nvidia"     title="Carlos NVIDIA"><span class="ag-icon"><img src="/images/agents/nvidia.png" class="ag-photo" alt="Carlos"></span><span class="ag-name">Carlos</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="thinking"   title="Prof. Deep Thought — Extended Thinking"><span class="ag-icon">🧠</span><span class="ag-name">Deep Thought</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
+                <!-- ── COMERCIAL ── -->
+                <div class="ag-section-hdr">💼 Comercial</div>
                 <div class="agent-grid-item" data-agent="sales"      title="Marco Sales"><span class="ag-icon"><img src="/images/agents/sales.png" class="ag-photo" alt="Marco"></span><span class="ag-name">Marco</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="support"    title="Marcus Support"><span class="ag-icon"><img src="/images/agents/support.png" class="ag-photo" alt="Marcus"></span><span class="ag-name">Marcus</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="email"      title="Daniel Email"><span class="ag-icon"><img src="/images/agents/email.png" class="ag-photo" alt="Daniel"></span><span class="ag-name">Daniel</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="sap"        title="Richard SAP"><span class="ag-icon"><img src="/images/agents/sap.png" class="ag-photo" alt="Richard"></span><span class="ag-name">Richard</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
+                <!-- ── OPERAÇÕES ── -->
+                <div class="ag-section-hdr">📋 Operações</div>
                 <div class="agent-grid-item" data-agent="document"   title="Commander Doc"><span class="ag-icon"><img src="/images/agents/document.png" class="ag-photo" alt="Doc"></span><span class="ag-name">Doc</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="claude"     title="Bruno AI"><span class="ag-icon"><img src="/images/agents/claude.png" class="ag-photo" alt="Bruno"></span><span class="ag-name">Bruno</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="nvidia"     title="Carlos NVIDIA"><span class="ag-icon"><img src="/images/agents/nvidia.png" class="ag-photo" alt="Carlos"></span><span class="ag-name">Carlos</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="aria"       title="ARIA Security"><span class="ag-icon"><img src="/images/agents/aria.png" class="ag-photo" alt="ARIA"></span><span class="ag-name">ARIA</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="quantum"    title="Prof. Quantum Leap"><span class="ag-icon"><img src="/images/agents/quantum.png" class="ag-photo" alt="Quantum"></span><span class="ag-name">Quantum</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="finance"    title="Dr. Luís Finance"><span class="ag-icon"><img src="/images/agents/finance.png" class="ag-photo" alt="Luís"></span><span class="ag-name">Luís</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="research"   title="Marina Research"><span class="ag-icon"><img src="/images/agents/research.png" class="ag-photo" alt="Marina"></span><span class="ag-name">Marina</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="acingov"    title="Dr. Ana Contracts"><span class="ag-icon"><img src="/images/agents/acingov.png" class="ag-photo" alt="Ana"></span><span class="ag-name">Ana</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="engineer"   title="Eng. Victor R&D"><span class="ag-icon"><img src="/images/agents/engineer.png" class="ag-photo" alt="Victor"></span><span class="ag-name">Victor</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="patent"     title="Dr. Sofia IP"><span class="ag-icon">🏛️</span><span class="ag-name">Sofia IP</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="energy"     title="Eng. Sofia Energy"><span class="ag-icon">🌱</span><span class="ag-name">Energy</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon"><img src="/images/agents/kyber.png" class="ag-photo" alt="KYBER"></span><span class="ag-name">KYBER</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="qnap"       title="PartYard Archive"><span class="ag-icon">🗄️</span><span class="ag-name">Archive</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="thinking"   title="Prof. Deep Thought — Extended Thinking"><span class="ag-icon">🧠</span><span class="ag-name">Deep Thought</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="batch"      title="Max Batch — Bulk Processing"><span class="ag-icon">📦</span><span class="ag-name">Max Batch</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
+                <!-- ── DEFESA & SEGURANÇA ── -->
+                <div class="ag-section-hdr">🎖️ Defesa &amp; Segurança</div>
+                <div class="agent-grid-item" data-agent="mildef"     title="Cor. Rodrigues — Military Procurement"><span class="ag-icon"><img src="/images/agents/mildef.png" class="ag-photo" alt="Rodrigues"></span><span class="ag-name">Rodrigues</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="aria"       title="ARIA Security"><span class="ag-icon"><img src="/images/agents/aria.png" class="ag-photo" alt="ARIA"></span><span class="ag-name">ARIA</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="kyber"      title="KYBER Encryption"><span class="ag-icon"><img src="/images/agents/kyber.png" class="ag-photo" alt="KYBER"></span><span class="ag-name">KYBER</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="computer"   title="RoboDesk — Web Automation"><span class="ag-icon">🖥️</span><span class="ag-name">RoboDesk</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="vessel"    title="Capitão Vasco — Ship Search &amp; Naval Services"><span class="ag-icon">⚓</span><span class="ag-name">Cap. Vasco</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="capitao"    title="Captain Porto"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Capitão"></span><span class="ag-name">Capitão</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
+                <!-- ── I&D / CIÊNCIA ── -->
+                <div class="ag-section-hdr">🔬 I&amp;D / Ciência</div>
+                <div class="agent-grid-item" data-agent="research"   title="Marina Research"><span class="ag-icon"><img src="/images/agents/research.png" class="ag-photo" alt="Marina"></span><span class="ag-name">Marina</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="quantum"    title="Prof. Quantum Leap"><span class="ag-icon"><img src="/images/agents/quantum.png" class="ag-photo" alt="Quantum"></span><span class="ag-name">Quantum</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="engineer"   title="Eng. Victor R&D"><span class="ag-icon"><img src="/images/agents/engineer.png" class="ag-photo" alt="Victor"></span><span class="ag-name">Victor</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="patent"     title="Dra. Sofia IP"><span class="ag-icon">🏛️</span><span class="ag-name">Sofia IP</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
+                <!-- ── NAVAL & ENERGIA ── -->
+                <div class="ag-section-hdr">🚢 Naval &amp; Energia</div>
+                <div class="agent-grid-item" data-agent="capitao"    title="Capitão Porto"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Capitão"></span><span class="ag-name">Capitão</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="vessel"     title="Capitão Vasco — Ship Search &amp; Naval Services"><span class="ag-icon">⚓</span><span class="ag-name">Cap. Vasco</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="energy"     title="Eng. Sofia Energia"><span class="ag-icon">🌱</span><span class="ag-name">Sofia E.</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="qnap"       title="PartYard Archive"><span class="ag-icon">🗄️</span><span class="ag-name">Archive</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
             </div>
         </div>
     </div>
