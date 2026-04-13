@@ -2235,29 +2235,32 @@ async function sendMessage() {
         logActivity('📎', `${textFiles.length} ficheiro(s) de texto incluídos`, 'done');
     }
 
-    // First binary file becomes the primary attachment (PDF/Excel/Word)
-    if (!payload.image && binaryFiles.length) {
-        const f = binaryFiles[0];
-        payload.file_b64  = f.b64;
-        payload.file_type = f.type || ('application/' + f.ext);
-        payload.file_name = f.name;
-        if (binaryFiles.length > 1) {
-            // Remaining binary files: note them (can't send multiple binaries to API)
-            binaryFiles.slice(1).forEach(fb => {
-                payload.message += `\n\n[Ficheiro adicional: ${fb.name} — ${fb.size} — enviado separadamente se necessário]`;
-            });
-        }
-        logActivity('📎', `Ficheiro incluído: ${f.name} (${f.size})`, 'done');
+    // Binary files (PDF/Excel/Word): use FormData to send ALL files when no image present
+    let requestBody, requestHeaders;
+
+    if (!currentImg && binaryFiles.length > 0) {
+        // Use FormData to send ALL binary files
+        const fd = new FormData();
+        fd.append('message',    payload.message);
+        fd.append('agent',      selectedAgent);
+        fd.append('session_id', SESSION_ID);
+        // Append each binary file
+        binaryFiles.forEach(f => {
+            const bytes = atob(f.b64);
+            const arr   = new Uint8Array(bytes.length);
+            for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+            fd.append('files[]', new Blob([arr], { type: f.type }), f.name);
+        });
+        requestBody    = fd;
+        requestHeaders = { 'Accept': 'text/event-stream', 'X-CSRF-TOKEN': CSRF };
+        logActivity('📎', `${binaryFiles.length} ficheiro(s) incluídos`, 'done');
+    } else {
+        // JSON for text-only or image (payload.image already set above if present)
+        requestBody    = JSON.stringify(payload);
+        requestHeaders = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream', 'X-CSRF-TOKEN': CSRF };
     }
 
     clearImage();
-
-    const requestBody    = JSON.stringify(payload);
-    const requestHeaders = {
-        'Content-Type': 'application/json',
-        'Accept':       'text/event-stream',
-        'X-CSRF-TOKEN': CSRF,
-    };
 
     resolveStep(stepRAG);
 

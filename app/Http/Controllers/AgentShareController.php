@@ -156,7 +156,10 @@ class AgentShareController extends Controller
             $fileName = $request->input('file_name', $uploaded->getClientOriginalName() ?: 'ficheiro');
         }
 
-        if (empty(trim($message)) && !$imageB64 && !$fileB64) {
+        // Multiple files via FormData files[] — detect early so we can check empty message
+        $uploadedFiles = $request->file('files', []);
+
+        if (empty(trim($message)) && !$imageB64 && !$fileB64 && empty($uploadedFiles)) {
             return response()->json(['error' => 'Mensagem vazia.'], 422);
         }
 
@@ -187,72 +190,66 @@ class AgentShareController extends Controller
                 ]],
             ];
         } elseif ($fileB64 && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
-            // Excel XLSX — extract text from ZIP XML (same logic as main chat)
             $tmp = tempnam(sys_get_temp_dir(), 'shr_');
             file_put_contents($tmp, base64_decode($fileB64));
-            try {
-                $zip = new \ZipArchive();
-                if ($zip->open($tmp) === true) {
-                    $sharedStrings = [];
-                    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
-                    if ($ssXml) {
-                        $ssXml = preg_replace('/<r>.*?<\/r>/s', '', $ssXml);
-                        preg_match_all('/<t[^>]*>(.*?)<\/t>/s', $ssXml, $m);
-                        $sharedStrings = array_map('html_entity_decode', $m[1]);
-                    }
-                    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
-                    $zip->close();
-                    $lines = [];
-                    preg_match_all('/<row[^>]*>(.*?)<\/row>/s', $sheetXml, $rows);
-                    foreach ($rows[1] as $rowXml) {
-                        $cells = [];
-                        preg_match_all('/<c r="([A-Z]+)\d+"([^>]*)>(.*?)<\/c>/s', $rowXml, $allCells, PREG_SET_ORDER);
-                        foreach ($allCells as $cell) {
-                            $isStr = str_contains($cell[2], 't="s"');
-                            preg_match('/<v>([^<]*)<\/v>/', $cell[3], $vMatch);
-                            $val = $vMatch[1] ?? '';
-                            if ($isStr) $val = $sharedStrings[(int)$val] ?? $val;
-                            $cells[] = $val;
-                        }
-                        if (array_filter($cells, fn($c) => $c !== '')) {
-                            $lines[] = implode(' | ', $cells);
-                        }
-                    }
-                    $text = implode("\n", $lines);
-                    $message .= "\n\n---\n**Ficheiro Excel: {$fileName}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
-                } else {
-                    $message .= "\n\n[Excel: não foi possível abrir o ficheiro]";
-                }
-            } catch (\Throwable $e) {
-                $message .= "\n\n[Excel: erro ao processar — " . $e->getMessage() . "]";
-            } finally {
-                @unlink($tmp);
-            }
+            $message .= $this->extractExcelText($tmp, $fileName);
         } elseif ($fileB64 && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
-            // Word DOCX — extract text from ZIP XML
             $tmp = tempnam(sys_get_temp_dir(), 'shr_');
             file_put_contents($tmp, base64_decode($fileB64));
-            try {
-                $zip = new \ZipArchive();
-                if ($zip->open($tmp) === true) {
-                    $xml = $zip->getFromName('word/document.xml') ?: '';
-                    $zip->close();
-                    $xml  = str_replace(['</w:p>', '</w:tr>', '<w:br/>'], ["\n", "\n", "\n"], $xml);
-                    $text = strip_tags($xml);
-                    $text = preg_replace('/[ \t]+/', ' ', $text);
-                    $text = preg_replace('/\n{3,}/', "\n\n", trim($text));
-                    $message .= "\n\n---\n**Ficheiro Word: {$fileName}**\n" . substr($text, 0, 15000);
-                } else {
-                    $message .= "\n\n[Word: não foi possível abrir o ficheiro]";
-                }
-            } catch (\Throwable $e) {
-                $message .= "\n\n[Word: erro ao processar — " . $e->getMessage() . "]";
-            } finally {
-                @unlink($tmp);
-            }
+            $message .= $this->extractWordText($tmp, $fileName);
         } elseif ($fileB64) {
             // Unsupported binary — note only
             $message .= "\n\n[Ficheiro: {$fileName} — formato não suportado para análise de texto]";
+        }
+
+        // Multiple files via FormData files[]
+        if (!empty($uploadedFiles) && !$imageB64) {
+            $pdfBlocks  = [];
+            $textAppend = '';
+
+            foreach ($uploadedFiles as $uploadedFile) {
+                $fname = $uploadedFile->getClientOriginalName();
+                $ftype = $uploadedFile->getMimeType() ?: 'application/octet-stream';
+                $fpath = $uploadedFile->getRealPath();
+
+                if (preg_match('/pdf/i', $ftype . $fname)) {
+                    Log::info("AgentShare: multi-file PDF [{$fname}] " . round(filesize($fpath) / 1024) . ' KB');
+                    $pdfBlocks[] = [
+                        'type'   => 'document',
+                        'source' => [
+                            'type'       => 'base64',
+                            'media_type' => 'application/pdf',
+                            'data'       => base64_encode(file_get_contents($fpath)),
+                        ],
+                    ];
+                } elseif (preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $ftype . $fname)) {
+                    Log::info("AgentShare: multi-file Excel [{$fname}] " . round(filesize($fpath) / 1024) . ' KB');
+                    $textAppend .= $this->extractExcelText($fpath, $fname);
+                } elseif (preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $ftype . $fname)) {
+                    Log::info("AgentShare: multi-file Word [{$fname}] " . round(filesize($fpath) / 1024) . ' KB');
+                    $textAppend .= $this->extractWordText($fpath, $fname);
+                } else {
+                    $content = @file_get_contents($fpath);
+                    if ($content) {
+                        $textAppend .= "\n\n---\n**{$fname}**\n```\n" . substr($content, 0, 8000) . "\n```";
+                    }
+                }
+            }
+
+            if (!empty($pdfBlocks)) {
+                $baseText = is_array($message) ? ($message[0]['text'] ?? '') : $message;
+                $contentBlocks = [['type' => 'text', 'text' => $baseText . $textAppend]];
+                foreach ($pdfBlocks as $block) {
+                    $contentBlocks[] = $block;
+                }
+                $message = $contentBlocks;
+            } elseif ($textAppend !== '') {
+                if (is_array($message)) {
+                    $message[0]['text'] = ($message[0]['text'] ?? '') . $textAppend;
+                } else {
+                    $message .= $textAppend;
+                }
+            }
         }
 
         $agentManager = app(AgentManager::class);
@@ -307,6 +304,82 @@ class AgentShareController extends Controller
             'X-Accel-Buffering' => 'no',
             'Connection'        => 'keep-alive',
         ]);
+    }
+
+    // ── File parsing helpers ─────────────────────────────────────────────────
+
+    /**
+     * Extract text content from an Excel XLSX file (no external library required).
+     * Deletes the temp file when done.
+     */
+    private function extractExcelText(string $path, string $name): string
+    {
+        try {
+            $zip = new \ZipArchive();
+            if ($zip->open($path) === true) {
+                $sharedStrings = [];
+                $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+                if ($ssXml) {
+                    $ssXml = preg_replace('/<r>.*?<\/r>/s', '', $ssXml);
+                    preg_match_all('/<t[^>]*>(.*?)<\/t>/s', $ssXml, $m);
+                    $sharedStrings = array_map('html_entity_decode', $m[1]);
+                }
+                $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
+                $zip->close();
+                $lines = [];
+                preg_match_all('/<row[^>]*>(.*?)<\/row>/s', $sheetXml, $rows);
+                foreach ($rows[1] as $rowXml) {
+                    $cells = [];
+                    preg_match_all('/<c r="([A-Z]+)\d+"([^>]*)>(.*?)<\/c>/s', $rowXml, $allCells, PREG_SET_ORDER);
+                    foreach ($allCells as $cell) {
+                        $isStr = str_contains($cell[2], 't="s"');
+                        preg_match('/<v>([^<]*)<\/v>/', $cell[3], $vMatch);
+                        $val = $vMatch[1] ?? '';
+                        if ($isStr) $val = $sharedStrings[(int)$val] ?? $val;
+                        $cells[] = $val;
+                    }
+                    if (array_filter($cells, fn($c) => $c !== '')) {
+                        $lines[] = implode(' | ', $cells);
+                    }
+                }
+                $text = implode("\n", $lines);
+                return "\n\n---\n**Ficheiro Excel: {$name}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
+            } else {
+                return "\n\n[Excel: não foi possível abrir o ficheiro]";
+            }
+        } catch (\Throwable $e) {
+            Log::warning("AgentShare Excel parse failed ({$name}): " . $e->getMessage());
+            return "\n\n[Excel: erro ao processar — " . $e->getMessage() . "]";
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Extract text content from a Word DOCX file (no external library required).
+     * Deletes the temp file when done.
+     */
+    private function extractWordText(string $path, string $name): string
+    {
+        try {
+            $zip = new \ZipArchive();
+            if ($zip->open($path) === true) {
+                $xml = $zip->getFromName('word/document.xml') ?: '';
+                $zip->close();
+                $xml  = str_replace(['</w:p>', '</w:tr>', '<w:br/>'], ["\n", "\n", "\n"], $xml);
+                $text = strip_tags($xml);
+                $text = preg_replace('/[ \t]+/', ' ', $text);
+                $text = preg_replace('/\n{3,}/', "\n\n", trim($text));
+                return "\n\n---\n**Ficheiro Word: {$name}**\n" . substr($text, 0, 15000);
+            } else {
+                return "\n\n[Word: não foi possível abrir o ficheiro]";
+            }
+        } catch (\Throwable $e) {
+            Log::warning("AgentShare Word parse failed ({$name}): " . $e->getMessage());
+            return "\n\n[Word: erro ao processar — " . $e->getMessage() . "]";
+        } finally {
+            @unlink($path);
+        }
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────

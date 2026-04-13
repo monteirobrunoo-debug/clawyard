@@ -221,81 +221,64 @@ class NvidiaController extends Controller
             ];
             @unlink($filePath); // clean up temp file
         } elseif ($filePath && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
-            // Excel XLSX — extract text directly from ZIP XML (no ext-gd required)
+            // Excel XLSX — extract text via helper method
             \Log::info("ClawYard: Excel attached [{$fileName}] " . round(filesize($filePath) / 1024) . ' KB');
-            $tmp = $filePath;
-            try {
-                $zip = new \ZipArchive();
-                if ($zip->open($tmp) === true) {
-                    // Load shared strings (cell values stored by index)
-                    $sharedStrings = [];
-                    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
-                    if ($ssXml) {
-                        $ssXml = preg_replace('/<r>.*?<\/r>/s', '', $ssXml); // keep only <t> nodes
-                        preg_match_all('/<t[^>]*>(.*?)<\/t>/s', $ssXml, $m);
-                        $sharedStrings = array_map('html_entity_decode', $m[1]);
-                    }
-                    // Parse sheet1 (main sheet)
-                    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
-                    $zip->close();
-                    $text  = '';
-                    $lines = [];
-                    preg_match_all('/<row[^>]*>(.*?)<\/row>/s', $sheetXml, $rows);
-                    foreach ($rows[1] as $rowXml) {
-                        $cells = [];
-                        preg_match_all('/<c [^>]*t="s"[^>]*>.*?<v>(\d+)<\/v>.*?<\/c>/s', $rowXml, $strCells);
-                        preg_match_all('/<c [^>]*>.*?<v>([^<]*)<\/v>.*?<\/c>/s', $rowXml, $numCells);
-                        // Rebuild cells in column order
-                        preg_match_all('/<c r="([A-Z]+)\d+"([^>]*)>(.*?)<\/c>/s', $rowXml, $allCells, PREG_SET_ORDER);
-                        foreach ($allCells as $cell) {
-                            $isStr = str_contains($cell[2], 't="s"');
-                            preg_match('/<v>([^<]*)<\/v>/', $cell[3], $vMatch);
-                            $val = $vMatch[1] ?? '';
-                            if ($isStr) $val = $sharedStrings[(int)$val] ?? $val;
-                            $cells[] = $val;
-                        }
-                        if (array_filter($cells, fn($c) => $c !== '')) {
-                            $lines[] = implode(' | ', $cells);
-                        }
-                    }
-                    $text = implode("\n", $lines);
-                    $augmentedMessage .= "\n\n---\n**Ficheiro Excel: {$fileName}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
-                } else {
-                    $augmentedMessage .= "\n\n[Excel: não foi possível abrir o ficheiro]";
-                }
-            } catch (\Throwable $e) {
-                \Log::warning("Excel parse failed ({$fileName}): " . $e->getMessage());
-                $augmentedMessage .= "\n\n[Excel: erro ao processar — " . $e->getMessage() . "]";
-            } finally {
-                @unlink($tmp); // clean up temp file
-            }
+            $augmentedMessage .= $this->extractExcelText($filePath, $fileName);
         } elseif ($filePath && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
-            // Word DOCX — extract text from ZIP XML (no external library needed)
+            // Word DOCX — extract text via helper method
             \Log::info("ClawYard: Word attached [{$fileName}] " . round(filesize($filePath) / 1024) . ' KB');
-            $tmp = $filePath;
-            try {
-                $zip = new \ZipArchive();
-                if ($zip->open($tmp) === true) {
-                    $xml = $zip->getFromName('word/document.xml') ?: '';
-                    $zip->close();
-                    $xml  = str_replace(['</w:p>', '</w:tr>', '<w:br/>'], ["\n", "\n", "\n"], $xml);
-                    $text = strip_tags($xml);
-                    $text = preg_replace('/[ \t]+/', ' ', $text);
-                    $text = preg_replace('/\n{3,}/', "\n\n", trim($text));
-                    $augmentedMessage .= "\n\n---\n**Ficheiro Word: {$fileName}**\n" . substr($text, 0, 15000);
-                } else {
-                    $augmentedMessage .= "\n\n[Word: não foi possível abrir o ficheiro]";
-                }
-            } catch (\Throwable $e) {
-                \Log::warning("Word parse failed ({$fileName}): " . $e->getMessage());
-                $augmentedMessage .= "\n\n[Word: erro ao processar — " . $e->getMessage() . "]";
-            } finally {
-                @unlink($tmp);
-            }
+            $augmentedMessage .= $this->extractWordText($filePath, $fileName);
         } elseif ($filePath) {
             // Other binary file — unsupported
             @unlink($filePath);
             $augmentedMessage .= "\n\n[Ficheiro binário: {$fileName} ({$fileType}) — formato não suportado para análise]";
+        }
+
+        // Multiple files via FormData files[] — supports PDF, Excel, Word, and other text
+        $uploadedFiles = $request->file('files', []);
+        if (!empty($uploadedFiles) && !$imageB64) {
+            $pdfBlocks  = [];
+            $textAppend = '';
+
+            foreach ($uploadedFiles as $uploadedFile) {
+                $fname = $uploadedFile->getClientOriginalName();
+                $ftype = $uploadedFile->getMimeType() ?: 'application/octet-stream';
+                $fpath = $uploadedFile->getRealPath();
+
+                if (preg_match('/pdf/i', $ftype . $fname)) {
+                    \Log::info("ClawYard: multi-file PDF [{$fname}] " . round(filesize($fpath) / 1024) . ' KB');
+                    $pdfBlocks[] = [
+                        'type'   => 'document',
+                        'source' => [
+                            'type'       => 'base64',
+                            'media_type' => 'application/pdf',
+                            'data'       => base64_encode(file_get_contents($fpath)),
+                        ],
+                    ];
+                } elseif (preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $ftype . $fname)) {
+                    \Log::info("ClawYard: multi-file Excel [{$fname}] " . round(filesize($fpath) / 1024) . ' KB');
+                    $textAppend .= $this->extractExcelText($fpath, $fname);
+                } elseif (preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $ftype . $fname)) {
+                    \Log::info("ClawYard: multi-file Word [{$fname}] " . round(filesize($fpath) / 1024) . ' KB');
+                    $textAppend .= $this->extractWordText($fpath, $fname);
+                } else {
+                    $content = @file_get_contents($fpath);
+                    if ($content) {
+                        $textAppend .= "\n\n---\n**{$fname}**\n```\n" . substr($content, 0, 8000) . "\n```";
+                    }
+                }
+            }
+
+            if (!empty($pdfBlocks)) {
+                // Build content array: text first, then all PDF document blocks
+                $contentBlocks = [['type' => 'text', 'text' => $augmentedMessage . $textAppend]];
+                foreach ($pdfBlocks as $block) {
+                    $contentBlocks[] = $block;
+                }
+                $augmentedMessage = $contentBlocks;
+            } elseif ($textAppend !== '') {
+                $augmentedMessage .= $textAppend;
+            }
         }
 
         // Save user message before streaming
@@ -642,6 +625,82 @@ PROMPT;
         }
 
         return [];
+    }
+
+    /**
+     * Extract text content from an Excel XLSX file (no external library required).
+     * Deletes the temp file when done.
+     */
+    private function extractExcelText(string $path, string $name): string
+    {
+        try {
+            $zip = new \ZipArchive();
+            if ($zip->open($path) === true) {
+                // Load shared strings (cell values stored by index)
+                $sharedStrings = [];
+                $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+                if ($ssXml) {
+                    $ssXml = preg_replace('/<r>.*?<\/r>/s', '', $ssXml);
+                    preg_match_all('/<t[^>]*>(.*?)<\/t>/s', $ssXml, $m);
+                    $sharedStrings = array_map('html_entity_decode', $m[1]);
+                }
+                // Parse sheet1 (main sheet)
+                $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
+                $zip->close();
+                $lines = [];
+                preg_match_all('/<row[^>]*>(.*?)<\/row>/s', $sheetXml, $rows);
+                foreach ($rows[1] as $rowXml) {
+                    $cells = [];
+                    preg_match_all('/<c r="([A-Z]+)\d+"([^>]*)>(.*?)<\/c>/s', $rowXml, $allCells, PREG_SET_ORDER);
+                    foreach ($allCells as $cell) {
+                        $isStr = str_contains($cell[2], 't="s"');
+                        preg_match('/<v>([^<]*)<\/v>/', $cell[3], $vMatch);
+                        $val = $vMatch[1] ?? '';
+                        if ($isStr) $val = $sharedStrings[(int)$val] ?? $val;
+                        $cells[] = $val;
+                    }
+                    if (array_filter($cells, fn($c) => $c !== '')) {
+                        $lines[] = implode(' | ', $cells);
+                    }
+                }
+                $text = implode("\n", $lines);
+                return "\n\n---\n**Ficheiro Excel: {$name}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
+            } else {
+                return "\n\n[Excel: não foi possível abrir o ficheiro]";
+            }
+        } catch (\Throwable $e) {
+            \Log::warning("Excel parse failed ({$name}): " . $e->getMessage());
+            return "\n\n[Excel: erro ao processar — " . $e->getMessage() . "]";
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    /**
+     * Extract text content from a Word DOCX file (no external library required).
+     * Deletes the temp file when done.
+     */
+    private function extractWordText(string $path, string $name): string
+    {
+        try {
+            $zip = new \ZipArchive();
+            if ($zip->open($path) === true) {
+                $xml = $zip->getFromName('word/document.xml') ?: '';
+                $zip->close();
+                $xml  = str_replace(['</w:p>', '</w:tr>', '<w:br/>'], ["\n", "\n", "\n"], $xml);
+                $text = strip_tags($xml);
+                $text = preg_replace('/[ \t]+/', ' ', $text);
+                $text = preg_replace('/\n{3,}/', "\n\n", trim($text));
+                return "\n\n---\n**Ficheiro Word: {$name}**\n" . substr($text, 0, 15000);
+            } else {
+                return "\n\n[Word: não foi possível abrir o ficheiro]";
+            }
+        } catch (\Throwable $e) {
+            \Log::warning("Word parse failed ({$name}): " . $e->getMessage());
+            return "\n\n[Word: erro ao processar — " . $e->getMessage() . "]";
+        } finally {
+            @unlink($path);
+        }
     }
 
     protected function combineReplies(array $results): string
