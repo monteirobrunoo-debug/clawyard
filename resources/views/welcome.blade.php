@@ -2594,10 +2594,7 @@ async function clearHistory() {
         '<div class="empty-state" id="empty-state"><div class="empty-state-hero">' +
         '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' +
         '<div class="empty-state-avatar" id="empty-avatar">🤖</div>' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-        '<button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client" style="display:block;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">🔗 Share Agent</button>' +
-        '<a id="manage-shares-btn" href="/shares" title="Manage shared links" style="display:block;background:none;border:1px solid #2a2a3a;color:#64748b;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:.15s">⚙️ Manage</a>' +
-        '</div></div>' +
+        '</div>' +
         '<h2 id="empty-title">ClawYard <span>AI</span></h2>' +
         '<p id="empty-desc"></p></div>' +
         '<div class="starter-chips" id="starter-chips"></div></div>');
