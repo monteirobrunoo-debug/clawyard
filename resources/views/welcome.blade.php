@@ -39,15 +39,15 @@
         .back-btn:hover { color:var(--text); }
 
         /* ── MAIN LAYOUT ── */
-        .main { flex:1; display:flex; overflow:hidden; }
+        .main { flex:1; display:flex; flex-direction:row-reverse; overflow:hidden; }
 
         /* ── SIDEBAR — Agent Activity ── */
         #activity-panel {
-            width:260px; min-width:260px; border-right:1px solid var(--border);
+            width:260px; min-width:260px; border-left:1px solid var(--border);
             background:var(--bg2); display:flex; flex-direction:column;
             transition: width 0.3s; overflow:hidden;
         }
-        #activity-panel.collapsed { width:0; min-width:0; border-right:none; }
+        #activity-panel.collapsed { width:0; min-width:0; border-left:none; }
         .activity-header { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
         .activity-header span { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
         #activity-log { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:6px; }
