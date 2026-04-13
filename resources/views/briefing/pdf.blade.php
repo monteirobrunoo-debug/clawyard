@@ -66,7 +66,7 @@
 
 <div class="doc-top">
     <div class="company-block">
-        <div class="company">PartYard_B.Mont_H&P Group rights reserved 2026</div>
+        <div class="company">PartYard/Setq.AI Rights reserved 2026</div>
         <div class="doc-type">📊 Briefing Executivo Diário</div>
         <div class="doc-date">{{ $report->created_at->format('d \d\e F \d\e Y · H:i') }}</div>
     </div>
@@ -82,7 +82,7 @@
 
 <div class="doc-footer">
     <span class="confidential">Confidencial · PartYard / HP-Group</span>
-    <span>ClawYard AI · © PartYard_B.Mont_H&P Group rights reserved 2026 · {{ $report->created_at->format('d/m/Y H:i') }}</span>
+    <span>ClawYard AI · © PartYard/Setq.AI Rights reserved 2026 · {{ $report->created_at->format('d/m/Y H:i') }}</span>
 </div>
 
 <script>

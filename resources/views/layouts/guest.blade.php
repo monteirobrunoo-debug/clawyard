@@ -101,7 +101,7 @@
     <div class="login-logo">
         <span class="paw">🐾</span>
         <h1>ClawYard</h1>
-        <p>© PartYard_B.Mont_H&P Group rights reserved 2026</p>
+        <p>© PartYard/Setq.AI Rights reserved 2026</p>
     </div>
 
     {{ $slot }}

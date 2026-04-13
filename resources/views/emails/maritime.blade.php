@@ -37,7 +37,7 @@
         <div class="footer-logo">🐾 ClawYard — IT Partyard</div>
         <div class="footer-info">
             Marine Spare Parts &amp; Technical Services<br>
-            © PartYard_B.Mont_H&P Group rights reserved 2026<br>
+            © PartYard/Setq.AI Rights reserved 2026<br>
             {{ config('mail.from.address') }}
         </div>
         <div class="footer-links">

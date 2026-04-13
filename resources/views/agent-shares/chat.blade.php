@@ -122,7 +122,7 @@
         <div class="agent-status"><span class="status-dot"></span> Online</div>
     </div>
     @if($share->show_branding)
-    <div class="branding">© PartYard_B.Mont_H&amp;P Group rights reserved 2026</div>
+    <div class="branding">© PartYard/Setq.AI Rights reserved 2026</div>
     @endif
 </div>
 
@@ -177,7 +177,7 @@
             </button>
         </div>
         @if($share->show_branding)
-        <div class="input-hint">© PartYard_B.Mont_H&amp;P Group rights reserved 2026</div>
+        <div class="input-hint">© PartYard/Setq.AI Rights reserved 2026</div>
         @endif
     </div>
 </div>

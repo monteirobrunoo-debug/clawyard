@@ -158,7 +158,7 @@
 
 <header class="header">
     <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/setq-logo.svg" alt="SETQ.AI" style="height:32px;filter:drop-shadow(0 0 1px rgba(255,255,255,0.1));"></a>
-    <span class="badge">© PartYard_B.Mont_H&P Group rights reserved 2026</span>
+    <span class="badge">© PartYard/Setq.AI Rights reserved 2026</span>
     <div class="nav-links">
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
         <a href="/intel" class="nav-link" style="color:#a855f7;border-color:#3b1a5f;background:#0f0a1e">🔗 Intel Bus</a>
@@ -182,7 +182,7 @@
 <div class="hero">
     <p class="hero-label">HP-Group · PartYard Marine · PartYard Military</p>
     <h1>Choose your <span>Agent</span></h1>
-    <p>© PartYard_B.Mont_H&P Group rights reserved 2026 — 14 specialised agents ready to help</p>
+    <p>© PartYard/Setq.AI Rights reserved 2026 — 14 specialised agents ready to help</p>
 </div>
 
 <p class="section-title">Available Agents</p>

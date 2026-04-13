@@ -20,7 +20,7 @@
     <div class="icon">⏱️</div>
     <div class="title">Link Expirado ou Inactivo</div>
     <div class="sub">Este link de acesso foi desactivado ou expirou.<br>Contacta quem te enviou o link para obter um novo acesso.</div>
-    <div class="contact">© PartYard_B.Mont_H&P Group rights reserved 2026</div>
+    <div class="contact">© PartYard/Setq.AI Rights reserved 2026</div>
 </div>
 </body>
 </html>
