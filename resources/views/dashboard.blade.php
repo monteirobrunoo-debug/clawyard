@@ -215,6 +215,7 @@
         ['key' => 'computer',    'name' => 'RoboDesk',              'emoji' => '🖥️', 'role' => 'Web automation — Computer Use API, browser control and desktop tasks',                  'color' => '#22c55e'],
         ['key' => 'thinking',    'name' => 'Prof. Deep Thought',    'emoji' => '🧠', 'role' => 'Extended thinking — complex multi-step reasoning and deep analysis',                    'color' => '#a855f7'],
         ['key' => 'batch',       'name' => 'Max Batch',             'emoji' => '📦', 'role' => 'Batch processing — run multiple tasks in parallel with async queues',                   'color' => '#06b6d4'],
+        ['key' => 'mildef',      'name' => 'Cor. Rodrigues Defesa', 'emoji' => '🎖️', 'role' => 'Military procurement — worldwide defence suppliers excl. China/Russia, NATO/EU/USLI context', 'color' => '#6b3fa0'],
     ];
     @endphp
 
