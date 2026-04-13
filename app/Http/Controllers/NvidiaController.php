@@ -152,7 +152,7 @@ class NvidiaController extends Controller
      */
     public function chatStream(Request $request): StreamedResponse
     {
-        set_time_limit(300); // 5 minutes for long Quantum/ARIA responses
+        set_time_limit(700); // 700s — matches Guzzle 600s + post-stream processing headroom
 
         $request->validate([
             'message'   => 'required|string|min:1|max:20000',
@@ -409,6 +409,11 @@ class NvidiaController extends Controller
                 return;
             }
 
+            // Keep SSE alive during post-stream processing (DB saves, suggestions API)
+            // nginx send_timeout default 60s can drop connection during long saves
+            echo ": post-stream\n\n";
+            flush();
+
             // Save assistant reply after streaming completes
             try {
                 $conversationRef->messages()->create([
@@ -420,27 +425,18 @@ class NvidiaController extends Controller
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
             }
 
+            echo ": saving\n\n";
+            flush();
+
             // Auto-save report for all agents (responses > 150 chars)
             if (strlen($fullReply) > 150) {
                 try {
-                    $agentLabels = [
-                        'quantum'      => 'Prof. Quantum Leap',
-                        'aria'         => 'ARIA Security',
-                        'sales'        => 'Sales Agent',
-                        'email'        => 'Email Agent',
-                        'support'      => 'Marcus Suporte',
-                        'orchestrator' => 'Orchestrator',
-                        'auto'         => 'Auto Agent',
-                    ];
-                    $agentLabel = $agentLabels[$agentName_final] ?? ucfirst($agentName_final);
-                    $validTypes = ['quantum','aria','market','sales','email','support','orchestrator','custom'];
-                    $type       = in_array($agentName_final, $validTypes) ? $agentName_final : 'custom';
-                    // Title includes session so same agent can have multiple reports per day
+                    $agentLabel = $agentName_final;
                     $title = $agentLabel . ' — ' . now()->format('Y-m-d H:i');
                     \App\Models\Report::create([
                         'title'   => $title,
                         'user_id' => $userId,
-                        'type'    => $type,
+                        'type'    => $agentName_final,
                         'content' => $fullReply,
                         'summary' => substr(strip_tags($fullReply), 0, 300),
                     ]);
@@ -448,6 +444,9 @@ class NvidiaController extends Controller
                     \Log::warning('ClawYard: could not auto-save report — ' . $e->getMessage());
                 }
             }
+
+            echo ": suggestions\n\n";
+            flush();
 
             // Generate smart contextual suggestions based on the actual response
             if (strlen($fullReply) > 80) {
