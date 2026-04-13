@@ -899,10 +899,10 @@ const AGENT_CHIPS = {
     mildef: [
         '🎯 Lista todos os fabricantes mundiais (excl. China/Rússia) de mísseis SAM com alcance >70 km',
         '📡 Fabricantes de radares de defesa aérea tática NATO — com specs e contactos',
-        '✈️ Fornecedores de mísseis ar-ar (SRAAM/MRAAM/LRAAM) disponíveis para procurement EU',
-        '💣 Lista fabricantes de bombas guiadas de precisão e glide/stand-off bombs — EU+USA+IL',
-        '🔫 Sistemas de artilharia antiaérea + munições: Rheinmetall, Diehl, MBDA — specs e preços',
+        '📧 Escreve emails RFI para todos os fabricantes de radares e SAM identificados',
+        '✉️ Draft email de procurement para MBDA, Raytheon e Kongsberg — RFP mísseis SAM >70km',
         '📋 Ajuda-me a preencher o Anexo 1 e Anexo 2 para o Ukraine Support Loan Instrument EU',
+        '📧 Cria emails em PT+EN para todos os fornecedores de bombas guiadas (SPICE, Paveway, JDAM)',
     ],
 };
 
