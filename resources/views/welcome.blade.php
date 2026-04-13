@@ -61,7 +61,7 @@
         @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
 
         /* Agent live status — compact 4-column grid */
-        .agent-live { padding:8px; border-top:1px solid var(--border); flex-shrink:0; background:var(--bg); }
+        .agent-live { padding:8px; border-top:1px solid var(--border); flex-shrink:0; background:var(--bg); max-height:260px; overflow-y:auto; }
         .agent-live .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; padding:0 2px; }
         .agent-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:3px; }
         .agent-grid-item {
@@ -496,7 +496,7 @@
                 <div class="agent-grid-item" data-agent="computer"   title="RoboDesk — Web Automation"><span class="ag-icon">🖥️</span><span class="ag-name">RoboDesk</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="vessel"    title="Capitão Vasco — Ship Search &amp; Naval Services"><span class="ag-icon">⚓</span><span class="ag-name">Cap. Vasco</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="capitao"    title="Captain Porto"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Capitão"></span><span class="ag-name">Capitão</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="mildef"     title="Cor. Rodrigues — Military Procurement"><span class="ag-icon">🎖️</span><span class="ag-name">Cor. Rodrigues</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="mildef"     title="Cor. Rodrigues — Military Procurement"><span class="ag-icon"><img src="/images/agents/mildef.png" class="ag-photo" alt="Rodrigues"></span><span class="ag-name">Rodrigues</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
             </div>
         </div>
     </div>
@@ -614,6 +614,7 @@ const AGENT_PHOTOS = {
     acingov:      '/images/agents/acingov.png',
     engineer:     '/images/agents/engineer.png',
     kyber:        '/images/agents/kyber.png',
+    mildef:       '/images/agents/mildef.png',
 };
 
 const AGENT_NAMES = {
