@@ -1107,6 +1107,9 @@ function updateFilePreviewUI() {
     wrapEl.style.display        = 'flex';
 }
 
+// Max binary file size before warning (nginx default limit ~1MB; base64 = ×1.33)
+const MAX_FILE_BYTES = 700 * 1024; // 700 KB → ~930 KB base64 → safe under 1MB nginx limit
+
 function readOneFile(file) {
     return new Promise((resolve) => {
         const ext        = file.name.split('.').pop().toLowerCase();
@@ -1141,6 +1144,18 @@ function readOneFile(file) {
 async function fileInputChangeHandler(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
+
+    // Warn about oversized binary files (won't be text-embedded)
+    const tooBig = files.filter(f => {
+        const ext = f.name.split('.').pop().toLowerCase();
+        const isText = ['txt','csv','md','eml','msg'].includes(ext) || f.type.startsWith('image/');
+        return !isText && f.size > MAX_FILE_BYTES;
+    });
+    if (tooBig.length) {
+        const names = tooBig.map(f => `${f.name} (${humanSize(f.size)})`).join(', ');
+        const go = confirm(`⚠️ Ficheiro(s) grandes:\n${names}\n\nO limite actual do servidor é ~700 KB por ficheiro binário.\n\nPodes continuar mas pode dar erro 413.\nPara aumentar o limite: Forge → Nginx → adiciona "client_max_body_size 50M;"\n\nContinuar mesmo assim?`);
+        if (!go) { e.target.value = ''; return; }
+    }
 
     // Read all files in parallel
     const read = await Promise.all(files.map(f => readOneFile(f)));

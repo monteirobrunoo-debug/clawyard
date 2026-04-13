@@ -246,6 +246,11 @@ function updateAttachPreview() {
 document.getElementById('file-input').addEventListener('change', async function(e){
     const files = Array.from(e.target.files);
     if (!files.length) return;
+    const tooBig = files.filter(f => { const ext=f.name.split('.').pop().toLowerCase(); return !['txt','csv','md','eml','msg'].includes(ext) && !f.type.startsWith('image/') && f.size > 700*1024; });
+    if (tooBig.length) {
+        const ok = confirm(`⚠️ ${tooBig.map(f=>f.name).join(', ')} é grande (${tooBig.map(f=>humanSize(f.size)).join(', ')}).\nPode dar erro 413 no servidor. Continuar?`);
+        if (!ok) { e.target.value=''; return; }
+    }
     const read = await Promise.all(files.map(f => readOneFileShare(f)));
     const imgFile = read.find(f => f.isImage);
     if (imgFile) {
