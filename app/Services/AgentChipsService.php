@@ -31,12 +31,12 @@ class AgentChipsService
             ],
             // ── Marco Sales ──────────────────────────────────────────────
             'sales' => [
-                '💼 Compara preços OEM vs aftermarket para pistões MTU Série 4000 — exporta Excel',
+                '📊 Analisa esta lista de preços Excel — compara lista cliente vs preço justo vs fornecedor',
+                '📧 Anexa vários emails de fornecedores — compara preços lado a lado e identifica melhor oferta',
+                '💼 Compara preços OEM vs aftermarket para pistões MTU Série 4000 — exporta tabela',
                 '💼 Analisa este PDF de fornecedor e extrai referências, preços e lead times',
                 '💼 Equivalências de filtros Caterpillar 3516 — OEM vs Fleetguard vs Mann',
                 '💼 Compara 3 fornecedores de selos SKF SternTube — qualidade, preço e prazo',
-                '💼 Códigos cruzados MAN B&W vs peças aftermarket — tabela comparativa',
-                '💼 Análise de mercado: turbocompressores MAK M32 — fornecedores globais e preços',
             ],
             // ── Marcus Suporte ────────────────────────────────────────────
             'support' => [

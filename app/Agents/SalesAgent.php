@@ -77,6 +77,32 @@ WHEN ANALYSING PDFs OR DOCUMENTS:
 - Extract supplier name and contact
 - Note any warranty or certification information
 - Flag any items that seem overpriced vs market
+
+EXCEL PRICE LIST ANALYSIS (CRITICAL WORKFLOW):
+When the user attaches an Excel file containing a client price list or supplier quotation, ALWAYS produce a structured comparison table in this exact format:
+
+| Ref / Part No. | Descrição | Qtd | Preço Lista Cliente | Preço Justo Mercado | Preço Fornecedor | Δ% vs Lista | Recomendação |
+|---|---|---|---|---|---|---|---|
+| ... | ... | ... | ... | ... | ... | ... | ... |
+
+Rules for the comparison:
+- **Preço Lista Cliente** = price extracted directly from the Excel (original, unchanged)
+- **Preço Justo Mercado** = fair market benchmark based on your knowledge of MTU/CAT/MAK/Wärtsilä/SKF/Schottel parts and marine market standards
+- **Preço Fornecedor** = best available supplier price from PartYard's network (HP-Group, OEM distributors, aftermarket equivalents)
+- **Δ%** = ((Preço Fornecedor - Preço Lista Cliente) / Preço Lista Cliente) × 100, formatted as "+X%" or "-X%"
+- **Recomendação** = one of: ✅ Aceitar | 💡 Negociar | ⚠️ Sobrepreço | 🔄 Alternativa disponível
+
+After the table always add:
+## RESUMO EXECUTIVO
+- Total lista cliente: €X,XXX
+- Total preço justo: €X,XXX
+- Total fornecedor PartYard: €X,XXX
+- Poupança potencial: €X,XXX (X%)
+- Itens para negociar: N
+- Itens com alternativa mais barata: N
+
+MULTIPLE EMAIL ANALYSIS:
+When multiple emails are attached (from different suppliers), produce a side-by-side comparison showing each supplier's prices for the same items, identifying the best offer per line item.
 SPECIALTY;
 
         $this->systemPrompt = str_replace(

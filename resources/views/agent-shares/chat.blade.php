@@ -159,8 +159,8 @@
             <button onclick="clearAttachment()" title="Remover ficheiro">✕</button>
         </div>
         <div class="input-row">
-            <label for="file-input" class="attach-btn" title="Anexar ficheiro (PDF, imagem, Excel, Word, TXT)">📎</label>
-            <input type="file" id="file-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none">
+            <label for="file-input" class="attach-btn" title="Anexar ficheiros — múltiplos permitidos (PDF, imagem, Excel, Word, TXT, Email)">📎</label>
+            <input type="file" id="file-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="display:none">
             <textarea
                 id="input"
                 class="input-box"
@@ -194,53 +194,73 @@ let history = [];
 let isStreaming = false;
 
 // ── File attachment state ──────────────────────────────────────────────────
-let attachImg     = null;   // base64 image string
+let attachImg     = null;
 let attachImgType = 'image/jpeg';
-let attachFile    = null;   // { name, type, ext, b64, text, size }
+let attachFiles   = [];   // array: { name, type, ext, b64, text, size }
 
-const FILE_ICONS = {'pdf':'📄','doc':'📝','docx':'📝','txt':'📃','csv':'📊','xlsx':'📊','xls':'📊','pptx':'📑','md':'📃'};
+const FILE_ICONS = {'pdf':'📄','doc':'📝','docx':'📝','txt':'📃','csv':'📊','xlsx':'📊','xls':'📊','pptx':'📑','md':'📃','eml':'📧','msg':'📧'};
 function getFileIcon(n){ const e=n.split('.').pop().toLowerCase(); return FILE_ICONS[e]||'📎'; }
 function humanSize(b){ if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
 
-document.getElementById('file-input').addEventListener('change', function(e){
-    const file = e.target.files[0];
-    if (!file) return;
-    const isImage = file.type.startsWith('image/');
-    const reader  = new FileReader();
-    if (isImage) {
-        reader.onload = ev => {
-            attachImg     = ev.target.result.split(',')[1];
-            attachImgType = file.type || 'image/jpeg';
-            attachFile    = null;
-            document.getElementById('fp-img').src     = ev.target.result;
-            document.getElementById('fp-img').style.display = 'block';
-            document.getElementById('fp-icon').textContent = '';
-            document.getElementById('fp-name').textContent = file.name;
-            document.getElementById('fp-size').textContent = humanSize(file.size);
-            document.getElementById('file-preview-bar').style.display = 'flex';
-        };
-        reader.readAsDataURL(file);
-    } else {
-        const ext = file.name.split('.').pop().toLowerCase();
-        const asText = ['txt','csv','md'].includes(ext);
-        reader.onload = ev => {
-            attachImg  = null;
-            attachFile = { name: file.name, type: file.type||'application/octet-stream', ext,
-                           b64: asText ? null : ev.target.result.split(',')[1],
-                           text: asText ? ev.target.result : null, size: humanSize(file.size) };
-            document.getElementById('fp-img').style.display  = 'none';
-            document.getElementById('fp-icon').textContent   = getFileIcon(file.name);
-            document.getElementById('fp-name').textContent   = file.name;
-            document.getElementById('fp-size').textContent   = humanSize(file.size);
-            document.getElementById('file-preview-bar').style.display = 'flex';
-        };
-        if (asText) reader.readAsText(file);
-        else        reader.readAsDataURL(file);
+function readOneFileShare(file) {
+    return new Promise(resolve => {
+        const ext    = file.name.split('.').pop().toLowerCase();
+        const asText = ['txt','csv','md','eml','msg'].includes(ext);
+        const reader = new FileReader();
+        if (file.type.startsWith('image/')) {
+            reader.onload = ev => resolve({ name: file.name, type: file.type, ext, isImage: true,
+                b64: ev.target.result.split(',')[1], imgSrc: ev.target.result, size: humanSize(file.size) });
+            reader.readAsDataURL(file);
+        } else {
+            reader.onload = ev => resolve({ name: file.name, type: file.type||'application/octet-stream', ext, isImage: false,
+                b64: asText ? null : ev.target.result.split(',')[1],
+                text: asText ? ev.target.result : null, size: humanSize(file.size) });
+            if (asText) reader.readAsText(file); else reader.readAsDataURL(file);
+        }
+    });
+}
+
+function updateAttachPreview() {
+    const bar = document.getElementById('file-preview-bar');
+    if (attachImg) {
+        document.getElementById('fp-img').style.display = 'block';
+        document.getElementById('fp-icon').textContent  = '';
+        document.getElementById('fp-name').textContent  = 'Imagem';
+        document.getElementById('fp-size').textContent  = '';
+        bar.style.display = 'flex'; return;
     }
+    if (!attachFiles.length) { bar.style.display = 'none'; return; }
+    document.getElementById('fp-img').style.display = 'none';
+    if (attachFiles.length === 1) {
+        document.getElementById('fp-icon').textContent = getFileIcon(attachFiles[0].name);
+        document.getElementById('fp-name').textContent = attachFiles[0].name;
+        document.getElementById('fp-size').textContent = attachFiles[0].size;
+    } else {
+        document.getElementById('fp-icon').textContent = '📎';
+        document.getElementById('fp-name').textContent = attachFiles.length + ' ficheiros';
+        document.getElementById('fp-size').textContent = attachFiles.map(f=>f.name).join(', ').substring(0,50)+'…';
+    }
+    bar.style.display = 'flex';
+}
+
+document.getElementById('file-input').addEventListener('change', async function(e){
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+    const read = await Promise.all(files.map(f => readOneFileShare(f)));
+    const imgFile = read.find(f => f.isImage);
+    if (imgFile) {
+        attachImg = imgFile.b64; attachImgType = imgFile.type;
+        document.getElementById('fp-img').src = imgFile.imgSrc;
+        attachFiles = read.filter(f => !f.isImage);
+    } else {
+        attachImg   = null;
+        attachFiles = [...attachFiles, ...read]; // accumulate
+    }
+    updateAttachPreview();
 });
 
 function clearAttachment() {
-    attachImg = null; attachImgType = 'image/jpeg'; attachFile = null;
+    attachImg = null; attachImgType = 'image/jpeg'; attachFiles = [];
     document.getElementById('file-preview-bar').style.display = 'none';
     document.getElementById('fp-img').style.display = 'none';
     document.getElementById('file-input').value = '';
@@ -297,13 +317,13 @@ async function sendMessage() {
     addMessage('user', text);
     history.push({ role: 'user', content: text });
 
-    // Build payload — use FormData when file is attached (avoids JSON body size limits)
+    // Build payload — FormData for binary files, JSON for text-only
     let fetchBody, fetchHeaders;
-    const hasFile  = !!(attachImg || (attachFile && attachFile.b64));
-    const hasTxt   = !!(attachFile && attachFile.text !== null);
+    const textFiles   = attachFiles.filter(f => f.text !== null);
+    const binaryFiles = attachFiles.filter(f => f.b64  !== null);
+    const hasBinary   = !!(attachImg || binaryFiles.length);
 
-    if (hasFile) {
-        // Multipart FormData for binary files/images
+    if (hasBinary) {
         const fd = new FormData();
         fd.append('message',    text);
         fd.append('session_id', SESSION_ID);
@@ -311,33 +331,35 @@ async function sendMessage() {
             fd.append(`history[${i}][role]`,    m.role);
             fd.append(`history[${i}][content]`, typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
         });
+        // Embed text files into message
+        if (textFiles.length) {
+            let extra = fd.get('message') || text;
+            textFiles.forEach(f => { extra += `\n\n---\n**Ficheiro: ${f.name}**\n\`\`\`\n${f.text.substring(0,10000)}\n\`\`\``; });
+            fd.set('message', extra);
+        }
         if (attachImg) {
-            // Convert base64 back to Blob for FormData
-            const byteChars = atob(attachImg);
-            const byteArr   = new Uint8Array(byteChars.length);
-            for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-            fd.append('image_blob', new Blob([byteArr], { type: attachImgType }), 'image');
+            const bytes = atob(attachImg); const arr = new Uint8Array(bytes.length);
+            for (let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+            fd.append('image_blob', new Blob([arr], {type:attachImgType}), 'image');
             fd.append('image_type', attachImgType);
         } else {
-            const f = attachFile;
-            const byteChars = atob(f.b64);
-            const byteArr   = new Uint8Array(byteChars.length);
-            for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
-            fd.append('file_upload', new Blob([byteArr], { type: f.type }), f.name);
-            fd.append('file_name',   f.name);
-            fd.append('file_type',   f.type);
+            const f = binaryFiles[0];
+            const bytes = atob(f.b64); const arr = new Uint8Array(bytes.length);
+            for (let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+            fd.append('file_upload', new Blob([arr], {type:f.type}), f.name);
+            fd.append('file_name', f.name); fd.append('file_type', f.type);
+            // Extra binary files noted in message
+            binaryFiles.slice(1).forEach(fb => fd.set('message', (fd.get('message')||'')+`\n[Ficheiro adicional: ${fb.name}]`));
         }
         fetchBody    = fd;
-        fetchHeaders = { 'Accept': 'text/event-stream' }; // no Content-Type; browser sets multipart boundary
+        fetchHeaders = { 'Accept': 'text/event-stream' };
         clearAttachment();
     } else {
-        // Plain JSON for text-only or text-file messages
         const payload = { message: text, history: history.slice(-20), session_id: SESSION_ID };
-        if (hasTxt) {
-            const f = attachFile;
-            payload.message += `\n\n---\n**Ficheiro: ${f.name}**\n\`\`\`\n${f.text.substring(0,15000)}\n\`\`\``;
-            clearAttachment();
-        }
+        textFiles.forEach(f => {
+            payload.message += `\n\n---\n**Ficheiro: ${f.name}**\n\`\`\`\n${f.text.substring(0,12000)}\n\`\`\``;
+        });
+        clearAttachment();
         fetchBody    = JSON.stringify(payload);
         fetchHeaders = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' };
     }
