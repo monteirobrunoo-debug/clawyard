@@ -280,9 +280,13 @@ class AgentShareController extends Controller
             };
 
             try {
+                // Sanitise all text to valid UTF-8 before Guzzle json-encodes the request
+                $safeMessage = $this->sanitizeForApi($message);
+                $safeHistory = array_map(fn($m) => $this->sanitizeForApi($m), $history);
+
                 $agent->stream(
-                    $message,
-                    $history,
+                    $safeMessage,
+                    $safeHistory,
                     function (string $chunk) {
                         echo 'data: ' . json_encode(['chunk' => $chunk], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                         flush();
@@ -386,17 +390,19 @@ class AgentShareController extends Controller
         }
     }
 
-    // ── UTF-8 sanitizer ──────────────────────────────────────────────────────
-    /**
-     * Sanitize a string to valid UTF-8.
-     * Prevents "Malformed UTF-8" errors when Guzzle JSON-encodes the API request body.
-     * Excel/Word files often contain Windows-1252 or Latin-1 bytes inside XML.
-     */
+    // ── UTF-8 sanitizers ─────────────────────────────────────────────────────
     private function safeUtf8(string $s): string
     {
         $out = @mb_convert_encoding($s, 'UTF-8', 'UTF-8');
         $out = @iconv('UTF-8', 'UTF-8//IGNORE', $out ?? $s);
         return $out !== false ? $out : '';
+    }
+
+    private function sanitizeForApi(mixed $value): mixed
+    {
+        if (is_string($value)) return $this->safeUtf8($value);
+        if (is_array($value))  return array_map(fn($v) => $this->sanitizeForApi($v), $value);
+        return $value;
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────
