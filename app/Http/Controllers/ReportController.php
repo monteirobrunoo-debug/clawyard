@@ -24,7 +24,7 @@ class ReportController extends Controller
     {
         $request->validate([
             'title'   => 'required|string|max:255',
-            'type'    => 'required|string|in:aria,quantum,market,custom',
+            'type'    => 'required|string|max:50',
             'content' => 'required|string',
             'summary' => 'nullable|string|max:500',
         ]);

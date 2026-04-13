@@ -7,8 +7,8 @@
         * { margin:0; padding:0; box-sizing:border-box; }
         body { font-family: Georgia, 'Times New Roman', serif; color:#111; background:#fff; padding:40px 48px; font-size:12px; line-height:1.7; }
 
-        .pdf-header { border-bottom:3px solid #76b900; padding-bottom:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; }
-        .pdf-logo { font-size:20px; font-weight:900; color:#76b900; letter-spacing:-0.5px; }
+        .pdf-header { border-bottom:3px solid {{ $report->typeColor() }}; padding-bottom:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; }
+        .pdf-logo { font-size:20px; font-weight:900; color:{{ $report->typeColor() }}; letter-spacing:-0.5px; }
         .pdf-logo span { color:#333; font-weight:400; font-size:13px; }
         .pdf-meta { text-align:right; font-size:11px; color:#666; }
 
@@ -17,7 +17,7 @@
         .meta-line { font-size:11px; color:#888; margin-bottom:24px; }
 
         .content { font-size:12px; line-height:1.8; color:#222; white-space:pre-wrap; word-break:break-word; }
-        .content h2 { font-size:14px; font-weight:700; color:#76b900; margin:20px 0 8px; border-bottom:1px solid #e5e5e5; padding-bottom:4px; }
+        .content h2 { font-size:14px; font-weight:700; color:{{ $report->typeColor() }}; margin:20px 0 8px; border-bottom:1px solid #e5e5e5; padding-bottom:4px; }
         .content h3 { font-size:12px; font-weight:700; color:#555; margin:14px 0 6px; }
         .content strong { font-weight:700; }
         .content hr { border:none; border-top:1px solid #ddd; margin:12px 0; }
@@ -35,7 +35,7 @@
 
 <!-- Print button (hidden in print) -->
 <div class="no-print" style="position:fixed;top:16px;right:16px;z-index:100;">
-    <button onclick="window.print()" style="background:#76b900;color:#000;border:none;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimir / Guardar PDF</button>
+    <button onclick="window.print()" style="background:{{ $report->typeColor() }};color:#fff;border:none;padding:10px 22px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimir / Guardar PDF</button>
     <a href="/reports/{{ $report->id }}" style="margin-left:8px;background:#333;color:#e5e5e5;border:none;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;">← Voltar</a>
 </div>
 

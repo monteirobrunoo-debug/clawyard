@@ -540,7 +540,7 @@
             <button type="button" class="icon-btn" id="image-btn" title="Anexar ficheiros (PDF, imagem, Excel, Word, TXT, Email) — múltiplos permitidos" onclick="document.getElementById('image-input').click()" style="cursor:pointer">📎</button>
             <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
             <button class="icon-btn" id="clear-btn" title="Limpar histórico desta conversa" onclick="clearHistory()">🗑️</button>
-            <button type="button" id="finance-pdf-btn" onclick="createFinancePdf()" title="Criar relatório financeiro em PDF" style="display:none;align-items:center;gap:5px;background:#10b981;border:none;color:#fff;font-size:11px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;white-space:nowrap;height:38px;flex-shrink:0;">📄 PDF</button>
+            <button type="button" id="finance-pdf-btn" onclick="createAgentPdf()" title="Gerar relatório PDF desta conversa" style="display:none;align-items:center;gap:5px;background:#10b981;border:none;color:#fff;font-size:11px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;white-space:nowrap;height:38px;flex-shrink:0;">📄 PDF</button>
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -967,7 +967,7 @@ renderStarterChips(initAgent);
 applyAgentColor(initAgent);
 updateEmptyState(initAgent);
 updateShareBtn();
-document.getElementById('finance-pdf-btn').style.display = initAgent === 'finance' ? 'flex' : 'none';
+document.getElementById('finance-pdf-btn').style.display = 'flex';
 // Mark initial agent in grid
 document.querySelectorAll('.agent-grid-item').forEach(el => {
     el.classList.toggle('active', el.dataset.agent === initAgent);
@@ -985,8 +985,8 @@ agentSelect.addEventListener('change', () => {
     applyAgentColor(agent);
     updateEmptyState(agent);
     updateShareBtn();
-    // Show PDF button only for finance agent
-    document.getElementById('finance-pdf-btn').style.display = agent === 'finance' ? 'flex' : 'none';
+    // PDF button always visible
+    document.getElementById('finance-pdf-btn').style.display = 'flex';
     document.querySelectorAll('.agent-grid-item').forEach(el => {
         el.classList.toggle('active', el.dataset.agent === agent);
         const statusEl = el.querySelector('.ag-status');
@@ -2123,45 +2123,45 @@ function esc(text) {
 // ═══════════════════════════════
 //  SAVE AS REPORT
 // ═══════════════════════════════
-// ── Dr. Luís Finance PDF Report ───────────────────────────────────────────
-async function createFinancePdf() {
-    const btn = document.getElementById('finance-pdf-btn');
+// ── Gerar PDF da conversa atual ───────────────────────────────────────────
+async function createAgentPdf() {
+    const btn       = document.getElementById('finance-pdf-btn');
+    const agent     = agentSelect.value || 'auto';
+    const agentName = AGENT_NAMES[agent] || 'ClawYard';
 
-    // Collect all AI messages from the finance agent
+    // Collect all AI messages in the current conversation
     const bubbles = document.querySelectorAll('.message.ai .bubble');
     if (!bubbles.length) {
-        alert('Sem respostas do Dr. Luís para gerar relatório.');
+        alert('Sem respostas do ' + agentName + ' para gerar relatório.');
         return;
     }
 
-    // Concatenate all finance responses
     const fullText = Array.from(bubbles).map(b => b.innerText || b.textContent).join('\n\n---\n\n');
-    const date  = new Date().toLocaleDateString('pt-PT', { day:'2-digit', month:'long', year:'numeric' });
-    const title = 'Dr. Luís Financeiro — Relatório ' + date;
+    const date     = new Date().toLocaleDateString('pt-PT', { day:'2-digit', month:'long', year:'numeric' });
+    const title    = agentName + ' — Relatório ' + date;
 
     const origHTML = btn.innerHTML;
-    btn.innerHTML = '⏳';
-    btn.disabled  = true;
+    btn.innerHTML  = '⏳';
+    btn.disabled   = true;
 
     try {
         const res = await fetch('/api/reports', {
             method:  'POST',
             headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF },
-            body:    JSON.stringify({ title, type: 'custom', content: fullText }),
+            body:    JSON.stringify({ title, type: agent, content: fullText }),
         });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
         if (data.success && data.report?.id) {
             btn.innerHTML = '✅';
-            logActivity('📄', 'Relatório financeiro criado', 'done');
-            // Open PDF in new tab
+            logActivity('📄', 'Relatório PDF criado — ' + agentName, 'done');
             setTimeout(() => window.open('/reports/' + data.report.id + '/pdf', '_blank'), 300);
         } else {
             throw new Error('save failed');
         }
     } catch(e) {
         btn.innerHTML = '❌';
-        console.error('Finance PDF error:', e);
+        console.error('Agent PDF error:', e);
     } finally {
         setTimeout(() => { btn.innerHTML = origHTML; btn.disabled = false; }, 2500);
     }
