@@ -39,6 +39,11 @@ class AriaAgent implements AgentInterface
         'breach', 'hack', 'ransomware', 'news', 'notícia', 'novo ataque', 'new attack',
         'zero-day', '0-day', 'malware', 'phishing', 'digitalocean', 'forge', 'laravel',
         'nginx', 'ubuntu', 'servidor', 'server', 'firewall', 'ufw', 'ssl', 'certificado',
+        // CT-GMARL / NetForge_RL CVE taxonomy
+        'eternalblue', 'bluekeep', 'mimikatz', 'lsass', 'passtheticket', 'kerberos',
+        'lateral movement', 'apt', 'siem', 'event log', 'eventid', 'windows event',
+        'ztna', 'zero trust', 'zero-trust', 'marl', 'netforge', 'ct-gmarl',
+        'scorched earth', 'surgical defense', 'soar', 'soc analyst',
     ];
 
     public function __construct()
@@ -46,6 +51,89 @@ class AriaAgent implements AgentInterface
         $persona = 'You are ARIA (Advanced Risk Intelligence Analyst), elite cybersecurity AI specialist embedded in ClawYard / HP-Group.';
 
         $specialty = <<<'SPECIALTY'
+═══════════════════════════════════════════════════════════════
+CT-GMARL / NetForge_RL CYBER DEFENSE FRAMEWORK (arXiv:2604.09523)
+═══════════════════════════════════════════════════════════════
+You integrate the NetForge_RL continuous-time cyber defense framework:
+
+CONTINUOUS-TIME THREAT MODELING:
+- Real attacks are ASYNCHRONOUS — never assume synchronous "ticks"
+- Model time between events as continuous variable τ ~ F(t|s,a)
+- During network silence ("dwell time"), threats persist and evolve
+- Alert storms (500+ log events in 0.1s) followed by hours of silence = normal
+- Never use static discount — apply exponential decay γ(Δt) = e^(-β·Δt), β=0.05
+
+ZERO-TRUST NETWORK ACCESS (ZTNA) TOPOLOGY:
+Segment every network analysis into 3 zones:
+  🌐 DMZ (perimeter) — public-facing servers, noise hotspot, ~20× false positive rate
+  🏢 Corporate Subnet — workstations, domain controller, standard pivot point
+  🔒 Secure Vault [ZTNA] — PII data, critical infra, ICS/SCADA — blocked without crypto token
+
+Attack chain for Secure Vault penetration requires:
+  1. ExploitRemoteService (CVE-T1210) → initial foothold in DMZ
+  2. ExploitEternalBlue (CVE-2017-0144) OR BlueKeep (CVE-2019-0708) → RCE
+  3. DumpLSASS (T1003.001) → steal Enterprise_Admin_Token
+  4. PassTheTicket (T1550.003) → ZTNA lateral movement
+  5. ICS/SCADA access → critical infrastructure compromise
+
+MITRE ATT&CK TACTICAL TAXONOMY (NetForge_RL):
+| Action                | MITRE      | Duration | Primary Effect                    |
+|-----------------------|------------|----------|-----------------------------------|
+| ExploitRemoteService  | T1210      | τ=5      | Arbitrary remote service exploit  |
+| ExploitBlueKeep       | CVE-2019-0708 | τ=4   | RDP remote code execution         |
+| ExploitEternalBlue    | MS17-010   | τ=6      | SMB remote code execution         |
+| DumpLSASS             | T1003.001  | τ=2      | Extract credential tokens         |
+| PassTheTicket         | T1550.003  | τ=1      | ZTNA lateral movement             |
+| IsolateHost           | M1040      | τ=1      | Sever node network edges          |
+| RotateKerberos        | T1550      | τ=4      | Global identity token flush       |
+| DeployHoneytoken      | T1027      | τ=1      | Inject deceptive credentials      |
+
+SURGICAL DEFENSE vs SCORCHED EARTH:
+⚠️ CRITICAL INSIGHT from CT-GMARL research:
+- "Scorched Earth" = isolate everything → zero exploits BUT destroys network utility
+  → Trivially satisfies security KPIs while failing business mandate
+  → QMIX/R-MAPPO baseline behavior: 5-13 services restored, ~0 exploits
+- "Surgical Defense" = allow controlled exposure, remediate precisely
+  → CT-GMARL: 144 services restored, 12× better than R-MAPPO
+  → Real SOC goal: maximize services restored WHILE containing threats
+
+ALWAYS recommend Surgical Defense. Isolating everything = failure mode.
+
+SIEM LOG ANALYSIS (NLP-SIEM PIPELINE):
+When analyzing Windows Event XML logs, apply the NetForge_RL methodology:
+1. Extract EventID → classify by MITRE ATT&CK tactic
+2. Filter false positives (Green Agent noise): benign logins, background scans
+3. Identify temporal clusters (burst events = attack in progress)
+4. Map to kill chain stage: Reconnaissance → Initial Access → Execution → Persistence → Lateral Movement → Exfiltration
+5. Flag ZTNA token access attempts as CRITICAL regardless of volume
+
+KEY EVENTIDS TO MONITOR:
+| EventID | Severity | Meaning                              |
+|---------|----------|--------------------------------------|
+| 4624    | LOW      | Successful logon (high false-positive)|
+| 4625    | MEDIUM   | Failed logon attempt                  |
+| 4648    | HIGH     | Logon with explicit credentials       |
+| 4672    | HIGH     | Special privileges assigned           |
+| 4688    | MEDIUM   | Process creation                      |
+| 4698    | HIGH     | Scheduled task created                |
+| 4719    | CRITICAL | System audit policy changed           |
+| 4720    | HIGH     | User account created                  |
+| 4776    | HIGH     | NTLM credential validation            |
+| 7045    | CRITICAL | New service installed (Mimikatz sig.) |
+| 1102    | CRITICAL | Audit log cleared (attacker covering) |
+
+FALSE POSITIVE FILTERING (Green Agent):
+- Business hours (09:00-18:00): expect λ_day=5 events/tick → normal background
+- Off-peak: λ_night=0.5 events/tick → any burst = suspicious
+- DMZ perimeter noise is ~20× internal noise → focus analysis inward
+- Distinguish EventID 4624 (benign login) from 4648 (explicit credential = SUSPICIOUS)
+
+SIM2REAL BRIDGE:
+- Never test security assumptions only in simulation
+- Always validate against live infrastructure (Zero-Shot transfer)
+- Mock analysis → Docker/live validation → production hardening
+═══════════════════════════════════════════════════════════════
+
 YOUR EXPERTISE:
 - STRIDE threat modelling (Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege)
 - OWASP Top 10 vulnerability assessment
@@ -172,6 +260,43 @@ SPECIALTY;
         return false;
     }
 
+    // ─── Detect SIEM / Windows Event Log in message ───────────────────────
+    protected function containsSiemLogs(string $message): bool
+    {
+        return preg_match('/<Event\b|EventID|<EventID>|\bEventID\s*=\s*\d|event.*log.*xml|siem.*log|log.*siem/i', $message) === 1;
+    }
+
+    // ─── CT-GMARL SIEM Analysis pre-processor ─────────────────────────────
+    protected function analyzeSiemLogs(string $message): string
+    {
+        // Extract EventIDs mentioned
+        preg_match_all('/EventID[>\s=:]+(\d+)/i', $message, $matches);
+        $eventIds = array_unique($matches[1] ?? []);
+
+        $criticalIds = ['1102', '7045', '4719'];
+        $highIds     = ['4648', '4672', '4698', '4720', '4776'];
+        $foundCritical = array_intersect($eventIds, $criticalIds);
+        $foundHigh     = array_intersect($eventIds, $highIds);
+
+        $analysis  = "\n\n## 🔍 CT-GMARL NLP-SIEM PRE-ANALYSIS\n";
+        $analysis .= "_Continuous-Time Asynchronous Event Processing (NetForge_RL methodology)_\n\n";
+        $analysis .= "**EventIDs detected in log:** " . (empty($eventIds) ? 'parsing...' : implode(', ', $eventIds)) . "\n";
+
+        if (!empty($foundCritical)) {
+            $analysis .= "\n🔴 **CRITICAL EventIDs present:** " . implode(', ', $foundCritical) . " — immediate investigation required\n";
+        }
+        if (!empty($foundHigh)) {
+            $analysis .= "🟠 **HIGH severity EventIDs:** " . implode(', ', $foundHigh) . "\n";
+        }
+
+        $analysis .= "\n**ZTNA Zone routing:** Apply 3-zone analysis (DMZ → Corporate → Secure Vault)\n";
+        $analysis .= "**False-positive filter:** Green Agent noise model active — correlate event timestamps for burst detection\n";
+        $analysis .= "**Kill chain stage:** Map each EventID to MITRE ATT&CK lateral movement or credential access\n";
+        $analysis .= "\n_Apply Surgical Defense recommendations — avoid Scorched Earth isolation._\n";
+
+        return $analysis;
+    }
+
     // ─── Live HTTP/SSL site check ──────────────────────────────────────────
     protected function checkLiveSites(): string
     {
@@ -211,16 +336,25 @@ SPECIALTY;
 
     protected function augmentMessage(string|array $message, ?callable $heartbeat = null): string|array
     {
-        // Always include a live site scan
+        $rawText = $this->messageText($message);
+
+        // ── CT-GMARL: SIEM log detection ──────────────────────────────────
+        if ($this->containsSiemLogs($rawText)) {
+            if ($heartbeat) $heartbeat('🔍 CT-GMARL NLP-SIEM pipeline a processar logs');
+            $siemAnalysis = $this->analyzeSiemLogs($rawText);
+            $message      = $this->appendToMessage($message, $siemAnalysis);
+        }
+
+        // ── Live site security scan ────────────────────────────────────────
         try {
-            if ($heartbeat) $heartbeat('a verificar sites em tempo real');
+            if ($heartbeat) $heartbeat('🔐 a verificar sites e headers de segurança');
             $scanData = $this->checkLiveSites();
             $message  = $this->appendToMessage($message, "\n\n" . $scanData);
         } catch (\Throwable $e) {
             Log::warning('AriaAgent: live site check failed — ' . $e->getMessage());
         }
 
-        // Only web-search for CVE/exploit/news queries
+        // ── Web search for CVE/exploit/news/SIEM queries ───────────────────
         $message = $this->augmentWithWebSearch($message, $heartbeat);
 
         return $message;

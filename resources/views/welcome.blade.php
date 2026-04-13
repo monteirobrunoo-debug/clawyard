@@ -791,6 +791,10 @@ const AGENT_CHIPS = {
         '🔐 Verifica certificados SSL/TLS e headers HTTP dos sites do grupo H&P',
         '🔐 Gera threat model completo para a API REST do ClawYard — MITRE ATT&CK',
         '🔐 Plano de cibersegurança para empresa marítima — GDPR + NIS2 compliance',
+        '🔐 [CT-GMARL] Análise SIEM assíncrona: cola logs Windows Event XML para análise de ameaças em tempo contínuo',
+        '🔐 [ZTNA] Arquitectura Zero-Trust para a infra PartYard — segmentação DMZ → Corporate → Secure Vault',
+        '🔐 [NetForge_RL] Simula cadeia de ataque APT na infra PartYard: EternalBlue → LSASS → PassTheTicket → Lateral Movement',
+        '🔐 [Surgical Defense] Analisa trade-off Scorched Earth vs Defesa Cirúrgica para os sistemas do HP-Group',
     ],
     // ── Prof. Quantum Leap ────────────────────────────────────────────────
     quantum: [
