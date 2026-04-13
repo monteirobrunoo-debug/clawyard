@@ -81,13 +81,21 @@
 
         /* INPUT */
         .input-area{background:var(--bg2);border-top:1px solid var(--border);padding:16px 20px;flex-shrink:0}
-        .input-row{display:flex;gap:10px;align-items:flex-end;max-width:800px;margin:0 auto}
+        .input-row{display:flex;gap:8px;align-items:flex-end;max-width:800px;margin:0 auto}
         .input-box{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:10px 14px;color:var(--text);font-size:14px;resize:none;outline:none;max-height:140px;min-height:44px;line-height:1.5;transition:border-color .15s;font-family:inherit}
         .input-box:focus{border-color:var(--agent-color)}
-        .send-btn{width:44px;height:44px;background:var(--agent-color);border:none;border-radius:10px;color:#000;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.15s}
+        .attach-btn{width:40px;height:40px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--muted);font-size:17px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.15s;margin-bottom:2px}
+        .attach-btn:hover{border-color:var(--agent-color);color:var(--text)}
+        .send-btn{width:44px;height:44px;background:var(--agent-color);border:none;border-radius:10px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:.15s}
+        .send-btn svg{width:18px;height:18px;flex-shrink:0}
         .send-btn:hover{filter:brightness(1.1)}
         .send-btn:disabled{opacity:.4;cursor:not-allowed}
         .input-hint{text-align:center;font-size:11px;color:var(--muted);margin-top:8px;max-width:800px;margin:8px auto 0}
+        /* File preview */
+        .file-preview-bar{display:none;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--muted);margin-bottom:8px;max-width:800px;margin-left:auto;margin-right:auto}
+        .file-preview-bar img{max-height:40px;border-radius:4px}
+        .file-preview-bar button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-left:auto;padding:0 4px}
+        .file-preview-bar button:hover{color:var(--text)}
 
         /* MARKDOWN render */
         @media(max-width:640px){
@@ -142,7 +150,17 @@
     </div>
 
     <div class="input-area">
+        <!-- File preview bar -->
+        <div class="file-preview-bar" id="file-preview-bar">
+            <img id="fp-img" src="" alt="" style="display:none">
+            <span id="fp-icon" style="font-size:20px"></span>
+            <span id="fp-name" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+            <span id="fp-size" style="font-size:11px;color:#475569"></span>
+            <button onclick="clearAttachment()" title="Remover ficheiro">✕</button>
+        </div>
         <div class="input-row">
+            <label for="file-input" class="attach-btn" title="Anexar ficheiro (PDF, imagem, Excel, Word, TXT)">📎</label>
+            <input type="file" id="file-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md" style="display:none">
             <textarea
                 id="input"
                 class="input-box"
@@ -151,7 +169,12 @@
                 onkeydown="handleKey(event)"
                 oninput="autoResize(this)"
             ></textarea>
-            <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+            <button class="send-btn" id="send-btn" onclick="sendMessage()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
         </div>
         @if($share->show_branding)
         <div class="input-hint">© PartYard_B.Mont_H&amp;P Group rights reserved 2026</div>
@@ -169,6 +192,59 @@ const AGENT_COLOR = '{{ $meta['color'] }}';
 const AGENT_KEY   = '{{ $share->agent_key }}';
 let history = [];
 let isStreaming = false;
+
+// ── File attachment state ──────────────────────────────────────────────────
+let attachImg     = null;   // base64 image string
+let attachImgType = 'image/jpeg';
+let attachFile    = null;   // { name, type, ext, b64, text, size }
+
+const FILE_ICONS = {'pdf':'📄','doc':'📝','docx':'📝','txt':'📃','csv':'📊','xlsx':'📊','xls':'📊','pptx':'📑','md':'📃'};
+function getFileIcon(n){ const e=n.split('.').pop().toLowerCase(); return FILE_ICONS[e]||'📎'; }
+function humanSize(b){ if(b<1024) return b+' B'; if(b<1048576) return (b/1024).toFixed(1)+' KB'; return (b/1048576).toFixed(1)+' MB'; }
+
+document.getElementById('file-input').addEventListener('change', function(e){
+    const file = e.target.files[0];
+    if (!file) return;
+    const isImage = file.type.startsWith('image/');
+    const reader  = new FileReader();
+    if (isImage) {
+        reader.onload = ev => {
+            attachImg     = ev.target.result.split(',')[1];
+            attachImgType = file.type || 'image/jpeg';
+            attachFile    = null;
+            document.getElementById('fp-img').src     = ev.target.result;
+            document.getElementById('fp-img').style.display = 'block';
+            document.getElementById('fp-icon').textContent = '';
+            document.getElementById('fp-name').textContent = file.name;
+            document.getElementById('fp-size').textContent = humanSize(file.size);
+            document.getElementById('file-preview-bar').style.display = 'flex';
+        };
+        reader.readAsDataURL(file);
+    } else {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const asText = ['txt','csv','md'].includes(ext);
+        reader.onload = ev => {
+            attachImg  = null;
+            attachFile = { name: file.name, type: file.type||'application/octet-stream', ext,
+                           b64: asText ? null : ev.target.result.split(',')[1],
+                           text: asText ? ev.target.result : null, size: humanSize(file.size) };
+            document.getElementById('fp-img').style.display  = 'none';
+            document.getElementById('fp-icon').textContent   = getFileIcon(file.name);
+            document.getElementById('fp-name').textContent   = file.name;
+            document.getElementById('fp-size').textContent   = humanSize(file.size);
+            document.getElementById('file-preview-bar').style.display = 'flex';
+        };
+        if (asText) reader.readAsText(file);
+        else        reader.readAsDataURL(file);
+    }
+});
+
+function clearAttachment() {
+    attachImg = null; attachImgType = 'image/jpeg'; attachFile = null;
+    document.getElementById('file-preview-bar').style.display = 'none';
+    document.getElementById('fp-img').style.display = 'none';
+    document.getElementById('file-input').value = '';
+}
 
 // ── Starter chips per agent ───────────────────────────────────────────────
 const AGENT_CHIPS = @json(\App\Services\AgentChipsService::all());
@@ -207,8 +283,9 @@ function handleKey(e) {
 // ── Send message ──
 async function sendMessage() {
     const input = document.getElementById('input');
-    const text  = input.value.trim();
-    if (!text || isStreaming) return;
+    let text    = input.value.trim();
+    if ((!text && !attachImg && !attachFile) || isStreaming) return;
+    if (!text) text = attachImg ? 'O que vês nesta imagem?' : (attachFile?.name || '?');
 
     input.value = '';
     autoResize(input);
@@ -220,13 +297,31 @@ async function sendMessage() {
     addMessage('user', text);
     history.push({ role: 'user', content: text });
 
+    // Build payload with optional file/image
+    const payload = { message: text, history: history.slice(-20), session_id: SESSION_ID };
+    if (attachImg) {
+        payload.image      = attachImg;
+        payload.image_type = attachImgType;
+        clearAttachment();
+    } else if (attachFile) {
+        const f = attachFile;
+        if (f.text !== null) {
+            payload.message += `\n\n---\n**Ficheiro: ${f.name}**\n\`\`\`\n${f.text.substring(0,15000)}\n\`\`\``;
+        } else if (f.b64) {
+            payload.file_b64  = f.b64;
+            payload.file_type = f.type || ('application/' + f.ext);
+            payload.file_name = f.name;
+        }
+        clearAttachment();
+    }
+
     const typingEl = addTyping();
 
     try {
         const resp = await fetch(`/api/a/${TOKEN}/stream`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-            body: JSON.stringify({ message: text, history: history.slice(-20), session_id: SESSION_ID }),
+            body: JSON.stringify(payload),
         });
 
         typingEl.remove();

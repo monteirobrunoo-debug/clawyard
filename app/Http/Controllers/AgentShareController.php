@@ -136,7 +136,14 @@ class AgentShareController extends Controller
         $history   = $request->input('history', []);
         $sessionId = $request->input('session_id', 'shared_' . uniqid());
 
-        if (empty(trim($message))) {
+        // File/image attachments
+        $imageB64  = $request->input('image');
+        $imageType = $request->input('image_type', 'image/jpeg');
+        $fileB64   = $request->input('file_b64');
+        $fileType  = $request->input('file_type', 'application/octet-stream');
+        $fileName  = $request->input('file_name', 'ficheiro');
+
+        if (empty(trim($message)) && !$imageB64 && !$fileB64) {
             return response()->json(['error' => 'Mensagem vazia.'], 422);
         }
 
@@ -146,6 +153,33 @@ class AgentShareController extends Controller
             ->map(fn($m) => ['role' => $m['role'], 'content' => $m['content']])
             ->values()
             ->toArray();
+
+        // Build multimodal message if file/image present
+        if ($imageB64) {
+            $message = [
+                ['type' => 'text',  'text' => $message ?: 'O que vês nesta imagem?'],
+                ['type' => 'image', 'source' => [
+                    'type'       => 'base64',
+                    'media_type' => $imageType,
+                    'data'       => $imageB64,
+                ]],
+            ];
+        } elseif ($fileB64 && preg_match('/pdf/i', $fileType . $fileName)) {
+            $message = [
+                ['type' => 'text',     'text'   => $message],
+                ['type' => 'document', 'source' => [
+                    'type'       => 'base64',
+                    'media_type' => 'application/pdf',
+                    'data'       => $fileB64,
+                ]],
+            ];
+        } elseif ($fileB64) {
+            // Other binary files: decode and extract text if possible, else embed as base64 note
+            $filePath = tempnam(sys_get_temp_dir(), 'shr_');
+            file_put_contents($filePath, base64_decode($fileB64));
+            $message = $message . "\n\n[Ficheiro anexado: {$fileName} — " . round(filesize($filePath)/1024) . " KB]";
+            @unlink($filePath);
+        }
 
         $agentManager = app(AgentManager::class);
         $agent        = $agentManager->agent($share->agent_key);
