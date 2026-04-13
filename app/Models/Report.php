@@ -48,6 +48,7 @@ class Report extends Model
             'orchestrator' => '🤖 All Agents',
             'briefing'     => '📊 Briefing Executivo',
             'auto'         => '🐾 ClawYard Auto',
+            'mildef'       => '🎖️ Cor. Rodrigues Defesa',
             default        => '📄 Relatório',
         };
     }
@@ -81,6 +82,7 @@ class Report extends Model
             'orchestrator' => '#aaaaaa',
             'briefing'     => '#00aaff',
             'auto'         => '#76b900',
+            'mildef'       => '#6b3fa0',
             default        => '#76b900',
         };
     }

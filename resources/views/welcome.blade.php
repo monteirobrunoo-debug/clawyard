@@ -431,6 +431,7 @@
         <option value="batch">📦 Max Batch</option>
         <option value="computer">🖥️ RoboDesk</option>
         <option value="vessel">⚓ Capitão Vasco</option>
+        <option value="mildef">🎖️ Cor. Rodrigues Defesa</option>
     </select>
     <button id="share-agent-btn" onclick="openShareModal()" title="Partilhar este agente com um cliente" style="background:var(--agent-color,#76b900);border:none;color:#000;font-size:12px;font-weight:800;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;flex-shrink:0;margin-left:auto;">🔗 Share</button>
     <div class="hdr-right" style="margin-left:8px;">
@@ -495,6 +496,7 @@
                 <div class="agent-grid-item" data-agent="computer"   title="RoboDesk — Web Automation"><span class="ag-icon">🖥️</span><span class="ag-name">RoboDesk</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="vessel"    title="Capitão Vasco — Ship Search &amp; Naval Services"><span class="ag-icon">⚓</span><span class="ag-name">Cap. Vasco</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="capitao"    title="Captain Porto"><span class="ag-icon"><img src="/images/agents/maritime.png" class="ag-photo" alt="Capitão"></span><span class="ag-name">Capitão</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="mildef"     title="Cor. Rodrigues — Military Procurement"><span class="ag-icon">🎖️</span><span class="ag-name">Cor. Rodrigues</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
             </div>
         </div>
     </div>
@@ -590,7 +592,7 @@ const AGENT_EMOJIS = {
     email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
-    thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓'
+    thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓', mildef:'🎖️'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -628,7 +630,8 @@ const AGENT_NAMES = {
     thinking: 'Prof. Deep Thought',
     batch:    'Max Batch',
     computer: 'RoboDesk',
-    vessel:   'Capitão Vasco'
+    vessel:   'Capitão Vasco',
+    mildef:   'Cor. Rodrigues Defesa'
 };
 
 const AGENT_COLORS = {
@@ -647,7 +650,8 @@ const AGENT_COLORS = {
     thinking:'#a855f7',
     batch:'#06b6d4',
     computer:'#22c55e',
-    vessel:'#0ea5e9'
+    vessel:'#0ea5e9',
+    mildef:'#6b3fa0'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -672,6 +676,7 @@ const AGENT_DESCRIPTIONS = {
     kyber:    'Encriptação post-quantum de emails — CRYSTALS-Kyber 1024 + AES-256-GCM (NIST FIPS 203)',
     capitao:  'Operações portuárias, escalas, documentação e logística marítima',
     qnap:     'Arquivo documental PartYard — pesquisa preços, códigos, invoices, licenças e contratos',
+    mildef:   'Procurement militar mundial (excl. China/Rússia) — radares, SAM, AAM, artilharia, munições, bombs — contexto NATO/EU/USLI',
 };
 
 const AGENT_CHIPS = {
@@ -890,6 +895,14 @@ const AGENT_CHIPS = {
         '⚓ Quais os contactos dos brokers neerlandeses especializados em motorvrachtschepen 110m?',
         '⚓ Analisa a oferta Mi Vida (ENI 08023148) — especificações, preço e gap de certificação',
         '⚓ Empresas de reparação naval no Reno/Main para overhaul de motor e renovação de casco',
+    ],
+    mildef: [
+        '🎯 Lista todos os fabricantes mundiais (excl. China/Rússia) de mísseis SAM com alcance >70 km',
+        '📡 Fabricantes de radares de defesa aérea tática NATO — com specs e contactos',
+        '✈️ Fornecedores de mísseis ar-ar (SRAAM/MRAAM/LRAAM) disponíveis para procurement EU',
+        '💣 Lista fabricantes de bombas guiadas de precisão e glide/stand-off bombs — EU+USA+IL',
+        '🔫 Sistemas de artilharia antiaérea + munições: Rheinmetall, Diehl, MBDA — specs e preços',
+        '📋 Ajuda-me a preencher o Anexo 1 e Anexo 2 para o Ukraine Support Loan Instrument EU',
     ],
 };
 

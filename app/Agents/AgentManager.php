@@ -33,6 +33,7 @@ class AgentManager
             'batch'     => new BatchAgent(),
             'computer'  => new ComputerUseAgent(),
             'vessel'    => new VesselSearchAgent(),
+            'mildef'    => new MilDefAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -230,6 +231,22 @@ class AgentManager
         ];
         foreach ($vesselKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['vessel'];
+        }
+
+        // Military defence procurement keywords
+        $mildefKeywords = [
+            'mildef', 'procurement militar', 'military procurement', 'defesa', 'defense',
+            'coronel rodrigues', 'cor. rodrigues', 'míssil', 'missile', 'foguete', 'rocket',
+            'radar defesa', 'defesa aérea', 'air defence', 'air defense', 'SAM', 'MANPADS',
+            'superficie-ar', 'surface-to-air', 'ar-ar', 'air-to-air', 'artilharia antiaérea',
+            'SHORAD', 'HIMARS', 'NASAMS', 'Patriot', 'IRIS-T', 'MBDA', 'Rheinmetall',
+            'NATO procurement', 'NSPA', 'OCCAR', 'EDA procurement', 'EDIP', 'EDIRPA',
+            'Ukraine Support Loan', 'USLI', 'IDDPORTUGAL', 'DGAPDN', 'S-CIRCABC',
+            'bomba guiada', 'precision bomb', 'glide bomb', 'stand-off', 'armamento',
+            'munições', 'ammunition', 'fabricante defesa', 'defence supplier',
+        ];
+        foreach ($mildefKeywords as $kw) {
+            if (str_contains($lower, strtolower($kw))) return $this->agents['mildef'];
         }
 
         // Computer Use / web automation keywords

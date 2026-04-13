@@ -156,7 +156,7 @@ class NvidiaController extends Controller
 
         $request->validate([
             'message'   => 'required|string|min:1|max:20000',
-            'agent'     => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum,finance,research,capitao,acingov,engineer,patent,energy,kyber,qnap,thinking,batch,computer,vessel',
+            'agent'     => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,document,maritime,cyber,aria,quantum,finance,research,capitao,acingov,engineer,patent,energy,kyber,qnap,thinking,batch,computer,vessel,mildef',
             'session_id'=> 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
             'image'      => 'nullable|string|max:10485760',  // base64 image ~7.5MB
         'image_type' => 'nullable|string|max:50',
