@@ -537,8 +537,8 @@
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
-            <label for="image-input" class="icon-btn" id="image-btn" title="Anexar ficheiros (PDF, imagem, Excel, Word, TXT, Email) — múltiplos permitidos" style="cursor:pointer;display:flex;align-items:center;justify-content:center">📎</label>
-            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="display:none">
+            <button type="button" class="icon-btn" id="image-btn" title="Anexar ficheiros (PDF, imagem, Excel, Word, TXT, Email) — múltiplos permitidos" onclick="document.getElementById('image-input').click()" style="cursor:pointer">📎</button>
+            <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
             <button class="icon-btn" id="clear-btn" title="Limpar histórico desta conversa" onclick="clearHistory()">🗑️</button>
             <textarea
                 id="message-input"

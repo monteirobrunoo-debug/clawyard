@@ -159,8 +159,8 @@
             <button onclick="clearAttachment()" title="Remover ficheiro">✕</button>
         </div>
         <div class="input-row">
-            <label for="file-input" class="attach-btn" title="Anexar ficheiros — múltiplos permitidos (PDF, imagem, Excel, Word, TXT, Email)">📎</label>
-            <input type="file" id="file-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="display:none">
+            <button type="button" class="attach-btn" title="Anexar ficheiros — múltiplos permitidos (PDF, imagem, Excel, Word, TXT, Email)" onclick="document.getElementById('file-input').click()">📎</button>
+            <input type="file" id="file-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
             <textarea
                 id="input"
                 class="input-box"
