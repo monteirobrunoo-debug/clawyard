@@ -440,6 +440,9 @@
         <a href="/conversations" title="Histórico de Conversas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">💬 Histórico</a>
         <a href="/briefing" title="Briefing Executivo Diário" style="background:#0d1a00;border:1px solid #1e3300;color:#76b900;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:700;">📊 Briefing</a>
         <a href="/schedules" title="Tarefas Agendadas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🗓️ Schedule</a>
+        <button id="share-agent-btn" onclick="openShareModal()" title="Partilhar este agente com um cliente" style="background:var(--agent-color,#76b900);border:none;color:#000;font-size:12px;font-weight:800;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;">🔗 Share</button>
+        <a id="manage-shares-btn" href="/shares" title="Gerir links partilhados" style="background:var(--bg3);border:1px solid #1e3a5f;color:#60a5fa;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:600;">⚙️ Shares</a>
+        <button onclick="clearHistory()" title="Nova conversa (limpar histórico)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;">🗑️ Novo</button>
         @if(Auth::user()->isAdmin())
         <a href="/admin/users" title="Admin" style="background:var(--bg3);border:1px solid #ff4444;color:#ff6666;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">⚙️ Admin</a>
         @endif
@@ -512,18 +515,6 @@
                 <div class="empty-state-hero">
                     <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
                         <div class="empty-state-avatar" id="empty-avatar">🤖</div>
-                        <div style="display:flex;align-items:center;gap:8px">
-                            <button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client"
-                                style="display:none;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">
-                                🔗 Share Agent
-                            </button>
-                            <a id="manage-shares-btn" href="/shares" title="Manage shared links"
-                                style="display:none;background:none;border:1px solid #2a2a3a;color:#64748b;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:.15s"
-                                onmouseover="this.style.borderColor='#60a5fa';this.style.color='#60a5fa'"
-                                onmouseout="this.style.borderColor='#2a2a3a';this.style.color='#64748b'">
-                                ⚙️ Manage
-                            </a>
-                        </div>
                     </div>
                     <h2 id="empty-title">ClawYard <span>AI</span></h2>
                     <p id="empty-desc">Routing inteligente — vai ao agente certo automaticamente</p>
@@ -1002,10 +993,7 @@ agentSelect.addEventListener('change', () => {
         '<div class="empty-state" id="empty-state"><div class="empty-state-hero">' +
         '<div style="display:flex;flex-direction:column;align-items:center;gap:10px">' +
         '<div class="empty-state-avatar" id="empty-avatar">🤖</div>' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-        '<button id="share-agent-btn" onclick="openShareModal()" title="Share this agent with a client" style="display:block;background:var(--agent-color);border:none;color:#000;font-size:11px;font-weight:800;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;transition:.15s;z-index:10">🔗 Share Agent</button>' +
-        '<a id="manage-shares-btn" href="/shares" title="Manage shared links" style="display:block;background:none;border:1px solid #2a2a3a;color:#64748b;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;white-space:nowrap;text-decoration:none;transition:.15s">⚙️ Manage</a>' +
-        '</div>' +
+        '' +
         '</div>' +
         '<h2 id="empty-title">ClawYard <span>AI</span></h2>' +
         '<p id="empty-desc"></p></div>' +
@@ -2639,12 +2627,13 @@ function copyShareUrl() {
     setTimeout(() => btn.textContent = '📋 Copiar Link', 2000);
 }
 
-// Show/hide share button based on selected agent
+// Keep header share button color in sync with current agent
 agentSelect.addEventListener('change', updateShareBtn);
 function updateShareBtn() {
-    const btn     = document.getElementById('share-agent-btn');
-    const manage  = document.getElementById('manage-shares-btn');
-    if (btn)    btn.style.display    = 'block';
+    const btn = document.getElementById('share-agent-btn');
+    if (btn) btn.style.background = getComputedStyle(document.documentElement).getPropertyValue('--agent-color').trim() || '#76b900';
+    // Also update any legacy in-chat share buttons if present
+    const manage = document.getElementById('manage-shares-btn');
     if (manage) manage.style.display = 'block';
 }
 updateShareBtn();
