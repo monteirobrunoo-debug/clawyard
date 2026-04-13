@@ -97,6 +97,23 @@ Route::get('/patents', function () {
     return response()->json($list->values());
 })->middleware(['auth']);
 
+// Re-download a specific patent PDF (in case storage was wiped)
+Route::post('/patents/redownload/{patent}', function (string $patent) {
+    $patent = strtoupper(preg_replace('/[^A-Z0-9\/\-]/', '', $patent));
+    // Force re-download by deleting cached copy first
+    $path = 'patents/' . $patent . '.pdf';
+    if (Storage::disk('local')->exists($path)) {
+        Storage::disk('local')->delete($path);
+    }
+    $svc    = new \App\Services\PatentPdfService();
+    $result = $svc->download($patent);
+    if ($result) {
+        $size = round(Storage::disk('local')->size($result) / 1024);
+        return response()->json(['ok' => true, 'patent' => $patent, 'size_kb' => $size]);
+    }
+    return response()->json(['ok' => false, 'patent' => $patent, 'error' => 'Download failed — source unavailable'], 422);
+})->middleware(['auth']);
+
 // Download a specific patent PDF
 Route::get('/patents/download/{patent}', function (string $patent) {
     $patent = strtoupper(preg_replace('/[^A-Z0-9\/\-]/', '', $patent));

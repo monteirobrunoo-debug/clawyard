@@ -235,10 +235,11 @@ function renderGrid(data) {
 
         const actionsHtml = isDB
             ? `<a href="${extUrl}" target="_blank" class="btn-view">🔗 Ver Online</a>
-               <span style="font-size:10px;color:#555;align-self:center">PDF não disponível</span>`
+               <button onclick="redownloadPatent('${p.patent}', this)" class="btn-espacenet" style="cursor:pointer">🔄 Re-download PDF</button>`
             : `<a href="${p.url}" class="btn-view" onclick="openModal(event, '${p.patent}', '${p.url}', '${flag}')">📄 Ver PDF</a>
                <a href="${p.url}" download="${p.patent}.pdf" class="btn-espacenet">⬇️ Download</a>
-               <a href="${extUrl}" target="_blank" class="btn-espacenet">🔗 Online</a>`;
+               <a href="${extUrl}" target="_blank" class="btn-espacenet">🔗 Online</a>
+               <button onclick="redownloadPatent('${p.patent}', this)" class="btn-espacenet" style="cursor:pointer;font-size:10px;padding:4px 8px">🔄</button>`;
 
         const cardStyle = isDB ? 'opacity:0.75' : '';
 
@@ -300,6 +301,32 @@ document.getElementById('modal').addEventListener('click', function(e) {
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+async function redownloadPatent(patent, btn) {
+    const original = btn.textContent;
+    btn.textContent = '⏳ A descarregar...';
+    btn.disabled = true;
+    try {
+        const res = await fetch(`/patents/redownload/${patent}`, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+        });
+        const data = await res.json();
+        if (data.ok) {
+            btn.textContent = `✅ ${data.size_kb} KB`;
+            btn.style.background = '#76b900';
+            btn.style.color = '#000';
+            setTimeout(() => loadPatents(), 1500); // reload list to show local PDF
+        } else {
+            btn.textContent = '❌ Falhou';
+            btn.style.borderColor = '#ef4444';
+            btn.disabled = false;
+        }
+    } catch(e) {
+        btn.textContent = '❌ Erro';
+        btn.disabled = false;
+    }
+}
 
 loadPatents();
 </script>
