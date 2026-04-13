@@ -378,9 +378,14 @@ class NvidiaController extends Controller
             };
 
             try {
+                // Sanitise ALL text to valid UTF-8 before Guzzle json-encodes the request.
+                // Bad bytes can come from Excel/Word extraction or old DB records.
+                $safeMessage = $this->sanitizeForApi($resolvedMessage);
+                $safeHistory = array_map(fn($m) => $this->sanitizeForApi($m), $resolvedHistory);
+
                 $fullReply = $resolvedAgent->stream(
-                    $resolvedMessage,
-                    $resolvedHistory,
+                    $safeMessage,
+                    $safeHistory,
                     function (string $chunk) {
                         echo 'data: ' . json_encode(['chunk' => $chunk], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                         flush();
@@ -643,6 +648,21 @@ PROMPT;
         // Second pass: strip any remaining invalid bytes via iconv
         $out = @iconv('UTF-8', 'UTF-8//IGNORE', $out ?? $s);
         return $out !== false ? $out : '';
+    }
+
+    /**
+     * Recursively sanitize all string values in a message (string or array)
+     * so Guzzle's internal json_encode never sees invalid UTF-8 bytes.
+     */
+    private function sanitizeForApi(mixed $value): mixed
+    {
+        if (is_string($value)) {
+            return $this->safeUtf8($value);
+        }
+        if (is_array($value)) {
+            return array_map(fn($v) => $this->sanitizeForApi($v), $value);
+        }
+        return $value;
     }
 
     private function extractExcelText(string $path, string $name): string
