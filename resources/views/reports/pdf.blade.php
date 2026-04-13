@@ -42,7 +42,7 @@
 <div class="pdf-header">
     <div>
         <div class="pdf-logo">🐾 ClawYard <span>/ IT Partyard</span></div>
-        <div style="font-size:10px;color:#888;margin-top:3px;">Powered by NVIDIA NeMo + Claude</div>
+        <div style="font-size:10px;color:#888;margin-top:3px;">© PartYard_B.Mont_H&P Group rights reserved 2026</div>
     </div>
     <div class="pdf-meta">
         Gerado em {{ now()->format('d/m/Y H:i') }}<br>
@@ -60,7 +60,7 @@
 <div class="content">{{ $report->content }}</div>
 
 <div class="pdf-footer">
-    <span>ClawYard AI Platform · www.partyard.eu · HP-Group</span>
+    <span>PartYard_B.Mont_H&P Group rights reserved 2026</span>
     <span>Relatório #{{ $report->id }} · {{ $report->created_at->format('d/m/Y') }}</span>
 </div>
 

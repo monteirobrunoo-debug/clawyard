@@ -114,7 +114,7 @@
         <div class="agent-status"><span class="status-dot"></span> Online</div>
     </div>
     @if($share->show_branding)
-    <div class="branding">Powered by <a href="https://partyard.eu" target="_blank">PartYard AI</a></div>
+    <div class="branding">© PartYard_B.Mont_H&amp;P Group rights reserved 2026</div>
     @endif
 </div>
 
@@ -154,7 +154,7 @@
             <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
         </div>
         @if($share->show_branding)
-        <div class="input-hint">Powered by <strong>PartYard AI</strong> · ClawYard</div>
+        <div class="input-hint">© PartYard_B.Mont_H&amp;P Group rights reserved 2026</div>
         @endif
     </div>
 </div>

@@ -51,7 +51,7 @@
 @endphp
 
 <div class="doc-header">
-    <div class="company">PartYard / HP-Group · ClawYard AI Platform</div>
+    <div class="company">PartYard_B.Mont_H&P Group rights reserved 2026</div>
     <h1>Conversa com {{ $agentName }}</h1>
     <div class="doc-meta">
         <span><strong>Sessão:</strong> {{ $sessionLabel ?: '#'.$conversation->id }}</span>
@@ -80,7 +80,7 @@
 </div>
 
 <div class="doc-footer">
-    Documento gerado automaticamente por ClawYard AI · PartYard / HP-Group · {{ now()->format('d/m/Y') }}
+    Documento ClawYard AI · © PartYard_B.Mont_H&P Group rights reserved 2026 · {{ now()->format('d/m/Y') }}
 </div>
 
 <script>

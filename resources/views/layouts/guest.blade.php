@@ -101,7 +101,7 @@
     <div class="login-logo">
         <span class="paw">🐾</span>
         <h1>ClawYard</h1>
-        <p>Powered by NVIDIA NeMo + Claude</p>
+        <p>© PartYard_B.Mont_H&P Group rights reserved 2026</p>
     </div>
 
     {{ $slot }}
