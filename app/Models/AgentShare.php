@@ -59,7 +59,9 @@ class AgentShare extends Model
 
     public function getUrl(): string
     {
-        return url('/a/' . $this->token);
+        // Use SHARE_URL if set (e.g. https://clawyard.partyard.eu), otherwise APP_URL
+        $base = rtrim(config('app.share_url', config('app.url')), '/');
+        return $base . '/a/' . $this->token;
     }
 
     // Agent display info

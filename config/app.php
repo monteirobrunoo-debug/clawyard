@@ -54,6 +54,10 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // Public-facing domain for shared agent links (e.g. https://clawyard.partyard.eu)
+    // If not set, falls back to APP_URL
+    'share_url' => env('SHARE_URL', env('APP_URL', 'http://localhost')),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
