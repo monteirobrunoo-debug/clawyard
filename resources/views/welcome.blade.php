@@ -2372,7 +2372,8 @@ async function sendMessage() {
                     evt.agent_log.forEach(l => logActivity(l.icon, l.text, 'done'));
                 }
 
-                modelBadge.textContent = evt.model || evt.agents?.join(', ') || agentKey;
+                // Show agent name only — never the raw model identifier
+                modelBadge.textContent = AGENT_NAMES[agentKey] || AGENT_NAMES[evt.agent] || 'PartYard AI';
 
                 // Create the streaming message bubble (empty, will fill with chunks)
                 // Email responses are streamed as plain text then parsed at [DONE]

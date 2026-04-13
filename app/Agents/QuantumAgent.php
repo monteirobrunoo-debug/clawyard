@@ -117,7 +117,7 @@ SPECIALTY;
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
-            'timeout'         => 120,
+            'timeout'         => 600,  // 10 min — large reports with extended thinking can take >2 min
             'connect_timeout' => 10,
         ]);
 
@@ -694,20 +694,32 @@ MSG;
         }
 
         // ── Auto-download patent PDFs found in the response ────────────────
+        // Each download is an outbound HTTP request — send heartbeats between them
+        // so the SSE connection stays alive during the silent period.
         try {
             $pdfService = new PatentPdfService();
             $patents    = $pdfService->extractPatentNumbers($full);
             if ($patents) {
                 if ($heartbeat) $heartbeat('a fazer download de ' . count($patents) . ' patente(s) em PDF');
-                $results = $pdfService->downloadMultiple($patents);
-                $ok      = array_filter($results);
-                $failed  = array_diff_key($results, $ok);
+
+                $ok     = [];
+                $failed = [];
+                foreach ($patents as $pn) {
+                    if ($heartbeat) $heartbeat('PDF ' . $pn);
+                    try {
+                        $path = $pdfService->download($pn);
+                        if ($path) $ok[$pn] = $path; else $failed[] = $pn;
+                    } catch (\Throwable $inner) {
+                        $failed[] = $pn;
+                        \Log::warning("QuantumAgent PDF {$pn}: " . $inner->getMessage());
+                    }
+                }
 
                 $summary = "\n\n---\n📥 **PDFs descarregados:** " . count($ok) . "/" . count($patents);
                 foreach ($ok as $pn => $path) {
                     $summary .= "\n- ✅ [{$pn}](/patents/download/{$pn})";
                 }
-                foreach (array_keys($failed) as $pn) {
+                foreach ($failed as $pn) {
                     $summary .= "\n- ⚠️ {$pn} — não disponível online";
                 }
                 $onChunk($summary);
