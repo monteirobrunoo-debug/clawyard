@@ -68,10 +68,16 @@
         @keyframes bounce{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}}
 
         /* WELCOME */
-        .welcome{text-align:center;padding:40px 20px;max-width:500px;margin:0 auto}
+        .welcome{text-align:center;padding:32px 20px 16px;max-width:560px;margin:0 auto}
         .welcome-avatar{font-size:52px;margin-bottom:12px;filter:drop-shadow(0 0 20px var(--agent-color))}
         .welcome-name{font-size:22px;font-weight:800;color:var(--agent-color);margin-bottom:8px}
-        .welcome-msg{font-size:14px;color:var(--muted);line-height:1.6}
+        .welcome-msg{font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:18px}
+
+        /* STARTER CHIPS */
+        .starter-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:560px;margin:16px auto 0}
+        .chip{background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:7px 14px;font-size:12px;color:var(--muted);cursor:pointer;transition:all .15s;text-align:left;line-height:1.4}
+        .chip:hover{border-color:var(--agent-color);color:var(--text);background:color-mix(in srgb,var(--agent-color) 8%,var(--bg3))}
+        @media(max-width:640px){.chip{font-size:11px;padding:6px 11px}}
 
         /* INPUT */
         .input-area{background:var(--bg2);border-top:1px solid var(--border);padding:16px 20px;flex-shrink:0}
@@ -131,6 +137,7 @@
                     Olá! Como posso ajudar?
                 @endif
             </div>
+            <div class="starter-chips" id="starter-chips"></div>
         </div>
     </div>
 
@@ -159,8 +166,30 @@ const SESSION_ID = 'share_' + Date.now() + '_' + Math.random().toString(36).subs
 const AGENT_EMOJI = '{{ $meta['emoji'] }}';
 const AGENT_PHOTO = '{{ $meta['photo'] ?? '' }}';
 const AGENT_COLOR = '{{ $meta['color'] }}';
+const AGENT_KEY   = '{{ $share->agent_key }}';
 let history = [];
 let isStreaming = false;
+
+// ── Starter chips per agent ───────────────────────────────────────────────
+const AGENT_CHIPS = @json(\App\Services\AgentChipsService::all());
+
+function renderStarterChips() {
+    const chips = AGENT_CHIPS[AGENT_KEY] || AGENT_CHIPS['auto'] || [];
+    const container = document.getElementById('starter-chips');
+    if (!container || !chips.length) return;
+    container.innerHTML = chips.map(c =>
+        `<button class="chip" onclick="useChip(this)">${c}</button>`
+    ).join('');
+}
+
+function useChip(btn) {
+    const input = document.getElementById('input');
+    input.value = btn.textContent;
+    autoResize(input);
+    input.focus();
+    // Remove chips after selection
+    document.getElementById('starter-chips')?.remove();
+}
 
 // ── Auto-resize textarea ──
 function autoResize(el) {
@@ -184,6 +213,7 @@ async function sendMessage() {
     input.value = '';
     autoResize(input);
     document.getElementById('welcome')?.remove();
+    document.getElementById('starter-chips')?.remove();
     document.getElementById('send-btn').disabled = true;
     isStreaming = true;
 
@@ -319,6 +349,9 @@ function scrollBottom() {
 function escapeHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
+
+// Render chips on load
+renderStarterChips();
 
 // ── Simple markdown renderer ──
 function renderMarkdown(md) {
