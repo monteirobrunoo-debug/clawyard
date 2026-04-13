@@ -136,12 +136,25 @@ class AgentShareController extends Controller
         $history   = $request->input('history', []);
         $sessionId = $request->input('session_id', 'shared_' . uniqid());
 
-        // File/image attachments
+        // File/image attachments — support both FormData (multipart) and JSON (base64)
         $imageB64  = $request->input('image');
         $imageType = $request->input('image_type', 'image/jpeg');
         $fileB64   = $request->input('file_b64');
         $fileType  = $request->input('file_type', 'application/octet-stream');
         $fileName  = $request->input('file_name', 'ficheiro');
+
+        // FormData uploads: image_blob or file_upload (UploadedFile objects)
+        if (!$imageB64 && $request->hasFile('image_blob')) {
+            $uploaded  = $request->file('image_blob');
+            $imageB64  = base64_encode(file_get_contents($uploaded->getRealPath()));
+            $imageType = $request->input('image_type', $uploaded->getMimeType() ?: 'image/jpeg');
+        }
+        if (!$fileB64 && $request->hasFile('file_upload')) {
+            $uploaded = $request->file('file_upload');
+            $fileB64  = base64_encode(file_get_contents($uploaded->getRealPath()));
+            $fileType = $request->input('file_type', $uploaded->getMimeType() ?: 'application/octet-stream');
+            $fileName = $request->input('file_name', $uploaded->getClientOriginalName() ?: 'ficheiro');
+        }
 
         if (empty(trim($message)) && !$imageB64 && !$fileB64) {
             return response()->json(['error' => 'Mensagem vazia.'], 422);

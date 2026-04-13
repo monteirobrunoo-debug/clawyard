@@ -297,22 +297,49 @@ async function sendMessage() {
     addMessage('user', text);
     history.push({ role: 'user', content: text });
 
-    // Build payload with optional file/image
-    const payload = { message: text, history: history.slice(-20), session_id: SESSION_ID };
-    if (attachImg) {
-        payload.image      = attachImg;
-        payload.image_type = attachImgType;
-        clearAttachment();
-    } else if (attachFile) {
-        const f = attachFile;
-        if (f.text !== null) {
-            payload.message += `\n\n---\n**Ficheiro: ${f.name}**\n\`\`\`\n${f.text.substring(0,15000)}\n\`\`\``;
-        } else if (f.b64) {
-            payload.file_b64  = f.b64;
-            payload.file_type = f.type || ('application/' + f.ext);
-            payload.file_name = f.name;
+    // Build payload — use FormData when file is attached (avoids JSON body size limits)
+    let fetchBody, fetchHeaders;
+    const hasFile  = !!(attachImg || (attachFile && attachFile.b64));
+    const hasTxt   = !!(attachFile && attachFile.text !== null);
+
+    if (hasFile) {
+        // Multipart FormData for binary files/images
+        const fd = new FormData();
+        fd.append('message',    text);
+        fd.append('session_id', SESSION_ID);
+        history.slice(-20).forEach((m, i) => {
+            fd.append(`history[${i}][role]`,    m.role);
+            fd.append(`history[${i}][content]`, typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+        });
+        if (attachImg) {
+            // Convert base64 back to Blob for FormData
+            const byteChars = atob(attachImg);
+            const byteArr   = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+            fd.append('image_blob', new Blob([byteArr], { type: attachImgType }), 'image');
+            fd.append('image_type', attachImgType);
+        } else {
+            const f = attachFile;
+            const byteChars = atob(f.b64);
+            const byteArr   = new Uint8Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+            fd.append('file_upload', new Blob([byteArr], { type: f.type }), f.name);
+            fd.append('file_name',   f.name);
+            fd.append('file_type',   f.type);
         }
+        fetchBody    = fd;
+        fetchHeaders = { 'Accept': 'text/event-stream' }; // no Content-Type; browser sets multipart boundary
         clearAttachment();
+    } else {
+        // Plain JSON for text-only or text-file messages
+        const payload = { message: text, history: history.slice(-20), session_id: SESSION_ID };
+        if (hasTxt) {
+            const f = attachFile;
+            payload.message += `\n\n---\n**Ficheiro: ${f.name}**\n\`\`\`\n${f.text.substring(0,15000)}\n\`\`\``;
+            clearAttachment();
+        }
+        fetchBody    = JSON.stringify(payload);
+        fetchHeaders = { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' };
     }
 
     const typingEl = addTyping();
@@ -320,9 +347,20 @@ async function sendMessage() {
     try {
         const resp = await fetch(`/api/a/${TOKEN}/stream`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
-            body: JSON.stringify(payload),
+            headers: fetchHeaders,
+            body:    fetchBody,
         });
+
+        // Handle HTTP errors (413 Too Large, 422 Unprocessable, 500, etc.)
+        if (!resp.ok) {
+            typingEl?.remove();
+            let errMsg = `Erro ${resp.status}`;
+            try { const j = await resp.json(); errMsg = j.error || errMsg; } catch(_){}
+            addMessage('assistant', `❌ ${errMsg}`);
+            document.getElementById('send-btn').disabled = false;
+            isStreaming = false;
+            return;
+        }
 
         typingEl.remove();
         const bubble = addAssistantBubble();
@@ -361,7 +399,7 @@ async function sendMessage() {
 
     } catch(e) {
         typingEl?.remove();
-        addMessage('assistant', '❌ Erro de ligação. Tenta novamente.');
+        addMessage('assistant', '❌ Erro de ligação: ' + (e.message || 'Tenta novamente.'));
     }
 
     document.getElementById('send-btn').disabled = false;
