@@ -173,12 +173,73 @@ class AgentShareController extends Controller
                     'data'       => $fileB64,
                 ]],
             ];
+        } elseif ($fileB64 && preg_match('/spreadsheet|excel|\.xlsx|\.xls/i', $fileType . $fileName)) {
+            // Excel XLSX — extract text from ZIP XML (same logic as main chat)
+            $tmp = tempnam(sys_get_temp_dir(), 'shr_');
+            file_put_contents($tmp, base64_decode($fileB64));
+            try {
+                $zip = new \ZipArchive();
+                if ($zip->open($tmp) === true) {
+                    $sharedStrings = [];
+                    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+                    if ($ssXml) {
+                        $ssXml = preg_replace('/<r>.*?<\/r>/s', '', $ssXml);
+                        preg_match_all('/<t[^>]*>(.*?)<\/t>/s', $ssXml, $m);
+                        $sharedStrings = array_map('html_entity_decode', $m[1]);
+                    }
+                    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml') ?: '';
+                    $zip->close();
+                    $lines = [];
+                    preg_match_all('/<row[^>]*>(.*?)<\/row>/s', $sheetXml, $rows);
+                    foreach ($rows[1] as $rowXml) {
+                        $cells = [];
+                        preg_match_all('/<c r="([A-Z]+)\d+"([^>]*)>(.*?)<\/c>/s', $rowXml, $allCells, PREG_SET_ORDER);
+                        foreach ($allCells as $cell) {
+                            $isStr = str_contains($cell[2], 't="s"');
+                            preg_match('/<v>([^<]*)<\/v>/', $cell[3], $vMatch);
+                            $val = $vMatch[1] ?? '';
+                            if ($isStr) $val = $sharedStrings[(int)$val] ?? $val;
+                            $cells[] = $val;
+                        }
+                        if (array_filter($cells, fn($c) => $c !== '')) {
+                            $lines[] = implode(' | ', $cells);
+                        }
+                    }
+                    $text = implode("\n", $lines);
+                    $message .= "\n\n---\n**Ficheiro Excel: {$fileName}**\n```\n" . substr(trim($text), 0, 15000) . "\n```";
+                } else {
+                    $message .= "\n\n[Excel: não foi possível abrir o ficheiro]";
+                }
+            } catch (\Throwable $e) {
+                $message .= "\n\n[Excel: erro ao processar — " . $e->getMessage() . "]";
+            } finally {
+                @unlink($tmp);
+            }
+        } elseif ($fileB64 && preg_match('/wordprocessing|msword|\.docx|\.doc$/i', $fileType . $fileName)) {
+            // Word DOCX — extract text from ZIP XML
+            $tmp = tempnam(sys_get_temp_dir(), 'shr_');
+            file_put_contents($tmp, base64_decode($fileB64));
+            try {
+                $zip = new \ZipArchive();
+                if ($zip->open($tmp) === true) {
+                    $xml = $zip->getFromName('word/document.xml') ?: '';
+                    $zip->close();
+                    $xml  = str_replace(['</w:p>', '</w:tr>', '<w:br/>'], ["\n", "\n", "\n"], $xml);
+                    $text = strip_tags($xml);
+                    $text = preg_replace('/[ \t]+/', ' ', $text);
+                    $text = preg_replace('/\n{3,}/', "\n\n", trim($text));
+                    $message .= "\n\n---\n**Ficheiro Word: {$fileName}**\n" . substr($text, 0, 15000);
+                } else {
+                    $message .= "\n\n[Word: não foi possível abrir o ficheiro]";
+                }
+            } catch (\Throwable $e) {
+                $message .= "\n\n[Word: erro ao processar — " . $e->getMessage() . "]";
+            } finally {
+                @unlink($tmp);
+            }
         } elseif ($fileB64) {
-            // Other binary files: decode and extract text if possible, else embed as base64 note
-            $filePath = tempnam(sys_get_temp_dir(), 'shr_');
-            file_put_contents($filePath, base64_decode($fileB64));
-            $message = $message . "\n\n[Ficheiro anexado: {$fileName} — " . round(filesize($filePath)/1024) . " KB]";
-            @unlink($filePath);
+            // Unsupported binary — note only
+            $message .= "\n\n[Ficheiro: {$fileName} — formato não suportado para análise de texto]";
         }
 
         $agentManager = app(AgentManager::class);
