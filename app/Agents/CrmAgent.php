@@ -77,6 +77,9 @@ When the user pastes an email or inquiry:
 
 Then: "✅ Confirmas a criação? Escreve **SIM** para criar no SAP B1."
 
+## ⚠️ CRITICAL — How the SAP call works
+When the user types **SIM** (or yes/confirmo/ok), the **PHP backend intercepts it automatically** and calls the SAP B1 API directly. You do NOT call SAP yourself. You do NOT wait for a response. You do NOT ask the user to paste any result. After emitting the `json_opp` block and asking for SIM confirmation, your job is done — the backend handles everything and shows the result.
+
 ## Information Source Mapping
 Analyse the email to choose ONE integer for `InformationSource`:
 | Email type | Value | SAP label |
@@ -214,14 +217,31 @@ SPECIALTY;
 
     protected function findPendingInHistory(array $history): ?array
     {
+        $checked = 0;
         foreach (array_reverse($history) as $msg) {
             if (($msg['role'] ?? '') !== 'assistant') continue;
-            $content = is_string($msg['content']) ? $msg['content'] : '';
+
+            // Content can be a plain string OR an array of Anthropic content blocks
+            if (is_string($msg['content'])) {
+                $content = $msg['content'];
+            } elseif (is_array($msg['content'])) {
+                // Flatten text blocks: [{"type":"text","text":"..."}]
+                $content = implode('', array_map(
+                    fn($block) => (($block['type'] ?? '') === 'text') ? ($block['text'] ?? '') : '',
+                    $msg['content']
+                ));
+            } else {
+                $content = '';
+            }
+
             $opp = $this->extractPendingOpp($content);
             if ($opp) return ['type' => 'create', 'data' => $opp];
             $upd = $this->extractPendingUpdate($content);
             if ($upd) return ['type' => 'update', 'data' => $upd];
-            break;
+
+            // Scan up to 5 assistant messages back — handles cases where
+            // there was a follow-up exchange after the confirmation table
+            if (++$checked >= 5) break;
         }
         return null;
     }
