@@ -249,32 +249,49 @@ class SapService
         if (!$session) return null;
 
         try {
+            // http_errors=false → never throws on 4xx/5xx; we read status manually
             $response = $this->http->post("{$this->baseUrl}/{$endpoint}", [
-                'headers' => [
+                'http_errors' => false,
+                'headers'     => [
                     'Cookie'       => "B1SESSION={$session}",
                     'Content-Type' => 'application/json',
                     'Prefer'       => 'return=representation',
                 ],
                 'json' => $payload,
             ]);
-            return json_decode($response->getBody()->getContents(), true);
 
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            if ($e->getResponse()->getStatusCode() === 401 && $retry) {
+            $status  = $response->getStatusCode();
+            $body    = (string) $response->getBody();
+            $decoded = $body !== '' ? json_decode($body, true) : null;
+
+            // Session expired → re-login once
+            if ($status === 401 && $retry) {
                 Cache::forget(self::SESSION_CACHE_KEY);
                 $this->login();
                 return $this->post($endpoint, $payload, false);
             }
-            $body    = (string) $e->getResponse()->getBody();
-            $decoded = json_decode($body, true);
-            // SAP B1 error format: {"error":{"code":...,"message":{"lang":"en","value":"..."}}}
+
+            // 2xx = success
+            if ($status >= 200 && $status < 300) {
+                // Return the entity if SAP sent one; otherwise a success marker
+                // (SAP B1 sometimes returns 201 with empty body when Prefer is ignored)
+                return (is_array($decoded) && !empty($decoded))
+                    ? $decoded
+                    : ['__created' => true];
+            }
+
+            // 4xx / 5xx — parse SAP error and store in $lastError
             $sapMsg = $decoded['error']['message']['value']
                    ?? $decoded['error']['message']
                    ?? $decoded['message']
-                   ?? substr($body, 0, 250);
-            $this->lastError = is_string($sapMsg) ? $sapMsg : json_encode($sapMsg);
-            Log::error("SAP POST failed [{$endpoint}]: " . $this->lastError);
+                   ?? null;
+            if (!$sapMsg) {
+                $sapMsg = substr(strip_tags($body), 0, 300) ?: "HTTP {$status}";
+            }
+            $this->lastError = is_string($sapMsg) ? trim($sapMsg) : json_encode($sapMsg);
+            Log::error("SAP POST failed [{$endpoint}] HTTP {$status}: {$this->lastError} | payload: " . json_encode($payload));
             return null;
+
         } catch (\Exception $e) {
             $this->lastError = $e->getMessage();
             Log::error("SAP POST exception [{$endpoint}]: " . $e->getMessage());
@@ -675,11 +692,36 @@ class SapService
         $result   = $this->post('SalesOpportunities', $filtered);
 
         // If failed and Source was set, retry without it — older SAP B1 versions may not expose BoSouType
+        // NOTE: do NOT clear $lastError here so the original error is kept if retry also fails
         if (!$result && isset($filtered['Source'])) {
-            Log::warning("CRM: retrying createOpportunity without Source field (SAP: {$this->lastError})");
-            $this->lastError = '';
+            $originalError = $this->lastError;
+            Log::warning("CRM: retrying createOpportunity without Source field (SAP: {$originalError})");
             unset($filtered['Source']);
             $result = $this->post('SalesOpportunities', $filtered);
+            // If retry also failed, restore original error so caller sees something useful
+            if (!$result && $this->lastError === '') {
+                $this->lastError = $originalError;
+            }
+        }
+
+        // SAP sometimes returns 201 with empty body (Prefer header ignored).
+        // If we got a success marker but no SequentialNo, fetch the latest opp for this CardCode.
+        if ($result && !isset($result['SequentialNo'])) {
+            Log::info("CRM: SAP returned no entity body — fetching latest opp for CardCode={$cardCode}");
+            try {
+                $latest = $this->get('SalesOpportunities', [
+                    '$filter'  => "CardCode eq '{$cardCode}'",
+                    '$orderby' => 'CreateDate desc,SequentialNo desc',
+                    '$top'     => 1,
+                    '$select'  => 'SequentialNo,CardCode,Name,StageId',
+                ]);
+                if (!empty($latest['value'][0]['SequentialNo'])) {
+                    $result = $latest['value'][0];
+                    Log::info("CRM: resolved SequentialNo={$result['SequentialNo']} from GET fallback");
+                }
+            } catch (\Throwable $e) {
+                Log::warning("CRM: GET fallback for SequentialNo failed: " . $e->getMessage());
+            }
         }
 
         // Post-creation PATCH: BusinessProject + Status Oportunidade UDF
