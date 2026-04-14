@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\WebSearchTrait;
 use App\Services\SapService;
 use App\Services\PromptLibrary;
 use App\Services\PartYardProfileService;
@@ -27,6 +28,7 @@ class CrmAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    use WebSearchTrait;
 
     protected Client     $client;
     protected SapService $sap;
