@@ -480,7 +480,9 @@ SPECIALTY;
         }
 
         // ── Normal conversation ───────────────────────────────────────────────
+        if ($heartbeat) $heartbeat('Marta a analisar...');
         $message = $this->augmentWithCrmContext($message, $heartbeat);
+        if ($heartbeat) $heartbeat('Marta a responder...');
         return $this->callClaude($message, $history, $onChunk, $heartbeat);
     }
 
