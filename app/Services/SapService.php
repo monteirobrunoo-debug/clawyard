@@ -595,8 +595,35 @@ class SapService
     {
         $this->lastError = '';  // reset before each attempt
 
+        // ── Resolve CardCode from CardName if CardCode is missing or looks like a name ──
+        $cardCode = trim((string) ($data['CardCode'] ?? ''));
+        $cardName = trim((string) ($data['CardName'] ?? ''));
+
+        // A real SAP CardCode is short and has no spaces (e.g. "C00123", "OCNP01")
+        // If CardCode is empty OR looks like a full company name (contains spaces / long),
+        // try to resolve it by searching BusinessPartners by name.
+        $looksLikeName = $cardName !== '' && (
+            $cardCode === '' ||
+            strlen($cardCode) > 15 ||
+            str_word_count($cardCode) > 1
+        );
+
+        if ($looksLikeName) {
+            try {
+                $bps = $this->searchBusinessPartners($cardName, 1);
+                if (!empty($bps)) {
+                    $cardCode = $bps[0]['CardCode'];
+                    $cardName = $bps[0]['CardName'];
+                    Log::info("CRM: resolved CardCode '{$cardCode}' for '{$cardName}' via name lookup");
+                }
+            } catch (\Throwable $e) {
+                Log::warning("CRM: CardCode name resolution failed: " . $e->getMessage());
+            }
+        }
+
         $payload = [
-            'CardCode'  => $data['CardCode'] ?? null,
+            'CardCode'  => $cardCode ?: null,
+            'CardName'  => $cardName ?: null,   // Business Partner Name field
             'StageId'   => isset($data['StageId']) ? (int) $data['StageId'] : null,
             'StartDate' => date('Y-m-d\T00:00:00\Z'),
             'Status'    => 'O',   // always Em Aberto
