@@ -555,37 +555,64 @@ class SapService
     /**
      * Create a new Sales Opportunity in SAP B1 CRM.
      *
-     * Required keys in $data:
-     *   CardCode, StageId, MaxLocalTotal
-     * Optional:
-     *   SalesPerson (int, SAP employee code), ExpectedClosingDate (Y-m-d), Remarks
+     * Supported keys in $data:
+     *   CardCode (required), StageId (required)
+     *   OpportunityName / Name  — opportunity title (from email Subject)
+     *   SalesPerson             — SAP EmployeeID (integer)
+     *   ContactPerson           — SAP CntctCode (integer)
+     *   MaxLocalTotal           — expected value; defaults to 1.0
+     *   Status                  — 'O' Open (always forced)
+     *   ExpectedClosingDate     — Y-m-d; OR use ClosingDays
+     *   ClosingDays             — integer, calculates ExpectedClosingDate = today + N days
+     *   Remarks                 — free text notes (appended to name)
      */
     public function createOpportunity(array $data): ?array
     {
         $payload = [
-            'CardCode' => $data['CardCode'] ?? null,
-            'StageId'  => isset($data['StageId']) ? (int) $data['StageId'] : null,
+            'CardCode'  => $data['CardCode'] ?? null,
+            'StageId'   => isset($data['StageId']) ? (int) $data['StageId'] : null,
             'StartDate' => date('Y-m-d\T00:00:00\Z'),
+            'Status'    => 'O',   // always Em Aberto
         ];
 
-        if (isset($data['MaxLocalTotal'])) {
-            $payload['MaxLocalTotal'] = (float) $data['MaxLocalTotal'];
+        // Opportunity name / title from email Subject
+        $oppName = trim((string) ($data['OpportunityName'] ?? $data['Name'] ?? ''));
+        if ($oppName !== '') {
+            // SAP B1 10.0+ supports a 'Name' field on SalesOpportunities
+            $payload['Name']    = substr($oppName, 0, 100);
+            // Also put in Remarks so older SAP versions show it
+            $remarks = $oppName;
+            if (!empty($data['Remarks'])) $remarks .= "\n" . $data['Remarks'];
+            $payload['Remarks'] = substr($remarks, 0, 254);
+        } elseif (!empty($data['Remarks'])) {
+            $payload['Remarks'] = substr($data['Remarks'], 0, 254);
         }
+
+        // Potential Amount — default to 1 if not provided or zero
+        $amount = isset($data['MaxLocalTotal']) ? (float) $data['MaxLocalTotal'] : 0;
+        $payload['MaxLocalTotal'] = $amount > 0 ? $amount : 1.0;
+
+        // SalesPerson (SAP EmployeeID)
         if (!empty($data['SalesPerson'])) {
             $payload['SalesPerson'] = (int) $data['SalesPerson'];
         }
+
+        // ContactPerson (SAP CntctCode)
+        if (!empty($data['ContactPerson'])) {
+            $payload['ContactPerson'] = (int) $data['ContactPerson'];
+        }
+
+        // Expected Closing Date — explicit date OR today + ClosingDays
         if (!empty($data['ExpectedClosingDate'])) {
             $ts = strtotime($data['ExpectedClosingDate']);
             if ($ts) $payload['ExpectedClosingDate'] = date('Y-m-d\T00:00:00\Z', $ts);
-        }
-        if (!empty($data['Remarks'])) {
-            $payload['Remarks'] = $data['Remarks'];
+        } elseif (!empty($data['ClosingDays'])) {
+            $days = max(1, (int) $data['ClosingDays']);
+            $payload['ExpectedClosingDate'] = date('Y-m-d\T00:00:00\Z', strtotime("+{$days} days"));
         }
 
-        // Remove null values
-        $payload = array_filter($payload, fn($v) => $v !== null);
-
-        return $this->post('SalesOpportunities', $payload);
+        // Strip nulls and call SAP
+        return $this->post('SalesOpportunities', array_filter($payload, fn($v) => $v !== null));
     }
 
     /**
@@ -608,7 +635,7 @@ class SapService
     }
 
     /**
-     * Fetch the list of SAP sales employees (for populating SalesPerson field).
+     * Fetch the list of SAP active sales employees.
      */
     public function getSalesEmployees(int $top = 20): array
     {
@@ -617,6 +644,49 @@ class SapService
             '$filter'  => "SalesEmployee eq 'tYES' and Active eq 'tYES'",
             '$top'     => $top,
             '$orderby' => 'LastName asc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    /**
+     * Search a sales employee by partial name (First or Last).
+     */
+    public function searchSalesEmployee(string $name, int $top = 5): array
+    {
+        $safe = addslashes($name);
+        $data = $this->get('EmployeesInfo', [
+            '$select' => 'EmployeeID,FirstName,LastName,Department,SalesEmployee',
+            '$filter' => "contains(FirstName,'{$safe}') or contains(LastName,'{$safe}')",
+            '$top'    => $top,
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    /**
+     * Search a Business Partner by VAT / NIF / FederalTaxID.
+     * Strips non-alphanumeric chars before searching.
+     */
+    public function searchBPByVAT(string $vat, int $top = 3): array
+    {
+        $clean = preg_replace('/[^0-9A-Za-z]/', '', $vat);
+        $data  = $this->get('BusinessPartners', [
+            '$select' => 'CardCode,CardName,CardType,FederalTaxID,Phone1,EmailAddress,CreditLimit',
+            '$filter' => "contains(FederalTaxID,'{$clean}')",
+            '$top'    => $top,
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    /**
+     * Fetch contact persons registered under a Business Partner CardCode.
+     */
+    public function getContactPersons(string $cardCode, int $top = 15): array
+    {
+        $safe = addslashes($cardCode);
+        $data = $this->get('ContactEmployees', [
+            '$select' => 'CntctCode,Name,FirstName,LastName,E_Mail,Phone1,Position',
+            '$filter' => "CardCode eq '{$safe}'",
+            '$top'    => $top,
         ]);
         return $data['value'] ?? [];
     }

@@ -13,13 +13,15 @@ use Illuminate\Support\Facades\Log;
 /**
  * CrmAgent — "Marta"
  *
- * Conversational agent for creating & managing SAP B1 Sales Opportunities.
+ * Conversational agent for creating SAP B1 Sales Opportunities from pasted emails.
+ *
  * Workflow:
- *   1. Gather fields from natural language (customer, stage, value, close date, salesperson)
- *   2. Validate customer against SAP BusinessPartners
- *   3. Show markdown summary + output a hidden ```json_opp{...}``` block
- *   4. When user types SIM/confirma, detect the pending block from history and call SAP POST
- *   5. Return SAP SequentialNo as confirmation
+ *   1. User pastes a customer email
+ *   2. Marta extracts all fields automatically (subject→name, VAT→BP, contact person, days to close…)
+ *   3. Marta asks for SalesPerson by name if not found in email
+ *   4. Shows confirmation table with all SAP fields
+ *   5. User types SIM → system calls SAP POST /SalesOpportunities
+ *   6. Returns SequentialNo confirmation
  */
 class CrmAgent implements AgentInterface
 {
@@ -31,109 +33,117 @@ class CrmAgent implements AgentInterface
 
     public function __construct()
     {
-        $persona = 'You are Marta, the CRM & pipeline specialist at PartYard (Setúbal, Portugal) — military/naval spare parts and technical services.';
+        $persona = 'You are Marta, the CRM & Sales Pipeline specialist at PartYard (Setúbal, Portugal) — military and naval spare parts and technical services.';
 
         $specialty = <<<'SPECIALTY'
 ## Your Role
-You are Marta, the CRM pipeline specialist at PartYard. You create **Sales Opportunities in SAP B1 CRM** by analysing customer emails and requests. You extract the data, confirm with the user, and trigger the SAP creation automatically.
+You create **SAP B1 Sales Opportunities** from customer emails pasted by the user. You extract all required fields from the email automatically, validate the customer (BP) via SAP data injected into context, and ask for anything that's missing — especially the **Vendedor (Sales Employee)** by name.
 
-## PRIMARY USE CASE — Email to Opportunity
-When the user pastes a **customer email or inquiry**, you must:
-1. Extract ALL relevant opportunity fields from the email text
-2. Show a clean confirmation table (DO NOT ask for each field individually)
-3. Emit the `json_opp` block immediately
-4. Ask for a single **SIM** to create in SAP
+## PRIMARY FLOW — Email → Opportunity
+When the user pastes an email or inquiry:
 
-Fields to extract from emails:
-- **Customer name / company** → map to CardCode (from SAP context, or ask if not found)
-- **Product / service requested** → include in Remarks
-- **Quoted or estimated value** → MaxLocalTotal (if not in email, estimate or ask)
-- **Requested delivery / deadline** → ExpectedClosingDate
-- **CRM Stage** → infer from email tone: inquiry=Prospecção(1), price request=Cotação de Compra(5), proposal=Cotação de Venda(6), follow-up=Follow Up Vendas(7), ready to order=Possível Venda(8)
-- **Salesperson / account manager** → SalesPerson (from context or ask)
-- **Reference numbers, PO numbers, vessel info** → include in Remarks
+### Step 1 — Extract these fields from the email:
+| Field | How to extract | SAP Field |
+|-------|----------------|-----------|
+| **Customer name** | Email sender company, signature, domain | CardCode (from SAP context) |
+| **VAT / NIF** | Look for "NIF:", "VAT:", "PT\d{9}", tax numbers | FederalTaxID (for BP validation) |
+| **Contact person** | Email sender name ("From: John Smith") | ContactPerson (CntctCode from SAP) |
+| **Opportunity name** | Email Subject line → use as title | OpportunityName |
+| **CRM Stage** | Infer from email tone (see table below) | StageId |
+| **Closing days** | Urgency phrases, deadlines, delivery dates | ClosingDays (integer) |
+| **Potential Amount** | Any value mentioned; default = **1** | MaxLocalTotal (default 1) |
+| **Notes** | Reference numbers, vessel name, PO, NSN | Remarks |
 
-## PartYard CRM Stages
-| StageId | Stage | When to use |
-|---------|-------|-------------|
-| 1  | Prospecção | Cold lead, first contact |
-| 5  | Cotação de Compra | Customer requests a purchase quote |
-| 6  | Cotação de Venda | PartYard submits sales quotation |
-| 7  | Follow Up Vendas | Following up on sent quotation |
-| 8  | Possível Venda | Customer likely to confirm |
-| 9  | Ordem de Compra | Purchase order received |
-| 10 | Ordem de Venda | Sales order confirmed |
+### Step 2 — Always ask for:
+- **Vendedor (Sales Employee)**: "📋 Qual o vendedor responsável? (ex: João Silva)" — ALWAYS ask if not in email or SAP context
+
+### Step 3 — After getting salesperson name, show confirmation table:
+| Campo SAP | Valor |
+|-----------|-------|
+| 🏢 Cliente (CardCode) | NSPA (C001) |
+| 🆔 NIF / VAT | PT123456789 |
+| 👤 Pessoa de Contacto | John Smith (código SAP: 3) |
+| 👔 Vendedor | João Silva (EmployeeID: 5) |
+| 📌 Nome Oportunidade | [email subject] |
+| 📋 Fase CRM | Cotação de Compra (StageId: 5) |
+| ✅ Status | Em Aberto (O) |
+| 💶 Valor Potencial | €1 (actualizar após proposta) |
+| 📅 Fecho previsto | em 30 dias (2026-05-14) |
+| 📝 Notas | [vessel, ref, PO…] |
+
+Then: "✅ Confirmas a criação? Escreve **SIM** para criar no SAP B1."
+
+## CRM Stage Inference
+| Email tone | StageId | Stage |
+|------------|---------|-------|
+| First contact, cold outreach | 1 | Prospecção |
+| Client requests price / RFQ | 5 | Cotação de Compra |
+| PartYard submits quotation | 6 | Cotação de Venda |
+| Follow-up on sent quote | 7 | Follow Up Vendas |
+| Client near decision | 8 | Possível Venda |
+| PO received | 9 | Ordem de Compra |
+| Order confirmed | 10 | Ordem de Venda |
+
+## Closing Days Guidelines
+- "urgent" / "ASAP" / "urgente" → 7 days
+- "end of week" → 5 days
+- "end of month" / "fim do mês" → 30 days
+- "Q2" / "próximo trimestre" → 60 days
+- Specific date → calculate days from today
+- No deadline mentioned → ask "Em quantos dias prevês fechar esta oportunidade?"
 
 ## Known PartYard Customers
-If SAP context is injected with a customer's CardCode, use it. Otherwise:
-- **NSPA** (NATO Support & Procurement Agency, Luxembourg)
-- **OCEANPACT** (Brazilian maritime services)
-- **SASU VBAF** (French naval/air entity)
-- **INCREMENT** (Partner/reseller)
-- **VOP CZ** (Czech defence contractor)
+If SAP context is injected with CardCode, use it directly. Otherwise:
+- NSPA, OCEANPACT, SASU VBAF, INCREMENT, VOP CZ
 
-## Opportunity Fields Reference
-| Field | Type | Notes |
-|-------|------|-------|
-| CardCode | string | SAP customer code — REQUIRED |
-| StageId | integer | 1–10 — REQUIRED |
-| MaxLocalTotal | float | Expected value EUR — REQUIRED (estimate if not in email) |
-| SalesPerson | integer | SAP employee ID (0 if unknown) |
-| ExpectedClosingDate | date | YYYY-MM-DD |
-| Remarks | string | Email subject + key details |
-
-## Confirmation Table Format
-Always present this table before the json_opp block:
-
-| Campo SAP | Valor Extraído |
-|-----------|---------------|
-| 🏢 Cliente | NSPA (CardCode: C001) |
-| 📋 Fase CRM | Cotação de Compra (StageId: 5) |
-| 💶 Valor Esperado | €50.000 |
-| 📅 Data de Fecho | 2026-06-30 |
-| 👔 Vendedor | #3 (ou Não atribuído) |
-| 📝 Referência/Email | [subject or key ref] |
-
-Then: "✅ Confirmas a criação desta oportunidade? Escreve **SIM** para criar no SAP B1."
-
-## CRITICAL — json_opp Block (NEVER omit this)
-End EVERY response where you're ready to create with:
+## CRITICAL — json_opp Block
+At the END of your confirmation response, you MUST include this block (even if some fields are 0 or null):
 
 ```json_opp
 {
   "CardCode": "C001",
   "CardName": "NSPA",
-  "StageName": "Cotação de Compra",
+  "FederalTaxID": "PT123456789",
+  "ContactPerson": 3,
+  "ContactPersonName": "John Smith",
+  "SalesPerson": 5,
+  "SalesEmployeeName": "João Silva",
+  "OpportunityName": "RFQ MTU 2000 Series Spare Parts",
   "StageId": 5,
-  "MaxLocalTotal": 50000.00,
-  "SalesPerson": 0,
-  "ExpectedClosingDate": "2026-06-30",
-  "Remarks": "Email: RFQ for MTU spare parts NSN 1290... Vessel: MV Atlantic"
+  "StageName": "Cotação de Compra",
+  "Status": "O",
+  "MaxLocalTotal": 1,
+  "ClosingDays": 30,
+  "ExpectedClosingDate": "2026-05-14",
+  "Remarks": "From: john@nspa.nato.int | RFQ MTU 2000 | Vessel: MV Atlantic | PO: 2026-0123"
 }
 ```
 
 Rules:
-- `SalesPerson` = 0 if not known
-- `MaxLocalTotal` = number only (no €, no commas)
-- `ExpectedClosingDate` = YYYY-MM-DD
-- `Remarks` = email subject + reference numbers + vessel name + key info (max 300 chars)
-- CardCode from SAP context only — NEVER invent
+- `Status` is ALWAYS "O" (Em Aberto)
+- `MaxLocalTotal` defaults to **1** (not 0, not null)
+- `ClosingDays` is the number of days from today until expected close
+- `SalesPerson` = SAP EmployeeID (from context). If 0 = not assigned
+- `ContactPerson` = SAP CntctCode (from context). If 0 = not found
+- `OpportunityName` = email Subject (trim to 100 chars)
+- `Remarks` = "From: [sender] | [key refs] | Vessel: [name] | PO: [ref]" (max 250 chars)
+- NEVER invent CardCode or employee IDs — use only what's in SAP context
 
-## Updating Existing Opportunities
-For updates, emit:
+## Updating Opportunities
+For updates, ask for the SequentialNo, then emit:
 
 ```json_opp_update
 {
   "SequentialNo": 1234,
   "StageId": 7,
-  "MaxLocalTotal": 60000,
-  "Remarks": "Updated after call with client"
+  "MaxLocalTotal": 50000,
+  "Remarks": "Updated after call"
 }
 ```
 
 ## Language
 - Default: Portuguese (PT)
-- Switch to English if the email or user message is in English
+- Switch to English if email/user writes in English
 SPECIALTY;
 
         $this->systemPrompt = str_replace(
@@ -151,11 +161,8 @@ SPECIALTY;
         $this->sap = new SapService();
     }
 
-    // ─── Opportunity detection helpers ────────────────────────────────────────
+    // ─── Opportunity detection helpers ───────────────────────────────────────
 
-    /**
-     * Extract a pending opportunity JSON block from an assistant message.
-     */
     protected function extractPendingOpp(string $text): ?array
     {
         if (preg_match('/```json_opp\s*(\{.*?\})\s*```/si', $text, $m)) {
@@ -165,9 +172,6 @@ SPECIALTY;
         return null;
     }
 
-    /**
-     * Extract a pending UPDATE block from an assistant message.
-     */
     protected function extractPendingUpdate(string $text): ?array
     {
         if (preg_match('/```json_opp_update\s*(\{.*?\})\s*```/si', $text, $m)) {
@@ -177,9 +181,6 @@ SPECIALTY;
         return null;
     }
 
-    /**
-     * True if the user message is a confirmation ("SIM", "yes", "confirma", etc.)
-     */
     protected function isConfirmation(string $message): bool
     {
         return (bool) preg_match(
@@ -188,10 +189,6 @@ SPECIALTY;
         );
     }
 
-    /**
-     * Scan conversation history (reversed) for the most recent pending opportunity.
-     * Returns the parsed JSON array or null.
-     */
     protected function findPendingInHistory(array $history): ?array
     {
         foreach (array_reverse($history) as $msg) {
@@ -201,82 +198,139 @@ SPECIALTY;
             if ($opp) return ['type' => 'create', 'data' => $opp];
             $upd = $this->extractPendingUpdate($content);
             if ($upd) return ['type' => 'update', 'data' => $upd];
-            break; // only check the most recent assistant message
+            break;
         }
         return null;
     }
 
-    // ─── SAP context augmentation ─────────────────────────────────────────────
+    // ─── SAP context augmentation ────────────────────────────────────────────
 
     /**
-     * If a known PartYard customer is mentioned, inject their SAP CardCode into context.
-     * This lets Claude populate the json_opp block with the correct CardCode.
+     * Build full CRM context for the message:
+     *   - BP lookup by name OR VAT
+     *   - Contact persons for found BP
+     *   - Sales employee lookup by name (if mentioned)
+     *   - Sales employee list (if "vendedor" keyword detected)
      */
-    protected function augmentWithCustomerContext(string|array $message, ?callable $heartbeat = null): string|array
+    protected function augmentWithCrmContext(string|array $message, ?callable $heartbeat = null): string|array
     {
-        $text = $this->messageText($message);
+        $text  = $this->messageText($message);
+        $extra = '';
 
-        static $knownBPs = [
-            'nspa'      => 'NSPA',
-            'oceanpact' => 'OCEANPACT',
-            'sasu'      => 'SASU',
-            'vbaf'      => 'VBAF',
-            'increment' => 'INCREMENT',
-            'raytheon'  => 'RAYTHEON',
-            'keysight'  => 'KEYSIGHT',
-            'carleton'  => 'CARLETON',
-            'vop'       => 'VOP',
-        ];
-
-        foreach ($knownBPs as $key => $name) {
-            if (stripos($text, $key) === false) continue;
+        // ── 1. Customer by VAT/NIF ────────────────────────────────────────────
+        // Portuguese NIF: 9 digits, EU VAT may have country prefix
+        if (preg_match('/\b(PT\d{9}|\d{9})\b/', $text, $vatMatch)) {
             try {
-                if ($heartbeat) $heartbeat('a verificar cliente SAP...');
-                $bps = $this->sap->searchBusinessPartners($name, 2);
+                if ($heartbeat) $heartbeat('a verificar NIF/VAT no SAP...');
+                $bps = $this->sap->searchBPByVAT($vatMatch[1], 2);
                 if ($bps) {
-                    $lines = ["--- CLIENTE SAP ---"];
+                    $extra .= "\n--- CLIENTE POR NIF/VAT ({$vatMatch[1]}) ---\n";
                     foreach ($bps as $bp) {
-                        $lines[] = "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']} | Tipo: "
-                            . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor');
+                        $extra .= "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']} | NIF: {$bp['FederalTaxID']} | Tipo: "
+                            . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
                     }
-                    $lines[] = "--- FIM ---";
-                    return $this->appendToMessage($message, "\n\n" . implode("\n", $lines) . "\n");
+                    $extra .= "--- FIM ---\n";
+
+                    // Also fetch contact persons for first found BP
+                    $cardCode = $bps[0]['CardCode'];
+                    $contacts = $this->sap->getContactPersons($cardCode, 10);
+                    if ($contacts) {
+                        $extra .= "\n--- CONTACTOS DE {$bps[0]['CardName']} ({$cardCode}) ---\n";
+                        foreach ($contacts as $c) {
+                            $name = trim(($c['FirstName'] ?? '') . ' ' . ($c['LastName'] ?? '')) ?: ($c['Name'] ?? '?');
+                            $extra .= "CntctCode: {$c['CntctCode']} | {$name} | {$c['E_Mail']} | {$c['Position']}\n";
+                        }
+                        $extra .= "--- FIM ---\n";
+                    }
                 }
             } catch (\Throwable $e) {
-                Log::warning("CrmAgent: BP lookup failed — " . $e->getMessage());
+                Log::warning("CrmAgent: VAT lookup failed — " . $e->getMessage());
             }
-            break; // only lookup first match per message
         }
-        return $message;
-    }
 
-    /**
-     * Inject list of SAP sales employees if user asks about salespeople.
-     */
-    protected function augmentWithSalespeople(string|array $message, ?callable $heartbeat = null): string|array
-    {
-        $text = $this->messageText($message);
-        if (!preg_match('/vendedor|sales.?person|operador|quem.*vend|comercial/i', $text)) {
-            return $message;
-        }
-        try {
-            if ($heartbeat) $heartbeat('a carregar vendedores SAP...');
-            $employees = $this->sap->getSalesEmployees(15);
-            if ($employees) {
-                $lines = ["--- VENDEDORES SAP ---"];
-                foreach ($employees as $e) {
-                    $lines[] = "ID: {$e['EmployeeID']} | {$e['FirstName']} {$e['LastName']}";
+        // ── 2. Customer by known name ─────────────────────────────────────────
+        if (empty($extra)) {
+            static $knownBPs = [
+                'nspa'      => 'NSPA',   'oceanpact' => 'OCEANPACT',
+                'sasu'      => 'SASU',   'vbaf'      => 'VBAF',
+                'increment' => 'INCREMENT', 'raytheon' => 'RAYTHEON',
+                'keysight'  => 'KEYSIGHT',  'carleton' => 'CARLETON',
+                'vop'       => 'VOP',
+            ];
+            foreach ($knownBPs as $key => $name) {
+                if (stripos($text, $key) === false) continue;
+                try {
+                    if ($heartbeat) $heartbeat('a verificar cliente SAP...');
+                    $bps = $this->sap->searchBusinessPartners($name, 2);
+                    if ($bps) {
+                        $extra .= "\n--- CLIENTE SAP ({$name}) ---\n";
+                        foreach ($bps as $bp) {
+                            $extra .= "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']}"
+                                . (!empty($bp['FederalTaxID']) ? " | NIF: {$bp['FederalTaxID']}" : '')
+                                . " | Tipo: " . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
+                        }
+                        $extra .= "--- FIM ---\n";
+
+                        // Contact persons
+                        $cardCode = $bps[0]['CardCode'];
+                        $contacts = $this->sap->getContactPersons($cardCode, 10);
+                        if ($contacts) {
+                            $extra .= "\n--- CONTACTOS DE {$bps[0]['CardName']} ({$cardCode}) ---\n";
+                            foreach ($contacts as $c) {
+                                $cname = trim(($c['FirstName'] ?? '') . ' ' . ($c['LastName'] ?? '')) ?: ($c['Name'] ?? '?');
+                                $extra .= "CntctCode: {$c['CntctCode']} | {$cname} | {$c['E_Mail']}\n";
+                            }
+                            $extra .= "--- FIM ---\n";
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning("CrmAgent: BP lookup failed — " . $e->getMessage());
                 }
-                $lines[] = "--- FIM ---";
-                return $this->appendToMessage($message, "\n\n" . implode("\n", $lines) . "\n");
+                break;
             }
-        } catch (\Throwable $e) {
-            Log::warning("CrmAgent: employees fetch failed — " . $e->getMessage());
         }
-        return $message;
+
+        // ── 3. Sales employee lookup by name ──────────────────────────────────
+        // Triggered when user provides a name in response to "Qual o vendedor?"
+        if (preg_match('/vendedor[:\s]+([A-Za-zÀ-ú]{2,}\s[A-Za-zÀ-ú]{2,})/i', $text, $empMatch)
+            || preg_match('/(?:é|e|:)\s+([A-Z][a-zÀ-ú]+\s[A-Z][a-zÀ-ú]+)\s*$/u', $text, $empMatch)) {
+            $empName = trim($empMatch[1]);
+            try {
+                if ($heartbeat) $heartbeat('a localizar vendedor no SAP...');
+                $employees = $this->sap->searchSalesEmployee($empName, 5);
+                if ($employees) {
+                    $extra .= "\n--- VENDEDOR SAP: {$empName} ---\n";
+                    foreach ($employees as $e) {
+                        $extra .= "EmployeeID: {$e['EmployeeID']} | {$e['FirstName']} {$e['LastName']} | Dept: {$e['Department']}\n";
+                    }
+                    $extra .= "--- FIM ---\n";
+                }
+            } catch (\Throwable $e) {
+                Log::warning("CrmAgent: employee search failed — " . $e->getMessage());
+            }
+        }
+
+        // ── 4. Full salespeople list (when "vendedor" keyword without specific name) ──
+        if (preg_match('/vendedor|sales.?person|quem.*vend|equipa.*comercial/i', $text) && empty(strpos($extra, 'EmployeeID'))) {
+            try {
+                if ($heartbeat) $heartbeat('a carregar vendedores SAP...');
+                $employees = $this->sap->getSalesEmployees(20);
+                if ($employees) {
+                    $extra .= "\n--- VENDEDORES SAP DISPONÍVEIS ---\n";
+                    foreach ($employees as $e) {
+                        $extra .= "EmployeeID: {$e['EmployeeID']} | {$e['FirstName']} {$e['LastName']}\n";
+                    }
+                    $extra .= "--- FIM ---\n";
+                }
+            } catch (\Throwable $e) {
+                Log::warning("CrmAgent: employees list failed — " . $e->getMessage());
+            }
+        }
+
+        return $extra ? $this->appendToMessage($message, "\n" . $extra) : $message;
     }
 
-    // ─── Confirmation execution ────────────────────────────────────────────────
+    // ─── Confirmation execution ───────────────────────────────────────────────
 
     protected function executeConfirmation(array $pending): string
     {
@@ -285,37 +339,47 @@ SPECIALTY;
 
         if ($type === 'create') {
             $result = $this->sap->createOpportunity($data);
+
             if ($result && isset($result['SequentialNo'])) {
-                return "✅ **Oportunidade #{$result['SequentialNo']} criada com sucesso no SAP B1!**\n\n"
+                $closingDate = !empty($data['ExpectedClosingDate'])
+                    ? $data['ExpectedClosingDate']
+                    : (!empty($data['ClosingDays']) ? date('Y-m-d', strtotime('+' . (int)$data['ClosingDays'] . ' days')) : '—');
+
+                return "✅ **Oportunidade #{$result['SequentialNo']} criada no SAP B1!**\n\n"
                     . "| Campo | Valor |\n|-------|-------|\n"
                     . "| 🆔 ID SAP | **#{$result['SequentialNo']}** |\n"
-                    . "| 👤 Cliente | " . ($data['CardName'] ?? $data['CardCode']) . " (`" . ($data['CardCode'] ?? '?') . "`) |\n"
+                    . "| 📌 Nome | " . ($data['OpportunityName'] ?? '—') . " |\n"
+                    . "| 🏢 Cliente | " . ($data['CardName'] ?? '') . " (`" . ($data['CardCode'] ?? '?') . "`) |\n"
+                    . (!empty($data['FederalTaxID']) ? "| 🆔 NIF/VAT | {$data['FederalTaxID']} |\n" : '')
+                    . "| 👤 Contacto | " . ($data['ContactPersonName'] ?? (($data['ContactPerson'] ?? 0) ? "#{$data['ContactPerson']}" : '—')) . " |\n"
+                    . "| 👔 Vendedor | " . ($data['SalesEmployeeName'] ?? (($data['SalesPerson'] ?? 0) ? "#{$data['SalesPerson']}" : '—')) . " |\n"
                     . "| 📋 Fase | " . ($data['StageName'] ?? 'StageId ' . ($data['StageId'] ?? '?')) . " |\n"
-                    . "| 💶 Valor | **€" . number_format((float) ($data['MaxLocalTotal'] ?? 0), 0, '.', ',') . "** |\n"
-                    . "| 📅 Fecho previsto | " . ($data['ExpectedClosingDate'] ?? '—') . " |\n"
-                    . "| 👔 Vendedor | " . (($data['SalesPerson'] ?? 0) ? "#{$data['SalesPerson']}" : 'Não atribuído') . " |\n"
-                    . "\n_Podes ver esta oportunidade no SAP B1 → CRM → Sales Opportunities._";
+                    . "| ✅ Status | Em Aberto |\n"
+                    . "| 💶 Valor Potencial | €" . number_format((float)($data['MaxLocalTotal'] ?? 1), 0, '.', ',') . " |\n"
+                    . "| 📅 Fecho previsto | {$closingDate}" . (!empty($data['ClosingDays']) ? " (" . $data['ClosingDays'] . " dias)" : '') . " |\n"
+                    . "\n_Acede ao SAP B1 → CRM → Sales Opportunities para ver a oportunidade._";
             }
-            return "❌ **Erro ao criar oportunidade.**\n\n"
-                . "- Verifica se o CardCode `" . ($data['CardCode'] ?? '?') . "` existe\n"
-                . "- StageId `" . ($data['StageId'] ?? '?') . "` deve ser um dos: 1, 5, 6, 7, 8, 9, 10\n"
+
+            return "❌ **Erro ao criar oportunidade no SAP B1.**\n\n"
+                . "Verificar:\n"
+                . "- CardCode `" . ($data['CardCode'] ?? '?') . "` existe no SAP\n"
+                . "- StageId `" . ($data['StageId'] ?? '?') . "` válido (1, 5–10)\n"
                 . "- Ligação SAP B1 activa\n\n"
-                . "_Descreve a oportunidade novamente para tentar outra vez._";
+                . "_Descreve novamente para tentar outra vez._";
         }
 
         if ($type === 'update') {
             $seqNo = (int) ($data['SequentialNo'] ?? 0);
-            if (!$seqNo) {
-                return "❌ Número de oportunidade (SequentialNo) em falta. Indica o ID SAP da oportunidade a actualizar.";
-            }
+            if (!$seqNo) return "❌ SequentialNo em falta. Indica o ID SAP da oportunidade.";
             $ok = $this->sap->updateOpportunity($seqNo, $data);
             if ($ok) {
-                return "✅ **Oportunidade #{$seqNo} actualizada com sucesso!**\n\nCampos actualizados: " . implode(', ', array_keys(array_diff_key($data, ['SequentialNo' => 1])));
+                $changed = implode(', ', array_keys(array_diff_key($data, ['SequentialNo' => 1])));
+                return "✅ **Oportunidade #{$seqNo} actualizada!**\nCampos: {$changed}";
             }
             return "❌ Erro ao actualizar oportunidade #{$seqNo}. Verifica se o ID existe no SAP.";
         }
 
-        return "❌ Operação desconhecida. Tenta descrever novamente o que queres fazer.";
+        return "❌ Operação desconhecida.";
     }
 
     // ─── Claude streaming ─────────────────────────────────────────────────────
@@ -376,17 +440,12 @@ SPECIALTY;
     {
         $rawText = $this->messageText($message);
 
-        // Confirmation flow
         if ($this->isConfirmation($rawText)) {
             $pending = $this->findPendingInHistory($history);
-            if ($pending) {
-                return $this->executeConfirmation($pending);
-            }
+            if ($pending) return $this->executeConfirmation($pending);
         }
 
-        // Normal flow
-        $message  = $this->augmentWithCustomerContext($message);
-        $message  = $this->augmentWithSalespeople($message);
+        $message  = $this->augmentWithCrmContext($message);
         $messages = array_merge($history, [['role' => 'user', 'content' => $message]]);
 
         $response = $this->client->post('/v1/messages', [
@@ -407,7 +466,7 @@ SPECIALTY;
     {
         $rawText = $this->messageText($message);
 
-        // ── Confirmation flow ──────────────────────────────────────────────────
+        // ── Confirmation flow ─────────────────────────────────────────────────
         if ($this->isConfirmation($rawText)) {
             $pending = $this->findPendingInHistory($history);
             if ($pending) {
@@ -418,10 +477,8 @@ SPECIALTY;
             }
         }
 
-        // ── Normal conversation ────────────────────────────────────────────────
-        $message = $this->augmentWithCustomerContext($message, $heartbeat);
-        $message = $this->augmentWithSalespeople($message, $heartbeat);
-
+        // ── Normal conversation ───────────────────────────────────────────────
+        $message = $this->augmentWithCrmContext($message, $heartbeat);
         return $this->callClaude($message, $history, $onChunk, $heartbeat);
     }
 
