@@ -34,6 +34,7 @@ class AgentManager
             'computer'  => new ComputerUseAgent(),
             'vessel'    => new VesselSearchAgent(),
             'mildef'    => new MilDefAgent(),
+            'crm'       => new CrmAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);

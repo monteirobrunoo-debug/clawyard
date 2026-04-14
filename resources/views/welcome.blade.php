@@ -415,6 +415,7 @@
         <option value="support">🔧 Marcus Suporte</option>
         <option value="email">📧 Daniel Email</option>
         <option value="sap">📊 Richard SAP</option>
+        <option value="crm">🎯 Marta CRM</option>
         <option value="document">📄 Comandante Doc</option>
         <option value="claude">🧠 Bruno AI</option>
         <option value="nvidia">⚡ Carlos NVIDIA</option>
@@ -488,6 +489,10 @@
                 <div class="agent-grid-item" data-agent="sales"      title="Marco Sales"><span class="ag-icon"><img src="/images/agents/sales.png" class="ag-photo" alt="Marco"></span><span class="ag-name">Marco</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="support"    title="Marcus Support"><span class="ag-icon"><img src="/images/agents/support.png" class="ag-photo" alt="Marcus"></span><span class="ag-name">Marcus</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="email"      title="Daniel Email"><span class="ag-icon"><img src="/images/agents/email.png" class="ag-photo" alt="Daniel"></span><span class="ag-name">Daniel</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="crm"        title="Marta CRM — Criar Oportunidades SAP"><span class="ag-icon">🎯</span><span class="ag-name">Marta CRM</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
+                <!-- ── SAP & DADOS ── -->
+                <div class="ag-section-hdr">📊 SAP &amp; Dados</div>
                 <div class="agent-grid-item" data-agent="sap"        title="Richard SAP"><span class="ag-icon"><img src="/images/agents/sap.png" class="ag-photo" alt="Richard"></span><span class="ag-name">Richard</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
 
                 <!-- ── OPERAÇÕES ── -->
@@ -610,7 +615,7 @@ let SESSION_ID    = getSessionId(selectedAgent);
 
 const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
-    email:'📧', sap:'📊', document:'📄', claude:'🧠', nvidia:'⚡',
+    email:'📧', sap:'📊', crm:'🎯', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
     thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓', mildef:'🎖️'
@@ -640,7 +645,7 @@ const AGENT_PHOTOS = {
 
 const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
-    email:'Daniel Email', sap:'Richard SAP', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
+    email:'Daniel Email', sap:'Richard SAP', crm:'Marta CRM', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
     aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research',
     capitao:'Capitão Porto',
     acingov:'Dra. Ana Contratos',
@@ -699,6 +704,7 @@ const AGENT_DESCRIPTIONS = {
     capitao:  'Operações portuárias, escalas, documentação e logística marítima',
     qnap:     'Arquivo documental PartYard — pesquisa preços, códigos, invoices, licenças e contratos',
     mildef:   'Procurement militar mundial (excl. China/Rússia) — radares, SAM, AAM, artilharia, munições, bombs — contexto NATO/EU/USLI',
+    crm:      'Cria oportunidades SAP B1 a partir de emails recebidos — extrai campos automaticamente e grava no CRM',
 };
 
 const AGENT_CHIPS = {
@@ -759,6 +765,17 @@ const AGENT_CHIPS = {
         '📊 Facturas em atraso >30 dias — lista de clientes e valor total',
         '📊 Artigos com stock baixo — código NSN, quantidade actual vs mínimo',
         '📊 Vendas último mês — top 10 clientes por valor faturado',
+    ],
+    // ── Marta CRM ─────────────────────────────────────────────────────────
+    crm: [
+        '🎯 Cola aqui o email do cliente — vou criar a oportunidade no SAP',
+        '🎯 NSPA enviou pedido de cotação para peças MTU — cria oportunidade Cotação de Compra',
+        '🎯 Cria oportunidade OCEANPACT — Possível Venda, €80.000, fecho Junho 2026',
+        '🎯 Actualiza oportunidade #1234 — passa para Follow Up Vendas, valor €65.000',
+        '🎯 Email SASU VBAF recebido — inspecção de motores, prazo urgente 30 dias',
+        '🎯 Cria prospecção para novo armador em Lisboa — reunião marcada para próxima semana',
+        '🎯 Qual o pipeline de Cotações de Venda? Mostra por vendedor',
+        '🎯 Quais as oportunidades em Follow Up há mais de 30 dias sem actualização?',
     ],
     // ── Comandante Doc ─────────────────────────────────────────────────────
     document: [

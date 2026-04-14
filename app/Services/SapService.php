@@ -228,6 +228,75 @@ class SapService
         }
     }
 
+    /**
+     * Make an authenticated POST request (create/insert records).
+     * Mirrors the retry logic of get().
+     */
+    protected function post(string $endpoint, array $payload, bool $retry = true): ?array
+    {
+        $session = $this->ensureSession();
+        if (!$session) return null;
+
+        try {
+            $response = $this->http->post("{$this->baseUrl}/{$endpoint}", [
+                'headers' => [
+                    'Cookie'       => "B1SESSION={$session}",
+                    'Content-Type' => 'application/json',
+                    'Prefer'       => 'return=representation',
+                ],
+                'json' => $payload,
+            ]);
+            return json_decode($response->getBody()->getContents(), true);
+
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            if ($e->getResponse()->getStatusCode() === 401 && $retry) {
+                Cache::forget(self::SESSION_CACHE_KEY);
+                $this->login();
+                return $this->post($endpoint, $payload, false);
+            }
+            $body = (string) $e->getResponse()->getBody();
+            Log::error("SAP POST failed [{$endpoint}]: " . $e->getMessage() . " | " . substr($body, 0, 400));
+            return null;
+        } catch (\Exception $e) {
+            Log::error("SAP POST exception [{$endpoint}]: " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Make an authenticated PATCH request (update existing records).
+     * SAP B1 returns 204 No Content on success — we return ['ok' => true].
+     */
+    protected function patch(string $endpoint, array $payload, bool $retry = true): ?array
+    {
+        $session = $this->ensureSession();
+        if (!$session) return null;
+
+        try {
+            $response = $this->http->patch("{$this->baseUrl}/{$endpoint}", [
+                'headers' => [
+                    'Cookie'       => "B1SESSION={$session}",
+                    'Content-Type' => 'application/json',
+                ],
+                'json' => $payload,
+            ]);
+            $code = $response->getStatusCode();
+            return ($code === 204 || $code === 200) ? ['ok' => true] : null;
+
+        } catch (\GuzzleHttp\Exception\ClientException $e) {
+            if ($e->getResponse()->getStatusCode() === 401 && $retry) {
+                Cache::forget(self::SESSION_CACHE_KEY);
+                $this->login();
+                return $this->patch($endpoint, $payload, false);
+            }
+            Log::error("SAP PATCH failed [{$endpoint}]: " . $e->getMessage());
+            return null;
+        } catch (\Exception $e) {
+            Log::error("SAP PATCH exception [{$endpoint}]: " . $e->getMessage());
+            return null;
+        }
+    }
+
     // ─── Stock & Items ─────────────────────────────────────────────────────────
 
     public function searchItems(string $query, int $top = 10): array
@@ -482,6 +551,76 @@ class SapService
 
         return implode("\n", $lines);
     }
+
+    /**
+     * Create a new Sales Opportunity in SAP B1 CRM.
+     *
+     * Required keys in $data:
+     *   CardCode, StageId, MaxLocalTotal
+     * Optional:
+     *   SalesPerson (int, SAP employee code), ExpectedClosingDate (Y-m-d), Remarks
+     */
+    public function createOpportunity(array $data): ?array
+    {
+        $payload = [
+            'CardCode' => $data['CardCode'] ?? null,
+            'StageId'  => isset($data['StageId']) ? (int) $data['StageId'] : null,
+            'StartDate' => date('Y-m-d\T00:00:00\Z'),
+        ];
+
+        if (isset($data['MaxLocalTotal'])) {
+            $payload['MaxLocalTotal'] = (float) $data['MaxLocalTotal'];
+        }
+        if (!empty($data['SalesPerson'])) {
+            $payload['SalesPerson'] = (int) $data['SalesPerson'];
+        }
+        if (!empty($data['ExpectedClosingDate'])) {
+            $ts = strtotime($data['ExpectedClosingDate']);
+            if ($ts) $payload['ExpectedClosingDate'] = date('Y-m-d\T00:00:00\Z', $ts);
+        }
+        if (!empty($data['Remarks'])) {
+            $payload['Remarks'] = $data['Remarks'];
+        }
+
+        // Remove null values
+        $payload = array_filter($payload, fn($v) => $v !== null);
+
+        return $this->post('SalesOpportunities', $payload);
+    }
+
+    /**
+     * Update an existing Sales Opportunity (e.g. change stage, value).
+     */
+    public function updateOpportunity(int $sequentialNo, array $data): bool
+    {
+        $payload = array_filter([
+            'StageId'             => isset($data['StageId']) ? (int) $data['StageId'] : null,
+            'MaxLocalTotal'       => isset($data['MaxLocalTotal']) ? (float) $data['MaxLocalTotal'] : null,
+            'SalesPerson'         => isset($data['SalesPerson']) ? (int) $data['SalesPerson'] : null,
+            'Remarks'             => $data['Remarks'] ?? null,
+            'ExpectedClosingDate' => !empty($data['ExpectedClosingDate'])
+                ? date('Y-m-d\T00:00:00\Z', strtotime($data['ExpectedClosingDate']))
+                : null,
+        ], fn($v) => $v !== null);
+
+        $result = $this->patch("SalesOpportunities({$sequentialNo})", $payload);
+        return !empty($result['ok']);
+    }
+
+    /**
+     * Fetch the list of SAP sales employees (for populating SalesPerson field).
+     */
+    public function getSalesEmployees(int $top = 20): array
+    {
+        $data = $this->get('EmployeesInfo', [
+            '$select'  => 'EmployeeID,FirstName,LastName,Department,SalesEmployee',
+            '$filter'  => "SalesEmployee eq 'tYES' and Active eq 'tYES'",
+            '$top'     => $top,
+            '$orderby' => 'LastName asc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
 
     // ─── Structured table data for the SAP Documents UI ───────────────────────
 
