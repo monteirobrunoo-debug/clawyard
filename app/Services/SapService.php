@@ -298,7 +298,7 @@ class SapService
     public function searchBusinessPartners(string $name, int $top = 5): array
     {
         $data = $this->get('BusinessPartners', [
-            '$select' => 'CardCode,CardName,CardType,Phone1,EmailAddress,Balance,CreditLimit',
+            '$select' => 'CardCode,CardName,CardType,Phone1,EmailAddress,CreditLimit',
             '$filter' => "contains(CardName,'" . addslashes($name) . "')",
             '$top'    => $top,
         ]);
@@ -308,6 +308,179 @@ class SapService
     public function getBusinessPartner(string $cardCode): ?array
     {
         return $this->get("BusinessPartners('{$cardCode}')") ?: null;
+    }
+
+    // ─── NSN / Military Part Number ────────────────────────────────────────────
+
+    /**
+     * Search PartYard's 72,562 military items by NSN code.
+     * NSN format: 13 digits (e.g. 1290997479873) or XXXX-XX-XXX-XXXX.
+     * In PartYard SAP, ItemCode = NSN directly.
+     */
+    public function searchByNSN(string $nsn, int $top = 5): array
+    {
+        $clean = preg_replace('/[^0-9]/', '', $nsn);
+        $data  = $this->get('Items', [
+            '$select' => 'ItemCode,ItemName,QuantityOnStock,QuantityOrderedFromVendors,QuantityOrderedByCustomers,Mainsupplier,SupplierCatalogNo,Manufacturer',
+            '$filter' => "startswith(ItemCode,'{$clean}') or contains(ItemCode,'{$clean}')",
+            '$top'    => $top,
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    // ─── Customer / Supplier specific queries ──────────────────────────────────
+
+    public function getOrdersByCustomer(string $cardCode, int $top = 10): array
+    {
+        $safe = addslashes($cardCode);
+        $data = $this->get('Orders', [
+            '$select'  => 'DocNum,CardCode,CardName,DocDate,DocDueDate,DocTotal,DocCurrency,DocumentStatus,NumAtCard',
+            '$filter'  => "CardCode eq '{$safe}' and DocumentStatus eq 'bost_Open'",
+            '$top'     => $top,
+            '$orderby' => 'DocDate desc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    public function getInvoicesByCustomer(string $cardCode, int $top = 10): array
+    {
+        $safe = addslashes($cardCode);
+        $data = $this->get('Invoices', [
+            '$select'  => 'DocNum,CardCode,CardName,DocDate,DocDueDate,DocTotal,DocCurrency,DocumentStatus,PaidToDate',
+            '$filter'  => "CardCode eq '{$safe}'",
+            '$top'     => $top,
+            '$orderby' => 'DocDate desc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    public function getPurchaseOrdersBySupplier(string $cardCode, int $top = 10): array
+    {
+        $safe = addslashes($cardCode);
+        $data = $this->get('PurchaseOrders', [
+            '$select'  => 'DocNum,CardCode,CardName,DocDate,DocDueDate,DocTotal,DocCurrency,DocumentStatus',
+            '$filter'  => "CardCode eq '{$safe}' and DocumentStatus eq 'bost_Open'",
+            '$top'     => $top,
+            '$orderby' => 'DocDate desc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    // ─── CRM / Sales Opportunities (Pipeline) ──────────────────────────────────
+
+    /** Translate PartYard CRM stage ID to human label */
+    protected function getStageLabel(int $stageId): string
+    {
+        static $labels = [
+            1  => 'Prospecção',
+            5  => 'Cotação de Compra',
+            6  => 'Cotação de Venda',
+            7  => 'Follow Up Vendas',
+            8  => 'Possível Venda',
+            9  => 'Ordem de Compra',
+            10 => 'Ordem de Venda',
+        ];
+        return $labels[$stageId] ?? "Stage {$stageId}";
+    }
+
+    /**
+     * Fetch sales opportunities from SAP B1 CRM.
+     *
+     * @param  int|null  $stageId     Filter by CRM stage (null = all stages)
+     * @param  int|null  $salesPerson Filter by SAP employee code
+     * @param  int       $top         Max records to return
+     * @param  string    $status      'O'=Open, 'W'=Won, 'L'=Lost
+     */
+    public function getSalesOpportunities(
+        ?int   $stageId     = null,
+        ?int   $salesPerson = null,
+        int    $top         = 100,
+        string $status      = 'O'
+    ): array {
+        $filters = ["Status eq '{$status}'"];
+        if ($stageId !== null)     $filters[] = "StageId eq {$stageId}";
+        if ($salesPerson !== null) $filters[] = "SalesPerson eq {$salesPerson}";
+
+        $data = $this->get('SalesOpportunities', [
+            '$select'  => 'SequentialNo,CardCode,CardName,SalesPerson,StageId,MaxLocalTotal,WeightedSumLC,ClosingPercentage,ExpectedClosingDate,StartDate',
+            '$filter'  => implode(' and ', $filters),
+            '$top'     => $top,
+            '$orderby' => 'MaxLocalTotal desc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    /**
+     * Build a formatted CRM pipeline summary grouped by stage and salesperson.
+     * Used by buildContext() when CRM keywords are detected in the user message.
+     */
+    public function getPipelineSummary(string $status = 'O'): string
+    {
+        $opps = $this->getSalesOpportunities(null, null, 500, $status);
+        if (empty($opps)) return '';
+
+        $byStage       = [];
+        $bySalesPerson = [];
+        $grandTotal    = 0.0;
+        $grandWeighted = 0.0;
+
+        foreach ($opps as $opp) {
+            $stageId  = (int) ($opp['StageId']   ?? 0);
+            $label    = $this->getStageLabel($stageId);
+            $person   = (string) ($opp['SalesPerson'] ?? '?');
+            $amount   = (float) ($opp['MaxLocalTotal']  ?? 0);
+            $weighted = (float) ($opp['WeightedSumLC']  ?? 0);
+
+            $grandTotal    += $amount;
+            $grandWeighted += $weighted;
+
+            // Aggregate by stage
+            if (!isset($byStage[$stageId])) {
+                $byStage[$stageId] = ['label' => $label, 'count' => 0, 'total' => 0.0, 'weighted' => 0.0];
+            }
+            $byStage[$stageId]['count']++;
+            $byStage[$stageId]['total']    += $amount;
+            $byStage[$stageId]['weighted'] += $weighted;
+
+            // Aggregate by salesperson
+            if (!isset($bySalesPerson[$person])) {
+                $bySalesPerson[$person] = ['count' => 0, 'total' => 0.0, 'stages' => []];
+            }
+            $bySalesPerson[$person]['count']++;
+            $bySalesPerson[$person]['total'] += $amount;
+            if (!isset($bySalesPerson[$person]['stages'][$label])) {
+                $bySalesPerson[$person]['stages'][$label] = ['count' => 0, 'total' => 0.0];
+            }
+            $bySalesPerson[$person]['stages'][$label]['count']++;
+            $bySalesPerson[$person]['stages'][$label]['total'] += $amount;
+        }
+
+        ksort($byStage);
+        uasort($bySalesPerson, fn($a, $b) => $b['total'] <=> $a['total']);
+
+        $lines = [
+            "💼 PIPELINE CRM — " . count($opps) . " oportunidades abertas"
+            . " | Total: €" . number_format($grandTotal, 0, '.', ',')
+            . " | Ponderado: €" . number_format($grandWeighted, 0, '.', ','),
+        ];
+
+        $lines[] = "\n📊 RESUMO POR FASE:";
+        foreach ($byStage as $sid => $s) {
+            $lines[] = "  " . str_pad($s['label'], 24) . "| "
+                . str_pad((string) $s['count'], 4, ' ', STR_PAD_LEFT) . " opor."
+                . " | €" . number_format($s['total'], 0, '.', ',')
+                . " | peso €" . number_format($s['weighted'], 0, '.', ',');
+        }
+
+        $lines[] = "\n👥 PIPELINE POR VENDEDOR (código SAP):";
+        foreach ($bySalesPerson as $person => $p) {
+            $lines[] = "  👤 Vendedor #{$person} — {$p['count']} oport. | €" . number_format($p['total'], 0, '.', ',');
+            foreach ($p['stages'] as $stage => $s) {
+                $lines[] = "    ↳ {$stage}: {$s['count']} | €" . number_format($s['total'], 0, '.', ',');
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     // ─── Structured table data for the SAP Documents UI ───────────────────────
@@ -561,9 +734,115 @@ class SapService
             if (preg_match('/(?:cliente|client|fornecedor|supplier|parceiro|partner|empresa)\s+["\']?([A-Za-zÀ-ú\s]{3,30})["\']?/i', $message, $m)) {
                 $bps = $this->searchBusinessPartners(trim($m[1]), 3);
                 if ($bps) {
-                    $rows      = array_map(fn($b) => "  • {$b['CardCode']} — {$b['CardName']} | Saldo: €{$b['Balance']}", $bps);
+                    $rows      = array_map(fn($b) => "  • {$b['CardCode']} — {$b['CardName']} | Limite créd: €" . number_format((float)($b['CreditLimit'] ?? 0), 0, '.', ','), $bps);
                     $context[] = "👤 PARCEIROS ENCONTRADOS:\n" . implode("\n", $rows);
                 }
+            }
+        }
+
+        // --- NSN lookup (13-digit National Stock Number) ---
+        if (preg_match('/\b(\d{4}[-\s]?\d{2}[-\s]?\d{3}[-\s]?\d{4}|\d{13})\b/', $message, $nsnMatch)) {
+            $nsn      = preg_replace('/[^0-9]/', '', $nsnMatch[1]);
+            $nsnItems = $this->searchByNSN($nsn, 5);
+            if ($nsnItems) {
+                $rows      = array_map(fn($i) =>
+                    "  • {$i['ItemCode']} — {$i['ItemName']}\n"
+                    . "    Stock: {$i['QuantityOnStock']}"
+                    . " | A receber forn.: {$i['QuantityOrderedFromVendors']}"
+                    . " | Encomendado cli.: {$i['QuantityOrderedByCustomers']}"
+                    . (!empty($i['Mainsupplier']) ? " | Fornecedor: {$i['Mainsupplier']}" : ''),
+                    $nsnItems
+                );
+                $context[] = "🎯 NSN ENCONTRADO ({$nsn}):\n" . implode("\n", $rows);
+            } else {
+                $context[] = "⚠️ NSN {$nsn}: não encontrado no catálogo PartYard (72.562 artigos).";
+            }
+        }
+
+        // --- Known PartYard customer quick-lookup ---
+        static $knownBPs = [
+            'nspa'       => 'NSPA',
+            'oceanpact'  => 'OCEANPACT',
+            'sasu'       => 'SASU',
+            'vbaf'       => 'VBAF',
+            'increment'  => 'INCREMENT',
+            'raytheon'   => 'RAYTHEON',
+            'keysight'   => 'KEYSIGHT',
+            'carleton'   => 'CARLETON',
+            'vop'        => 'VOP',
+        ];
+        foreach ($knownBPs as $key => $name) {
+            if (stripos($message, $key) !== false) {
+                $bps = $this->searchBusinessPartners($name, 1);
+                if ($bps && isset($bps[0]['CardCode'])) {
+                    $bp       = $bps[0];
+                    $cardCode = $bp['CardCode'];
+                    $cardType = $bp['CardType'] ?? '';
+                    if ($cardType === 'cCustomer') {
+                        $orders = $this->getOrdersByCustomer($cardCode, 8);
+                        if ($orders) {
+                            $rows      = array_map(fn($o) =>
+                                "  • #{$o['DocNum']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 0, '.', ',') . " {$o['DocCurrency']} | " . ($o['DocumentStatus'] === 'bost_Open' ? 'Aberta' : 'Fechada'),
+                                $orders
+                            );
+                            $context[] = "📦 ENCOMENDAS ABERTAS — {$bp['CardName']} ({$cardCode}):\n" . implode("\n", $rows);
+                        }
+                    } elseif ($cardType === 'cSupplier') {
+                        $pos = $this->getPurchaseOrdersBySupplier($cardCode, 8);
+                        if ($pos) {
+                            $rows      = array_map(fn($o) =>
+                                "  • #{$o['DocNum']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 0, '.', ',') . " | " . ($o['DocumentStatus'] === 'bost_Open' ? 'Aberta' : 'Fechada'),
+                                $pos
+                            );
+                            $context[] = "🏭 OC ABERTAS — {$bp['CardName']} ({$cardCode}):\n" . implode("\n", $rows);
+                        }
+                    }
+                }
+                break; // only lookup the first matched BP
+            }
+        }
+
+        // --- CRM Pipeline / Sales Opportunities ---
+        if (preg_match('/pipeline|oportunidad|cotaç[ãa]o|crm|prospec|vendedor|forecast|funil/i', $message)) {
+            try {
+                // Cotação de Compra detail (StageId = 5)
+                if (preg_match('/cotaç[ãa]o.{0,8}compra|purchase.quot/i', $message)) {
+                    $opps = $this->getSalesOpportunities(5, null, 50);
+                    if ($opps) {
+                        $rows      = array_map(fn($o) =>
+                            "  • #{$o['SequentialNo']} {$o['CardName']}"
+                            . " | €" . number_format((float)$o['MaxLocalTotal'], 0, '.', ',')
+                            . " | Vend#{$o['SalesPerson']}"
+                            . " | Fecho:" . substr((string)($o['ExpectedClosingDate'] ?? ''), 0, 10),
+                            $opps
+                        );
+                        $context[] = "📋 COTAÇÕES DE COMPRA (StageId=5) — " . count($opps) . " abertas:\n" . implode("\n", $rows);
+                    }
+                }
+
+                // Cotação de Venda detail (StageId = 6)
+                if (preg_match('/cotaç[ãa]o.{0,8}venda|sales.quot/i', $message)) {
+                    $opps = $this->getSalesOpportunities(6, null, 50);
+                    if ($opps) {
+                        $rows      = array_map(fn($o) =>
+                            "  • #{$o['SequentialNo']} {$o['CardName']}"
+                            . " | €" . number_format((float)$o['MaxLocalTotal'], 0, '.', ',')
+                            . " | Vend#{$o['SalesPerson']}"
+                            . " | Fecho:" . substr((string)($o['ExpectedClosingDate'] ?? ''), 0, 10),
+                            $opps
+                        );
+                        $context[] = "💼 COTAÇÕES DE VENDA (StageId=6) — " . count($opps) . " abertas:\n" . implode("\n", $rows);
+                    }
+                }
+
+                // Full pipeline summary by stage + salesperson
+                $pipelineText = $this->getPipelineSummary();
+                if ($pipelineText) {
+                    $context[] = $pipelineText;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SapService: pipeline fetch failed — ' . $e->getMessage());
+                $context[] = "⚠️ Pipeline CRM: erro ao carregar dados (" . $e->getMessage() . ")";
             }
         }
 

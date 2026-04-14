@@ -749,12 +749,16 @@ const AGENT_CHIPS = {
     ],
     // ── Richard SAP ───────────────────────────────────────────────────────
     sap: [
-        '📊 Stock actual de peças MTU Série 2000 — listar por referência e quantidade',
-        '📊 Estado da encomenda #PY-2025-0847 — última actualização de entrega',
-        '📊 Clientes com facturas em atraso >30 dias — valor total e lista de contacto',
-        '📊 Vendas por marca Q1 2026: MTU vs Caterpillar vs MAK vs Schottel',
-        '📊 Cria cotação SAP B1 para Navios do Tejo Lda — condições NET 30',
-        '📊 Kits de pistões CAT 3516 em stock — quantidades + localização warehouse',
+        '📊 Pipeline CRM completo por vendedor — cotações de compra e venda abertas',
+        '📊 Cotações de venda abertas — maiores oportunidades, por quem e quando fecham?',
+        '📊 Cotações de compra em pipeline — fornecedores, valores e datas de fecho',
+        '📊 Encomendas abertas NSPA — estado actual, valores e prazos',
+        '📊 NSN 1290997479873 — stock disponível, fornecedor e quantidades encomendadas',
+        '📊 Encomendas abertas RAYTHEON — OC pendentes e valores',
+        '📊 OCEANPACT — ordens abertas e histórico recente de faturas',
+        '📊 Facturas em atraso >30 dias — lista de clientes e valor total',
+        '📊 Artigos com stock baixo — código NSN, quantidade actual vs mínimo',
+        '📊 Vendas último mês — top 10 clientes por valor faturado',
     ],
     // ── Comandante Doc ─────────────────────────────────────────────────────
     document: [
