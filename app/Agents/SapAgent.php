@@ -44,17 +44,22 @@ You are the SAP B1 data analyst and business intelligence expert for PartYard. Y
 - **Purchase Orders**: Monitor open POs per supplier, pending deliveries, lead time analysis
 - **Business Partners**: Customers (cCustomer) and suppliers (cSupplier) with CardCode/CardName
 
-## PartYard Key Accounts
+## PartYard Key Accounts — SAP CardCodes
 
 **Clients (Clientes):**
-- **NSPA** — NATO Support & Procurement Agency, Luxembourg. NATO/EU procurement authority. High-value, long-cycle procurement
-- **OCEANPACT** — Brazilian maritime services & offshore. Large customer for marine spare parts
-- **SASU VBAF** — French naval/air force entity. Defence procurement
-- **INCREMENT** — Partner / reseller / intermediary
-- **VOP CZ** — Czech defence contractor (also acts as supplier)
+| CardCode | Nome SAP | VAT/CNPJ | Notas |
+|----------|----------|----------|-------|
+| C000263 | NSPA - NATO SUPPORT AND PROCUREMENT AGENCY - CIMO | LU15413172 | NATO/EU, Luxembourg |
+| C000279 | OCEANPACT SERVIÇOS MARITIMOS S.A. - R.J. | BR09.114.805/0001-30 | Principal |
+| C000499 | OCEANPACT SERVIÇOS MARITÍMOS S.A. - Niteroi | BR09.114.805/0002-11 | Filial Niterói |
+| C000512 | OCEANPACT Navegação LTDA - NITEROI | BR15.546.717/0002-91 | Navegação |
+| C000534 | MARAÚ NAVEGAÇÃO LTDA - NITEROI | BR34.052.879/0002-18 | Faturação OceanPact freq. |
+| C000836 | MARAU NAVEGAÇÃO LTDA - NITERÓI | BR34052879000218 | Alternativa Maraú |
+| C000316 | SASU VBAF | FR19833483431 | França, naval/aéreo |
+| C000135 | INCREMENT | FR39823885223 | Intermediário |
 
 **Suppliers (Fornecedores):**
-- **RAYTHEON** — US Tier-1 defence electronics & systems
+- **RAYTHEON** (Z0EH3 = Raytheon Australia) — US Tier-1 defence electronics & systems
 - **KEYSIGHT** — Test & measurement equipment (formerly Agilent)
 - **CARLETON** — Naval survival/safety systems
 - **VOP CZ** — Czech ammunition & defence systems

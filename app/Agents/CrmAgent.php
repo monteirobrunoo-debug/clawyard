@@ -113,12 +113,51 @@ If the email IS the inquiry (which it always is at PartYard), default to **3**.
 - Specific date → calculate days from today
 - No deadline mentioned → ask "Em quantos dias prevês fechar esta oportunidade?"
 
-## Known PartYard Customers
-If SAP context is injected with CardCode, use it directly.
+## Known PartYard Customers — SAP CardCodes
+⚠️ **NEVER use the company name as CardCode.** Use ONLY codes from this table or from SAP context.
 
-⚠️ **NEVER use the company name as CardCode.** The CardCode is a short SAP code (e.g. "C00001", not "OCEANPACT"). If SAP context is NOT available, set `CardCode: ""` and `CardName: "[company name]"` and tell the user: "Não encontrei o CardCode SAP para [empresa]. Por favor confirma o código SAP do cliente."
+### NSPA / NATO
+| CardCode | CardName | VAT/CNPJ |
+|----------|----------|----------|
+| C000263 | NSPA - NATO SUPPORT AND PROCUREMENT AGENCY - CIMO | LU15413172 |
+| C000273 | NSPA-NATO SUPPORT AGENCY - Airlift Mgmt Programme | — |
+| C000475 | NATO SUPPORT AND PROCUREMENT A | — |
+| C000264 | Naval Striking and Support Forces NATO | PT514797185 |
 
-If the SAP context IS available, the correct CardCode will appear in the injected context block (e.g. `CardCode: OCNP001`). Use that exactly.
+### OceanPact (Brazil)
+| CardCode | CardName | VAT/CNPJ |
+|----------|----------|----------|
+| C000279 | OCEANPACT SERVIÇOS MARITIMOS S.A. - R.J. | BR09.114.805/0001-30 |
+| C000499 | OCEANPACT SERVIÇOS MARITÍMOS S.A. - Niteroi | BR09.114.805/0002-11 |
+| C000954 | OCEANPACT SERVICOS MARITIMOS S.A. | BR09.114.805/0008-07 |
+| C000278 | OCEANPACT Navegação LTDA | BR15.546.717/0001-00 |
+| C000512 | OCEANPACT Navegação LTDA - NITEROI | BR15.546.717/0002-91 |
+| C000441 | OCEANPACT GEOCIENCIA LTDA | BR16.492.411/0001-81 |
+| C000851 | OCEANPACT GEOCIENCIAS LTDA - FILIAL NITEROI | BR16.492.411/0002-62 |
+| C000936 | OCEANPACT TECH | BR57.278.379/0001-13 |
+
+### Maraú Navegação (Brazil) — faturação frequente OceanPact
+| CardCode | CardName | VAT/CNPJ |
+|----------|----------|----------|
+| C000534 | MARAÚ NAVEGAÇÃO LTDA - NITEROI | BR34.052.879/0002-18 |
+| C000539 | MARAÚ NAVEGAÇÃO LTDA- NITEROI | BR34.052.879/0002-18 |
+| C000836 | MARAU NAVEGAÇÃO LTDA - NITERÓI | BR34052879000218 |
+| C000436 | MARAU NAVEGAÇÃO LTDA - R.J. | BR34.052.879/0001-37 |
+
+### Other Key Customers
+| CardCode | CardName | VAT |
+|----------|----------|-----|
+| C000316 | SASU VBAF | FR19833483431 |
+| C000135 | INCREMENT | FR39823885223 |
+
+### VAT/CNPJ → CardCode Quick Reference
+- CNPJ `34.052.879/0002-18` → **C000534** (MARAÚ NAVEGAÇÃO LTDA - NITEROI)
+- CNPJ `09.114.805/0001-30` → **C000279** (OCEANPACT SERVIÇOS MARITIMOS S.A. - R.J.)
+- CNPJ `09.114.805/0002-11` → **C000499** (OCEANPACT SERVIÇOS MARITÍMOS - Niteroi)
+- VAT `LU15413172` → **C000263** (NSPA)
+
+⚠️ **Important**: The email "Faturação" field identifies the **billing entity** — use its CNPJ/VAT to select the correct CardCode, not the sender's company name.
+If SAP context IS available, use the CardCode from the injected context block.
 
 ## CRITICAL — json_opp Block
 At the END of your confirmation response, you MUST include this block (even if some fields are 0 or null):
