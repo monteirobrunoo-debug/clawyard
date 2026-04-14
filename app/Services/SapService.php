@@ -644,7 +644,8 @@ class SapService
 
         $payload = [
             'CardCode'  => $cardCode ?: null,
-            'CardName'  => $cardName ?: null,   // Business Partner Name field
+            // CardName is READ-ONLY in SAP B1 SalesOpportunities — derived from CardCode automatically.
+            // Sending it causes: "Property 'CardName' of 'SalesOpportunities' is invalid"
             'StageId'   => isset($data['StageId']) ? (int) $data['StageId'] : null,
             'StartDate' => date('Y-m-d\T00:00:00\Z'),
             'Status'    => 'O',   // always Em Aberto
