@@ -672,12 +672,14 @@ class SapService
         }
 
         // Potential Amount — SAP B1 requires a SalesOpportunitiesLines entry with MaxLocalTotal > 0.
-        // The header MaxLocalTotal is calculated from lines; sending it directly has no effect.
+        // Header MaxLocalTotal is read-only (calculated from lines). StageKey on the line also
+        // drives CurrentStageNo — so we set it here to ensure the opportunity lands in the right stage.
         $amount = isset($data['MaxLocalTotal']) ? (float) $data['MaxLocalTotal'] : 0.0;
         $lineAmount = $amount > 0 ? $amount : 1.0;
         $payload['SalesOpportunitiesLines'] = [
             [
                 'LineNum'       => 0,
+                'StageKey'      => $stageNo,
                 'MaxLocalTotal' => $lineAmount,
             ]
         ];
