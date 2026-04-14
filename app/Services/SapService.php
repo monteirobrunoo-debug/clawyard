@@ -714,17 +714,33 @@ class SapService
         $filtered = array_filter($payload, fn($v) => $v !== null);
         $result   = $this->post('SalesOpportunities', $filtered);
 
-        // If failed and Source was set, retry without it — older SAP B1 versions may not expose BoSouType
-        // NOTE: do NOT clear $lastError here so the original error is kept if retry also fails
+        // Retry 1: Source field not supported on some SAP B1 versions — drop it
         if (!$result && isset($filtered['Source'])) {
             $originalError = $this->lastError;
-            Log::warning("CRM: retrying createOpportunity without Source field (SAP: {$originalError})");
+            Log::warning("CRM: retrying without Source (SAP: {$originalError})");
             unset($filtered['Source']);
             $result = $this->post('SalesOpportunities', $filtered);
-            // If retry also failed, restore original error so caller sees something useful
-            if (!$result && $this->lastError === '') {
-                $this->lastError = $originalError;
-            }
+            if (!$result && $this->lastError === '') $this->lastError = $originalError;
+        }
+
+        // Retry 2: Inactive SalesPerson — remove and try again without assignment
+        if (!$result && isset($filtered['SalesPerson'])
+            && str_contains((string) $this->lastError, 'sales employee')) {
+            $originalError = $this->lastError;
+            Log::warning("CRM: retrying without SalesPerson (inactive employee: {$originalError})");
+            unset($filtered['SalesPerson']);
+            $result = $this->post('SalesOpportunities', $filtered);
+            if (!$result && $this->lastError === '') $this->lastError = $originalError;
+        }
+
+        // Retry 3: ContactPerson invalid — remove and try again
+        if (!$result && isset($filtered['ContactPerson'])
+            && str_contains((string) $this->lastError, 'contact')) {
+            $originalError = $this->lastError;
+            Log::warning("CRM: retrying without ContactPerson (SAP: {$originalError})");
+            unset($filtered['ContactPerson']);
+            $result = $this->post('SalesOpportunities', $filtered);
+            if (!$result && $this->lastError === '') $this->lastError = $originalError;
         }
 
         // SAP sometimes returns 201 with empty body (Prefer header ignored).
