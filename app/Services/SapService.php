@@ -246,7 +246,11 @@ class SapService
     protected function post(string $endpoint, array $payload, bool $retry = true): ?array
     {
         $session = $this->ensureSession();
-        if (!$session) return null;
+        if (!$session) {
+            $this->lastError = 'Sem sessão SAP B1 activa — credenciais inválidas ou servidor SAP inacessível.';
+            Log::warning("SAP POST [{$endpoint}]: no session available");
+            return null;
+        }
 
         try {
             // http_errors=false → never throws on 4xx/5xx; we read status manually

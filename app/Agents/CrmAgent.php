@@ -444,11 +444,19 @@ SPECIALTY;
                     . "\n_Acede ao SAP B1 → CRM → Sales Opportunities para ver a oportunidade._";
             }
 
-            $sapErr = $this->sap->getLastError();
+            $sapErr    = $this->sap->getLastError();
+            $sessionOk = $this->sap->isSessionActive() ? '✅ activa' : '❌ sem sessão';
+            $debugPayload = json_encode(array_intersect_key($data, array_flip([
+                'CardCode','CardName','StageId','SalesPerson','ContactPerson','InformationSource'
+            ])), JSON_UNESCAPED_UNICODE);
             return "❌ **Erro ao criar oportunidade no SAP B1.**\n\n"
                 . ($sapErr ? "> ⚠️ SAP diz: *{$sapErr}*\n\n" : '')
+                . "**Debug:**\n"
+                . "- Sessão SAP: {$sessionOk}\n"
+                . "- Payload enviado: `{$debugPayload}`\n"
+                . "- Result devolvido: `" . json_encode($result) . "`\n\n"
                 . "Verificar:\n"
-                . "- CardCode `" . ($data['CardCode'] ?? '?') . "` existe no SAP (deve ser o código SAP, não o nome)\n"
+                . "- CardCode `" . ($data['CardCode'] ?? '?') . "` existe no SAP\n"
                 . "- StageId `" . ($data['StageId'] ?? '?') . "` válido (1, 5–10)\n"
                 . "- Ligação SAP B1 activa\n\n"
                 . "_Cola o email novamente ou diz o CardCode correcto para tentar outra vez._";
