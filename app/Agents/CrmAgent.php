@@ -206,39 +206,45 @@ SPECIALTY;
     // ─── SAP context augmentation ────────────────────────────────────────────
 
     /**
-     * Build full CRM context for the message:
-     *   - BP lookup by name OR VAT
-     *   - Contact persons for found BP
-     *   - Sales employee lookup by name (if mentioned)
-     *   - Sales employee list (if "vendedor" keyword detected)
+     * Build CRM context for the message.
+     *
+     * PERFORMANCE RULE: Only runs SAP calls when a session is already cached
+     * (isSessionActive). This prevents hanging 30-second timeouts when SAP is
+     * not yet logged-in. Claude handles the conversation without SAP context
+     * in that case and asks the user for the needed fields directly.
      */
     protected function augmentWithCrmContext(string|array $message, ?callable $heartbeat = null): string|array
     {
         $text  = $this->messageText($message);
         $extra = '';
 
+        // Skip all SAP calls if no cached session — avoids blocking on login/timeouts
+        if (!$this->sap->isSessionActive()) {
+            return $message;
+        }
+
         // ── 1. Customer by VAT/NIF ────────────────────────────────────────────
-        // Portuguese NIF: 9 digits, EU VAT may have country prefix
-        if (preg_match('/\b(PT\d{9}|\d{9})\b/', $text, $vatMatch)) {
+        if (preg_match('/\b(PT\d{9})\b/', $text, $vatMatch)) {
             try {
-                if ($heartbeat) $heartbeat('a verificar NIF/VAT no SAP...');
+                if ($heartbeat) $heartbeat('a verificar NIF no SAP...');
                 $bps = $this->sap->searchBPByVAT($vatMatch[1], 2);
                 if ($bps) {
-                    $extra .= "\n--- CLIENTE POR NIF/VAT ({$vatMatch[1]}) ---\n";
+                    $extra .= "\n--- CLIENTE POR NIF ({$vatMatch[1]}) ---\n";
                     foreach ($bps as $bp) {
-                        $extra .= "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']} | NIF: {$bp['FederalTaxID']} | Tipo: "
-                            . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
+                        $extra .= "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']}"
+                            . (!empty($bp['FederalTaxID']) ? " | NIF: {$bp['FederalTaxID']}" : '')
+                            . " | Tipo: " . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
                     }
                     $extra .= "--- FIM ---\n";
 
-                    // Also fetch contact persons for first found BP
+                    // Fetch contact persons for first BP found
                     $cardCode = $bps[0]['CardCode'];
                     $contacts = $this->sap->getContactPersons($cardCode, 10);
                     if ($contacts) {
                         $extra .= "\n--- CONTACTOS DE {$bps[0]['CardName']} ({$cardCode}) ---\n";
                         foreach ($contacts as $c) {
-                            $name = trim(($c['FirstName'] ?? '') . ' ' . ($c['LastName'] ?? '')) ?: ($c['Name'] ?? '?');
-                            $extra .= "CntctCode: {$c['CntctCode']} | {$name} | {$c['E_Mail']} | {$c['Position']}\n";
+                            $cname = trim(($c['FirstName'] ?? '') . ' ' . ($c['LastName'] ?? '')) ?: ($c['Name'] ?? '?');
+                            $extra .= "CntctCode: {$c['CntctCode']} | {$cname} | {$c['E_Mail']}\n";
                         }
                         $extra .= "--- FIM ---\n";
                     }
@@ -248,34 +254,30 @@ SPECIALTY;
             }
         }
 
-        // ── 2. Customer by known name ─────────────────────────────────────────
-        if (empty($extra)) {
+        // ── 2. Customer by known name (only if VAT lookup found nothing) ───────
+        if ($extra === '') {
             static $knownBPs = [
-                'nspa'      => 'NSPA',   'oceanpact' => 'OCEANPACT',
-                'sasu'      => 'SASU',   'vbaf'      => 'VBAF',
-                'increment' => 'INCREMENT', 'raytheon' => 'RAYTHEON',
-                'keysight'  => 'KEYSIGHT',  'carleton' => 'CARLETON',
-                'vop'       => 'VOP',
+                'nspa' => 'NSPA', 'oceanpact' => 'OCEANPACT', 'sasu' => 'SASU',
+                'vbaf' => 'VBAF', 'increment' => 'INCREMENT', 'raytheon' => 'RAYTHEON',
+                'keysight' => 'KEYSIGHT', 'carleton' => 'CARLETON', 'vop' => 'VOP',
             ];
             foreach ($knownBPs as $key => $name) {
                 if (stripos($text, $key) === false) continue;
                 try {
                     if ($heartbeat) $heartbeat('a verificar cliente SAP...');
-                    $bps = $this->sap->searchBusinessPartners($name, 2);
+                    $bps = $this->sap->searchBusinessPartners($name, 1);
                     if ($bps) {
-                        $extra .= "\n--- CLIENTE SAP ({$name}) ---\n";
-                        foreach ($bps as $bp) {
-                            $extra .= "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']}"
-                                . (!empty($bp['FederalTaxID']) ? " | NIF: {$bp['FederalTaxID']}" : '')
-                                . " | Tipo: " . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
-                        }
+                        $bp = $bps[0];
+                        $extra .= "\n--- CLIENTE SAP ---\n";
+                        $extra .= "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']}"
+                            . (!empty($bp['FederalTaxID']) ? " | NIF: {$bp['FederalTaxID']}" : '')
+                            . " | Tipo: " . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
                         $extra .= "--- FIM ---\n";
 
                         // Contact persons
-                        $cardCode = $bps[0]['CardCode'];
-                        $contacts = $this->sap->getContactPersons($cardCode, 10);
+                        $contacts = $this->sap->getContactPersons($bp['CardCode'], 10);
                         if ($contacts) {
-                            $extra .= "\n--- CONTACTOS DE {$bps[0]['CardName']} ({$cardCode}) ---\n";
+                            $extra .= "\n--- CONTACTOS DE {$bp['CardName']} ---\n";
                             foreach ($contacts as $c) {
                                 $cname = trim(($c['FirstName'] ?? '') . ' ' . ($c['LastName'] ?? '')) ?: ($c['Name'] ?? '?');
                                 $extra .= "CntctCode: {$c['CntctCode']} | {$cname} | {$c['E_Mail']}\n";
@@ -286,14 +288,13 @@ SPECIALTY;
                 } catch (\Throwable $e) {
                     Log::warning("CrmAgent: BP lookup failed — " . $e->getMessage());
                 }
-                break;
+                break; // only one BP per message
             }
         }
 
         // ── 3. Sales employee lookup by name ──────────────────────────────────
-        // Triggered when user provides a name in response to "Qual o vendedor?"
-        if (preg_match('/vendedor[:\s]+([A-Za-zÀ-ú]{2,}\s[A-Za-zÀ-ú]{2,})/i', $text, $empMatch)
-            || preg_match('/(?:é|e|:)\s+([A-Z][a-zÀ-ú]+\s[A-Z][a-zÀ-ú]+)\s*$/u', $text, $empMatch)) {
+        // Triggered when user provides "vendedor: João Silva" or similar
+        if (preg_match('/vendedor[:\s]+([A-Za-zÀ-ú]{2,}(?:\s[A-Za-zÀ-ú]{2,})+)/i', $text, $empMatch)) {
             $empName = trim($empMatch[1]);
             try {
                 if ($heartbeat) $heartbeat('a localizar vendedor no SAP...');
@@ -301,7 +302,7 @@ SPECIALTY;
                 if ($employees) {
                     $extra .= "\n--- VENDEDOR SAP: {$empName} ---\n";
                     foreach ($employees as $e) {
-                        $extra .= "EmployeeID: {$e['EmployeeID']} | {$e['FirstName']} {$e['LastName']} | Dept: {$e['Department']}\n";
+                        $extra .= "EmployeeID: {$e['EmployeeID']} | {$e['FirstName']} {$e['LastName']}\n";
                     }
                     $extra .= "--- FIM ---\n";
                 }
@@ -310,13 +311,14 @@ SPECIALTY;
             }
         }
 
-        // ── 4. Full salespeople list (when "vendedor" keyword without specific name) ──
-        if (preg_match('/vendedor|sales.?person|quem.*vend|equipa.*comercial/i', $text) && empty(strpos($extra, 'EmployeeID'))) {
+        // ── 4. Full salespeople list — only on explicit request and no match yet ──
+        $hasEmployeeContext = strpos($extra, 'EmployeeID') !== false;
+        if (!$hasEmployeeContext && preg_match('/lista.*vendedor|vendedores disponíveis|quais.*vendedor/i', $text)) {
             try {
                 if ($heartbeat) $heartbeat('a carregar vendedores SAP...');
                 $employees = $this->sap->getSalesEmployees(20);
                 if ($employees) {
-                    $extra .= "\n--- VENDEDORES SAP DISPONÍVEIS ---\n";
+                    $extra .= "\n--- VENDEDORES SAP ---\n";
                     foreach ($employees as $e) {
                         $extra .= "EmployeeID: {$e['EmployeeID']} | {$e['FirstName']} {$e['LastName']}\n";
                     }
@@ -327,7 +329,7 @@ SPECIALTY;
             }
         }
 
-        return $extra ? $this->appendToMessage($message, "\n" . $extra) : $message;
+        return $extra !== '' ? $this->appendToMessage($message, "\n" . $extra) : $message;
     }
 
     // ─── Confirmation execution ───────────────────────────────────────────────

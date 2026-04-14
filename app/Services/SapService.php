@@ -96,6 +96,16 @@ class SapService
     }
 
     /**
+     * True when a valid SAP session is already cached (no login attempt needed).
+     * Used by CrmAgent to skip SAP augmentation when SAP is not reachable/logged-in.
+     */
+    public function isSessionActive(): bool
+    {
+        if (Cache::has(self::SESSION_FAILED_KEY)) return false;
+        return (bool) Cache::get(self::SESSION_CACHE_KEY);
+    }
+
+    /**
      * Test SAP connection and return a human-readable status string.
      * Also clears any negative cache so the next real request retries.
      */
