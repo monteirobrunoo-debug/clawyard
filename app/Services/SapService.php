@@ -588,14 +588,12 @@ class SapService
         // Opportunity name / title from email Subject
         $oppName = trim((string) ($data['OpportunityName'] ?? $data['Name'] ?? ''));
         if ($oppName !== '') {
-            // SAP B1 10.0+ supports a 'Name' field on SalesOpportunities
-            $payload['Name']    = substr($oppName, 0, 100);
-            // Also put in Remarks so older SAP versions show it
-            $remarks = $oppName;
-            if (!empty($data['Remarks'])) $remarks .= "\n" . $data['Remarks'];
-            $payload['Remarks'] = substr($remarks, 0, 254);
-        } elseif (!empty($data['Remarks'])) {
-            $payload['Remarks'] = substr($data['Remarks'], 0, 254);
+            $payload['Name'] = substr($oppName, 0, 100);
+        }
+
+        // Remarks = verbatim equipment / material text from the email
+        if (!empty($data['Remarks'])) {
+            $payload['Remarks'] = substr((string) $data['Remarks'], 0, 254);
         }
 
         // Potential Amount — default to 1 if not provided or zero
@@ -621,8 +619,29 @@ class SapService
             $payload['ExpectedClosingDate'] = date('Y-m-d\T00:00:00\Z', strtotime("+{$days} days"));
         }
 
-        // Strip nulls and call SAP
-        return $this->post('SalesOpportunities', array_filter($payload, fn($v) => $v !== null));
+        // Information Source — SAP BoSouType enum
+        //   0=Word of Mouth  1=Cold Call  2=Advertising  3=Email  4=Trade Show
+        //   5=Internet/Seminar  6=Other
+        if (isset($data['InformationSource'])) {
+            $payload['Source'] = (int) $data['InformationSource'];
+        }
+
+        // POST to SAP
+        $result = $this->post('SalesOpportunities', array_filter($payload, fn($v) => $v !== null));
+
+        // Auto-fill BusinessProject = SequentialNo (self-reference for cross-tab tracking)
+        if ($result && isset($result['SequentialNo'])) {
+            $seqNo = $result['SequentialNo'];
+            try {
+                $this->patch("SalesOpportunities({$seqNo})", [
+                    'BusinessProject' => (string) $seqNo,
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning("CRM: could not set BusinessProject for opp #{$seqNo}: " . $e->getMessage());
+            }
+        }
+
+        return $result;
     }
 
     /**

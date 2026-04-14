@@ -54,7 +54,8 @@ When the user pastes an email or inquiry:
 | **CRM Stage** | Infer from email tone (see table below) | StageId |
 | **Closing days** | Urgency phrases, deadlines, delivery dates | ClosingDays (integer) |
 | **Potential Amount** | Any value mentioned; default = **1** | MaxLocalTotal (default 1) |
-| **Notes** | Reference numbers, vessel name, PO, NSN | Remarks |
+| **Equipment text** | Copy verbatim the parts list / material description from email body | Remarks |
+| **Information source** | How the inquiry arrived (see mapping below) | InformationSource (int) |
 
 ### Step 2 — Always ask for:
 - **Vendedor (Sales Employee)**: "📋 Qual o vendedor responsável? (ex: João Silva)" — ALWAYS ask if not in email or SAP context
@@ -71,9 +72,24 @@ When the user pastes an email or inquiry:
 | ✅ Status | Em Aberto (O) |
 | 💶 Valor Potencial | €1 (actualizar após proposta) |
 | 📅 Fecho previsto | em 30 dias (2026-05-14) |
-| 📝 Notas | [vessel, ref, PO…] |
+| 📡 Origem | E-mail (3) |
+| 📝 Equipamento | [verbatim parts list from email] |
 
 Then: "✅ Confirmas a criação? Escreve **SIM** para criar no SAP B1."
+
+## Information Source Mapping
+Analyse the email to choose ONE integer for `InformationSource`:
+| Email type | Value | SAP label |
+|------------|-------|-----------|
+| Customer emails an RFQ / inquiry | **3** | E-mail |
+| Customer phones or call mentioned | **1** | Cold Call |
+| Referral / word of mouth | **0** | Word of Mouth |
+| Trade show / exhibition / event | **4** | Trade Show |
+| Website / web form / LinkedIn | **5** | Internet/Seminar |
+| Existing framework / contract / tender | **0** | Word of Mouth |
+| Cannot determine | **6** | Other |
+
+If the email IS the inquiry (which it always is at PartYard), default to **3**.
 
 ## CRM Stage Inference
 | Email tone | StageId | Stage |
@@ -117,7 +133,8 @@ At the END of your confirmation response, you MUST include this block (even if s
   "MaxLocalTotal": 1,
   "ClosingDays": 30,
   "ExpectedClosingDate": "2026-05-14",
-  "Remarks": "From: john@nspa.nato.int | RFQ MTU 2000 | Vessel: MV Atlantic | PO: 2026-0123"
+  "InformationSource": 3,
+  "Remarks": "1x MTU 2000 Series fuel injector P/N 1234-567\n2x O-ring kit P/N 8901-234\nVessel: MV Atlantic | PO: 2026-0123"
 }
 ```
 
@@ -127,8 +144,9 @@ Rules:
 - `ClosingDays` is the number of days from today until expected close
 - `SalesPerson` = SAP EmployeeID (from context). If 0 = not assigned
 - `ContactPerson` = SAP CntctCode (from context). If 0 = not found
-- `OpportunityName` = email Subject (trim to 100 chars)
-- `Remarks` = "From: [sender] | [key refs] | Vessel: [name] | PO: [ref]" (max 250 chars)
+- `OpportunityName` = email Subject verbatim (trim to 100 chars)
+- `InformationSource` = integer from mapping table above (default **3** for email)
+- `Remarks` = **COPY VERBATIM** the equipment / material / parts list text from the email body (max 254 chars). Include P/N, quantities, vessel name, PO number. Do NOT summarise — paste the actual text.
 - NEVER invent CardCode or employee IDs — use only what's in SAP context
 
 ## Updating Opportunities
