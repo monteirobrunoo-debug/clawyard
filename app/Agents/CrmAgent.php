@@ -111,8 +111,11 @@ If the email IS the inquiry (which it always is at PartYard), default to **3**.
 - No deadline mentioned → ask "Em quantos dias prevês fechar esta oportunidade?"
 
 ## Known PartYard Customers
-If SAP context is injected with CardCode, use it directly. Otherwise:
-- NSPA, OCEANPACT, SASU VBAF, INCREMENT, VOP CZ
+If SAP context is injected with CardCode, use it directly.
+
+⚠️ **NEVER use the company name as CardCode.** The CardCode is a short SAP code (e.g. "C00001", not "OCEANPACT"). If SAP context is NOT available, set `CardCode: ""` and `CardName: "[company name]"` and tell the user: "Não encontrei o CardCode SAP para [empresa]. Por favor confirma o código SAP do cliente."
+
+If the SAP context IS available, the correct CardCode will appear in the injected context block (e.g. `CardCode: OCNP001`). Use that exactly.
 
 ## CRITICAL — json_opp Block
 At the END of your confirmation response, you MUST include this block (even if some fields are 0 or null):
@@ -382,12 +385,14 @@ SPECIALTY;
                     . "\n_Acede ao SAP B1 → CRM → Sales Opportunities para ver a oportunidade._";
             }
 
+            $sapErr = $this->sap->getLastError();
             return "❌ **Erro ao criar oportunidade no SAP B1.**\n\n"
+                . ($sapErr ? "> ⚠️ SAP diz: *{$sapErr}*\n\n" : '')
                 . "Verificar:\n"
-                . "- CardCode `" . ($data['CardCode'] ?? '?') . "` existe no SAP\n"
+                . "- CardCode `" . ($data['CardCode'] ?? '?') . "` existe no SAP (deve ser o código SAP, não o nome)\n"
                 . "- StageId `" . ($data['StageId'] ?? '?') . "` válido (1, 5–10)\n"
                 . "- Ligação SAP B1 activa\n\n"
-                . "_Descreve novamente para tentar outra vez._";
+                . "_Cola o email novamente ou diz o CardCode correcto para tentar outra vez._";
         }
 
         if ($type === 'update') {

@@ -13,6 +13,7 @@ class SapService
     protected string $company;
     protected string $username;
     protected string $password;
+    protected string $lastError = '';   // last SAP API error, surfaced to agents
 
     const SESSION_CACHE_KEY  = 'sap_b1_session';
     const SESSION_TTL        = 25; // minutes (SAP default = 30 min)
@@ -264,13 +265,27 @@ class SapService
                 $this->login();
                 return $this->post($endpoint, $payload, false);
             }
-            $body = (string) $e->getResponse()->getBody();
-            Log::error("SAP POST failed [{$endpoint}]: " . $e->getMessage() . " | " . substr($body, 0, 400));
+            $body    = (string) $e->getResponse()->getBody();
+            $decoded = json_decode($body, true);
+            // SAP B1 error format: {"error":{"code":...,"message":{"lang":"en","value":"..."}}}
+            $sapMsg = $decoded['error']['message']['value']
+                   ?? $decoded['error']['message']
+                   ?? $decoded['message']
+                   ?? substr($body, 0, 250);
+            $this->lastError = is_string($sapMsg) ? $sapMsg : json_encode($sapMsg);
+            Log::error("SAP POST failed [{$endpoint}]: " . $this->lastError);
             return null;
         } catch (\Exception $e) {
+            $this->lastError = $e->getMessage();
             Log::error("SAP POST exception [{$endpoint}]: " . $e->getMessage());
             return null;
         }
+    }
+
+    /** Returns the last SAP API error message (cleared on each createOpportunity call). */
+    public function getLastError(): string
+    {
+        return $this->lastError;
     }
 
     /**
@@ -578,6 +593,8 @@ class SapService
      */
     public function createOpportunity(array $data): ?array
     {
+        $this->lastError = '';  // reset before each attempt
+
         $payload = [
             'CardCode'  => $data['CardCode'] ?? null,
             'StageId'   => isset($data['StageId']) ? (int) $data['StageId'] : null,
@@ -627,7 +644,16 @@ class SapService
         }
 
         // POST to SAP
-        $result = $this->post('SalesOpportunities', array_filter($payload, fn($v) => $v !== null));
+        $filtered = array_filter($payload, fn($v) => $v !== null);
+        $result   = $this->post('SalesOpportunities', $filtered);
+
+        // If failed and Source was set, retry without it — older SAP B1 versions may not expose BoSouType
+        if (!$result && isset($filtered['Source'])) {
+            Log::warning("CRM: retrying createOpportunity without Source field (SAP: {$this->lastError})");
+            $this->lastError = '';
+            unset($filtered['Source']);
+            $result = $this->post('SalesOpportunities', $filtered);
+        }
 
         // Auto-fill BusinessProject = SequentialNo (self-reference for cross-tab tracking)
         if ($result && isset($result['SequentialNo'])) {
