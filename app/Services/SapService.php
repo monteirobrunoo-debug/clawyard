@@ -696,31 +696,51 @@ class SapService
     }
 
     /**
-     * Fetch the list of SAP active sales employees.
+     * Fetch all SAP Sales Persons (the list used by CRM Opportunities).
+     *
+     * Uses the SalesPersons entity — NOT EmployeesInfo — because the
+     * SalesOpportunities.SalesPerson field takes SalesEmployeeCode from this table.
+     * Known persons: Ana Sobral, Bruno Monteiro, Catarina Aresta, Catarina Sequeira,
+     * Claudia Leal, Eduardo Rio, Joao Murta, José Inácio, Luis Gomes,
+     * Mónica Pereira, Olimpia Pires, Sonia Osorio, Victor Macedo.
      */
-    public function getSalesEmployees(int $top = 20): array
+    public function getSalesEmployees(int $top = 30): array
     {
-        $data = $this->get('EmployeesInfo', [
-            '$select'  => 'EmployeeID,FirstName,LastName,Department,SalesEmployee',
-            '$filter'  => "SalesEmployee eq 'tYES' and Active eq 'tYES'",
+        $data = $this->get('SalesPersons', [
+            '$select'  => 'SalesEmployeeCode,SalesEmployeeName,Active',
+            '$filter'  => "Active eq 'tYES'",
             '$top'     => $top,
-            '$orderby' => 'LastName asc',
+            '$orderby' => 'SalesEmployeeName asc',
         ]);
-        return $data['value'] ?? [];
+
+        // Normalise to common field names expected by callers
+        return array_map(fn($r) => [
+            'EmployeeID' => $r['SalesEmployeeCode'] ?? 0,
+            'FirstName'  => $r['SalesEmployeeName'] ?? '',
+            'LastName'   => '',
+            'FullName'   => $r['SalesEmployeeName'] ?? '',
+        ], $data['value'] ?? []);
     }
 
     /**
-     * Search a sales employee by partial name (First or Last).
+     * Search a Sales Person by partial name (used for SalesOpportunities.SalesPerson).
+     * Returns rows with EmployeeID = SalesEmployeeCode.
      */
     public function searchSalesEmployee(string $name, int $top = 5): array
     {
         $safe = addslashes($name);
-        $data = $this->get('EmployeesInfo', [
-            '$select' => 'EmployeeID,FirstName,LastName,Department,SalesEmployee',
-            '$filter' => "contains(FirstName,'{$safe}') or contains(LastName,'{$safe}')",
+        $data = $this->get('SalesPersons', [
+            '$select' => 'SalesEmployeeCode,SalesEmployeeName,Active',
+            '$filter' => "contains(SalesEmployeeName,'{$safe}') and Active eq 'tYES'",
             '$top'    => $top,
         ]);
-        return $data['value'] ?? [];
+
+        return array_map(fn($r) => [
+            'EmployeeID' => $r['SalesEmployeeCode'] ?? 0,
+            'FirstName'  => $r['SalesEmployeeName'] ?? '',
+            'LastName'   => '',
+            'FullName'   => $r['SalesEmployeeName'] ?? '',
+        ], $data['value'] ?? []);
     }
 
     /**
