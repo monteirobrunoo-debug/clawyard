@@ -655,15 +655,21 @@ class SapService
             $result = $this->post('SalesOpportunities', $filtered);
         }
 
-        // Auto-fill BusinessProject = SequentialNo (self-reference for cross-tab tracking)
+        // Post-creation PATCH: BusinessProject + Status Oportunidade UDF
         if ($result && isset($result['SequentialNo'])) {
             $seqNo = $result['SequentialNo'];
+            $patch = ['BusinessProject' => (string) $seqNo];
+
+            // Status Oportunidade UDF — always "Em aberto" on creation
+            $statusField = $this->discoverStatusOportunidadeField();
+            if ($statusField) {
+                $patch[$statusField] = 'Em aberto';
+            }
+
             try {
-                $this->patch("SalesOpportunities({$seqNo})", [
-                    'BusinessProject' => (string) $seqNo,
-                ]);
+                $this->patch("SalesOpportunities({$seqNo})", $patch);
             } catch (\Throwable $e) {
-                Log::warning("CRM: could not set BusinessProject for opp #{$seqNo}: " . $e->getMessage());
+                Log::warning("CRM: post-create PATCH failed for opp #{$seqNo}: " . $e->getMessage());
             }
         }
 
@@ -715,6 +721,44 @@ class SapService
             '$top'    => $top,
         ]);
         return $data['value'] ?? [];
+    }
+
+    /**
+     * Auto-discover the UDF field name for "Status Oportunidade" in the OOPR table.
+     * Caches for 24 h — only queries SAP once per deployment.
+     *
+     * Returns the API field name (e.g. "U_StatusOp") or null if not found.
+     */
+    public function discoverStatusOportunidadeField(): ?string
+    {
+        $cacheKey = 'sap_udf_status_oportunidade';
+
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey) ?: null;  // '' stored = not found
+        }
+
+        try {
+            $data = $this->get('UserFieldsMD', [
+                '$filter' => "TableName eq 'OOPR'",
+                '$select' => 'FieldID,FieldName,Description',
+                '$top'    => 50,
+            ]);
+
+            foreach ($data['value'] ?? [] as $udf) {
+                $desc = strtolower($udf['Description'] ?? '');
+                if (str_contains($desc, 'status')) {
+                    $apiField = 'U_' . $udf['FieldName'];
+                    Cache::put($cacheKey, $apiField, now()->addHours(24));
+                    Log::info("CRM: discovered Status Oportunidade UDF field: {$apiField}");
+                    return $apiField;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning("CRM: could not discover Status UDF: " . $e->getMessage());
+        }
+
+        Cache::put($cacheKey, '', now()->addHours(1));  // negative cache 1 h
+        return null;
     }
 
     /**
