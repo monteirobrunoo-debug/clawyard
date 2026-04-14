@@ -510,14 +510,14 @@ class SapService
         ?int   $stageId     = null,
         ?int   $salesPerson = null,
         int    $top         = 100,
-        string $status      = 'O'
+        string $status      = 'sos_Open'
     ): array {
         $filters = ["Status eq '{$status}'"];
-        if ($stageId !== null)     $filters[] = "StageId eq {$stageId}";
+        if ($stageId !== null)     $filters[] = "CurrentStageNo eq {$stageId}";
         if ($salesPerson !== null) $filters[] = "SalesPerson eq {$salesPerson}";
 
         $data = $this->get('SalesOpportunities', [
-            '$select'  => 'SequentialNo,CardCode,CardName,SalesPerson,StageId,MaxLocalTotal,WeightedSumLC,ClosingPercentage,ExpectedClosingDate,StartDate',
+            '$select'  => 'SequentialNo,CardCode,CardName,SalesPerson,CurrentStageNo,MaxLocalTotal,WeightedSumLC,ClosingPercentage,PredictedClosingDate,StartDate,OpportunityName',
             '$filter'  => implode(' and ', $filters),
             '$top'     => $top,
             '$orderby' => 'MaxLocalTotal desc',
@@ -540,7 +540,7 @@ class SapService
         $grandWeighted = 0.0;
 
         foreach ($opps as $opp) {
-            $stageId  = (int) ($opp['StageId']   ?? 0);
+            $stageId  = (int) ($opp['CurrentStageNo'] ?? $opp['StageId'] ?? 0);
             $label    = $this->getStageLabel($stageId);
             $person   = (string) ($opp['SalesPerson'] ?? '?');
             $amount   = (float) ($opp['MaxLocalTotal']  ?? 0);
@@ -602,15 +602,15 @@ class SapService
      * Create a new Sales Opportunity in SAP B1 CRM.
      *
      * Supported keys in $data:
-     *   CardCode (required), StageId (required)
-     *   OpportunityName / Name  — opportunity title (from email Subject)
-     *   SalesPerson             — SAP EmployeeID (integer)
-     *   ContactPerson           — SAP CntctCode (integer)
-     *   MaxLocalTotal           — expected value; defaults to 1.0
-     *   Status                  — 'O' Open (always forced)
-     *   ExpectedClosingDate     — Y-m-d; OR use ClosingDays
-     *   ClosingDays             — integer, calculates ExpectedClosingDate = today + N days
-     *   Remarks                 — free text notes (appended to name)
+     *   CardCode (required)
+     *   StageId (optional)       — maps to CurrentStageNo in SAP; defaults to 1 (Prospecção)
+     *   OpportunityName / Name   — opportunity title (from email Subject)
+     *   SalesPerson              — SAP EmployeeID (integer)
+     *   ContactPerson            — SAP CntctCode (integer)
+     *   MaxLocalTotal            — potential amount (line item); defaults to 1.0
+     *   ExpectedClosingDate      — Y-m-d; OR use ClosingDays
+     *   ClosingDays              — integer, calculates PredictedClosingDate = today + N days
+     *   Remarks                  — free text notes
      */
     public function createOpportunity(array $data): ?array
     {
@@ -642,19 +642,28 @@ class SapService
             }
         }
 
+        // ── Verified field names from GET /SalesOpportunities (live SAP B1 instance) ──
+        // CardName        → READ-ONLY (derived from CardCode). Do NOT send.
+        // Name            → INVALID.  Use OpportunityName.
+        // ExpectedClosingDate → INVALID. Use PredictedClosingDate.
+        // StageId         → INVALID for POST. Use CurrentStageNo.
+        // Status          → must be 'sos_Open' (not 'O') for Em Aberto.
+        // MaxLocalTotal   → calculated from SalesOpportunitiesLines. Send 0 or omit in header.
+        //                   SAP validation requires at least 1 line with MaxLocalTotal > 0.
+
+        $stageNo = isset($data['StageId']) ? (int) $data['StageId'] : 1;
+
         $payload = [
-            'CardCode'  => $cardCode ?: null,
-            // CardName is READ-ONLY in SAP B1 SalesOpportunities — derived from CardCode automatically.
-            // Sending it causes: "Property 'CardName' of 'SalesOpportunities' is invalid"
-            'StageId'   => isset($data['StageId']) ? (int) $data['StageId'] : null,
-            'StartDate' => date('Y-m-d\T00:00:00\Z'),
-            'Status'    => 'O',   // always Em Aberto
+            'CardCode'       => $cardCode ?: null,
+            'CurrentStageNo' => $stageNo,
+            'StartDate'      => date('Y-m-d\T00:00:00\Z'),
+            'Status'         => 'sos_Open',   // Em Aberto
         ];
 
         // Opportunity name / title from email Subject
         $oppName = trim((string) ($data['OpportunityName'] ?? $data['Name'] ?? ''));
         if ($oppName !== '') {
-            $payload['Name'] = substr($oppName, 0, 100);
+            $payload['OpportunityName'] = substr($oppName, 0, 100);
         }
 
         // Remarks = verbatim equipment / material text from the email
@@ -662,9 +671,16 @@ class SapService
             $payload['Remarks'] = substr((string) $data['Remarks'], 0, 254);
         }
 
-        // Potential Amount — default to 1 if not provided or zero
-        $amount = isset($data['MaxLocalTotal']) ? (float) $data['MaxLocalTotal'] : 0;
-        $payload['MaxLocalTotal'] = $amount > 0 ? $amount : 1.0;
+        // Potential Amount — SAP B1 requires a SalesOpportunitiesLines entry with MaxLocalTotal > 0.
+        // The header MaxLocalTotal is calculated from lines; sending it directly has no effect.
+        $amount = isset($data['MaxLocalTotal']) ? (float) $data['MaxLocalTotal'] : 0.0;
+        $lineAmount = $amount > 0 ? $amount : 1.0;
+        $payload['SalesOpportunitiesLines'] = [
+            [
+                'LineNum'       => 0,
+                'MaxLocalTotal' => $lineAmount,
+            ]
+        ];
 
         // SalesPerson (SAP EmployeeID)
         if (!empty($data['SalesPerson'])) {
@@ -676,13 +692,13 @@ class SapService
             $payload['ContactPerson'] = (int) $data['ContactPerson'];
         }
 
-        // Expected Closing Date — explicit date OR today + ClosingDays
+        // Predicted Closing Date — explicit date OR today + ClosingDays
         if (!empty($data['ExpectedClosingDate'])) {
             $ts = strtotime($data['ExpectedClosingDate']);
-            if ($ts) $payload['ExpectedClosingDate'] = date('Y-m-d\T00:00:00\Z', $ts);
+            if ($ts) $payload['PredictedClosingDate'] = date('Y-m-d\T00:00:00\Z', $ts);
         } elseif (!empty($data['ClosingDays'])) {
             $days = max(1, (int) $data['ClosingDays']);
-            $payload['ExpectedClosingDate'] = date('Y-m-d\T00:00:00\Z', strtotime("+{$days} days"));
+            $payload['PredictedClosingDate'] = date('Y-m-d\T00:00:00\Z', strtotime("+{$days} days"));
         }
 
         // Information Source — SAP BoSouType enum
@@ -718,7 +734,7 @@ class SapService
                     '$filter'  => "CardCode eq '{$cardCode}'",
                     '$orderby' => 'CreateDate desc,SequentialNo desc',
                     '$top'     => 1,
-                    '$select'  => 'SequentialNo,CardCode,Name,StageId',
+                    '$select'  => 'SequentialNo,CardCode,OpportunityName,CurrentStageNo',
                 ]);
                 if (!empty($latest['value'][0]['SequentialNo'])) {
                     $result = $latest['value'][0];
@@ -756,11 +772,10 @@ class SapService
     public function updateOpportunity(int $sequentialNo, array $data): bool
     {
         $payload = array_filter([
-            'StageId'             => isset($data['StageId']) ? (int) $data['StageId'] : null,
-            'MaxLocalTotal'       => isset($data['MaxLocalTotal']) ? (float) $data['MaxLocalTotal'] : null,
+            'CurrentStageNo'      => isset($data['StageId']) ? (int) $data['StageId'] : null,
             'SalesPerson'         => isset($data['SalesPerson']) ? (int) $data['SalesPerson'] : null,
             'Remarks'             => $data['Remarks'] ?? null,
-            'ExpectedClosingDate' => !empty($data['ExpectedClosingDate'])
+            'PredictedClosingDate' => !empty($data['ExpectedClosingDate'])
                 ? date('Y-m-d\T00:00:00\Z', strtotime($data['ExpectedClosingDate']))
                 : null,
         ], fn($v) => $v !== null);
@@ -1215,7 +1230,7 @@ class SapService
                             "  • #{$o['SequentialNo']} {$o['CardName']}"
                             . " | €" . number_format((float)$o['MaxLocalTotal'], 0, '.', ',')
                             . " | Vend#{$o['SalesPerson']}"
-                            . " | Fecho:" . substr((string)($o['ExpectedClosingDate'] ?? ''), 0, 10),
+                            . " | Fecho:" . substr((string)($o['PredictedClosingDate'] ?? ''), 0, 10),
                             $opps
                         );
                         $context[] = "📋 COTAÇÕES DE COMPRA (StageId=5) — " . count($opps) . " abertas:\n" . implode("\n", $rows);
@@ -1230,7 +1245,7 @@ class SapService
                             "  • #{$o['SequentialNo']} {$o['CardName']}"
                             . " | €" . number_format((float)$o['MaxLocalTotal'], 0, '.', ',')
                             . " | Vend#{$o['SalesPerson']}"
-                            . " | Fecho:" . substr((string)($o['ExpectedClosingDate'] ?? ''), 0, 10),
+                            . " | Fecho:" . substr((string)($o['PredictedClosingDate'] ?? ''), 0, 10),
                             $opps
                         );
                         $context[] = "💼 COTAÇÕES DE VENDA (StageId=6) — " . count($opps) . " abertas:\n" . implode("\n", $rows);
