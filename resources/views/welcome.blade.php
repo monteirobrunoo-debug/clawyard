@@ -2833,9 +2833,6 @@ window.addEventListener('beforeunload', (e) => {
 // ═══════════════════════════════════════════════════════
 function openShareModal() {
     const agent = agentSelect.value || 'auto';
-    document.getElementById('share-modal-agent').value = agent;
-    document.getElementById('share-modal-agent-label').textContent =
-        (AGENT_EMOJIS[agent] || '🤖') + ' ' + (AGENT_NAMES[agent] || agent);
     document.getElementById('share-modal').style.display = 'flex';
     document.getElementById('share-success-box').style.display = 'none';
     document.getElementById('share-form-body').style.display = '';
@@ -2845,6 +2842,28 @@ function openShareModal() {
     // Reset fields
     ['share-client','share-email','share-title','share-welcome','share-pass','share-expires']
         .forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+    // Populate agent checkboxes
+    const list = document.getElementById('share-agent-list');
+    if (list) {
+        list.innerHTML = '';
+        Object.keys(AGENT_NAMES).forEach(key => {
+            const name  = AGENT_NAMES[key] || key;
+            const photo = AGENT_PHOTOS[key] || null;
+            const emoji = AGENT_EMOJIS[key] || '🤖';
+            const checked = key === agent ? 'checked' : '';
+            const avatar = photo
+                ? `<img src="${photo}" alt="${name}" style="width:22px;height:22px;border-radius:5px;object-fit:cover;flex-shrink:0">`
+                : `<span style="font-size:16px;line-height:1;flex-shrink:0">${emoji}</span>`;
+            list.innerHTML += `
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:5px 6px;border-radius:6px;transition:.12s;user-select:none"
+                       onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background=''">
+                    <input type="checkbox" value="${key}" ${checked}
+                        style="accent-color:#76b900;width:14px;height:14px;cursor:pointer;flex-shrink:0">
+                    ${avatar}
+                    <span style="font-size:12px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
+                </label>`;
+        });
+    }
 }
 function closeShareModal() {
     document.getElementById('share-modal').style.display = 'none';
@@ -2853,10 +2872,13 @@ async function submitShareModal() {
     const btn = document.getElementById('share-submit-btn');
     const client = document.getElementById('share-client').value.trim();
     if (!client) { alert('Introduz o nome do cliente.'); return; }
+
+    const checked = Array.from(document.querySelectorAll('#share-agent-list input[type="checkbox"]:checked')).map(c => c.value);
+    if (!checked.length) { alert('Seleciona pelo menos um agente.'); return; }
+
     btn.textContent = 'A criar…'; btn.disabled = true;
 
-    const payload = {
-        agent_key:       document.getElementById('share-modal-agent').value,
+    const common = {
         client_name:     client,
         client_email:    document.getElementById('share-email').value.trim() || null,
         custom_title:    document.getElementById('share-title').value.trim() || null,
@@ -2867,22 +2889,31 @@ async function submitShareModal() {
     };
 
     try {
-        const r    = await fetch('/admin/shares', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF}, body:JSON.stringify(payload) });
-        const data = await r.json();
-        if (data.ok) {
-            document.getElementById('share-url-display').textContent = data.url;
+        const results = [];
+        for (const agentKey of checked) {
+            const r    = await fetch('/admin/shares', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF}, body:JSON.stringify({ ...common, agent_key: agentKey }) });
+            const data = await r.json();
+            if (data.ok) results.push({ agent: AGENT_NAMES[agentKey] || agentKey, url: data.url });
+            else { alert('Erro ao criar link para ' + (AGENT_NAMES[agentKey] || agentKey) + ': ' + JSON.stringify(data)); }
+        }
+        if (results.length) {
+            const display = document.getElementById('share-url-display');
+            display.innerHTML = results.map(r =>
+                `<div style="margin-bottom:6px"><span style="font-size:10px;opacity:.7">${r.agent}</span><br>${r.url}</div>`
+            ).join('');
             document.getElementById('share-success-box').style.display = 'block';
             document.getElementById('share-form-body').style.display = 'none';
             document.getElementById('share-submit-btn').style.display = 'none';
-            window._shareUrl = data.url;
+            window._shareUrls = results.map(r => r.url);
+            window._shareUrl  = results[0].url;
         } else {
-            alert('Erro: ' + JSON.stringify(data));
             btn.textContent = 'Criar Link'; btn.disabled = false;
         }
     } catch(e) { alert('Erro de rede.'); btn.textContent = 'Criar Link'; btn.disabled = false; }
 }
 function copyShareUrl() {
-    navigator.clipboard.writeText(window._shareUrl || '');
+    const urls = (window._shareUrls || [window._shareUrl]).filter(Boolean);
+    navigator.clipboard.writeText(urls.join('\n'));
     const btn = document.getElementById('copy-share-url');
     btn.textContent = '✅ Copiado!';
     setTimeout(() => btn.textContent = '📋 Copiar Link', 2000);
@@ -2905,9 +2936,13 @@ updateShareBtn();
      onclick="if(event.target===this)closeShareModal()">
     <div style="background:#111118;border:1px solid #2a2a3a;border-radius:16px;width:100%;max-width:460px;padding:28px;position:relative">
         <button onclick="closeShareModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;color:#64748b;font-size:18px;cursor:pointer">✕</button>
-        <div style="font-size:17px;font-weight:800;margin-bottom:4px">🔗 Share Agent</div>
-        <div id="share-modal-agent-label" style="font-size:13px;color:var(--agent-color,#76b900);margin-bottom:20px;font-weight:600"></div>
-        <input type="hidden" id="share-modal-agent">
+        <div style="font-size:17px;font-weight:800;margin-bottom:16px">🔗 Share Agent</div>
+        <div style="margin-bottom:14px">
+            <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Agentes a partilhar</label>
+            <div id="share-agent-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:200px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:8px;padding:8px;background:#1a1a24">
+                <!-- filled by JS from AGENT_NAMES + AGENT_PHOTOS -->
+            </div>
+        </div>
 
         <!-- Success -->
         <div id="share-success-box" style="display:none;background:rgba(118,185,0,.1);border:1px solid rgba(118,185,0,.3);border-radius:10px;padding:16px;margin-bottom:16px">

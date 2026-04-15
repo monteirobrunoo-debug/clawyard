@@ -113,45 +113,110 @@
     </div>
 
     <div class="shares-grid">
-        @forelse($shares as $share)
-        @php
-            $meta  = $agentMeta[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900'];
-            $valid = $share->isValid();
-        @endphp
-        <div class="share-card" id="share-{{ $share->id }}">
-            <div class="share-agent-badge" style="background:{{ $meta['color'] }}22;border:1px solid {{ $meta['color'] }}44">
-                {{ $meta['emoji'] }}
+        @forelse($shares->groupBy('client_name') as $clientName => $clientShares)
+        @php $singleAgent = $clientShares->count() === 1; @endphp
+        <div class="client-group-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
+            <!-- Client group header -->
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.02)">
+                <span style="font-size:15px;font-weight:800;color:var(--text)">{{ $clientName }}</span>
+                <span style="font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:2px 8px">
+                    {{ $clientShares->count() }} {{ $clientShares->count() === 1 ? 'agente' : 'agentes' }}
+                </span>
             </div>
-            <div class="share-info">
-                <div class="share-client">{{ $share->client_name }}</div>
-                <div class="share-agent-name">{{ $share->custom_title ?: $meta['name'] }}</div>
-                <div class="share-url">{{ $share->getUrl() }}</div>
-                <div class="share-meta">
-                    <span class="share-tag {{ $valid ? 'green' : 'red' }}">
-                        {{ $valid ? ($share->is_active ? '● Activo' : '● Pausado') : '● Expirado' }}
-                    </span>
-                    @if($share->password_hash)
-                        <span class="share-tag blue">🔒 Com password</span>
-                    @endif
-                    @if($share->expires_at)
-                        <span class="share-tag">⏱ Expira {{ $share->expires_at->format('d/m/Y') }}</span>
+
+            @if($singleAgent)
+            {{-- Single agent: full card layout --}}
+            @php
+                $share = $clientShares->first();
+                $meta  = $agentMeta[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900', 'photo' => null];
+                $valid = $share->isValid();
+            @endphp
+            <div class="share-card" id="share-{{ $share->id }}" style="border:none;border-radius:0;padding:14px 20px">
+                <div class="share-agent-badge" style="background:{{ $meta['color'] }}22;border:1px solid {{ $meta['color'] }}44;overflow:hidden;padding:0">
+                    @if(!empty($meta['photo']))
+                        <img src="{{ $meta['photo'] }}" alt="{{ $meta['name'] }}" style="width:100%;height:100%;object-fit:cover;border-radius:10px;display:block">
                     @else
-                        <span class="share-tag">∞ Sem expiração</span>
-                    @endif
-                    <span class="share-tag">{{ $share->usage_count }} mensagens</span>
-                    @if($share->last_used_at)
-                        <span class="share-tag">Usado {{ $share->last_used_at->diffForHumans() }}</span>
+                        <span style="font-size:22px">{{ $meta['emoji'] }}</span>
                     @endif
                 </div>
+                <div class="share-info">
+                    <div class="share-agent-name" style="font-size:13px;font-weight:700;color:var(--text)">{{ $share->custom_title ?: $meta['name'] }}</div>
+                    <div class="share-url">{{ $share->getUrl() }}</div>
+                    <div class="share-meta">
+                        <span class="share-tag {{ $valid ? 'green' : 'red' }}">
+                            {{ $valid ? ($share->is_active ? '● Activo' : '● Pausado') : '● Expirado' }}
+                        </span>
+                        @if($share->password_hash)
+                            <span class="share-tag blue">🔒 Com password</span>
+                        @endif
+                        @if($share->expires_at)
+                            <span class="share-tag">⏱ Expira {{ $share->expires_at->format('d/m/Y') }}</span>
+                        @else
+                            <span class="share-tag">∞ Sem expiração</span>
+                        @endif
+                        <span class="share-tag">{{ $share->usage_count }} mensagens</span>
+                        @if($share->last_used_at)
+                            <span class="share-tag">Usado {{ $share->last_used_at->diffForHumans() }}</span>
+                        @endif
+                    </div>
+                </div>
+                <div class="share-actions">
+                    <button class="btn-action" onclick="copyUrl('{{ $share->getUrl() }}', this)">📋 Copiar</button>
+                    <button class="btn-action" onclick="toggleShare({{ $share->id }}, this)">
+                        {{ $share->is_active ? '⏸ Pausar' : '▶ Activar' }}
+                    </button>
+                    <button class="btn-action" onclick="window.open('{{ $share->getUrl() }}','_blank')">↗ Abrir</button>
+                    <button class="btn-action danger" onclick="deleteShare({{ $share->id }})">🗑</button>
+                </div>
             </div>
-            <div class="share-actions">
-                <button class="btn-action" onclick="copyUrl('{{ $share->getUrl() }}', this)">📋 Copiar</button>
-                <button class="btn-action" onclick="toggleShare({{ $share->id }}, this)">
-                    {{ $share->is_active ? '⏸ Pausar' : '▶ Activar' }}
-                </button>
-                <button class="btn-action" onclick="window.open('{{ $share->getUrl() }}','_blank')">↗ Abrir</button>
-                <button class="btn-action danger" onclick="deleteShare({{ $share->id }})">🗑</button>
-            </div>
+
+            @else
+            {{-- Multiple agents: compact table layout --}}
+            <table style="width:100%;border-collapse:collapse">
+                @foreach($clientShares as $share)
+                @php
+                    $meta  = $agentMeta[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900', 'photo' => null];
+                    $valid = $share->isValid();
+                @endphp
+                <tr id="share-{{ $share->id }}" style="border-top:1px solid var(--border);transition:.15s" onmouseover="this.style.background='rgba(255,255,255,.02)'" onmouseout="this.style.background=''">
+                    <td style="padding:10px 20px;width:44px">
+                        <div style="width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:{{ $meta['color'] }}22;border:1px solid {{ $meta['color'] }}44;overflow:hidden;padding:0;flex-shrink:0">
+                            @if(!empty($meta['photo']))
+                                <img src="{{ $meta['photo'] }}" alt="{{ $meta['name'] }}" style="width:100%;height:100%;object-fit:cover;border-radius:7px;display:block">
+                            @else
+                                <span style="font-size:16px">{{ $meta['emoji'] }}</span>
+                            @endif
+                        </div>
+                    </td>
+                    <td style="padding:10px 12px;min-width:140px">
+                        <div style="font-size:13px;font-weight:700;color:var(--text)">{{ $share->custom_title ?: $meta['name'] }}</div>
+                        <div style="font-size:11px;color:#60a5fa;word-break:break-all;margin-top:2px">{{ $share->getUrl() }}</div>
+                    </td>
+                    <td style="padding:10px 12px;white-space:nowrap">
+                        <span class="share-tag {{ $valid ? 'green' : 'red' }}">
+                            {{ $valid ? ($share->is_active ? '● Activo' : '● Pausado') : '● Expirado' }}
+                        </span>
+                    </td>
+                    <td style="padding:10px 12px;white-space:nowrap">
+                        <span class="share-tag">{{ $share->usage_count }} msgs</span>
+                        @if($share->last_used_at)
+                            <span class="share-tag" style="margin-left:4px">{{ $share->last_used_at->diffForHumans() }}</span>
+                        @endif
+                    </td>
+                    <td style="padding:10px 20px;text-align:right">
+                        <div class="share-actions">
+                            <button class="btn-action" onclick="copyUrl('{{ $share->getUrl() }}', this)">📋</button>
+                            <button class="btn-action" onclick="toggleShare({{ $share->id }}, this)">
+                                {{ $share->is_active ? '⏸' : '▶' }}
+                            </button>
+                            <button class="btn-action" onclick="window.open('{{ $share->getUrl() }}','_blank')">↗</button>
+                            <button class="btn-action danger" onclick="deleteShare({{ $share->id }})">🗑</button>
+                        </div>
+                    </td>
+                </tr>
+                @endforeach
+            </table>
+            @endif
         </div>
         @empty
         <div class="empty">
