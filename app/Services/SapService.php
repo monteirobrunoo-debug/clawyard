@@ -770,12 +770,9 @@ class SapService
             }
         }
 
-        // Post-creation PATCH: set ProjectCode = SequentialNo (shown in General tab)
-        // Note: field is "ProjectCode" in OData (not "BusinessProject" — that name is invalid)
-        if ($result && isset($result['SequentialNo'])) {
-            $seqNo = $result['SequentialNo'];
-            $this->patch("SalesOpportunities({$seqNo})", ['ProjectCode' => (string) $seqNo]);
-        }
+        // Note: ProjectCode (Business Project in General tab) is a FK to the Projects table.
+        // SAP rejects arbitrary values — must reference an existing project code.
+        // This field should be set manually in SAP B1 if a project exists for this opportunity.
 
         return $result;
     }

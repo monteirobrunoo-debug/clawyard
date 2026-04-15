@@ -2704,7 +2704,7 @@ async function clearHistory() {
             headers: { 'X-CSRF-TOKEN': CSRF, 'Content-Type': 'application/json' }
         });
     } catch(e) { /* ignore */ }
-    // Clear UI
+    // Clear chat area
     const agent = agentSelect.value;
     document.getElementById('chat').innerHTML = '';
     document.getElementById('chat').insertAdjacentHTML('beforeend',
@@ -2717,8 +2717,11 @@ async function clearHistory() {
         '<div class="starter-chips" id="starter-chips"></div></div>');
     updateEmptyState(agent);
     renderStarterChips(agent);
-    const step = logActivity('🗑️', 'Histórico limpo');
-    setTimeout(() => resolveStep(step), 1000);
+    // Clear activity log — reset to initial state
+    if (activityLog) {
+        activityLog.innerHTML =
+            '<div class="activity-step done"><span class="step-icon">✅</span><span class="step-text">Nova conversa iniciada.</span></div>';
+    }
 }
 
 // Warn before leaving if agent is streaming
