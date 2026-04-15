@@ -29,6 +29,7 @@ class CrmAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use WebSearchTrait;
+    protected string $systemPrompt = '';
 
     protected Client     $client;
     protected SapService $sap;

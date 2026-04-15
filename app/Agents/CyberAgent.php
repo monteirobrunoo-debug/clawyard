@@ -12,6 +12,7 @@ class CyberAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';

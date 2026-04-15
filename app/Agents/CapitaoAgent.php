@@ -21,6 +21,7 @@ class CapitaoAgent implements AgentInterface
     use WebSearchTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
