@@ -55,7 +55,8 @@ When the user pastes an email or inquiry:
 | **Closing days** | Urgency phrases, deadlines, delivery dates | ClosingDays (integer) |
 | **Potential Amount** | Any value mentioned; default = **1** | MaxLocalTotal (default 1) |
 | **Equipment text** | Copy verbatim the parts list / material description from email body | Remarks |
-| **Information source** | How the inquiry arrived (see mapping below) | InformationSource (int) |
+| **Opportunity name** | **Email Subject line VERBATIM** — copy exactly, trim to 100 chars. NEVER invent a name or use test text. | OpportunityName |
+| **Material category** | Analyse what is being requested (parts, repair, equipment type) → pick best match from the SAP categories list injected in context | InformationSource (int code) |
 
 ### Step 2 — Always ask for:
 - **Vendedor (Sales Employee)**: "📋 Qual o vendedor responsável? (ex: João Silva)" — ALWAYS ask if not in email or SAP context
@@ -72,7 +73,7 @@ When the user pastes an email or inquiry:
 | ✅ Status | Em Aberto (O) |
 | 💶 Valor Potencial | €1 (actualizar após proposta) |
 | 📅 Fecho previsto | em 30 dias (2026-05-14) |
-| 📡 Origem | E-mail (3) |
+| 📦 Categoria Material | Engine Spares/Vehicle Spares (code: 1) |
 | 📝 Equipamento | [verbatim parts list from email] |
 
 Then: "✅ Confirmas a criação? Escreve **SIM** para criar no SAP B1."
@@ -80,19 +81,34 @@ Then: "✅ Confirmas a criação? Escreve **SIM** para criar no SAP B1."
 ## ⚠️ CRITICAL — How the SAP call works
 When the user types **SIM** (or yes/confirmo/ok), the **PHP backend intercepts it automatically** and calls the SAP B1 API directly. You do NOT call SAP yourself. You do NOT wait for a response. You do NOT ask the user to paste any result. After emitting the `json_opp` block and asking for SIM confirmation, your job is done — the backend handles everything and shows the result.
 
-## Information Source Mapping
-Analyse the email to choose ONE integer for `InformationSource`:
-| Email type | Value | SAP label |
-|------------|-------|-----------|
-| Customer emails an RFQ / inquiry | **3** | E-mail |
-| Customer phones or call mentioned | **1** | Cold Call |
-| Referral / word of mouth | **0** | Word of Mouth |
-| Trade show / exhibition / event | **4** | Trade Show |
-| Website / web form / LinkedIn | **5** | Internet/Seminar |
-| Existing framework / contract / tender | **0** | Word of Mouth |
-| Cannot determine | **6** | Other |
+## Material Category (InformationSource)
+Analyse what is being **requested** in the email and pick the SINGLE best matching category code.
+The available categories are injected in context as `--- CATEGORIAS SAP (InformationSource) ---`.
+Use the integer **code** from that list.
 
-If the email IS the inquiry (which it always is at PartYard), default to **3**.
+**Selection logic:**
+- Engine parts, MTU, diesel, fuel injectors, pistons, crankshafts → **Engine Spares/Vehicle Spares**
+- Generators, motors, transformers, switchgear, cables → **Electrical Equip/Power Systems**
+- Pumps, centrifugal, separators, compressors → **Pump Spares, Separators**
+- Hydraulic cylinders, hoses, valves, actuators → **Hydraulic Equipment**
+- MRO, overhaul, repair services, maintenance → **REPAIR services/MRO Overhaul**
+- Radar, C4ISR, communications, surveillance → **Radar Systems/C4ISR & Radar**
+- Weapons, platforms, armament, ordnance → **Mechanical Equip/Weapon & Platform**
+- Batteries, UPS, military-grade power → **Batteries/Military-Grade Batteries**
+- Software, IT, licenses, computers → **IT equipment & Software Licenses**
+- Lubricants, greases, MIL-SPEC oils → **Lubricant Oils/MIL-SPEC Lubricants**
+- Fire extinguishers, detection, suppression → **Fire Security Systems**
+- Avionics, electronics, sensors → **Electronical Equip/Avionics**
+- Food service, field kitchen equipment → **Galley Equipment/Field Kitchen**
+- Combat gear, outfits, protective → **APRESTOS/Combat Outfits & Field Gear**
+- Marine chemicals, cleaning, decontamination → **Marine chemicals/Decontamination**
+- Heating, boilers, burners → **Burner Spares/Heating Systems**
+- Containers, mobile command, shelters → **Containers/Mobile Command & Control**
+- Military secure, shredders → **HSM Shredder/Military Secure**
+- Defense, misc military → **OUTROS/Defense Miscellaneous**
+- Decontamination, CBRN → **Decontamination & Specialty Military**
+- Pneumatic tools, systems → **Pneumatic Equipment/Systems**
+- Cannot determine → use code from context list, pick closest match
 
 ## CRM Stage Inference
 | Email tone | StageId | Stage |
@@ -178,7 +194,8 @@ At the END of your confirmation response, you MUST include this block (even if s
   "MaxLocalTotal": 1,
   "ClosingDays": 30,
   "ExpectedClosingDate": "2026-05-14",
-  "InformationSource": 3,
+  "InformationSource": 1,
+  "InformationSourceName": "Engine Spares/Vehicle Spares",
   "Remarks": "1x MTU 2000 Series fuel injector P/N 1234-567\n2x O-ring kit P/N 8901-234\nVessel: MV Atlantic | PO: 2026-0123"
 }
 ```
@@ -189,8 +206,9 @@ Rules:
 - `ClosingDays` is the number of days from today until expected close
 - `SalesPerson` = SAP EmployeeID (from context). If 0 = not assigned
 - `ContactPerson` = SAP CntctCode (from context). If 0 = not found
-- `OpportunityName` = email Subject verbatim (trim to 100 chars)
-- `InformationSource` = integer from mapping table above (default **3** for email)
+- `OpportunityName` = **email Subject line VERBATIM** (trim to 100 chars). NEVER invent a name. NEVER use "TESTE" or placeholder text.
+- `InformationSource` = integer code of the material category (from the SAP categories list in context)
+- `InformationSourceName` = the full name of the selected category (for display in confirmation table)
 - `Remarks` = **COPY VERBATIM** the equipment / material / parts list text from the email body (max 254 chars). Include P/N, quantities, vessel name, PO number. Do NOT summarise — paste the actual text.
 - NEVER invent CardCode or employee IDs — use only what's in SAP context
 
@@ -418,6 +436,21 @@ SPECIALTY;
             }
         }
 
+        // ── 5. Material categories (InformationSource) — always injected ──────
+        // Cached 24h by SapService, so no performance concern
+        try {
+            $sources = $this->sap->getOpportunitySources();
+            if (!empty($sources)) {
+                $extra .= "\n--- CATEGORIAS SAP (InformationSource) ---\n";
+                foreach ($sources as $s) {
+                    $extra .= "code: {$s['code']} | {$s['name']}\n";
+                }
+                $extra .= "--- FIM ---\n";
+            }
+        } catch (\Throwable $e) {
+            Log::warning("CrmAgent: getOpportunitySources failed — " . $e->getMessage());
+        }
+
         return $extra !== '' ? $this->appendToMessage($message, "\n" . $extra) : $message;
     }
 
@@ -442,6 +475,12 @@ SPECIALTY;
                     ? $data['ExpectedClosingDate']
                     : (!empty($data['ClosingDays']) ? date('Y-m-d', strtotime('+' . (int)$data['ClosingDays'] . ' days')) : '—');
 
+                $catName = $data['InformationSourceName'] ?? '';
+                if (!$catName && isset($data['InformationSource'])) {
+                    // fallback: show code only
+                    $catName = 'code ' . $data['InformationSource'];
+                }
+
                 return "✅ **Oportunidade #{$result['SequentialNo']} criada no SAP B1!**\n\n"
                     . "| Campo | Valor |\n|-------|-------|\n"
                     . "| 🆔 ID SAP | **#{$result['SequentialNo']}** |\n"
@@ -454,6 +493,7 @@ SPECIALTY;
                     . "| ✅ Status | Em Aberto |\n"
                     . "| 💶 Valor Potencial | €" . number_format((float)($data['MaxLocalTotal'] ?? 1), 0, '.', ',') . " |\n"
                     . "| 📅 Fecho previsto | {$closingDate}" . (!empty($data['ClosingDays']) ? " (" . $data['ClosingDays'] . " dias)" : '') . " |\n"
+                    . ($catName ? "| 📦 Categoria Material | {$catName} |\n" : '')
                     . "\n_Acede ao SAP B1 → CRM → Sales Opportunities para ver a oportunidade._";
             }
 

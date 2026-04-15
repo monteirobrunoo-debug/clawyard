@@ -707,9 +707,9 @@ class SapService
             $payload['PredictedClosingDate'] = date('Y-m-d\T00:00:00\Z', strtotime("+{$days} days"));
         }
 
-        // Information Source — SAP BoSouType enum
-        //   0=Word of Mouth  1=Cold Call  2=Advertising  3=Email  4=Trade Show
-        //   5=Internet/Seminar  6=Other
+        // Information Source — PartYard custom material categories
+        // (Engine Spares=1, Electrical=2, Pumps=3, … — see getOpportunitySources())
+        // InformationSourceName is for display only — not sent to SAP
         if (isset($data['InformationSource'])) {
             $payload['Source'] = (int) $data['InformationSource'];
         }
@@ -927,6 +927,69 @@ class SapService
         return $data['value'] ?? [];
     }
 
+
+    /**
+     * Get the list of valid InformationSource (Source) values configured in SAP B1.
+     * Returns array of ['code' => int, 'name' => string].
+     * Cached for 24 h — these rarely change.
+     */
+    public function getOpportunitySources(): array
+    {
+        return Cache::remember('sap_opp_sources', 1440, function () {
+            try {
+                $session = $this->ensureSession();
+                if (!$session) return [];
+
+                // SAP B1 stores custom Source descriptions in SalesOpportunitySources
+                $response = $this->http->get("{$this->baseUrl}/SalesOpportunitySources", [
+                    'http_errors' => false,
+                    'headers'     => ['Cookie' => "B1SESSION={$session}"],
+                    'query'       => ['$select' => 'Num,Description', '$orderby' => 'Num asc'],
+                ]);
+
+                if ($response->getStatusCode() === 200) {
+                    $data = json_decode($response->getBody()->getContents(), true);
+                    $rows = $data['value'] ?? [];
+                    if (!empty($rows)) {
+                        return array_map(fn($r) => [
+                            'code' => (int) ($r['Num'] ?? $r['SequenceNo'] ?? 0),
+                            'name' => $r['Description'] ?? $r['Name'] ?? '',
+                        ], $rows);
+                    }
+                }
+
+                // Fallback: try querying via OData metadata or known PartYard categories
+                Log::warning('SAP: SalesOpportunitySources endpoint returned no data — using fallback list');
+            } catch (\Throwable $e) {
+                Log::warning('SAP: getOpportunitySources failed — ' . $e->getMessage());
+            }
+
+            // Hardcoded fallback based on PartYard's SAP configuration (from UI screenshot)
+            return [
+                ['code' => 1,  'name' => 'Engine Spares/Vehicle Spares'],
+                ['code' => 2,  'name' => 'Electrical Equip/Power Systems'],
+                ['code' => 3,  'name' => 'Pump Spares, Separators'],
+                ['code' => 4,  'name' => 'Hydraulic Equipment'],
+                ['code' => 5,  'name' => 'REPAIR services/MRO Overhaul'],
+                ['code' => 6,  'name' => 'HSM Shredder/Military Secure'],
+                ['code' => 7,  'name' => 'OUTROS/Defense Miscellaneous'],
+                ['code' => 8,  'name' => 'Pneumatic Equipment/Systems'],
+                ['code' => 9,  'name' => 'Batteries/Military-Grade Batteries'],
+                ['code' => 10, 'name' => 'APRESTOS/Combat Outfits & Field Gear'],
+                ['code' => 11, 'name' => 'Electronical Equip/Avionics'],
+                ['code' => 12, 'name' => 'Galley Equipment/Field Kitchen'],
+                ['code' => 13, 'name' => 'Fire Security Systems'],
+                ['code' => 14, 'name' => 'Lubricant Oils/MIL-SPEC Lubricants'],
+                ['code' => 15, 'name' => 'Radar Systems/C4ISR & Radar'],
+                ['code' => 16, 'name' => 'Containers/Mobile Command & Control'],
+                ['code' => 17, 'name' => 'Marine chemicals/Decontamination'],
+                ['code' => 18, 'name' => 'Burner Spares/Heating Systems'],
+                ['code' => 19, 'name' => 'Mechanical Equip/Weapon & Platform'],
+                ['code' => 20, 'name' => 'Decontamination & Specialty Military'],
+                ['code' => 21, 'name' => 'IT equipment & Software Licenses'],
+            ];
+        });
+    }
 
     // ─── Structured table data for the SAP Documents UI ───────────────────────
 
