@@ -750,6 +750,37 @@ class SapService
             elseif ($this->lastError === '') $this->lastError = $originalError;
         }
 
+        // Retry 4: Business partner removed/inactive — try to find active BP by CardName
+        if (!$result && str_contains((string) $this->lastError, 'removed')
+            && $cardName !== '') {
+            $originalError = $this->lastError;
+            Log::warning("CRM: BP '{$cardCode}' marked as removed — searching active BP by name '{$cardName}'");
+            try {
+                // Search only ACTIVE business partners by name
+                $bps = $this->get('BusinessPartners', [
+                    '$filter' => "startswith(CardName,'" . addslashes(substr($cardName, 0, 20)) . "') and Frozen eq 'tNO'",
+                    '$select' => 'CardCode,CardName',
+                    '$top'    => 3,
+                ]);
+                $activeBps = $bps['value'] ?? [];
+                if (!empty($activeBps)) {
+                    $newCardCode = $activeBps[0]['CardCode'];
+                    Log::info("CRM: found active BP '{$newCardCode}' for removed BP '{$cardCode}'");
+                    $filtered['CardCode'] = $newCardCode;
+                    // store resolved code so error message can show it
+                    $cardCode = $newCardCode;
+                    $result   = $this->post('SalesOpportunities', $filtered);
+                    if ($result)  $this->lastError = '';
+                    elseif ($this->lastError === '') $this->lastError = $originalError;
+                } else {
+                    $this->lastError = $originalError . " | Nenhum BP ativo encontrado para '{$cardName}' — verifica no SAP.";
+                }
+            } catch (\Throwable $e) {
+                Log::warning("CRM: active BP lookup failed: " . $e->getMessage());
+                $this->lastError = $originalError;
+            }
+        }
+
         // SAP sometimes returns 201 with empty body (Prefer header ignored).
         // If we got a success marker but no SequentialNo, fetch the latest opp for this CardCode.
         if ($result && !isset($result['SequentialNo'])) {

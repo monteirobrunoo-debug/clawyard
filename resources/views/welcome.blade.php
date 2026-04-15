@@ -92,6 +92,13 @@
 
         /* ── CHAT AREA ── */
         .chat-wrap { flex:1; display:flex; flex-direction:column; overflow:hidden; }
+        /* ── Persistent agent header bar ── */
+        .agent-header-bar { display:flex; align-items:center; gap:10px; padding:8px 18px; border-bottom:1px solid var(--border); background:var(--bg3); flex-shrink:0; min-height:48px; }
+        .agent-header-bar .ahb-avatar { width:34px; height:34px; border-radius:50%; overflow:hidden; flex-shrink:0; border:2px solid var(--agent-color); box-shadow:0 0 8px var(--agent-color)55; display:flex; align-items:center; justify-content:center; font-size:18px; background:var(--bg2); transition:border-color .3s, box-shadow .3s; }
+        .agent-header-bar .ahb-avatar img { width:100%; height:100%; object-fit:cover; border-radius:50%; display:block; }
+        .agent-header-bar .ahb-info { flex:1; min-width:0; }
+        .agent-header-bar .ahb-name { font-size:13px; font-weight:700; color:var(--text); line-height:1.2; }
+        .agent-header-bar .ahb-desc { font-size:11px; color:var(--muted); line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         #chat { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:12px; scroll-behavior:smooth; }
         #chat::-webkit-scrollbar { width:4px; }
         #chat::-webkit-scrollbar-track { background:transparent; }
@@ -396,6 +403,10 @@
             .starter-chips { padding: 0 8px; gap: 6px; }
             .starter-chip { font-size: 12px; padding: 6px 12px; }
 
+            /* ── AGENT HEADER BAR: compact on mobile ── */
+            .agent-header-bar { padding: 6px 12px; min-height: 40px; }
+            .agent-header-bar .ahb-desc { display: none; }
+
             /* ── EMAIL CARD: scroll horizontal evitado ── */
             .email-body-area { max-height: 160px; font-size: 13px; }
 
@@ -541,6 +552,14 @@
 
     <!-- ── CHAT AREA ── -->
     <div class="chat-wrap">
+        <!-- Persistent agent header — always visible even when history is loaded -->
+        <div class="agent-header-bar" id="agent-header-bar">
+            <div class="ahb-avatar" id="ahb-avatar">🤖</div>
+            <div class="ahb-info">
+                <div class="ahb-name" id="ahb-name">ClawYard Auto</div>
+                <div class="ahb-desc" id="ahb-desc">Routing inteligente — vai ao agente certo automaticamente</div>
+            </div>
+        </div>
         <div id="chat">
             <div class="empty-state" id="empty-state">
                 <div class="empty-state-hero">
@@ -971,7 +990,29 @@ function renderStarterChips(agent) {
     ).join('');
 }
 
+// ── Persistent agent header bar (always visible above messages) ─────────────
+function updateAgentHeader(agent) {
+    const avatarEl = document.getElementById('ahb-avatar');
+    const nameEl   = document.getElementById('ahb-name');
+    const descEl   = document.getElementById('ahb-desc');
+    if (!avatarEl) return;
+    const emoji = AGENT_EMOJIS[agent] || '🤖';
+    const name  = AGENT_NAMES[agent]  || 'ClawYard';
+    const desc  = AGENT_DESCRIPTIONS[agent] || 'Escolhe um exemplo ou escreve a tua pergunta';
+    const photo = AGENT_PHOTOS[agent];
+    if (photo) {
+        avatarEl.innerHTML = `<img src="${photo}" alt="${name}">`;
+    } else {
+        avatarEl.innerHTML = emoji;
+    }
+    if (nameEl) nameEl.textContent = name;
+    if (descEl) descEl.textContent = desc;
+}
+
 function updateEmptyState(agent) {
+    // Always update the persistent header bar (visible even when messages are shown)
+    updateAgentHeader(agent);
+
     const emptyState = document.getElementById('empty-state');
     if (!emptyState) return;
     const avatarEl = document.getElementById('empty-avatar');

@@ -497,10 +497,27 @@ SPECIALTY;
                     . "\n_Acede ao SAP B1 → CRM → Sales Opportunities para ver a oportunidade._";
             }
 
-            $sapErr = $this->sap->getLastError();
+            $sapErr   = $this->sap->getLastError();
+            $cardCode = $data['CardCode'] ?? '?';
+            $cardName = $data['CardName'] ?? '';
+            $bpInfo   = $cardName ? "`{$cardCode}` — {$cardName}" : "`{$cardCode}`";
+
+            // Specific guidance for "business partner removed" error
+            $isRemoved = $sapErr && (
+                str_contains(strtolower($sapErr), 'removed') ||
+                str_contains(strtolower($sapErr), 'business partner')
+            );
+            $guidance = $isRemoved
+                ? "⚠️ O parceiro de negócio {$bpInfo} está marcado como **removido/inativo** no SAP B1.\n\n"
+                  . "**Para resolver:**\n"
+                  . "1. Acede ao SAP → Gestão → Parceiros de Negócio → re-ativa `{$cardCode}`\n"
+                  . "2. Ou cola o email novamente indicando o CardCode correto para este cliente."
+                : "_Cola o email novamente ou corrige o campo indicado e volta a confirmar com **SIM**._";
+
             return "❌ **Não foi possível criar a oportunidade no SAP B1.**\n\n"
                 . ($sapErr ? "> ⚠️ *{$sapErr}*\n\n" : '')
-                . "_Cola o email novamente ou corrige o campo indicado e volta a confirmar com **SIM**._";
+                . "**Parceiro usado:** {$bpInfo}\n\n"
+                . $guidance;
         }
 
         if ($type === 'update') {
