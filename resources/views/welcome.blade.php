@@ -489,7 +489,7 @@
                 <div class="agent-grid-item" data-agent="sales"      title="Marco Sales"><span class="ag-icon"><img src="/images/agents/sales.png" class="ag-photo" alt="Marco"></span><span class="ag-name">Marco</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="support"    title="Marcus Support"><span class="ag-icon"><img src="/images/agents/support.png" class="ag-photo" alt="Marcus"></span><span class="ag-name">Marcus</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="email"      title="Daniel Email"><span class="ag-icon"><img src="/images/agents/email.png" class="ag-photo" alt="Daniel"></span><span class="ag-name">Daniel</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
-                <div class="agent-grid-item" data-agent="crm"        title="Marta CRM — Criar Oportunidades SAP"><span class="ag-icon">🎯</span><span class="ag-name">Marta CRM</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="crm"        title="Marta CRM — Criar Oportunidades SAP"><span class="ag-icon"><img src="/images/agents/crm.png" class="ag-photo" alt="Marta"></span><span class="ag-name">Marta CRM</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
 
                 <!-- ── SAP & DADOS ── -->
                 <div class="ag-section-hdr">📊 SAP &amp; Dados</div>
@@ -629,6 +629,7 @@ const AGENT_PHOTOS = {
     support:      '/images/agents/support.png',
     email:        '/images/agents/email.png',
     sap:          '/images/agents/sap.png',
+    crm:          '/images/agents/crm.png',
     document:     '/images/agents/document.png',
     claude:       '/images/agents/claude.png',
     nvidia:       '/images/agents/nvidia.png',
