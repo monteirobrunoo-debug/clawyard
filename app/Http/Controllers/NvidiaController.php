@@ -545,6 +545,8 @@ class NvidiaController extends Controller
 
         if ($conversation) {
             $conversation->messages()->delete();
+            // Also clear cached summary so next conversation starts fresh
+            $conversation->update(['metadata' => null]);
         }
 
         return response()->json(['ok' => true]);
