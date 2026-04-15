@@ -519,9 +519,20 @@ SPECIALTY;
 
     // ─── Claude streaming ─────────────────────────────────────────────────────
 
+    /**
+     * How many recent messages to pass to Claude.
+     * Full history is still saved to DB and used by findPendingInHistory().
+     * We only need the current email-processing chain (paste → ask → confirm),
+     * so 8 messages (4 turns) is plenty. Older conversations stay out of context.
+     */
+    const CONTEXT_WINDOW = 8;
+
     protected function callClaude(string|array $message, array $history, callable $onChunk, ?callable $heartbeat): string
     {
-        $messages = array_merge($history, [['role' => 'user', 'content' => $message]]);
+        // Only pass the most recent N messages to Claude — full history is saved in DB
+        // but old email threads should not pollute the current conversation context.
+        $recentHistory = array_slice($history, -self::CONTEXT_WINDOW);
+        $messages = array_merge($recentHistory, [['role' => 'user', 'content' => $message]]);
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
@@ -580,8 +591,9 @@ SPECIALTY;
             if ($pending) return $this->executeConfirmation($pending);
         }
 
-        $message  = $this->augmentWithCrmContext($message);
-        $messages = array_merge($history, [['role' => 'user', 'content' => $message]]);
+        $message      = $this->augmentWithCrmContext($message);
+        $recentHistory = array_slice($history, -self::CONTEXT_WINDOW);
+        $messages      = array_merge($recentHistory, [['role' => 'user', 'content' => $message]]);
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
