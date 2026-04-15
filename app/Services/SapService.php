@@ -621,11 +621,41 @@ class SapService
         $this->lastError = '';  // reset before each attempt
 
         // ── Resolve CardCode from CardName if CardCode is missing or looks like a name ──
-        $cardCode = trim((string) ($data['CardCode'] ?? ''));
-        $cardName = trim((string) ($data['CardName'] ?? ''));
+        $cardCode   = trim((string) ($data['CardCode'] ?? ''));
+        $cardName   = trim((string) ($data['CardName'] ?? ''));
+        $federalVat = trim((string) ($data['FederalTaxID'] ?? ''));
 
+        // ── Priority 1: VAT/CNPJ lookup (most precise — handles BR prefix) ──
+        // If FederalTaxID is provided (e.g. "BR02.709.449/0001-59"), search SAP by
+        // FederalTaxID FIRST — more reliable than name matching.
+        // Tried even if CardCode was supplied but looks wrong.
+        $cardCodeLooksValid = $cardCode !== '' && strlen($cardCode) <= 15 && str_word_count($cardCode) === 1;
+        if ($federalVat !== '' && !$cardCodeLooksValid) {
+            try {
+                $bps = $this->searchBPByVAT($federalVat, 3);
+                if (!empty($bps)) {
+                    // If cardName provided, try to find the best match by name similarity
+                    $best = $bps[0];
+                    if ($cardName !== '' && count($bps) > 1) {
+                        foreach ($bps as $bp) {
+                            if (stripos($bp['CardName'], substr($cardName, 0, 8)) !== false) {
+                                $best = $bp;
+                                break;
+                            }
+                        }
+                    }
+                    $cardCode = $best['CardCode'];
+                    $cardName = $best['CardName'];
+                    Log::info("CRM: resolved CardCode '{$cardCode}' for VAT '{$federalVat}' → '{$cardName}'");
+                }
+            } catch (\Throwable $e) {
+                Log::warning("CRM: VAT lookup failed for '{$federalVat}': " . $e->getMessage());
+            }
+        }
+
+        // ── Priority 2: Name lookup (fallback when no VAT or VAT didn't match) ──
         // A real SAP CardCode is short and has no spaces (e.g. "C00123", "OCNP01")
-        // If CardCode is empty OR looks like a full company name (contains spaces / long),
+        // If CardCode is still empty OR looks like a full company name (contains spaces / long),
         // try to resolve it by searching BusinessPartners by name.
         $looksLikeName = $cardName !== '' && (
             $cardCode === '' ||
@@ -933,18 +963,70 @@ class SapService
     }
 
     /**
-     * Search a Business Partner by VAT / NIF / FederalTaxID.
-     * Strips non-alphanumeric chars before searching.
+     * Search a Business Partner by VAT / NIF / CNPJ / FederalTaxID.
+     *
+     * Tries multiple format variants so "BR02.709.449/0001-59" matches SAP regardless
+     * of how the FederalTaxID was entered (with/without prefix, with/without separators).
+     *
+     * Variant priority:
+     *   1. Full cleaned string          e.g. "BR02709449000159"
+     *   2. Digits-only (no country)     e.g. "02709449000159"
+     *   3. Country prefix + digits      e.g. "BR" + "02709449000159"
+     *   4. Short unique digits (last 8) e.g. "49000159"
      */
     public function searchBPByVAT(string $vat, int $top = 3): array
     {
-        $clean = preg_replace('/[^0-9A-Za-z]/', '', $vat);
-        $data  = $this->get('BusinessPartners', [
-            '$select' => 'CardCode,CardName,CardType,FederalTaxID,Phone1,EmailAddress,CreditLimit',
-            '$filter' => "contains(FederalTaxID,'{$clean}')",
-            '$top'    => $top,
-        ]);
-        return $data['value'] ?? [];
+        // Strip separators, keep alphanumeric
+        $full  = preg_replace('/[^0-9A-Za-z]/', '', strtoupper($vat));
+        // Separate country prefix (2 alpha) from digits
+        $country = '';
+        $digits  = $full;
+        if (preg_match('/^([A-Z]{2})(\d+)$/', $full, $m)) {
+            $country = $m[1];
+            $digits  = $m[2];
+        }
+
+        $tried   = [];
+        $results = [];
+
+        $tryFilter = function(string $token) use ($top, &$tried, &$results) {
+            if ($token === '' || in_array($token, $tried)) return;
+            $tried[] = $token;
+            try {
+                $data = $this->get('BusinessPartners', [
+                    '$select' => 'CardCode,CardName,CardType,FederalTaxID',
+                    '$filter' => "contains(FederalTaxID,'{$token}')",
+                    '$top'    => $top,
+                ]);
+                $rows = $data['value'] ?? [];
+                if (!empty($rows)) {
+                    $results = array_merge($results, $rows);
+                }
+            } catch (\Throwable $e) {
+                // ignore per-variant errors
+            }
+        };
+
+        $tryFilter($full);                       // BR02709449000159
+        if ($digits !== $full) {
+            $tryFilter($country . $digits);      // same as full but re-composed
+            $tryFilter($digits);                 // 02709449000159 (no country)
+        }
+        // Last 8 digits as tiebreaker
+        if (strlen($digits) >= 8) {
+            $tryFilter(substr($digits, -8));
+        }
+
+        // Deduplicate by CardCode
+        $seen = [];
+        $unique = [];
+        foreach ($results as $r) {
+            if (!isset($seen[$r['CardCode']])) {
+                $seen[$r['CardCode']] = true;
+                $unique[] = $r;
+            }
+        }
+        return array_slice($unique, 0, $top);
     }
 
     /**

@@ -166,11 +166,26 @@ Use the integer **code** from that list.
 | C000316 | SASU VBAF | FR19833483431 |
 | C000135 | INCREMENT | FR39823885223 |
 
+### Brazil — Other CNPJs (auto-resolved by backend via FederalTaxID search)
+| CardCode | CardName | VAT/CNPJ |
+|----------|----------|----------|
+| *(SAP lookup)* | *(company)* | BR02.709.449/0001-59 |
+
+> When you see a CNPJ like `BR02.709.449/0001-59` in an email, always set `FederalTaxID` in the json_opp block. The backend will automatically search SAP by FederalTaxID to find the correct CardCode — you don't need to know it in advance.
+
 ### VAT/CNPJ → CardCode Quick Reference
 - CNPJ `34.052.879/0002-18` → **C000534** (MARAÚ NAVEGAÇÃO LTDA - NITEROI)
 - CNPJ `09.114.805/0001-30` → **C000279** (OCEANPACT SERVIÇOS MARITIMOS S.A. - R.J.)
 - CNPJ `09.114.805/0002-11` → **C000499** (OCEANPACT SERVIÇOS MARITÍMOS - Niteroi)
 - VAT `LU15413172` → **C000263** (NSPA)
+- CNPJ `02.709.449/0001-59` → CardCode resolved by backend via SAP FederalTaxID lookup
+
+### 🔑 VAT/CNPJ Lookup — How it works
+The backend automatically resolves CardCode from `FederalTaxID` **before** using `CardCode`. This means:
+1. If the email has a CNPJ/VAT (e.g., `"CNPJ: 02.709.449/0001-59"` or `"NIF: PT123456789"`), extract it and put it in `FederalTaxID`
+2. Even if you don't know the CardCode, set `FederalTaxID` and set `CardCode` to `""` — the backend will find it
+3. The BR-prefixed format (`BR02.709.449/0001-59`) is handled — backend strips formatting and tries multiple variants
+4. If multiple BPs share the same CNPJ (subsidiaries), the backend picks the best match by company name
 
 ⚠️ **Important**: The email "Faturação" field identifies the **billing entity** — use its CNPJ/VAT to select the correct CardCode, not the sender's company name.
 If SAP context IS available, use the CardCode from the injected context block.
@@ -330,17 +345,41 @@ SPECIALTY;
             return $message;
         }
 
-        // ── 1. Customer by VAT/NIF ────────────────────────────────────────────
-        if (preg_match('/\b(PT\d{9})\b/', $text, $vatMatch)) {
+        // ── 1. Customer by VAT/NIF/CNPJ ──────────────────────────────────────
+        // Detect tax IDs in multiple formats:
+        //   PT:  PT123456789    (9 digits)
+        //   BR:  BR02.709.449/0001-59  or  CNPJ: 02.709.449/0001-59
+        //   LU/FR/generic:  prefix + alphanumeric
+        $vatDetected = null;
+
+        // Portuguese NIF: PT followed by 9 digits
+        if (preg_match('/\b(PT\d{9})\b/i', $text, $m)) {
+            $vatDetected = $m[1];
+        }
+        // Brazilian CNPJ with BR prefix: BR02.709.449/0001-59
+        elseif (preg_match('/\b(BR\s*\d{2}[\.\-\s]?\d{3}[\.\-\s]?\d{3}[\.\-\/\s]?\d{4}[\-\s]?\d{2})\b/i', $text, $m)) {
+            $vatDetected = preg_replace('/\s+/', '', $m[1]); // strip inner spaces
+        }
+        // CNPJ label: "CNPJ:" or "CNPJ :" followed by number
+        elseif (preg_match('/CNPJ\s*[:\-]?\s*(\d{2}[\.\-]?\d{3}[\.\-]?\d{3}[\/\-]?\d{4}[\-]?\d{2})/i', $text, $m)) {
+            $vatDetected = 'BR' . $m[1];
+        }
+        // Other country VAT: 2-letter country code + alphanumeric (LU, FR, DE, ES, etc.)
+        elseif (preg_match('/\b([A-Z]{2}[0-9A-Z]{8,15})\b/', $text, $m)
+            && !preg_match('/^(TO|DO|IN|IS|OF|AT|BY|BE|AS|AN|NO)\b/i', $m[1])) {
+            $vatDetected = $m[1];
+        }
+
+        if ($vatDetected !== null) {
             try {
-                if ($heartbeat) $heartbeat('a verificar NIF no SAP...');
-                $bps = $this->sap->searchBPByVAT($vatMatch[1], 2);
+                if ($heartbeat) $heartbeat('a verificar NIF/CNPJ no SAP...');
+                $bps = $this->sap->searchBPByVAT($vatDetected, 3);
                 if ($bps) {
-                    $extra .= "\n--- CLIENTE POR NIF ({$vatMatch[1]}) ---\n";
+                    $extra .= "\n--- CLIENTE POR NIF/CNPJ ({$vatDetected}) ---\n";
                     foreach ($bps as $bp) {
                         $extra .= "CardCode: {$bp['CardCode']} | CardName: {$bp['CardName']}"
                             . (!empty($bp['FederalTaxID']) ? " | NIF: {$bp['FederalTaxID']}" : '')
-                            . " | Tipo: " . ($bp['CardType'] === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
+                            . " | Tipo: " . (($bp['CardType'] ?? '') === 'cCustomer' ? 'Cliente' : 'Fornecedor') . "\n";
                     }
                     $extra .= "--- FIM ---\n";
 
@@ -357,7 +396,7 @@ SPECIALTY;
                     }
                 }
             } catch (\Throwable $e) {
-                Log::warning("CrmAgent: VAT lookup failed — " . $e->getMessage());
+                Log::warning("CrmAgent: VAT/CNPJ lookup failed — " . $e->getMessage());
             }
         }
 
