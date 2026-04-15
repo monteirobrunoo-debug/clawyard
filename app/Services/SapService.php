@@ -320,23 +320,27 @@ class SapService
 
         try {
             $response = $this->http->patch("{$this->baseUrl}/{$endpoint}", [
-                'headers' => [
+                'http_errors' => false,
+                'headers'     => [
                     'Cookie'       => "B1SESSION={$session}",
                     'Content-Type' => 'application/json',
                 ],
                 'json' => $payload,
             ]);
             $code = $response->getStatusCode();
-            return ($code === 204 || $code === 200) ? ['ok' => true] : null;
 
-        } catch (\GuzzleHttp\Exception\ClientException $e) {
-            if ($e->getResponse()->getStatusCode() === 401 && $retry) {
+            if ($code === 401 && $retry) {
                 Cache::forget(self::SESSION_CACHE_KEY);
                 $this->login();
                 return $this->patch($endpoint, $payload, false);
             }
-            Log::error("SAP PATCH failed [{$endpoint}]: " . $e->getMessage());
+
+            if ($code === 204 || $code === 200) return ['ok' => true];
+
+            $body = (string) $response->getBody();
+            Log::warning("SAP PATCH [{$endpoint}] HTTP {$code}: " . substr($body, 0, 300));
             return null;
+
         } catch (\Exception $e) {
             Log::error("SAP PATCH exception [{$endpoint}]: " . $e->getMessage());
             return null;
@@ -720,17 +724,19 @@ class SapService
             Log::warning("CRM: retrying without Source (SAP: {$originalError})");
             unset($filtered['Source']);
             $result = $this->post('SalesOpportunities', $filtered);
-            if (!$result && $this->lastError === '') $this->lastError = $originalError;
+            if ($result)  $this->lastError = '';          // success — clear error
+            elseif ($this->lastError === '') $this->lastError = $originalError;
         }
 
         // Retry 2: Inactive SalesPerson — remove and try again without assignment
         if (!$result && isset($filtered['SalesPerson'])
             && str_contains((string) $this->lastError, 'sales employee')) {
             $originalError = $this->lastError;
-            Log::warning("CRM: retrying without SalesPerson (inactive employee: {$originalError})");
+            Log::warning("CRM: retrying without SalesPerson (inactive: {$originalError})");
             unset($filtered['SalesPerson']);
             $result = $this->post('SalesOpportunities', $filtered);
-            if (!$result && $this->lastError === '') $this->lastError = $originalError;
+            if ($result)  $this->lastError = '';
+            elseif ($this->lastError === '') $this->lastError = $originalError;
         }
 
         // Retry 3: ContactPerson invalid — remove and try again
@@ -740,7 +746,8 @@ class SapService
             Log::warning("CRM: retrying without ContactPerson (SAP: {$originalError})");
             unset($filtered['ContactPerson']);
             $result = $this->post('SalesOpportunities', $filtered);
-            if (!$result && $this->lastError === '') $this->lastError = $originalError;
+            if ($result)  $this->lastError = '';
+            elseif ($this->lastError === '') $this->lastError = $originalError;
         }
 
         // SAP sometimes returns 201 with empty body (Prefer header ignored).
@@ -763,22 +770,11 @@ class SapService
             }
         }
 
-        // Post-creation PATCH: BusinessProject + Status Oportunidade UDF
+        // Post-creation PATCH: set ProjectCode = SequentialNo (shown in General tab)
+        // Note: field is "ProjectCode" in OData (not "BusinessProject" — that name is invalid)
         if ($result && isset($result['SequentialNo'])) {
             $seqNo = $result['SequentialNo'];
-            $patch = ['BusinessProject' => (string) $seqNo];
-
-            // Status Oportunidade UDF — always "Em aberto" on creation
-            $statusField = $this->discoverStatusOportunidadeField();
-            if ($statusField) {
-                $patch[$statusField] = 'Em aberto';
-            }
-
-            try {
-                $this->patch("SalesOpportunities({$seqNo})", $patch);
-            } catch (\Throwable $e) {
-                Log::warning("CRM: post-create PATCH failed for opp #{$seqNo}: " . $e->getMessage());
-            }
+            $this->patch("SalesOpportunities({$seqNo})", ['ProjectCode' => (string) $seqNo]);
         }
 
         return $result;
