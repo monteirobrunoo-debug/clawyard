@@ -776,11 +776,14 @@ class SapService
         if ($result && isset($result['SequentialNo'])) {
             $seqNo    = $result['SequentialNo'];
             $projCode = (string) $seqNo;
+            // Project Name = Opportunity Name (email subject), trimmed to 100 chars
+            $oppName  = trim((string) ($data['OpportunityName'] ?? ''));
+            $projName = $oppName !== '' ? substr($oppName, 0, 100) : "Oportunidade #{$seqNo}";
             try {
                 // Step 1 — create the project (ignore 409 conflict if it already exists)
                 $this->post('Projects', [
                     'Code'   => $projCode,
-                    'Name'   => "Oportunidade #{$seqNo}",
+                    'Name'   => $projName,
                     'Active' => 'tYES',
                 ]);
                 // Step 2 — link project to opportunity
