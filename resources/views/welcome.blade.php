@@ -284,6 +284,9 @@
         .save-report-btn { background:none; border:none; cursor:pointer; font-size:13px; margin-left:6px; opacity:0.4; transition:opacity .2s; padding:0; }
         .save-report-btn:hover { opacity:1; }
         .save-report-btn.saved { opacity:1; }
+        .pdf-export-btn { background:none; border:1px solid var(--border2); color:var(--muted); cursor:pointer; font-size:11px; font-weight:600; margin-left:6px; opacity:0; transition:opacity .2s,border-color .2s; padding:2px 8px; border-radius:5px; }
+        .pdf-export-btn:hover { opacity:1 !important; border-color:#76b900; color:#76b900; }
+        .message.ai:hover .pdf-export-btn { opacity:0.5; }
 
         /* ══════════════════════════════════════
            MOBILE — max-width: 768px
@@ -1471,13 +1474,14 @@ function addMessage(role, text, agentName = '') {
     }
 
     const saveBtn = role === 'ai' ? `<button class="save-report-btn" onclick="saveAsReport(this,'${agentName}')" title="Guardar como relatório">💾</button>` : '';
+    const pdfBtn  = role === 'ai' ? `<button class="pdf-export-btn" onclick="exportMsgPDF(this)" title="Exportar como PDF">📄 PDF</button>` : '';
     msg.innerHTML = `
         ${avatarHtml}
         <div class="msg-col">
             <div class="msg-meta">
                 <span>${role === 'user' ? '{{ Auth::user()->name }}' : name}</span>
                 ${agentName ? `<span class="agent-tag ${role==='ai'?'active':''}">${AGENT_EMOJIS[agentName]||''} ${AGENT_NAMES[agentName]||agentName}</span>` : ''}
-                ${saveBtn}
+                ${saveBtn}${pdfBtn}
             </div>
             <div class="bubble">${role === 'user' ? esc(text) : renderMarkdown(text)}</div>
         </div>`;
@@ -2226,6 +2230,55 @@ async function createAgentPdf() {
     } finally {
         setTimeout(() => { btn.innerHTML = origHTML; btn.disabled = false; }, 2500);
     }
+}
+
+function exportMsgPDF(btn) {
+    const msgCol   = btn.closest('.msg-col');
+    const bubble   = msgCol.querySelector('.bubble');
+    const metaSpan = msgCol.querySelector('.msg-meta span');
+    const agentTag = msgCol.querySelector('.agent-tag');
+    const agentLabel = agentTag ? agentTag.textContent.trim() : 'ClawYard';
+    const date     = new Date().toLocaleString('pt-PT', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const html     = bubble.innerHTML;
+
+    const win = window.open('', '_blank', 'width=860,height=900');
+    win.document.write(`<!DOCTYPE html>
+<html lang="pt"><head>
+<meta charset="UTF-8">
+<title>${agentLabel} — ${date}</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; color: #1a1a1a; font-size: 13.5px; line-height: 1.65; }
+  h1 { font-size: 16px; color: #1a1a1a; margin-bottom: 4px; border-bottom: 2px solid #76b900; padding-bottom: 8px; }
+  .meta { font-size: 11px; color: #666; margin-bottom: 20px; }
+  strong { font-weight: 700; }
+  em { color: #555; }
+  code { background: #f4f4f4; border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px; font-family: 'Courier New', monospace; font-size: 12px; }
+  pre { background: #f6f6f6; border: 1px solid #ddd; border-radius: 6px; padding: 12px; overflow-x: auto; }
+  pre code { background: none; border: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 10px 0; }
+  th { background: #f0f0f0; font-weight: 700; padding: 7px 10px; border: 1px solid #ccc; text-align: left; }
+  td { padding: 6px 10px; border: 1px solid #ddd; }
+  tr:nth-child(even) td { background: #fafafa; }
+  h2 { font-size: 14px; margin: 14px 0 5px; color: #333; }
+  h3 { font-size: 13px; margin: 10px 0 4px; color: #555; }
+  ul, ol { padding-left: 20px; }
+  li { margin: 2px 0; }
+  hr { border: none; border-top: 1px solid #ddd; margin: 12px 0; }
+  .footer { margin-top: 32px; font-size: 10px; color: #999; border-top: 1px solid #eee; padding-top: 8px; }
+  @media print { body { margin: 20px; } .no-print { display: none; } }
+</style>
+</head><body>
+<h1>${agentLabel}</h1>
+<div class="meta">Gerado em ${date} · ClawYard / HP-Group</div>
+${html}
+<div class="footer">ClawYard AI Platform · HP-Group · Documento gerado automaticamente</div>
+<div class="no-print" style="margin-top:20px;">
+  <button onclick="window.print()" style="background:#76b900;color:#000;border:none;padding:10px 24px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimir / Guardar PDF</button>
+  <button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;margin-left:8px;">✕ Fechar</button>
+</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
 }
 
 async function saveAsReport(btn, agentName) {
