@@ -770,9 +770,26 @@ class SapService
             }
         }
 
-        // Note: ProjectCode (Business Project in General tab) is a FK to the Projects table.
-        // SAP rejects arbitrary values — must reference an existing project code.
-        // This field should be set manually in SAP B1 if a project exists for this opportunity.
+        // Post-creation: create a SAP Project with Code = SequentialNo, then link it
+        // to the opportunity via ProjectCode (Business Project field in General tab).
+        // Two-step required: project must exist before it can be referenced.
+        if ($result && isset($result['SequentialNo'])) {
+            $seqNo    = $result['SequentialNo'];
+            $projCode = (string) $seqNo;
+            try {
+                // Step 1 — create the project (ignore 409 conflict if it already exists)
+                $this->post('Projects', [
+                    'Code'   => $projCode,
+                    'Name'   => "Oportunidade #{$seqNo}",
+                    'Active' => 'tYES',
+                ]);
+                // Step 2 — link project to opportunity
+                $this->patch("SalesOpportunities({$seqNo})", ['ProjectCode' => $projCode]);
+                Log::info("CRM: ProjectCode={$projCode} linked to opportunity #{$seqNo}");
+            } catch (\Throwable $e) {
+                Log::warning("CRM: ProjectCode PATCH failed for #{$seqNo}: " . $e->getMessage());
+            }
+        }
 
         return $result;
     }
