@@ -189,6 +189,34 @@ class NvidiaController extends Controller
 
         $history = $conversation->history;
 
+        // CRM shortcut: if user confirms with SIM and we have a cached pending_opp
+        // in metadata, bypass the agent entirely and execute the SAP call directly.
+        // This is a safeguard for cases where findPendingInHistory() can't re-parse
+        // the json_opp block from history (encoding issues, complex JSON, etc.)
+        if ($agentName === 'crm' && preg_match('/^\s*(sim|s|yes|y|confirmo|ok|criar|cria|confirmar)\s*\.?$/i', trim($message))) {
+            $meta       = $conversation->metadata ?? [];
+            $pendingOpp = $meta['pending_opp'] ?? null;
+            if ($pendingOpp && is_array($pendingOpp)) {
+                $crmAgent = new \App\Agents\CrmAgent();
+                $result   = $crmAgent->executePendingOpp($pendingOpp);
+
+                // Clear pending_opp from metadata after execution
+                unset($meta['pending_opp']);
+                $conversation->update(['metadata' => $meta]);
+
+                // Save messages
+                $conversation->messages()->create(['role' => 'user',      'content' => $message]);
+                $conversation->messages()->create(['role' => 'assistant', 'agent' => 'crm', 'content' => $result]);
+
+                return response()->stream(function () use ($result, $sessionId) {
+                    $meta = ['type' => 'meta', 'mode' => 'single', 'agent' => 'crm', 'session_id' => $sessionId, 'agent_log' => [], 'suggestions' => []];
+                    echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE) . "\n\n"; flush();
+                    echo 'data: ' . json_encode(['chunk' => $result], JSON_UNESCAPED_UNICODE) . "\n\n"; flush();
+                    echo "data: [DONE]\n\n"; flush();
+                }, 200, ['Content-Type' => 'text/event-stream', 'Cache-Control' => 'no-cache', 'X-Accel-Buffering' => 'no']);
+            }
+        }
+
         $augmentedMessage = $this->ragService->augmentMessage($message);
 
         // Write base64 file to temp path for ZIP-based parsers (Excel/Word)
@@ -423,6 +451,21 @@ class NvidiaController extends Controller
                 ]);
             } catch (\Throwable $e) {
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
+            }
+
+            // CRM: cache json_opp block in conversation metadata so SIM confirmation
+            // never has to re-parse history (safeguard against regex edge-cases)
+            if ($agentName_final === 'crm' && preg_match('/```json_opp\s*([\s\S]*?)\s*```/i', $fullReply, $oppMatch)) {
+                $oppData = json_decode(trim($oppMatch[1]), true);
+                if (is_array($oppData)) {
+                    try {
+                        $meta = $conversationRef->metadata ?? [];
+                        $meta['pending_opp'] = $oppData;
+                        $conversationRef->update(['metadata' => $meta]);
+                    } catch (\Throwable $e) {
+                        \Log::warning('ClawYard CRM: could not cache pending_opp — ' . $e->getMessage());
+                    }
+                }
             }
 
             echo ": saving\n\n";

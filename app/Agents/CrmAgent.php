@@ -230,18 +230,25 @@ SPECIALTY;
 
     protected function extractPendingOpp(string $text): ?array
     {
-        if (preg_match('/```json_opp\s*(\{.*?\})\s*```/si', $text, $m)) {
+        // Capture everything between ```json_opp and ``` (don't constrain to {…} —
+        // lazy brace matching breaks on any } inside JSON string values)
+        if (preg_match('/```json_opp\s*([\s\S]*?)\s*```/i', $text, $m)) {
             $data = json_decode(trim($m[1]), true);
-            return is_array($data) ? $data : null;
+            if (is_array($data)) return $data;
+        }
+        // Fallback: look for a bare JSON object after the json_opp label (no closing ```)
+        if (preg_match('/```json_opp\s*(\{[\s\S]*?\})\s*(?:```|$)/i', $text, $m)) {
+            $data = json_decode(trim($m[1]), true);
+            if (is_array($data)) return $data;
         }
         return null;
     }
 
     protected function extractPendingUpdate(string $text): ?array
     {
-        if (preg_match('/```json_opp_update\s*(\{.*?\})\s*```/si', $text, $m)) {
+        if (preg_match('/```json_opp_update\s*([\s\S]*?)\s*```/i', $text, $m)) {
             $data = json_decode(trim($m[1]), true);
-            return is_array($data) ? $data : null;
+            if (is_array($data)) return $data;
         }
         return null;
     }
@@ -415,6 +422,12 @@ SPECIALTY;
     }
 
     // ─── Confirmation execution ───────────────────────────────────────────────
+
+    /** Public wrapper used by NvidiaController's metadata-based shortcut */
+    public function executePendingOpp(array $oppData): string
+    {
+        return $this->executeConfirmation(['type' => 'create', 'data' => $oppData]);
+    }
 
     protected function executeConfirmation(array $pending): string
     {
