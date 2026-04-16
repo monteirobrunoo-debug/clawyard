@@ -53,7 +53,7 @@ class NvidiaController extends Controller
             $history = $conversation->history;
 
             // RAG: augment message with relevant documents
-            $augmentedMessage = $this->ragService->augmentMessage($message);
+            $augmentedMessage = $this->ragService->augmentMessage($message, $agentName);
 
             // Multimodal: add image to message if provided
             if ($imageB64) {
@@ -217,7 +217,7 @@ class NvidiaController extends Controller
             }
         }
 
-        $augmentedMessage = $this->ragService->augmentMessage($message);
+        $augmentedMessage = $this->ragService->augmentMessage($message, $agentName);
 
         // Write base64 file to temp path for ZIP-based parsers (Excel/Word)
         $filePath = null;
