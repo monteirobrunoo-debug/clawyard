@@ -2899,13 +2899,14 @@ async function submitShareModal() {
     btn.textContent = 'A criar…'; btn.disabled = true;
 
     const common = {
-        client_name:     client,
-        client_email:    document.getElementById('share-email').value.trim() || null,
-        custom_title:    document.getElementById('share-title').value.trim() || null,
-        welcome_message: document.getElementById('share-welcome').value.trim() || null,
-        password:        document.getElementById('share-pass').value || null,
-        expires_at:      document.getElementById('share-expires').value || null,
-        show_branding:   true,
+        client_name:      client,
+        client_email:     document.getElementById('share-email').value.trim() || null,
+        custom_title:     document.getElementById('share-title').value.trim() || null,
+        welcome_message:  document.getElementById('share-welcome').value.trim() || null,
+        password:         document.getElementById('share-pass').value || null,
+        expires_at:       document.getElementById('share-expires').value || null,
+        show_branding:    true,
+        allow_sap_access: document.getElementById('share-sap-access').checked,
     };
 
     try {
@@ -3009,9 +3010,20 @@ updateShareBtn();
             </div>
         </div>
 
+        <!-- SAP access toggle -->
+        <div style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:11px 14px;margin-bottom:14px">
+            <label style="display:flex;align-items:center;gap:11px;cursor:pointer">
+                <input type="checkbox" id="share-sap-access" style="width:20px;height:20px;accent-color:#76b900;cursor:pointer;flex-shrink:0">
+                <div>
+                    <div style="font-size:13px;font-weight:700;color:#e2e8f0">📊 Permitir acesso SAP B1 (Richard)</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px">Por defeito <strong style="color:#ef4444">bloqueado</strong> — stock, faturas e CRM ficam ocultos a utilizadores externos.</div>
+                </div>
+            </label>
+        </div>
+
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
             <button onclick="closeShareModal()" style="background:none;border:1px solid #2a2a3a;color:#64748b;padding:8px 18px;border-radius:8px;cursor:pointer;font-size:13px">Cancel</button>
-            <button id="share-submit-btn" onclick="submitShareModal()" style="background:var(--agent-color,#76b900);color:#000;font-weight:700;padding:8px 20px;border:none;border-radius:8px;cursor:pointer;font-size:13px">Create Link</button>
+            <button id="share-submit-btn" onclick="submitShareModal()" style="background:var(--agent-color,#76b900);color:#000;font-weight:700;padding:8px 20px;border:none;border-radius:8px;cursor:pointer;font-size:13px">Criar Link</button>
         </div>
     </div>
 </div>
