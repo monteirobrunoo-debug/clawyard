@@ -33,11 +33,14 @@ class ComputerUseAgent implements AgentInterface
     /** Max Computer Use iterations per task (safety limit) */
     private const MAX_ITERATIONS = 30;
 
-    /** Computer Use API beta flag */
-    private const CU_BETA = 'computer-use-2024-10-22';
+    /** Computer Use API beta flag — configurable via ROBODESK_CU_BETA env */
+    private const CU_BETA_DEFAULT = 'computer-use-2024-10-22';
 
-    /** Model that supports Computer Use */
-    private const CU_MODEL = 'claude-opus-4-5';
+    /** Model — configurable via ROBODESK_MODEL env; must support Computer Use */
+    private const CU_MODEL_DEFAULT = 'claude-3-5-sonnet-20241022';
+
+    /** Tool type matching the beta flag */
+    private const CU_TOOL_DEFAULT = 'computer_20241022';
 
     public function __construct()
     {
@@ -124,7 +127,7 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'computer'; }
-    public function getModel(): string { return self::CU_MODEL; }
+    public function getModel(): string { return config('services.robodesk.cu_model', self::CU_MODEL_DEFAULT); }
 
     // ── Computer Use Loop ────────────────────────────────────────────────────
 
@@ -151,8 +154,12 @@ SPECIALTY;
         $width      = $screenInfo['screen']['width']  ?? 1280;
         $height     = $screenInfo['screen']['height'] ?? 800;
 
+        $cuTool  = config('services.robodesk.cu_tool',  self::CU_TOOL_DEFAULT);
+        $cuModel = config('services.robodesk.cu_model', self::CU_MODEL_DEFAULT);
+        $cuBeta  = config('services.robodesk.cu_beta',  self::CU_BETA_DEFAULT);
+
         $tools = [[
-            'type'              => 'computer_20241022',
+            'type'              => $cuTool,
             'name'              => 'computer',
             'display_width_px'  => $width,
             'display_height_px' => $height,
@@ -198,10 +205,10 @@ SPECIALTY;
                 $response = $this->client->post('/v1/messages', [
                     'headers' => array_merge(
                         $this->apiHeaders(),
-                        ['anthropic-beta' => self::CU_BETA]
+                        ['anthropic-beta' => $cuBeta]
                     ),
                     'json' => [
-                        'model'      => self::CU_MODEL,
+                        'model'      => $cuModel,
                         'max_tokens' => 4096,
                         'system'     => $this->systemPrompt,
                         'tools'      => $tools,

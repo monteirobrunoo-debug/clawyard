@@ -100,8 +100,11 @@ return [
 
     // RoboDesk — local Mac bridge for Computer Use API
     'robodesk' => [
-        'bridge_url' => env('ROBODESK_BRIDGE_URL'),   // e.g. https://xyz.ngrok-free.app
-        'secret'     => env('ROBODESK_SECRET', ''),   // shared secret between bridge and Forge
+        'bridge_url' => env('ROBODESK_BRIDGE_URL'),                           // e.g. https://xyz.ngrok-free.app
+        'secret'     => env('ROBODESK_SECRET', ''),                           // shared secret
+        'cu_model'   => env('ROBODESK_MODEL',   'claude-3-5-sonnet-20241022'),// Computer Use model
+        'cu_beta'    => env('ROBODESK_CU_BETA', 'computer-use-2024-10-22'),   // beta flag
+        'cu_tool'    => env('ROBODESK_CU_TOOL', 'computer_20241022'),         // tool type
     ],
 
 ];
