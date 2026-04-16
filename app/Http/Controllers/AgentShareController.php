@@ -26,27 +26,29 @@ class AgentShareController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'agent_key'       => 'required|string|max:50',
-            'client_name'     => 'required|string|max:100',
-            'client_email'    => 'nullable|email|max:150',
-            'password'        => 'nullable|string|min:4|max:100',
-            'custom_title'    => 'nullable|string|max:100',
-            'welcome_message' => 'nullable|string|max:500',
-            'show_branding'   => 'nullable|boolean',
-            'expires_at'      => 'nullable|date|after:now',
+            'agent_key'        => 'required|string|max:50',
+            'client_name'      => 'required|string|max:100',
+            'client_email'     => 'nullable|email|max:150',
+            'password'         => 'nullable|string|min:4|max:100',
+            'custom_title'     => 'nullable|string|max:100',
+            'welcome_message'  => 'nullable|string|max:500',
+            'show_branding'    => 'nullable|boolean',
+            'allow_sap_access' => 'nullable|boolean',
+            'expires_at'       => 'nullable|date|after:now',
         ]);
 
         $share = AgentShare::create([
-            'token'           => AgentShare::generateToken(),
-            'agent_key'       => $data['agent_key'],
-            'client_name'     => $data['client_name'],
-            'client_email'    => $data['client_email'] ?? null,
-            'password_hash'   => isset($data['password']) ? password_hash($data['password'], PASSWORD_DEFAULT) : null,
-            'custom_title'    => $data['custom_title'] ?? null,
-            'welcome_message' => $data['welcome_message'] ?? null,
-            'show_branding'   => $request->boolean('show_branding', true),
-            'expires_at'      => $data['expires_at'] ?? null,
-            'created_by'      => auth()->id(),
+            'token'            => AgentShare::generateToken(),
+            'agent_key'        => $data['agent_key'],
+            'client_name'      => $data['client_name'],
+            'client_email'     => $data['client_email'] ?? null,
+            'password_hash'    => isset($data['password']) ? password_hash($data['password'], PASSWORD_DEFAULT) : null,
+            'custom_title'     => $data['custom_title'] ?? null,
+            'welcome_message'  => $data['welcome_message'] ?? null,
+            'show_branding'    => $request->boolean('show_branding', true),
+            'allow_sap_access' => $request->boolean('allow_sap_access', false),
+            'expires_at'       => $data['expires_at'] ?? null,
+            'created_by'       => auth()->id(),
         ]);
 
         return response()->json([
@@ -250,6 +252,11 @@ class AgentShareController extends Controller
                     $message .= $textAppend;
                 }
             }
+        }
+
+        // SAP access control — set runtime flag so agents respect the share's permission
+        if (!$share->allow_sap_access) {
+            config(['app.sap_access_blocked' => true]);
         }
 
         $agentManager = app(AgentManager::class);

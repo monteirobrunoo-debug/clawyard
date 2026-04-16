@@ -41,7 +41,7 @@ class AcingovAgent implements AgentInterface
     private static string $acingovPersona = 'Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública para o HP-Group / PartYard.';
 
     protected string $systemPromptSpecialty = <<<'SPECIALTY'
-A sua missão: analisar concursos públicos de 6 portais (base.gov.pt, Acingov, Vortal, UNIDO, UNGM e **SAM.gov** — contratos federais dos EUA) e identificar oportunidades para o HP-Group e todas as suas subsidiárias.
+A sua missão: analisar concursos públicos de 5 portais (base.gov.pt, Acingov, **TED Europa** — API oficial UE, UNGM e **SAM.gov** — contratos federais dos EUA) e identificar oportunidades para o HP-Group e todas as suas subsidiárias.
 
 ═══════════════════════════════════════════
 ÂMBITOS DE NEGÓCIO DO HP-GROUP / PARTYARD
@@ -190,7 +190,7 @@ FORMAT DE RESPOSTA
 **ESTRUTURA — agrupado por fonte de informação:**
 
 ### 🇵🇹 ACINGOV
-### 🇪🇺 VORTAL / TED EUROPA
+### 🇪🇺 TED EUROPA (API Oficial)
 ### 🌍 UNGM
 ### 🇵🇹 BASE.GOV.PT (intel competitiva)
 ### 🇺🇸 SAM.GOV
@@ -888,6 +888,169 @@ SPECIALTY;
         return "=== UNGM — UN Global Marketplace Tenders (últimos 14 dias) ===\n" . implode("\n", $lines);
     }
 
+    // ─── TED Europa — Official API v3 (no auth required) ─────────────────
+    /**
+     * Queries the EU TED (Tenders Electronic Daily) API v3 directly.
+     * No API key needed — public endpoint.
+     * Docs: https://docs.ted.europa.eu/api/
+     *
+     * Runs 3 keyword passes covering all PartYard business areas.
+     * Returns up to 40 unique active notices with title, entity, CPV, deadline, value, link.
+     */
+    protected function fetchTEDEuropa(?callable $heartbeat = null): string
+    {
+        $endpoint = 'https://api.ted.europa.eu/v3/notices/search';
+
+        // Keyword groups — one per PartYard business area
+        $keywordGroups = [
+            // ⚓ Naval & Maritime
+            'maritime OR naval OR vessel OR ship OR propulsion OR "spare parts" OR "ship repair" OR "marine engine" OR MTU OR Caterpillar OR Wärtsilä OR MAN',
+            // 🛩️ Aerospace & Defense MRO
+            'aircraft OR aviation OR MRO OR helicopter OR "F-16" OR "C-130" OR airframe OR avionics OR "aircraft maintenance" OR "aircraft parts" OR "aeronautical"',
+            // 🚗 Military land + simulation + cyber + lubricants
+            'defense OR defence OR military OR NATO OR "armoured vehicle" OR simulator OR simulation OR cybersecurity OR lubricant OR "spare parts" OR "ground equipment"',
+        ];
+
+        $seen  = [];
+        $lines = [];
+
+        foreach ($keywordGroups as $idx => $keywords) {
+            if ($heartbeat) $heartbeat('TED Europa — pesquisa ' . ($idx + 1) . '/3');
+            try {
+                $resp = $this->httpClient->post($endpoint, [
+                    'headers' => [
+                        'Accept'       => 'application/json',
+                        'Content-Type' => 'application/json',
+                        'User-Agent'   => 'ClawYard/1.0 (research@hp-group.org)',
+                    ],
+                    'json' => [
+                        'query'  => $keywords,
+                        'fields' => [
+                            'publication-number',
+                            'notice-type',
+                            'title',
+                            'contracting-authority-name',
+                            'deadline-receipt-request',
+                            'estimated-value-highest',
+                            'publication-date',
+                            'place-of-performance',
+                            'cpv',
+                            'procedure-type',
+                        ],
+                        'page'   => 1,
+                        'limit'  => 20,
+                        'scope'  => 'ACTIVE',   // only open/active notices
+                        'sort'   => [['deadline-receipt-request', 'asc']], // soonest deadline first
+                    ],
+                    'timeout' => 12,
+                ]);
+
+                $data    = json_decode($resp->getBody()->getContents(), true);
+                $notices = $data['notices'] ?? $data['results'] ?? [];
+
+                if (!is_array($notices)) continue;
+
+                foreach ($notices as $n) {
+                    $id = $n['publication-number'] ?? '';
+                    if ($id && isset($seen[$id])) continue;
+                    if ($id) $seen[$id] = true;
+
+                    // Title: TED returns array of multilingual strings; prefer EN then PT then first
+                    $title = '';
+                    $rawTitle = $n['title'] ?? [];
+                    if (is_array($rawTitle)) {
+                        $title = $rawTitle['ENG'] ?? $rawTitle['POR'] ?? reset($rawTitle) ?? '';
+                    } else {
+                        $title = (string) $rawTitle;
+                    }
+
+                    $entity   = $n['contracting-authority-name'] ?? 'N/A';
+                    if (is_array($entity)) $entity = reset($entity) ?? 'N/A';
+
+                    $deadline = $n['deadline-receipt-request'] ?? 'N/A';
+                    // Normalize: TED returns ISO 8601 or dd-mm-yyyy
+                    if ($deadline !== 'N/A' && preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $deadline, $dm)) {
+                        $deadline = "{$dm[3]}/{$dm[2]}/{$dm[1]}";
+                    }
+
+                    $value   = $n['estimated-value-highest'] ?? '';
+                    $pubDate = $n['publication-date'] ?? '';
+                    if ($pubDate && preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $pubDate, $pd)) {
+                        $pubDate = "{$pd[3]}/{$pd[2]}/{$pd[1]}";
+                    }
+
+                    $noticeType = $n['notice-type'] ?? '';
+                    $cpv        = $n['cpv']         ?? '';
+                    if (is_array($cpv)) $cpv = implode(', ', array_slice($cpv, 0, 3));
+
+                    $place = $n['place-of-performance'] ?? '';
+                    if (is_array($place)) $place = reset($place) ?? '';
+
+                    $link = $id ? "https://ted.europa.eu/en/notice/-/detail/{$id}" : '';
+
+                    $line = "- [{$noticeType}] {$title} | ENTIDADE: {$entity}";
+                    if ($place)    $line .= " | LOCAL: {$place}";
+                    if ($cpv)      $line .= " | CPV: {$cpv}";
+                    if ($pubDate)  $line .= " | PUBLICADO: {$pubDate}";
+                    if ($deadline) $line .= " | PRAZO: {$deadline}";
+                    if ($value)    $line .= " | VALOR: €{$value}";
+                    if ($link)     $line .= " | URL: {$link}";
+
+                    $lines[] = $line;
+                }
+            } catch (\Throwable $e) {
+                Log::info("TED Europa [group {$idx}]: " . $e->getMessage());
+            }
+        }
+
+        // Fallback: broader query if nothing found (TED may have different field names in future)
+        if (empty($lines)) {
+            try {
+                if ($heartbeat) $heartbeat('TED Europa — fallback query');
+                $resp = $this->httpClient->post($endpoint, [
+                    'headers' => ['Accept' => 'application/json', 'Content-Type' => 'application/json'],
+                    'json'    => [
+                        'query'  => 'naval OR aircraft OR defense OR maritime OR military',
+                        'fields' => ['publication-number', 'notice-type', 'title', 'contracting-authority-name', 'deadline-receipt-request', 'publication-date'],
+                        'page'   => 1,
+                        'limit'  => 25,
+                        'scope'  => 'ACTIVE',
+                    ],
+                    'timeout' => 10,
+                ]);
+                $data    = json_decode($resp->getBody()->getContents(), true);
+                $notices = $data['notices'] ?? $data['results'] ?? [];
+                foreach ($notices as $n) {
+                    $id    = $n['publication-number'] ?? '';
+                    if ($id && isset($seen[$id])) continue;
+                    if ($id) $seen[$id] = true;
+                    $title = $n['title'] ?? 'N/A';
+                    if (is_array($title)) $title = $title['ENG'] ?? reset($title) ?? 'N/A';
+                    $entity   = $n['contracting-authority-name'] ?? 'N/A';
+                    if (is_array($entity)) $entity = reset($entity) ?? 'N/A';
+                    $deadline = $n['deadline-receipt-request'] ?? 'N/A';
+                    if ($deadline !== 'N/A' && preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $deadline, $dm)) {
+                        $deadline = "{$dm[3]}/{$dm[2]}/{$dm[1]}";
+                    }
+                    $link  = $id ? "https://ted.europa.eu/en/notice/-/detail/{$id}" : '';
+                    $lines[] = "- {$title} | ENTIDADE: {$entity} | PRAZO: {$deadline}" . ($link ? " | URL: {$link}" : '');
+                }
+            } catch (\Throwable $e) {
+                Log::info("TED Europa [fallback]: " . $e->getMessage());
+            }
+        }
+
+        $lines = array_unique(array_slice($lines, 0, 50));
+
+        if (empty($lines)) {
+            return '(TED Europa: API sem resultados — possível alteração de schema; verifica https://docs.ted.europa.eu/api/)';
+        }
+
+        return "=== TED EUROPA (Official API v3) — Concursos UE Activos ===\n"
+             . "Total: " . count($lines) . " avisos | Fonte: ted.europa.eu\n"
+             . implode("\n", $lines);
+    }
+
     // ─── Fetch contracts via Tavily — EU/UN portals ───────────────────────
     protected function fetchContracts(?callable $heartbeat = null): string
     {
@@ -1087,7 +1250,7 @@ MSG;
 
         // ── Header ───────────────────────────────────────────────────────────
         $emit("## 📋 Dra. Ana Contratos — Relatório {$today}\n");
-        $emit("Período: **{$dateFrom}** → **{$dateTo}** · Portais: Acingov · Vortal · base.gov.pt · UNGM · SAM.gov\n\n");
+        $emit("Período: **{$dateFrom}** → **{$dateTo}** · Portais: Acingov · **TED Europa (API oficial)** · base.gov.pt · UNGM · SAM.gov\n\n");
 
         $emit("⏳ A recolher dados dos portais...\n\n");
 
@@ -1099,33 +1262,9 @@ MSG;
         if ($heartbeat) $heartbeat('a pesquisar Acingov');
         $acingovData = $this->fetchAcingov();
 
-        // Portal 2: Vortal / TED (European Tenders)
-        // Vortal é privado. Usamos TED (Tenders Electronic Daily, EU) que é público.
-        $emit("  `2/5` 🇵🇹 Vortal / TED Europa...\n");
-        if ($heartbeat) $heartbeat('a pesquisar Vortal / TED Europa');
-        $vortalData = '';
-        if ($this->searcher->isAvailable()) {
-            try {
-                $vortalData = $this->searcher->search(
-                    'ted.europa.eu OR vortal tender Portugal 2026 naval maritime aviation defense spare parts MRO procurement',
-                    8, 'basic', $tavilyDays
-                );
-                if (strlen($vortalData) < 80) {
-                    $vortalData = $this->searcher->search(
-                        'TED tenders Portugal 2026 naval defesa aviação aeronave equipamento maritimo',
-                        8, 'basic', $tavilyDays
-                    );
-                }
-                if (strlen($vortalData) < 80) {
-                    $vortalData = $this->searcher->search(
-                        'European tender 2026 maritime naval aircraft MRO spare parts Portugal defense NATO procurement',
-                        8, 'basic', $tavilyDays
-                    );
-                }
-            } catch (\Throwable $e) {
-                Log::info('AcingovAgent [Vortal/TED]: ' . $e->getMessage());
-            }
-        }
+        // Portal 2: TED Europa — Official API v3 (direct, no auth needed)
+        $emit("  `2/5` 🇪🇺 TED Europa (API oficial)...\n");
+        $vortalData = $this->fetchTEDEuropa($heartbeat);
 
         // Portal 3: UNGM — direct public API
         $emit("  `3/5` 🌍 UNGM...\n");
@@ -1170,7 +1309,7 @@ MSG;
         $allData = implode("\n\n", array_filter(
             [
                 '[FONTE: ACINGOV — Concursos Públicos Portugal]' . "\n" . $acingovData,
-                '[FONTE: VORTAL / TED Europa — Concursos UE]'    . "\n" . $vortalData,
+                '[FONTE: TED EUROPA — Concursos UE (API Oficial ted.europa.eu)]' . "\n" . $vortalData,
                 '[FONTE: UNGM — UN Global Marketplace]'          . "\n" . $ungmData,
                 '[FONTE: BASE.GOV.PT — Contratos Adjudicados PT]'. "\n" . $baseGovData,
                 '[FONTE: SAM.GOV — US Federal Contracts]'        . "\n" . $samData,
@@ -1201,7 +1340,7 @@ ESTRUTURA DO RELATÓRIO — AGRUPADO POR FONTE
 ═══════════════════════════════════════════
 
 ### 🇵🇹 ACINGOV — Concursos Públicos Portugal
-### 🇪🇺 VORTAL / TED EUROPA — Concursos UE
+### 🇪🇺 TED EUROPA — Concursos UE (API Oficial)
 ### 🌍 UNGM — UN Global Marketplace
 ### 🇵🇹 BASE.GOV.PT — Contratos Adjudicados (inteligência competitiva)
 ### 🇺🇸 SAM.GOV — US Federal Contracts

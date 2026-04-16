@@ -29,6 +29,8 @@ class CrmAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use WebSearchTrait;
+    protected string $contextKey  = 'crm_intel';
+    protected array  $contextTags = ['CRM','oportunidade','pipeline','SAP','cliente','negócio','proposta','contrato','vendedor'];
     protected string $systemPrompt = '';
 
     protected Client     $client;
@@ -662,8 +664,10 @@ SPECIALTY;
             ],
         ]);
 
-        $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $data   = json_decode($response->getBody()->getContents(), true);
+        $fullReply = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($fullReply);
+        return $fullReply;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -685,7 +689,9 @@ SPECIALTY;
         if ($heartbeat) $heartbeat('Marta a analisar...');
         $message = $this->augmentWithCrmContext($message, $heartbeat);
         if ($heartbeat) $heartbeat('Marta a responder...');
-        return $this->callClaude($message, $history, $onChunk, $heartbeat);
+        $full = $this->callClaude($message, $history, $onChunk, $heartbeat);
+        $this->publishSharedContext($full);
+        return $full;
     }
 
     public function getName(): string  { return 'crm'; }

@@ -41,7 +41,7 @@
             text-align: center; margin-bottom: 32px;
         }
 
-        .login-logo .paw { font-size: 48px; display: block; margin-bottom: 8px; }
+        .login-logo img.claw-icon { width: 80px; height: 80px; display: block; margin: 0 auto 10px; filter: drop-shadow(0 0 8px rgba(118,185,0,0.35)); }
         .login-logo h1 { font-size: 28px; font-weight: 800; color: #76b900; margin: 0 0 4px; }
         .login-logo p { font-size: 12px; color: #444; }
 
@@ -99,7 +99,7 @@
 
 <div class="login-box">
     <div class="login-logo">
-        <span class="paw">🐾</span>
+        <img src="/images/clawyard-icon.svg" alt="ClawYard" class="claw-icon">
         <h1>ClawYard</h1>
         <p>© PartYard/Setq.AI Rights reserved 2026</p>
     </div>

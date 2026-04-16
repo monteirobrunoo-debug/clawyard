@@ -31,7 +31,8 @@ trait SharedContextTrait
      */
     protected function enrichSystemPrompt(string $basePrompt, ?string $query = null): string
     {
-        $block = (new SharedContextService())->getContextBlock($query);
+        $agentKey = method_exists($this, 'getName') ? $this->getName() : null;
+        $block = (new SharedContextService())->getContextBlock($query, $agentKey);
         if (!$block) return $basePrompt;
         return $basePrompt . "\n" . $block;
     }

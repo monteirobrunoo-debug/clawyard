@@ -11,15 +11,16 @@ class AgentShare extends Model
     protected $fillable = [
         'token', 'agent_key', 'client_name', 'client_email',
         'password_hash', 'custom_title', 'welcome_message',
-        'show_branding', 'is_active', 'expires_at', 'created_by',
+        'show_branding', 'allow_sap_access', 'is_active', 'expires_at', 'created_by',
         'usage_count', 'last_used_at',
     ];
 
     protected $casts = [
-        'show_branding' => 'boolean',
-        'is_active'     => 'boolean',
-        'expires_at'    => 'datetime',
-        'last_used_at'  => 'datetime',
+        'show_branding'    => 'boolean',
+        'allow_sap_access' => 'boolean',
+        'is_active'        => 'boolean',
+        'expires_at'       => 'datetime',
+        'last_used_at'     => 'datetime',
     ];
 
     // ── Relationships ────────────────────────────────────────────────────────

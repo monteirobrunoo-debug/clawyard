@@ -149,6 +149,11 @@
                         @if($share->password_hash)
                             <span class="share-tag blue">🔒 Com password</span>
                         @endif
+                        @if($share->allow_sap_access)
+                            <span class="share-tag" style="background:rgba(6,182,212,.12);color:#06b6d4">📊 SAP activo</span>
+                        @else
+                            <span class="share-tag" style="background:rgba(239,68,68,.08);color:#f87171">📊 SAP bloqueado</span>
+                        @endif
                         @if($share->expires_at)
                             <span class="share-tag">⏱ Expira {{ $share->expires_at->format('d/m/Y') }}</span>
                         @else
@@ -281,6 +286,23 @@
                     <input id="f-expires" class="form-input" type="datetime-local">
                 </div>
             </div>
+
+            <!-- SAP access toggle -->
+            <div class="form-row" style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:14px 16px">
+                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
+                    <div style="flex-shrink:0;margin-top:1px">
+                        <input type="checkbox" id="f-sap-access" style="width:18px;height:18px;accent-color:#76b900;cursor:pointer">
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:#e2e8f0;display:flex;align-items:center;gap:6px">
+                            <span>📊</span> Permitir acesso ao Richard SAP B1
+                        </div>
+                        <div style="font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.5">
+                            Por defeito <strong style="color:#ef4444">bloqueado</strong> — dados internos (stock, faturas, encomendas, CRM) ficam ocultos ao utilizador externo. Activa apenas para clientes de confiança dentro da empresa.
+                        </div>
+                    </div>
+                </label>
+            </div>
         </div>
 
         <div class="modal-actions">
@@ -310,14 +332,15 @@ async function createShare() {
     btn.disabled = true;
 
     const payload = {
-        agent_key:       document.getElementById('f-agent').value,
-        client_name:     document.getElementById('f-client').value.trim(),
-        client_email:    document.getElementById('f-email').value.trim() || null,
-        custom_title:    document.getElementById('f-title').value.trim() || null,
-        welcome_message: document.getElementById('f-welcome').value.trim() || null,
-        password:        document.getElementById('f-pass').value || null,
-        expires_at:      document.getElementById('f-expires').value || null,
-        show_branding:   true,
+        agent_key:        document.getElementById('f-agent').value,
+        client_name:      document.getElementById('f-client').value.trim(),
+        client_email:     document.getElementById('f-email').value.trim() || null,
+        custom_title:     document.getElementById('f-title').value.trim() || null,
+        welcome_message:  document.getElementById('f-welcome').value.trim() || null,
+        password:         document.getElementById('f-pass').value || null,
+        expires_at:       document.getElementById('f-expires').value || null,
+        show_branding:    true,
+        allow_sap_access: document.getElementById('f-sap-access').checked,
     };
 
     if (!payload.client_name) {

@@ -28,7 +28,8 @@
         .conv-list{display:flex;flex-direction:column;gap:10px}
         .conv-card{background:#111;border:1px solid #1e1e1e;border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:16px;transition:border-color .2s,background .2s;text-decoration:none;color:inherit}
         .conv-card:hover{border-color:#333;background:#141414}
-        .conv-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:#1a1a1a}
+        .conv-icon{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;background:#1a1a1a;overflow:hidden;border:2px solid #222}
+        .conv-icon img{width:100%;height:100%;object-fit:cover}
         .conv-info{flex:1;min-width:0}
         .conv-session{font-size:13px;font-weight:600;color:#e5e5e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
         .conv-meta{font-size:11px;color:#555;margin-top:3px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
@@ -59,7 +60,7 @@
 <body>
 <header>
     <a href="/dashboard" class="back-btn">←</a>
-    <span class="logo">⚡ ClawYard</span>
+    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/clawyard-logo.svg" alt="ClawYard" style="height:34px;filter:drop-shadow(0 0 4px rgba(118,185,0,0.3));"></a>
     <span class="header-title">/ Histórico de Conversas</span>
 </header>
 
@@ -91,14 +92,28 @@
         @foreach($conversations as $conv)
         @php
             $agent = $conv->agent ?? 'default';
-            $agentEmojis = ['quantum'=>'⚛️','aria'=>'🛡️','sales'=>'💼','email'=>'✉️','support'=>'🎧','orchestrator'=>'🤖','auto'=>'🔄'];
+            $agentEmojis = ['quantum'=>'⚛️','aria'=>'🛡️','sales'=>'💼','email'=>'✉️','support'=>'🎧','orchestrator'=>'🤖','auto'=>'🔄','crm'=>'🎯','sap'=>'📊','document'=>'📄','capitao'=>'⚓','claude'=>'🧠','nvidia'=>'⚡','finance'=>'💰','research'=>'🔍','engineer'=>'🔩','patent'=>'🏛️','energy'=>'⚡','kyber'=>'🔒','qnap'=>'🗄️','vessel'=>'⚓','thinking'=>'🧠','batch'=>'📦','mildef'=>'🎖️','cyber'=>'🔐'];
             $emoji = $agentEmojis[$agent] ?? '🤖';
             $sessionLabel = preg_replace('/^u\d+_/', '', $conv->session_id);
             $lastMsg = $conv->messages()->latest()->first();
             $preview = $lastMsg ? \Illuminate\Support\Str::limit(strip_tags($lastMsg->content), 80) : 'Sem mensagens';
+            // Agent photo lookup
+            $agentPhoto = null;
+            foreach (['.png', '.jpg', '.jpeg', '.webp'] as $ext) {
+                if (file_exists(public_path('images/agents/' . $agent . $ext))) {
+                    $agentPhoto = '/images/agents/' . $agent . $ext;
+                    break;
+                }
+            }
         @endphp
         <div class="conv-card">
-            <div class="conv-icon">{{ $emoji }}</div>
+            <div class="conv-icon">
+                @if($agentPhoto)
+                    <img src="{{ $agentPhoto }}" alt="{{ ucfirst($agent) }}">
+                @else
+                    {{ $emoji }}
+                @endif
+            </div>
             <div class="conv-info">
                 <div class="conv-session">{{ $sessionLabel ?: 'Conversa #'.$conv->id }}</div>
                 <div class="conv-meta">

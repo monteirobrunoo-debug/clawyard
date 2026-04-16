@@ -16,6 +16,8 @@ class SapAgent implements AgentInterface
     use AnthropicKeyTrait;
     use WebSearchTrait;
     use SharedContextTrait;
+    protected string $contextKey  = 'sap_intel';
+    protected array  $contextTags = ['SAP','stock','fatura','encomenda','ERP','inventário','parceiro','cliente SAP','fornecedor'];
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -103,9 +105,15 @@ SPECIALTY;
 
     protected function augmentWithSap(string|array $message, ?callable $heartbeat = null): string|array
     {
+        // Block SAP data injection when share link has allow_sap_access = false
+        if (config('app.sap_access_blocked', false)) {
+            return $message;
+        }
+
         try {
-            if ($heartbeat) $heartbeat('a consultar SAP');
-            $context = $this->sap->buildContext($this->messageText($message));
+            // Pass heartbeat into buildContext so it fires between each SAP API call,
+            // keeping the SSE connection alive during potentially slow SAP data loads.
+            $context = $this->sap->buildContext($this->messageText($message), $heartbeat);
             return $context ? $this->appendToMessage($message, $context) : $message;
         } catch (\Throwable $e) {
             Log::warning('SapAgent: SAP context failed — ' . $e->getMessage());
@@ -131,8 +139,10 @@ SPECIALTY;
             ],
         ]);
 
-        $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $data  = json_decode($response->getBody()->getContents(), true);
+        $reply = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($reply);
+        return $reply;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -186,6 +196,7 @@ SPECIALTY;
             }
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

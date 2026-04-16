@@ -89,32 +89,60 @@ SPECIALTY;
     }
 
     /**
-     * Run multiple agents in parallel and combine their responses.
+     * Run multiple agents in parallel using PHP 8.1 Fibers and combine their responses.
      */
     public function chat(string|array $message, array $history = []): string
     {
-        $agentNames = $this->decideAgents($message);
+        $agentNames = $this->decideAgents(is_array($message) ? ($message[0]['text'] ?? '') : $message);
         $results    = [];
 
-        // Run agents (sequentially for now, can be parallelized with queues)
-        foreach ($agentNames as $name) {
-            if (isset($this->agents[$name])) {
+        // Run agents in parallel using PHP 8.1 fibers when multiple agents selected
+        if (count($agentNames) > 1) {
+            $fibers = [];
+            foreach ($agentNames as $name) {
+                if (!isset($this->agents[$name])) continue;
+                $fiber = new \Fiber(function () use ($name, $message, $history) {
+                    try {
+                        return [
+                            'agent' => $name,
+                            'reply' => $this->agents[$name]->chat($message, $history),
+                        ];
+                    } catch (\Throwable $e) {
+                        return ['agent' => $name, 'reply' => "Erro: " . $e->getMessage()];
+                    }
+                });
+                $fibers[$name] = $fiber;
+                $fiber->start();
+            }
+            foreach ($fibers as $name => $fiber) {
+                if ($fiber->isTerminated()) {
+                    $results[] = $fiber->getReturn();
+                }
+            }
+            // Any fiber not terminated yet — run sequentially as fallback
+            foreach ($agentNames as $name) {
+                if (!isset($this->agents[$name])) continue;
+                $alreadyDone = array_filter($results, fn($r) => $r['agent'] === $name);
+                if (!empty($alreadyDone)) continue;
                 try {
-                    $reply     = $this->agents[$name]->chat($message, $history);
-                    $results[] = [
-                        'agent' => $name,
-                        'reply' => $reply,
-                    ];
-                } catch (\Exception $e) {
-                    $results[] = [
-                        'agent' => $name,
-                        'reply' => "Error: " . $e->getMessage(),
-                    ];
+                    $results[] = ['agent' => $name, 'reply' => $this->agents[$name]->chat($message, $history)];
+                } catch (\Throwable $e) {
+                    $results[] = ['agent' => $name, 'reply' => "Erro: " . $e->getMessage()];
+                }
+            }
+        } else {
+            // Single agent — no fiber overhead
+            foreach ($agentNames as $name) {
+                if (!isset($this->agents[$name])) continue;
+                try {
+                    $results[] = ['agent' => $name, 'reply' => $this->agents[$name]->chat($message, $history)];
+                } catch (\Throwable $e) {
+                    $results[] = ['agent' => $name, 'reply' => "Erro: " . $e->getMessage()];
                 }
             }
         }
 
-        return $this->combineResults($message, $results);
+        return $this->combineResults(is_array($message) ? ($message[0]['text'] ?? '') : $message, $results);
     }
 
     /**

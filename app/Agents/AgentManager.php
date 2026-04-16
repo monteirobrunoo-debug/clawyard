@@ -270,20 +270,67 @@ class AgentManager
         $agentNames = $this->orchestrator->decideAgents($message);
         $results    = [];
 
-        foreach ($agentNames as $name) {
-            if (isset($this->agents[$name])) {
+        if (count($agentNames) > 1) {
+            $fibers = [];
+            foreach ($agentNames as $name) {
+                if (!isset($this->agents[$name])) continue;
+                $agent = $this->agents[$name];
+                $fiber = new \Fiber(function () use ($name, $agent, $message, $history) {
+                    try {
+                        return [
+                            'agent' => $name,
+                            'model' => $agent->getModel(),
+                            'reply' => $agent->chat($message, $history),
+                        ];
+                    } catch (\Throwable $e) {
+                        return [
+                            'agent' => $name,
+                            'model' => 'error',
+                            'reply' => 'Erro: ' . $e->getMessage(),
+                        ];
+                    }
+                });
+                $fibers[$name] = $fiber;
+                $fiber->start();
+            }
+            foreach ($fibers as $name => $fiber) {
+                if ($fiber->isTerminated()) {
+                    $results[] = $fiber->getReturn();
+                }
+            }
+            // Any fiber not terminated yet — run sequentially as fallback
+            foreach ($agentNames as $name) {
+                if (!isset($this->agents[$name])) continue;
+                $alreadyDone = array_filter($results, fn($r) => $r['agent'] === $name);
+                if (!empty($alreadyDone)) continue;
                 try {
-                    $reply     = $this->agents[$name]->chat($message, $history);
                     $results[] = [
                         'agent' => $name,
                         'model' => $this->agents[$name]->getModel(),
-                        'reply' => $reply,
+                        'reply' => $this->agents[$name]->chat($message, $history),
                     ];
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     $results[] = [
                         'agent' => $name,
                         'model' => 'error',
-                        'reply' => 'Error: ' . $e->getMessage(),
+                        'reply' => 'Erro: ' . $e->getMessage(),
+                    ];
+                }
+            }
+        } else {
+            foreach ($agentNames as $name) {
+                if (!isset($this->agents[$name])) continue;
+                try {
+                    $results[] = [
+                        'agent' => $name,
+                        'model' => $this->agents[$name]->getModel(),
+                        'reply' => $this->agents[$name]->chat($message, $history),
+                    ];
+                } catch (\Throwable $e) {
+                    $results[] = [
+                        'agent' => $name,
+                        'model' => 'error',
+                        'reply' => 'Erro: ' . $e->getMessage(),
                     ];
                 }
             }

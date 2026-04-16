@@ -15,7 +15,11 @@
         .print-btn{position:fixed;top:20px;right:20px;background:#76b900;color:#000;border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;z-index:999}
         .print-btn:hover{background:#5e9400}
 
-        .doc-header{border-bottom:3px solid #111;padding-bottom:20px;margin-bottom:28px}
+        .doc-header{border-bottom:3px solid #111;padding-bottom:20px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:flex-start}
+        .doc-header-left{flex:1}
+        .doc-header-agent{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+        .doc-header-agent img{width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #ddd}
+        .doc-header-agent .agent-emoji{width:52px;height:52px;border-radius:50%;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:26px;border:2px solid #ddd}
         .company{font-size:11px;color:#666;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:4px}
         h1{font-size:22px;font-weight:700;margin-bottom:8px}
         .doc-meta{font-size:11px;color:#666;display:flex;gap:20px;flex-wrap:wrap}
@@ -45,14 +49,59 @@
 
 @php
     $agent = $conversation->agent ?? 'default';
-    $agentNames = ['quantum'=>'Professor Quantum Leap','aria'=>'ARIA Security','sales'=>'Sales Agent','email'=>'Email Agent','support'=>'Marcus Support','orchestrator'=>'Orchestrator','auto'=>'Auto Agent'];
+    $agentNames = [
+        'quantum'     => 'Professor Quantum Leap',
+        'aria'        => 'ARIA Security',
+        'sales'       => 'Marco Sales',
+        'email'       => 'Daniel Email',
+        'support'     => 'Marcus Suporte',
+        'crm'         => 'Marta CRM',
+        'sap'         => 'Richard SAP',
+        'document'    => 'Commander Doc',
+        'capitao'     => 'Captain Porto',
+        'claude'      => 'Bruno AI',
+        'nvidia'      => 'Carlos NVIDIA',
+        'finance'     => 'Dr. Luís Finance',
+        'research'    => 'Marina Research',
+        'engineer'    => 'Eng. Victor R&D',
+        'patent'      => 'Dr. Sofia IP',
+        'energy'      => 'Eng. Sofia Energy',
+        'kyber'       => 'KYBER Encryption',
+        'qnap'        => 'PartYard Archive',
+        'vessel'      => 'Capitão Vasco',
+        'thinking'    => 'Prof. Deep Thought',
+        'batch'       => 'Max Batch',
+        'mildef'      => 'Cor. Rodrigues Defesa',
+        'orchestrator'=> 'All Agents',
+        'auto'        => 'Auto Agent',
+    ];
     $agentName = $agentNames[$agent] ?? ucfirst($agent);
     $sessionLabel = preg_replace('/^u\d+_/', '', $conversation->session_id);
+    // Agent photo lookup
+    $agentPhoto = null;
+    foreach (['.png', '.jpg', '.jpeg', '.webp'] as $ext) {
+        if (file_exists(public_path('images/agents/' . $agent . $ext))) {
+            $agentPhoto = '/images/agents/' . $agent . $ext;
+            break;
+        }
+    }
+    $agentEmojis = ['quantum'=>'⚛️','aria'=>'🛡️','sales'=>'💼','email'=>'✉️','support'=>'🎧','crm'=>'🎯','sap'=>'📊','document'=>'📄','capitao'=>'⚓','claude'=>'🧠','nvidia'=>'⚡','finance'=>'💰','research'=>'🔍','engineer'=>'🔩','patent'=>'🏛️','energy'=>'⚡','kyber'=>'🔒','qnap'=>'🗄️','vessel'=>'⚓','thinking'=>'🧠','batch'=>'📦','mildef'=>'🎖️','orchestrator'=>'🌐','auto'=>'🔄'];
+    $agentEmoji = $agentEmojis[$agent] ?? '🤖';
 @endphp
 
 <div class="doc-header">
-    <div class="company">PartYard/Setq.AI Rights reserved 2026</div>
-    <h1>Conversa com {{ $agentName }}</h1>
+  <div class="doc-header-left">
+    <div class="doc-header-agent">
+        @if($agentPhoto)
+            <img src="{{ $agentPhoto }}" alt="{{ $agentName }}">
+        @else
+            <div class="agent-emoji">{{ $agentEmoji }}</div>
+        @endif
+        <div>
+            <div class="company">PartYard/Setq.AI Rights reserved 2026</div>
+            <h1>Conversa com {{ $agentName }}</h1>
+        </div>
+    </div>
     <div class="doc-meta">
         <span><strong>Sessão:</strong> {{ $sessionLabel ?: '#'.$conversation->id }}</span>
         <span><strong>Agente:</strong> <span class="badge">{{ strtoupper($agent) }}</span></span>
@@ -61,6 +110,16 @@
         <span><strong>Mensagens:</strong> {{ $messages->count() }}</span>
         <span><strong>Exportado:</strong> {{ now()->format('d/m/Y H:i') }}</span>
     </div>
+  </div><!-- /.doc-header-left -->
+  <div style="text-align:right;flex-shrink:0">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 26" width="56" height="30">
+          <path d="M2 13 Q7 3 12 13 Q17 23 22 13 Q27 3 32 13 Q37 23 42 13 Q45 8 46 10"
+                stroke="#76b900" stroke-width="2.8" fill="none" stroke-linecap="round"/>
+          <path d="M2 19 Q7 9 12 19 Q17 29 22 19 Q27 9 32 19 Q37 29 42 19 Q45 14 46 16"
+                stroke="#76b900" stroke-width="1.4" fill="none" stroke-linecap="round" opacity="0.4"/>
+      </svg>
+      <div style="font-size:9px;color:#aaa;margin-top:3px;letter-spacing:1px">ClawYard AI</div>
+  </div>
 </div>
 
 <div class="messages">

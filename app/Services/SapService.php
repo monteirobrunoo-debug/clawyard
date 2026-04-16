@@ -1275,13 +1275,18 @@ class SapService
     /**
      * Analyse the user message and fetch relevant SAP data as a context string.
      */
-    public function buildContext(string $message): string
+    public function buildContext(string $message, ?callable $heartbeat = null): string
     {
+        $hb = function (string $status) use ($heartbeat) {
+            if ($heartbeat) $heartbeat($status);
+        };
+
         if (!$this->username || !$this->password) {
             return "\n\n--- ERRO SAP B1 ---\nCredenciais não configuradas (SAP_B1_USER / SAP_B1_PASSWORD em falta no .env do servidor).\nDiz ao utilizador que as credenciais SAP não estão configuradas e que deve contactar o administrador.\n--- FIM ERRO ---\n";
         }
 
         // Test if we can get a session — detect login failures explicitly
+        $hb('a autenticar SAP B1');
         $session = $this->ensureSession();
         if (!$session) {
             // Do NOT call testConnection() here — it clears the negative cache
@@ -1295,31 +1300,38 @@ class SapService
 
         $context = [];
 
-        // ── OVERVIEW SEMPRE CARREGADO ─────────────────────────────────────────
-        // Independentemente das keywords, sempre buscar um resumo do estado actual
-        // para que o Richard tenha sempre dados reais para responder.
-        $overviewParts = [];
+        // ── OVERVIEW — cached 3 min to avoid 3× sequential SAP calls per message ──
+        // Each SAP call can take 5-15s; caching prevents stream timeouts.
+        $cacheKey     = 'sap_overview_' . md5($this->company);
+        $overviewText = Cache::remember($cacheKey, now()->addMinutes(3), function () use ($hb) {
+            $parts = [];
 
-        $recentInvoices = $this->getRecentInvoices(8);
-        if ($recentInvoices) {
-            $rows = array_map(fn($i) => "  • #{$i['DocNum']} — {$i['CardName']} | {$i['DocDate']} | €" . number_format((float)$i['DocTotal'], 2, '.', ',') . " | " . ($i['DocumentStatus'] === 'bost_Open' ? 'Aberta' : 'Fechada'), $recentInvoices);
-            $overviewParts[] = "🧾 ÚLTIMAS FATURAS (8):\n" . implode("\n", $rows);
-        }
+            $hb('a buscar faturas SAP');
+            $recentInvoices = $this->getRecentInvoices(8);
+            if ($recentInvoices) {
+                $rows  = array_map(fn($i) => "  • #{$i['DocNum']} — {$i['CardName']} | {$i['DocDate']} | €" . number_format((float)$i['DocTotal'], 2, '.', ',') . " | " . ($i['DocumentStatus'] === 'bost_Open' ? 'Aberta' : 'Fechada'), $recentInvoices);
+                $parts[] = "🧾 ÚLTIMAS FATURAS (8):\n" . implode("\n", $rows);
+            }
 
-        $openOrders = $this->getOpenSalesOrders(8);
-        if ($openOrders) {
-            $rows = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 2, '.', ','), $openOrders);
-            $overviewParts[] = "📋 ENCOMENDAS DE VENDA ABERTAS (8):\n" . implode("\n", $rows);
-        }
+            $hb('a buscar encomendas SAP');
+            $openOrders = $this->getOpenSalesOrders(8);
+            if ($openOrders) {
+                $rows  = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 2, '.', ','), $openOrders);
+                $parts[] = "📋 ENCOMENDAS DE VENDA ABERTAS (8):\n" . implode("\n", $rows);
+            }
 
-        $openPOs = $this->getOpenPurchaseOrders(5);
-        if ($openPOs) {
-            $rows = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 2, '.', ','), $openPOs);
-            $overviewParts[] = "🏭 ORDENS DE COMPRA ABERTAS (5):\n" . implode("\n", $rows);
-        }
+            $hb('a buscar ordens de compra SAP');
+            $openPOs = $this->getOpenPurchaseOrders(5);
+            if ($openPOs) {
+                $rows  = array_map(fn($o) => "  • #{$o['DocNum']} — {$o['CardName']} | {$o['DocDate']} | €" . number_format((float)$o['DocTotal'], 2, '.', ','), $openPOs);
+                $parts[] = "🏭 ORDENS DE COMPRA ABERTAS (5):\n" . implode("\n", $rows);
+            }
 
-        if ($overviewParts) {
-            $context[] = implode("\n\n", $overviewParts);
+            return implode("\n\n", $parts);
+        });
+
+        if ($overviewText) {
+            $context[] = $overviewText;
         }
 
         // ── SECÇÕES ADICIONAIS POR KEYWORD ────────────────────────────────────

@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80">
+  <defs>
+    <linearGradient id="pawGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#88cc00"/>
+      <stop offset="100%" stop-color="#5a9200"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- 4 toe beans -->
+  <ellipse cx="20" cy="19" rx="7.5" ry="8.5" fill="url(#pawGrad)"/>
+  <ellipse cx="33" cy="12" rx="7.5" ry="8.5" fill="url(#pawGrad)"/>
+  <ellipse cx="47" cy="12" rx="7.5" ry="8.5" fill="url(#pawGrad)"/>
+  <ellipse cx="60" cy="19" rx="7.5" ry="8.5" fill="url(#pawGrad)"/>
+
+  <!-- Main pad -->
+  <ellipse cx="40" cy="51" rx="27" ry="22" fill="url(#pawGrad)"/>
+
+  <!-- AI sine wave through main pad -->
+  <path d="M14 51 Q19 39 24 51 Q29 63 34 51 Q39 39 44 51 Q49 63 54 51 Q59 39 64 51 Q67 57 66 57"
+        stroke="rgba(0,0,0,0.45)" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Highlight wave (white, offset slightly up) -->
+  <path d="M14 51 Q19 39 24 51 Q29 63 34 51 Q39 39 44 51 Q49 63 54 51 Q59 39 64 51 Q67 57 66 57"
+        stroke="rgba(255,255,255,0.25)" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Signal arcs below pad (broadcast effect) -->
+  <path d="M26 70 Q40 64 54 70" stroke="#76b900" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7" filter="url(#glow)"/>
+  <path d="M19 76 Q40 68 61 76" stroke="#76b900" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.4"/>
+</svg>

@@ -16,6 +16,8 @@ class SupportAgent implements AgentInterface
     use WebSearchTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    protected string $contextKey  = 'support_intel';
+    protected array  $contextTags = ['avaria','diagnóstico','motor','reparação','suporte','falha','MTU','CAT','técnico'];
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -131,8 +133,10 @@ SPECIALTY;
             ],
         ]);
 
-        $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $data   = json_decode($response->getBody()->getContents(), true);
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -180,6 +184,7 @@ SPECIALTY;
             }
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

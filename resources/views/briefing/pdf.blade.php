@@ -21,7 +21,7 @@
         .company-block .doc-type{font-size:20px;font-weight:900;color:#111}
         .company-block .doc-date{font-size:12px;color:#555;margin-top:3px}
         .logo-block{text-align:right}
-        .logo-block .logo{font-size:22px;font-weight:900;color:#4a7a00}
+        .logo-block .logo{font-size:22px;font-weight:900;color:#4a7a00;display:inline-flex;align-items:center;gap:7px}
         .logo-block .tagline{font-size:10px;color:#888;margin-top:2px}
 
         /* Classification badge */
@@ -71,7 +71,15 @@
         <div class="doc-date">{{ $report->created_at->format('d \d\e F \d\e Y · H:i') }}</div>
     </div>
     <div class="logo-block">
-        <div class="logo">⚡ ClawYard</div>
+        <div class="logo">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 26" width="44" height="24">
+                <path d="M2 13 Q7 3 12 13 Q17 23 22 13 Q27 3 32 13 Q37 23 42 13 Q45 8 46 10"
+                      stroke="#4a7a00" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 19 Q7 9 12 19 Q17 29 22 19 Q27 9 32 19 Q37 29 42 19 Q45 14 46 16"
+                      stroke="#4a7a00" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+            </svg>
+            ClawYard
+        </div>
         <div class="tagline">AI-Powered Strategic Intelligence</div>
     </div>
 </div>

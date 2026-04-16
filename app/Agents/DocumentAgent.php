@@ -14,6 +14,8 @@ class DocumentAgent implements AgentInterface
     use AnthropicKeyTrait;
     use WebSearchTrait;
     use SharedContextTrait;
+    protected string $contextKey  = 'document_intel';
+    protected array  $contextTags = ['documento','contrato','certificado','PDF','análise','cláusula','especificação','manual'];
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -118,8 +120,10 @@ SPECIALTY;
             ],
         ]);
 
-        $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $data   = json_decode($response->getBody()->getContents(), true);
+        $result = $data['content'][0]['text'] ?? '';
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -174,6 +178,7 @@ SPECIALTY;
             }
         }
 
+        $this->publishSharedContext($full);
         return $full;
     }
 

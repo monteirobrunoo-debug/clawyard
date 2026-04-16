@@ -14,6 +14,8 @@ class EmailAgent implements AgentInterface
     use WebSearchTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    protected string $contextKey  = 'email_intel';
+    protected array  $contextTags = ['email','cliente','proposta','cotação','follow-up','armador','navio','contacto'];
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -144,10 +146,11 @@ SPECIALTY;
             ],
         ]);
 
-        $data = json_decode($response->getBody()->getContents(), true);
-        $text = $data['content'][0]['text'] ?? '';
-
-        return $this->parseEmailJson($text) ?? $text;
+        $data   = json_decode($response->getBody()->getContents(), true);
+        $text   = $data['content'][0]['text'] ?? '';
+        $result = $this->parseEmailJson($text) ?? $text;
+        $this->publishSharedContext($result);
+        return $result;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -214,6 +217,7 @@ SPECIALTY;
         // Without this, the browser never receives the email and appears "stuck".
         $onChunk($result);
 
+        $this->publishSharedContext($result);
         return $result;
     }
 

@@ -8,8 +8,9 @@
         body { font-family: Georgia, 'Times New Roman', serif; color:#111; background:#fff; padding:40px 48px; font-size:12px; line-height:1.7; }
 
         .pdf-header { border-bottom:3px solid {{ $report->typeColor() }}; padding-bottom:16px; margin-bottom:24px; display:flex; justify-content:space-between; align-items:flex-end; }
-        .pdf-logo { font-size:20px; font-weight:900; color:{{ $report->typeColor() }}; letter-spacing:-0.5px; }
+        .pdf-logo { font-size:20px; font-weight:900; color:{{ $report->typeColor() }}; letter-spacing:-0.5px; display:flex; align-items:center; gap:8px; }
         .pdf-logo span { color:#333; font-weight:400; font-size:13px; }
+        .pdf-logo .wave-icon { flex-shrink:0; }
         .pdf-meta { text-align:right; font-size:11px; color:#666; }
 
         .type-badge { display:inline-block; background:#f0f0f0; border:1px solid #ccc; padding:2px 10px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; color:#333; }
@@ -41,7 +42,15 @@
 
 <div class="pdf-header">
     <div>
-        <div class="pdf-logo">🐾 ClawYard <span>/ IT Partyard</span></div>
+        <div class="pdf-logo">
+            <svg class="wave-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 26" width="48" height="26">
+                <path d="M2 13 Q7 3 12 13 Q17 23 22 13 Q27 3 32 13 Q37 23 42 13 Q45 8 46 10"
+                      stroke="{{ $report->typeColor() }}" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 19 Q7 9 12 19 Q17 29 22 19 Q27 9 32 19 Q37 29 42 19 Q45 14 46 16"
+                      stroke="{{ $report->typeColor() }}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+            </svg>
+            ClawYard <span>/ IT Partyard</span>
+        </div>
         <div style="font-size:10px;color:#888;margin-top:3px;">© PartYard/Setq.AI Rights reserved 2026</div>
     </div>
     <div class="pdf-meta">

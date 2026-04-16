@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 230 60" width="230" height="60">
+  <defs>
+    <linearGradient id="pg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#88cc00"/>
+      <stop offset="100%" stop-color="#5a9200"/>
+    </linearGradient>
+    <filter id="gl">
+      <feGaussianBlur stdDeviation="1" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Paw icon (left, 0–52) ── -->
+  <!-- 4 toe beans -->
+  <ellipse cx="14"  cy="13" rx="5.5" ry="6.2" fill="url(#pg)"/>
+  <ellipse cx="23"  cy="8"  rx="5.5" ry="6.2" fill="url(#pg)"/>
+  <ellipse cx="33"  cy="8"  rx="5.5" ry="6.2" fill="url(#pg)"/>
+  <ellipse cx="42"  cy="13" rx="5.5" ry="6.2" fill="url(#pg)"/>
+  <!-- Main pad -->
+  <ellipse cx="28"  cy="35" rx="19"  ry="16"   fill="url(#pg)"/>
+  <!-- AI sine wave through pad -->
+  <path d="M10 35 Q14 27 18 35 Q22 43 26 35 Q30 27 34 35 Q38 43 42 35 Q46 27 46 31"
+        stroke="rgba(0,0,0,0.40)" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+  <path d="M10 35 Q14 27 18 35 Q22 43 26 35 Q30 27 34 35 Q38 43 42 35 Q46 27 46 31"
+        stroke="rgba(255,255,255,0.22)" stroke-width="1" fill="none" stroke-linecap="round"/>
+  <!-- Broadcast arcs below paw -->
+  <path d="M18 49 Q28 44 38 49" stroke="#76b900" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.7"/>
+  <path d="M13 54 Q28 47 43 54" stroke="#76b900" stroke-width="1.2" fill="none" stroke-linecap="round" opacity="0.35"/>
+
+  <!-- ── Text block (right, x=60) ── -->
+  <!-- "Claw" white -->
+  <text x="60" y="32"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="24" font-weight="800" fill="#f2f2f2" letter-spacing="-0.5">Claw</text>
+  <!-- "Yard" green -->
+  <text x="112" y="32"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="24" font-weight="800" fill="#76b900" letter-spacing="-0.5">Yard</text>
+
+  <!-- Wave underline (2 sine arcs flowing right of text) -->
+  <path d="M60 41 Q73 35 86 41 Q99 47 112 41 Q125 35 138 41 Q151 47 164 41 Q177 35 190 41 Q203 47 216 41 Q224 38 228 41"
+        stroke="#76b900" stroke-width="1.4" fill="none" opacity="0.55"/>
+  <path d="M60 47 Q73 41 86 47 Q99 53 112 47 Q125 41 138 47 Q151 53 164 47 Q177 41 190 47 Q203 53 216 47 Q224 44 228 47"
+        stroke="#76b900" stroke-width="0.9" fill="none" opacity="0.25"/>
+
+  <!-- "AI PLATFORM" tagline -->
+  <text x="60" y="57"
+        font-family="system-ui, sans-serif"
+        font-size="7.5" fill="#555" letter-spacing="2.2">AI PLATFORM</text>
+</svg>

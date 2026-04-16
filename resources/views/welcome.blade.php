@@ -420,7 +420,7 @@
 <!-- ── HEADER ── -->
 <header>
     <a href="/dashboard" class="back-btn" title="Voltar ao dashboard">←</a>
-    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/setq-logo.svg" alt="SETQ.AI" style="height:32px;filter:drop-shadow(0 0 1px rgba(255,255,255,0.1));"></a>
+    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/clawyard-logo.svg" alt="ClawYard" style="height:36px;filter:drop-shadow(0 0 4px rgba(118,185,0,0.3));"></a>
     <span class="badge">AI</span>
     <select id="agent-select">
         <option value="auto">🤖 Auto Route</option>
@@ -460,7 +460,7 @@
         <a href="/briefing" title="Briefing Executivo Diário" style="background:#0d1a00;border:1px solid #1e3300;color:#76b900;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:700;">📊 Briefing</a>
         <a href="/schedules" title="Tarefas Agendadas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🗓️ Schedule</a>
         <a id="manage-shares-btn" href="/shares" title="Gerir links partilhados" style="background:var(--bg3);border:1px solid #1e3a5f;color:#60a5fa;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:600;">⚙️ Shares</a>
-        <button onclick="clearHistory()" title="Nova conversa (limpar histórico)" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);font-size:12px;padding:5px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;">🗑️ Novo</button>
+        <button onclick="clearHistory()" title="Nova conversa (limpar histórico)" style="background:#1a0a00;border:1px solid #ff6600;color:#ff8844;font-size:12px;font-weight:700;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:all .15s;display:flex;align-items:center;gap:5px;" onmouseover="this.style.background='#2a1000';this.style.borderColor='#ff8844'" onmouseout="this.style.background='#1a0a00';this.style.borderColor='#ff6600'">🗑️ Nova conversa</button>
         @if(Auth::user()->isAdmin())
         <a href="/admin/users" title="Admin" style="background:var(--bg3);border:1px solid #ff4444;color:#ff6666;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">⚙️ Admin</a>
         @endif
@@ -2642,7 +2642,16 @@ async function sendMessage() {
         // Read the stream
         while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done) {
+                // Stream closed by server without [DONE] (timeout / Cloudflare cut)
+                // Clean up any leftover typing indicator or empty bubble
+                if (typing.parentNode) typing.remove();
+                if (streamMsg && streamBubble && !accumulated.trim()) {
+                    // Empty response — replace bubble with timeout error
+                    streamBubble.innerHTML = '<span style="color:#ff6b6b;font-size:12px">⏱️ O agente SAP B1 está a demorar mais que o esperado. Tenta novamente — os dados SAP podem estar a carregar.</span>';
+                }
+                break;
+            }
 
             lineBuf += decoder.decode(value, { stream: true });
 
@@ -2768,11 +2777,22 @@ async function restoreHistory(agent) {
     try {
         const r    = await fetch(`/api/history/${sid}`);
         const data = await r.json();
-        const msgs = data.messages || [];
-        if (!msgs.length) return;
+        const allMsgs = data.messages || [];
+        if (!allMsgs.length) return;
+
+        // Only restore the last 5 messages — keeps the chat clean on re-entry
+        const msgs = allMsgs.slice(-5);
 
         // Remove empty state
         document.getElementById('empty-state')?.remove();
+
+        // Show a subtle "older messages exist" hint if history was trimmed
+        if (allMsgs.length > 5) {
+            const hint = document.createElement('div');
+            hint.style.cssText = 'text-align:center;padding:8px 0 4px;font-size:11px;color:#444;';
+            hint.innerHTML = `<a href="/conversations" style="color:#555;text-decoration:none;border:1px solid #222;padding:3px 12px;border-radius:20px;font-size:11px;" title="Ver conversa completa">↑ ${allMsgs.length - 5} mensagens anteriores — <span style="color:#76b900">ver histórico completo</span></a>`;
+            document.getElementById('chat').appendChild(hint);
+        }
 
         for (const m of msgs) {
             const role     = m.role === 'user' ? 'user' : 'ai';
