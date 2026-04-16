@@ -950,12 +950,12 @@ const AGENT_CHIPS = {
     ],
     // ── RoboDesk ──────────────────────────────────────────────────────────
     computer: [
-        '🖥️ Pesquisa os preços actuais de peças MTU 4000 nos 5 maiores distribuidores online europeus',
-        '🖥️ Verifica se o site partyard.eu tem erros, links quebrados ou páginas lentas — relatório',
-        '🖥️ Pesquisa concursos NATO abertos agora para fornecimento de peças navais e motores',
-        '🖥️ Encontra todos os armadores portugueses com frota acima de 5 navios e os seus contactos',
-        '🖥️ Compara os preços de frete marítimo Rotterdam→Sines nos principais forwarding agents',
-        '🖥️ Pesquisa os últimos press releases dos concorrentes Wärtsilä, Rolls-Royce Marine e Kongsberg',
+        '🖥️ Abre o SAP B1 no browser, entra em Compras → Ordens de Compra e tira screenshot da lista de OC abertas',
+        '🖥️ Vai ao base.gov.pt, pesquisa contratos públicos com "motor naval" publicados esta semana e copia os resultados',
+        '🖥️ Abre o Gmail, procura emails não lidos de clientes com "urgent" ou "NSPA" no assunto e lista-os',
+        '🖥️ Entra no portal ACINGOV, faz login e descarrega os concursos abertos da área de defesa em PDF',
+        '🖥️ Abre o Excel com a lista de preços, actualiza os valores MTU Série 4000 com os preços do site MTU e guarda',
+        '🖥️ Preenche o formulário de registo no portal de fornecedores da NATO com os dados da PartYard',
     ],
     // ── Capitão Vasco ─────────────────────────────────────────────────────
     vessel: [
