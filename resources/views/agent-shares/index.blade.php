@@ -58,7 +58,7 @@
         /* MODAL */
         .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
         .modal-overlay.open{display:flex}
-        .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;padding:28px}
+        .modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:520px;padding:28px;max-height:90vh;overflow-y:auto}
         .modal-title{font-size:18px;font-weight:800;margin-bottom:20px}
         .form-row{margin-bottom:16px}
         .form-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;text-transform:uppercase;letter-spacing:.5px}
@@ -254,6 +254,21 @@
                 </select>
             </div>
 
+            <!-- SAP access toggle — posição de destaque, logo após escolha do agente -->
+            <div class="form-row" style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:12px 14px;margin-bottom:16px">
+                <label style="display:flex;align-items:center;gap:12px;cursor:pointer">
+                    <input type="checkbox" id="f-sap-access" style="width:20px;height:20px;accent-color:#76b900;cursor:pointer;flex-shrink:0">
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:#e2e8f0">
+                            📊 Permitir acesso SAP B1 (Richard)
+                        </div>
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px">
+                            Por defeito <strong style="color:#ef4444">bloqueado</strong> — stock, faturas e CRM ficam ocultos a utilizadores externos.
+                        </div>
+                    </div>
+                </label>
+            </div>
+
             <div class="form-row-2">
                 <div class="form-row">
                     <label class="form-label">Nome do Cliente</label>
@@ -287,22 +302,6 @@
                 </div>
             </div>
 
-            <!-- SAP access toggle -->
-            <div class="form-row" style="background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:14px 16px">
-                <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
-                    <div style="flex-shrink:0;margin-top:1px">
-                        <input type="checkbox" id="f-sap-access" style="width:18px;height:18px;accent-color:#76b900;cursor:pointer">
-                    </div>
-                    <div>
-                        <div style="font-size:13px;font-weight:700;color:#e2e8f0;display:flex;align-items:center;gap:6px">
-                            <span>📊</span> Permitir acesso ao Richard SAP B1
-                        </div>
-                        <div style="font-size:11px;color:#94a3b8;margin-top:3px;line-height:1.5">
-                            Por defeito <strong style="color:#ef4444">bloqueado</strong> — dados internos (stock, faturas, encomendas, CRM) ficam ocultos ao utilizador externo. Activa apenas para clientes de confiança dentro da empresa.
-                        </div>
-                    </div>
-                </label>
-            </div>
         </div>
 
         <div class="modal-actions">
