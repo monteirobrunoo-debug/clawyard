@@ -98,4 +98,10 @@ return [
         'api_key' => env('SAM_GOV_API_KEY'),
     ],
 
+    // RoboDesk — local Mac bridge for Computer Use API
+    'robodesk' => [
+        'bridge_url' => env('ROBODESK_BRIDGE_URL'),   // e.g. https://xyz.ngrok-free.app
+        'secret'     => env('ROBODESK_SECRET', ''),   // shared secret between bridge and Forge
+    ],
+
 ];
