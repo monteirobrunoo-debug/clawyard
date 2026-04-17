@@ -216,11 +216,17 @@ Route::get('/schedules', function () {
 })->middleware(['auth'])->name('schedules');
 
 // ─── Agent Shares — public client chat ───────────────────────────────────────
-// GET page + password POST: web routes (need session)
-// POST stream: handled in api.php (no CSRF)
+// GET page + password/OTP POST: web routes (need session for CSRF).
+// POST stream: handled in api.php (no CSRF).
 Route::get('/a/{token}', [AgentShareController::class, 'show']);
 Route::post('/a/{token}/password', [AgentShareController::class, 'verifyPassword'])
     ->withoutMiddleware('App\Http\Middleware\VerifyCsrfToken');
+
+// OTP flow — throttle hard to slow enumeration / brute force.
+Route::post('/a/{token}/otp/request', [AgentShareController::class, 'requestOtp'])
+    ->middleware('throttle:10,10'); // 10 req per 10 min per IP
+Route::post('/a/{token}/otp/verify', [AgentShareController::class, 'verifyOtp'])
+    ->middleware('throttle:15,10'); // 15 attempts per 10 min per IP
 
 // Authenticated: manage shares
 Route::middleware(['auth'])->group(function () {
@@ -229,9 +235,11 @@ Route::middleware(['auth'])->group(function () {
 
 // Admin: create/delete shares (any authenticated user can manage their own)
 Route::middleware(['auth'])->prefix('admin')->group(function () {
-    Route::post('/shares',           [AgentShareController::class, 'store'])->name('shares.store');
-    Route::patch('/shares/{share}/toggle', [AgentShareController::class, 'toggle'])->name('shares.toggle');
-    Route::delete('/shares/{share}', [AgentShareController::class, 'destroy'])->name('shares.destroy');
+    Route::post('/shares',                  [AgentShareController::class, 'store'])->name('shares.store');
+    Route::patch('/shares/{share}/toggle',  [AgentShareController::class, 'toggle'])->name('shares.toggle');
+    Route::post('/shares/{share}/revoke',   [AgentShareController::class, 'revoke'])->name('shares.revoke');
+    Route::get('/shares/{share}/log',       [AgentShareController::class, 'accessLog'])->name('shares.log');
+    Route::delete('/shares/{share}',        [AgentShareController::class, 'destroy'])->name('shares.destroy');
 });
 
 // Admin Portal

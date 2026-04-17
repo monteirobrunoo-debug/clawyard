@@ -2891,7 +2891,12 @@ function closeShareModal() {
 async function submitShareModal() {
     const btn = document.getElementById('share-submit-btn');
     const client = document.getElementById('share-client').value.trim();
+    const clientEmail = document.getElementById('share-email').value.trim();
     if (!client) { alert('Introduz o nome do cliente.'); return; }
+    if (!clientEmail) {
+        alert('⚠️ Email do cliente é obrigatório.\n\nÉ para esse email que vai o código de acesso (OTP). Sem email, o cliente não consegue entrar.');
+        return;
+    }
 
     const checked = Array.from(document.querySelectorAll('#share-agent-list input[type="checkbox"]:checked')).map(c => c.value);
     if (!checked.length) { alert('Seleciona pelo menos um agente.'); return; }
@@ -2900,13 +2905,19 @@ async function submitShareModal() {
 
     const common = {
         client_name:      client,
-        client_email:     document.getElementById('share-email').value.trim() || null,
+        client_email:     clientEmail,
         custom_title:     document.getElementById('share-title').value.trim() || null,
         welcome_message:  document.getElementById('share-welcome').value.trim() || null,
         password:         document.getElementById('share-pass').value || null,
         expires_at:       document.getElementById('share-expires').value || null,
         show_branding:    true,
         allow_sap_access: document.getElementById('share-sap-access').checked,
+        // Security defaults: every link gets OTP + device lock + notifications
+        // unless the creator explicitly opts out in /shares. The chat-side
+        // modal keeps them ON — simpler UX.
+        require_otp:      true,
+        lock_to_device:   true,
+        notify_on_access: true,
     };
 
     try {
@@ -2981,9 +2992,10 @@ updateShareBtn();
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
                 <div>
-                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email</label>
-                    <input id="share-email" type="email" placeholder="client@company.com"
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Email <span style="color:#ef4444">*</span></label>
+                    <input id="share-email" type="email" placeholder="client@company.com" required
                         style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
+                    <div style="font-size:10px;color:#64748b;margin-top:4px">Obrigatório — é para aqui que vai o código de acesso.</div>
                 </div>
                 <div>
                     <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Password</label>

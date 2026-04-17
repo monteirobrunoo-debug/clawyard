@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentShare;
 use App\Agents\AgentManager;
+use App\Services\AgentShareAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -25,15 +26,23 @@ class AgentShareController extends Controller
     // ── ADMIN: Create new share ──────────────────────────────────────────────
     public function store(Request $request)
     {
+        // SECURITY: client_email is now REQUIRED. Without it we can't enforce
+        // the OTP challenge nor notify anyone. We also cap the default expiry
+        // at 24 h so forgotten links don't hang around forever.
         $data = $request->validate([
             'agent_key'        => 'required|string|max:50',
             'client_name'      => 'required|string|max:100',
-            'client_email'     => 'nullable|email|max:150',
+            'client_email'     => 'required|email|max:150',
             'password'         => 'nullable|string|min:4|max:100',
             'custom_title'     => 'nullable|string|max:100',
             'welcome_message'  => 'nullable|string|max:500',
             'show_branding'    => 'nullable|boolean',
             'allow_sap_access' => 'nullable|boolean',
+            'require_otp'      => 'nullable|boolean',
+            'lock_to_device'   => 'nullable|boolean',
+            'notify_on_access' => 'nullable|boolean',
+            'notify_email'     => 'nullable|email|max:150',
+            'notify_whatsapp'  => 'nullable|string|max:30',
             'expires_at'       => 'nullable|date|after:now',
         ]);
 
@@ -41,13 +50,18 @@ class AgentShareController extends Controller
             'token'            => AgentShare::generateToken(),
             'agent_key'        => $data['agent_key'],
             'client_name'      => $data['client_name'],
-            'client_email'     => $data['client_email'] ?? null,
-            'password_hash'    => isset($data['password']) ? password_hash($data['password'], PASSWORD_DEFAULT) : null,
+            'client_email'     => strtolower(trim($data['client_email'])),
+            'password_hash'    => !empty($data['password']) ? password_hash($data['password'], PASSWORD_DEFAULT) : null,
             'custom_title'     => $data['custom_title'] ?? null,
             'welcome_message'  => $data['welcome_message'] ?? null,
             'show_branding'    => $request->boolean('show_branding', true),
             'allow_sap_access' => $request->boolean('allow_sap_access', false),
-            'expires_at'       => $data['expires_at'] ?? null,
+            'require_otp'      => $request->boolean('require_otp', true),
+            'lock_to_device'   => $request->boolean('lock_to_device', true),
+            'notify_on_access' => $request->boolean('notify_on_access', true),
+            'notify_email'     => $data['notify_email'] ?? auth()->user()->email,
+            'notify_whatsapp'  => $data['notify_whatsapp'] ?? null,
+            'expires_at'       => $data['expires_at'] ?? now()->addHours(24),
             'created_by'       => auth()->id(),
         ]);
 
@@ -75,7 +89,7 @@ class AgentShareController extends Controller
     }
 
     // ── PUBLIC: Show shared agent chat page ──────────────────────────────────
-    public function show(string $token)
+    public function show(Request $request, string $token)
     {
         $share = AgentShare::where('token', $token)->firstOrFail();
 
@@ -83,11 +97,33 @@ class AgentShareController extends Controller
             return view('agent-shares.expired');
         }
 
-        // Password check — if set and not yet verified in session
+        // Password check — optional secondary factor on top of OTP.
         if ($share->password_hash) {
             $sessionKey = 'share_auth_' . $share->token;
             if (!session($sessionKey)) {
                 return view('agent-shares.password', ['token' => $token]);
+            }
+        }
+
+        // ── OTP + device-lock gate ──────────────────────────────────────────
+        if ($share->require_otp) {
+            $sessionId = $this->sharePublicSessionId($share);
+            $status    = app(AgentShareAccessService::class)->sessionStatus($share, $sessionId, $request);
+
+            if ($status === 'revoked') {
+                return view('agent-shares.expired', ['reason' => 'revoked']);
+            }
+
+            if (in_array($status, ['otp_required', 'new_device'], true)) {
+                // Log the initial "open" hit so the owner sees attempts even
+                // if the user never completes the challenge.
+                app(AgentShareAccessService::class)->recordStream($share, $sessionId, $request);
+
+                return view('agent-shares.otp-challenge', [
+                    'share'        => $share,
+                    'new_device'   => $status === 'new_device',
+                    'suggested'    => $share->client_email,
+                ]);
             }
         }
 
@@ -117,6 +153,69 @@ class AgentShareController extends Controller
         return back()->withErrors(['password' => 'Palavra-passe incorrecta.']);
     }
 
+    // ── PUBLIC: Request OTP (sends 6-digit code to the registered email) ─────
+    public function requestOtp(Request $request, string $token)
+    {
+        $share = AgentShare::where('token', $token)->firstOrFail();
+        if (!$share->isValid()) abort(403, 'Link inválido.');
+
+        $email = (string) $request->input('email', '');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return back()->withErrors(['email' => 'Email inválido.']);
+        }
+
+        $sessionId = $this->sharePublicSessionId($share);
+        app(AgentShareAccessService::class)->issueOtp($share, $email, $sessionId, $request);
+
+        // Always report success to the client — we never reveal whether the
+        // email matched, to avoid enumeration.
+        return view('agent-shares.otp-challenge', [
+            'share'        => $share,
+            'otp_sent'     => true,
+            'sent_to'      => $this->maskEmail($email),
+        ]);
+    }
+
+    // ── PUBLIC: Verify OTP + create trusted session ──────────────────────────
+    public function verifyOtp(Request $request, string $token)
+    {
+        $share = AgentShare::where('token', $token)->firstOrFail();
+        if (!$share->isValid()) abort(403, 'Link inválido.');
+
+        $email = strtolower(trim((string) $request->input('email', '')));
+        $code  = preg_replace('/\D/', '', (string) $request->input('code', ''));
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($code) !== 6) {
+            return back()->withErrors(['code' => 'Código inválido.']);
+        }
+
+        $sessionId = $this->sharePublicSessionId($share);
+        $ok = app(AgentShareAccessService::class)->verifyOtp($share, $email, $sessionId, $code, $request);
+
+        if (!$ok) {
+            return back()->withErrors(['code' => 'Código incorrecto ou expirado.']);
+        }
+
+        return redirect('/a/' . $token);
+    }
+
+    // ── OWNER: Revoke immediately ────────────────────────────────────────────
+    public function revoke(Request $request, AgentShare $share)
+    {
+        $this->authorize_owner($share);
+        app(AgentShareAccessService::class)->revoke($share, $request, $request->input('reason'));
+        return response()->json(['ok' => true, 'revoked_at' => $share->refresh()->revoked_at]);
+    }
+
+    // ── OWNER: Access log ────────────────────────────────────────────────────
+    public function accessLog(AgentShare $share)
+    {
+        $this->authorize_owner($share);
+        return response()->json([
+            'logs' => $share->accessLogs()->limit(50)->get(),
+        ]);
+    }
+
     // ── PUBLIC: SSE Stream for shared agent ──────────────────────────────────
     public function stream(Request $request, string $token)
     {
@@ -132,6 +231,21 @@ class AgentShareController extends Controller
             if (!session($sessionKey)) {
                 return response()->json(['error' => 'Autenticação necessária.'], 401);
             }
+        }
+
+        // SECURITY: enforce the OTP + device-lock session for every stream
+        // call — the client can't just keep POSTing to /stream after the
+        // owner revokes or after the 24 h window expires.
+        if ($share->require_otp) {
+            $publicSid = $this->sharePublicSessionId($share);
+            $status    = app(AgentShareAccessService::class)->sessionStatus($share, $publicSid, $request);
+            if ($status !== 'ok') {
+                $msg = $status === 'revoked'
+                    ? 'Este link foi revogado pelo administrador.'
+                    : 'Sessão expirada — volta à página inicial para reautenticar.';
+                return response()->json(['error' => $msg, 'reauth' => true], 401);
+            }
+            app(AgentShareAccessService::class)->recordStream($share, $publicSid, $request);
         }
 
         $message   = $request->input('message', '');
@@ -446,6 +560,36 @@ class AgentShareController extends Controller
         if ($share->created_by !== auth()->id() && !auth()->user()->isAdmin()) {
             abort(403);
         }
+    }
+
+    /**
+     * A stable per-browser identifier used by AgentShareAccessService to key
+     * the OTP and the trusted session. We derive it from the Laravel session
+     * cookie so reloads in the same browser stay authenticated, while a
+     * forwarded link in a different browser has to go through OTP again.
+     */
+    private function sharePublicSessionId(AgentShare $share): string
+    {
+        $sid = session('share_public_sid_' . $share->id);
+        if (!$sid) {
+            $sid = bin2hex(random_bytes(16));
+            session(['share_public_sid_' . $share->id => $sid]);
+        }
+        return $sid;
+    }
+
+    /**
+     * Obscure the local part of an email before echoing it back to the page
+     * (e.g. "an***@idd.pt"). Prevents the OTP confirmation view from leaking
+     * the full authorised address to whoever happens to look.
+     */
+    private function maskEmail(string $email): string
+    {
+        $parts = explode('@', $email, 2);
+        if (count($parts) !== 2) return $email;
+        [$local, $domain] = $parts;
+        $visible = mb_substr($local, 0, min(2, mb_strlen($local)));
+        return $visible . str_repeat('*', max(0, mb_strlen($local) - 2)) . '@' . $domain;
     }
 
     /**

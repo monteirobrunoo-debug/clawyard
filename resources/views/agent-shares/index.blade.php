@@ -170,8 +170,10 @@
                     <button class="btn-action" onclick="toggleShare({{ $share->id }}, this)">
                         {{ $share->is_active ? '⏸ Pausar' : '▶ Activar' }}
                     </button>
+                    <button class="btn-action" onclick="showAccessLog({{ $share->id }})">📜 Acessos</button>
                     <button class="btn-action" onclick="window.open('{{ $share->getUrl() }}','_blank')">↗ Abrir</button>
-                    <button class="btn-action danger" onclick="deleteShare({{ $share->id }})">🗑</button>
+                    <button class="btn-action danger" onclick="revokeShare({{ $share->id }})" title="Revogar imediatamente (bloqueia todos os acessos futuros)">🛑 Revogar</button>
+                    <button class="btn-action danger" onclick="deleteShare({{ $share->id }})" title="Apagar">🗑</button>
                 </div>
             </div>
 
@@ -210,12 +212,14 @@
                     </td>
                     <td style="padding:10px 20px;text-align:right">
                         <div class="share-actions">
-                            <button class="btn-action" onclick="copyUrl('{{ $share->getUrl() }}', this)">📋</button>
-                            <button class="btn-action" onclick="toggleShare({{ $share->id }}, this)">
+                            <button class="btn-action" onclick="copyUrl('{{ $share->getUrl() }}', this)" title="Copiar link">📋</button>
+                            <button class="btn-action" onclick="toggleShare({{ $share->id }}, this)" title="Pausar/Activar">
                                 {{ $share->is_active ? '⏸' : '▶' }}
                             </button>
-                            <button class="btn-action" onclick="window.open('{{ $share->getUrl() }}','_blank')">↗</button>
-                            <button class="btn-action danger" onclick="deleteShare({{ $share->id }})">🗑</button>
+                            <button class="btn-action" onclick="showAccessLog({{ $share->id }})" title="Acessos">📜</button>
+                            <button class="btn-action" onclick="window.open('{{ $share->getUrl() }}','_blank')" title="Abrir">↗</button>
+                            <button class="btn-action danger" onclick="revokeShare({{ $share->id }})" title="Revogar">🛑</button>
+                            <button class="btn-action danger" onclick="deleteShare({{ $share->id }})" title="Apagar">🗑</button>
                         </div>
                     </td>
                 </tr>
@@ -275,8 +279,48 @@
                     <input id="f-client" class="form-input" type="text" placeholder="ex: Armadores Silva Lda.">
                 </div>
                 <div class="form-row">
-                    <label class="form-label">Email do Cliente <span style="opacity:.5">(opcional)</span></label>
-                    <input id="f-email" class="form-input" type="email" placeholder="cliente@empresa.com">
+                    <label class="form-label">Email do Cliente <span style="color:#ef4444;font-weight:700">*</span></label>
+                    <input id="f-email" class="form-input" type="email" placeholder="cliente@empresa.com" required>
+                    <div class="form-hint">Obrigatório — é para este email que vai o código de acesso (OTP).</div>
+                </div>
+            </div>
+
+            <div style="background:rgba(118,185,0,.06);border:1px solid rgba(118,185,0,.25);border-radius:10px;padding:12px 14px;margin:6px 0">
+                <div style="font-size:12px;font-weight:700;color:#a3e635;margin-bottom:10px">🔒 Segurança do link</div>
+
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px">
+                    <input type="checkbox" id="f-require-otp" checked style="width:18px;height:18px;accent-color:#76b900">
+                    <span style="font-size:12px">
+                        <strong>Exigir código por email (OTP)</strong>
+                        <span style="opacity:.7">— só quem tem a caixa de entrada acima entra</span>
+                    </span>
+                </label>
+
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px">
+                    <input type="checkbox" id="f-lock-device" checked style="width:18px;height:18px;accent-color:#76b900">
+                    <span style="font-size:12px">
+                        <strong>Fixar ao dispositivo</strong>
+                        <span style="opacity:.7">— se o link for aberto noutro browser, pede OTP de novo</span>
+                    </span>
+                </label>
+
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px">
+                    <input type="checkbox" id="f-notify" checked style="width:18px;height:18px;accent-color:#76b900">
+                    <span style="font-size:12px">
+                        <strong>Notificar-me a cada acesso</strong>
+                        <span style="opacity:.7">— email + WhatsApp (opcional) com IP + dispositivo</span>
+                    </span>
+                </label>
+
+                <div class="form-row-2" style="margin-top:8px">
+                    <div class="form-row">
+                        <label class="form-label" style="font-size:11px">Email de notificação</label>
+                        <input id="f-notify-email" class="form-input" type="email" placeholder="{{ auth()->user()->email }}">
+                    </div>
+                    <div class="form-row">
+                        <label class="form-label" style="font-size:11px">WhatsApp (+351…)</label>
+                        <input id="f-notify-wa" class="form-input" type="text" placeholder="+351 91x xxx xxx">
+                    </div>
                 </div>
             </div>
 
@@ -333,17 +377,28 @@ async function createShare() {
     const payload = {
         agent_key:        document.getElementById('f-agent').value,
         client_name:      document.getElementById('f-client').value.trim(),
-        client_email:     document.getElementById('f-email').value.trim() || null,
+        client_email:     document.getElementById('f-email').value.trim(),
         custom_title:     document.getElementById('f-title').value.trim() || null,
         welcome_message:  document.getElementById('f-welcome').value.trim() || null,
         password:         document.getElementById('f-pass').value || null,
         expires_at:       document.getElementById('f-expires').value || null,
         show_branding:    true,
         allow_sap_access: document.getElementById('f-sap-access').checked,
+        require_otp:      document.getElementById('f-require-otp').checked,
+        lock_to_device:   document.getElementById('f-lock-device').checked,
+        notify_on_access: document.getElementById('f-notify').checked,
+        notify_email:     document.getElementById('f-notify-email').value.trim() || null,
+        notify_whatsapp:  document.getElementById('f-notify-wa').value.trim() || null,
     };
 
     if (!payload.client_name) {
         alert('Introduz o nome do cliente.');
+        btn.textContent = 'Criar Link';
+        btn.disabled = false;
+        return;
+    }
+    if (!payload.client_email) {
+        alert('O email do cliente é obrigatório — é para onde vai o código de acesso.');
         btn.textContent = 'Criar Link';
         btn.disabled = false;
         return;
@@ -414,6 +469,37 @@ async function deleteShare(id) {
     if ((await r.json()).ok) {
         document.getElementById('share-' + id)?.remove();
     }
+}
+
+async function revokeShare(id) {
+    if (!confirm('🛑 REVOGAR este link?\n\nQualquer sessão aberta é terminada imediatamente e o link deixa de aceitar novos acessos. Não é reversível.')) return;
+    const reason = prompt('(Opcional) Motivo para o registo:', '') ?? '';
+    const r = await fetch(`/admin/shares/${id}/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF },
+        body: JSON.stringify({ reason }),
+    });
+    if ((await r.json()).ok) {
+        alert('Link revogado. Todas as sessões activas foram terminadas.');
+        location.reload();
+    } else {
+        alert('Falha ao revogar. Tenta novamente.');
+    }
+}
+
+async function showAccessLog(id) {
+    const r = await fetch(`/admin/shares/${id}/log`, { headers: { 'X-CSRF-TOKEN': CSRF } });
+    const data = await r.json();
+    if (!data.logs || !data.logs.length) {
+        alert('Sem acessos registados.');
+        return;
+    }
+    const rows = data.logs.map(l => {
+        const when = new Date(l.created_at).toLocaleString('pt-PT');
+        const status = l.status === 'allowed' ? '✅' : '⛔';
+        return `${status} ${when}  ·  ${l.event.padEnd(15)}  ·  ${l.email || '-'}  ·  ${l.ip || '-'} (${l.country || '?'})${l.note ? '  · ' + l.note : ''}`;
+    }).join('\n');
+    alert('📜 Últimos acessos:\n\n' + rows);
 }
 </script>
 </body>

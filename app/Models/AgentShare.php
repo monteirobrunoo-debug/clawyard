@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
 class AgentShare extends Model
@@ -13,20 +14,37 @@ class AgentShare extends Model
         'password_hash', 'custom_title', 'welcome_message',
         'show_branding', 'allow_sap_access', 'is_active', 'expires_at', 'created_by',
         'usage_count', 'last_used_at',
+        'require_otp', 'lock_to_device',
+        'notify_on_access', 'notify_email', 'notify_whatsapp',
+        'revoked_at', 'revoked_reason',
     ];
 
     protected $casts = [
         'show_branding'    => 'boolean',
         'allow_sap_access' => 'boolean',
         'is_active'        => 'boolean',
+        'require_otp'      => 'boolean',
+        'lock_to_device'   => 'boolean',
+        'notify_on_access' => 'boolean',
         'expires_at'       => 'datetime',
         'last_used_at'     => 'datetime',
+        'revoked_at'       => 'datetime',
     ];
 
     // ── Relationships ────────────────────────────────────────────────────────
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function otps(): HasMany
+    {
+        return $this->hasMany(AgentShareOtp::class);
+    }
+
+    public function accessLogs(): HasMany
+    {
+        return $this->hasMany(AgentShareAccessLog::class)->latest();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -42,8 +60,23 @@ class AgentShare extends Model
     public function isValid(): bool
     {
         if (!$this->is_active) return false;
+        if ($this->revoked_at) return false;
         if ($this->expires_at && $this->expires_at->isPast()) return false;
         return true;
+    }
+
+    public function isRevoked(): bool
+    {
+        return $this->revoked_at !== null;
+    }
+
+    public function revoke(?string $reason = null): void
+    {
+        $this->update([
+            'revoked_at'     => now(),
+            'revoked_reason' => $reason,
+            'is_active'      => false,
+        ]);
     }
 
     public function checkPassword(string $password): bool
