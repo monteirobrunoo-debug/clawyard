@@ -101,7 +101,7 @@ SPECIALTY;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
                 'max_tokens' => 20000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 10000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -133,7 +133,7 @@ SPECIALTY;
             'headers' => $this->headersForMessage($message),
             'stream'  => true,
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
                 'max_tokens' => 20000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 10000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -192,5 +192,5 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'thinking'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-7'); }
 }

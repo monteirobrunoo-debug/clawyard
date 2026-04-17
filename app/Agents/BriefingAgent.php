@@ -275,7 +275,7 @@ SPECIALTY;
             'headers' => $this->headersForMessage($prompt),
             'stream'  => true,
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
                 'max_tokens' => 8192,
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
@@ -372,5 +372,5 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'briefing'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-7'); }
 }

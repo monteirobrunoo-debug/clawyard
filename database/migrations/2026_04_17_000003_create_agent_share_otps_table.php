@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (Schema::hasTable('agent_share_otps')) return;
+
         Schema::create('agent_share_otps', function (Blueprint $table) {
             $table->id();
             $table->foreignId('agent_share_id')->constrained()->cascadeOnDelete();

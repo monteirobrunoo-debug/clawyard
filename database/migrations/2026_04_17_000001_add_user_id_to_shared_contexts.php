@@ -19,9 +19,11 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::table('shared_contexts', function (Blueprint $table) {
-            $table->unsignedBigInteger('user_id')->nullable()->after('id');
-            $table->index(['user_id', 'agent_key']);
-            $table->index(['user_id', 'created_at']);
+            if (!Schema::hasColumn('shared_contexts', 'user_id')) {
+                $table->unsignedBigInteger('user_id')->nullable()->after('id');
+                $table->index(['user_id', 'agent_key']);
+                $table->index(['user_id', 'created_at']);
+            }
         });
     }
 

@@ -257,6 +257,8 @@ SPECIALTY;
             : $context . $message;
 
         $augmented = $this->augmentWithWebSearch($augmented);
+        $augmented = $this->sanitizeForApi($augmented);
+        $history   = array_map(fn($m) => $this->sanitizeForApi($m), $history);
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $augmented],
@@ -265,7 +267,7 @@ SPECIALTY;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($augmented),
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -301,6 +303,14 @@ SPECIALTY;
             $augmented = $this->augmentWithWebSearch($augmented, $heartbeat);
         }
 
+        // 4. SECURITY/STABILITY: sanitise every string that Guzzle will
+        //    json_encode before it reaches api.anthropic.com. Malformed
+        //    UTF-8 slipping in from DB-sourced briefings/discoveries (old
+        //    Windows-1252 copy-pastes, truncated multibyte sequences)
+        //    used to crash the whole request at `guzzle/src/Utils.php:298`.
+        $augmented = $this->sanitizeForApi($augmented);
+        $history   = array_map(fn($m) => $this->sanitizeForApi($m), $history);
+
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $augmented],
         ]);
@@ -311,10 +321,10 @@ SPECIALTY;
             'headers' => $this->headersForMessage($augmented),
             'stream'  => true,
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->sanitizeForApi($this->enrichSystemPrompt($this->systemPrompt)),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -356,5 +366,25 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'engineer'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-7'); }
+
+    /**
+     * Re-encode every string inside the message tree as valid UTF-8 so
+     * Guzzle's internal json_encode never sees a malformed byte. Without
+     * this, a single bad byte in an auto-loaded briefing rejects the
+     * entire /v1/messages request and the user sees an empty stream.
+     */
+    private function safeUtf8(string $s): string
+    {
+        $out = @mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+        $out = @iconv('UTF-8', 'UTF-8//IGNORE', $out ?? $s);
+        return $out !== false ? $out : '';
+    }
+
+    private function sanitizeForApi(mixed $value): mixed
+    {
+        if (is_string($value)) return $this->safeUtf8($value);
+        if (is_array($value))  return array_map(fn($v) => $this->sanitizeForApi($v), $value);
+        return $value;
+    }
 }
