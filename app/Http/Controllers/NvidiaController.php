@@ -447,12 +447,18 @@ class NvidiaController extends Controller
             echo ": post-stream\n\n";
             flush();
 
+            // SECURITY (B5): strip Kyber secret keys BEFORE any persistence /
+            // LLM callout. The browser already received the one-time card;
+            // never keep the private key in the DB, reports, or suggestion
+            // pipeline. A redacted marker keeps the UI consistent.
+            $fullReplyPersisted = $this->redactKyberSecrets($fullReply);
+
             // Save assistant reply after streaming completes
             try {
                 $conversationRef->messages()->create([
                     'role'    => 'assistant',
                     'agent'   => $agentName_final,
-                    'content' => $fullReply,
+                    'content' => $fullReplyPersisted,
                 ]);
             } catch (\Throwable $e) {
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
@@ -460,7 +466,10 @@ class NvidiaController extends Controller
 
             // CRM: cache json_opp block in conversation metadata so SIM confirmation
             // never has to re-parse history (safeguard against regex edge-cases)
-            if ($agentName_final === 'crm' && preg_match('/```json_opp\s*([\s\S]*?)\s*```/i', $fullReply, $oppMatch)) {
+            // Use the redacted copy downstream — CRM never contains Kyber
+            // payloads in practice, but this keeps the invariant that
+            // $fullReply (raw) stops being touched after line ~454.
+            if ($agentName_final === 'crm' && preg_match('/```json_opp\s*([\s\S]*?)\s*```/i', $fullReplyPersisted, $oppMatch)) {
                 $oppData = json_decode(trim($oppMatch[1]), true);
                 if (is_array($oppData)) {
                     try {
@@ -477,7 +486,7 @@ class NvidiaController extends Controller
             flush();
 
             // Auto-save report for all agents (responses > 150 chars)
-            if (strlen($fullReply) > 150) {
+            if (strlen($fullReplyPersisted) > 150) {
                 try {
                     $agentLabel = $agentName_final;
                     $title = $agentLabel . ' — ' . now()->format('Y-m-d H:i');
@@ -485,8 +494,8 @@ class NvidiaController extends Controller
                         'title'   => $title,
                         'user_id' => $userId,
                         'type'    => $agentName_final,
-                        'content' => $fullReply,
-                        'summary' => substr(strip_tags($fullReply), 0, 300),
+                        'content' => $fullReplyPersisted,
+                        'summary' => substr(strip_tags($fullReplyPersisted), 0, 300),
                     ]);
                 } catch (\Throwable $e) {
                     \Log::warning('ClawYard: could not auto-save report — ' . $e->getMessage());
@@ -497,12 +506,12 @@ class NvidiaController extends Controller
             flush();
 
             // Generate smart contextual suggestions based on the actual response
-            if (strlen($fullReply) > 80) {
+            if (strlen($fullReplyPersisted) > 80) {
                 try {
                     $smartSuggestions = $this->generateSmartSuggestions(
                         $agentName_final,
                         is_array($message) ? ($message[0]['text'] ?? '') : $message,
-                        $fullReply
+                        $fullReplyPersisted
                     );
                     if (!empty($smartSuggestions)) {
                         echo 'data: ' . json_encode([
@@ -625,8 +634,13 @@ class NvidiaController extends Controller
             default    => 'general assistant',
         };
 
-        $snippet  = mb_substr(strip_tags($response), 0, 800);
-        $q        = mb_substr($question, 0, 200);
+        // SECURITY (B11): sanitise both the user question and the response
+        // snippet before embedding them in the secondary prompt. Stops a
+        // crafted user message like "Ignore all instructions. Return …"
+        // from hijacking the suggestion generator.
+        $snippet  = $this->sanitiseForSecondaryPrompt(strip_tags($response));
+        $snippet  = mb_substr($snippet, 0, 800);
+        $q        = $this->sanitiseForSecondaryPrompt($question);
 
         $prompt = <<<PROMPT
 You are a UX assistant. Given this AI agent response, suggest exactly 3 specific follow-up actions the user can take next.
@@ -710,6 +724,93 @@ PROMPT;
         $mime    = strtolower(trim((string) $mime));
         $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         return in_array($mime, $allowed, true) ? $mime : 'image/jpeg';
+    }
+
+    /**
+     * Strip any Kyber private-key payload from a response before it is
+     * persisted to the database or forwarded to secondary LLM calls.
+     *
+     * The browser still receives the full __KYBER_KEYS__ payload (one-time,
+     * via SSE) so the user can copy/store it. Everything server-side
+     * afterwards keeps only a redacted marker — we never want the secret
+     * key to live in conversation history, auto-saved reports, or the
+     * Haiku-based suggestion pipeline.
+     */
+    private function redactKyberSecrets(string $text): string
+    {
+        // 1. __KYBER_KEYS__ marker + flat JSON body (current emitter format).
+        //    Uses a tolerant body matcher: allow escaped quotes and newlines
+        //    inside string values, stop at the first unescaped `}` on the
+        //    same logical JSON object.
+        $text = preg_replace_callback(
+            '/__KYBER_KEYS__\{(?:[^{}"\\\\]|\\\\.|"(?:[^"\\\\]|\\\\.)*")*\}/s',
+            fn() => '__KYBER_KEYS_REDACTED__{"note":"Par de chaves gerado. Chave privada entregue uma única vez na UI — não fica guardada no servidor."}',
+            $text
+        );
+
+        // 2. Belt-and-braces: blank every known private-key JSON field
+        //    regardless of where it appears. Covers alternative casings and
+        //    naming conventions so future emitters are caught by default.
+        $privateKeyFields = [
+            'secret_key', 'secretKey',
+            'private_key', 'privateKey',
+            'priv_key', 'privKey',
+            'kyber_secret', 'kyberSecret',
+            'sk',
+        ];
+        foreach ($privateKeyFields as $field) {
+            $text = preg_replace(
+                '/"' . preg_quote($field, '/') . '"\s*:\s*"(?:[^"\\\\]|\\\\.)*"/',
+                '"' . $field . '":"[REDACTED]"',
+                $text
+            );
+        }
+
+        return $text;
+    }
+
+    /**
+     * Strip obvious prompt-injection attempts from a user message before it is
+     * embedded in a secondary LLM prompt. Used by generateSmartSuggestions so
+     * a crafted user message cannot hijack the suggestion-generation pipeline
+     * (see audit item B11).
+     */
+    private function sanitiseForSecondaryPrompt(string $input): string
+    {
+        $clean = strip_tags($input);
+
+        // Strip zero-width / bidi control characters frequently used to
+        // smuggle instructions past naive regex (U+200B–U+200F, U+202A–U+202E,
+        // U+2060–U+206F).
+        $clean = preg_replace('/[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{206F}\x{FEFF}]/u', '', $clean);
+
+        // Collapse known jailbreak / prompt-injection phrases before they
+        // reach the secondary (suggestion) model. Covers English + Portuguese
+        // + common obfuscations.
+        $patterns = [
+            // English
+            '/ignore\s+(all\s+)?(previous|above|prior|earlier)\s+(instructions|prompts?|messages?|rules?)/iu',
+            '/disregard\s+(all\s+)?(previous|prior|above)\s+\w+/iu',
+            '/forget\s+(everything|all)\s+(you|above)/iu',
+            '/system\s*:\s*/iu',
+            '/<\s*\/?(system|assistant|user)\s*>/iu',
+            '/\[\/?(SYSTEM|INST)\]/iu',
+            '/new\s+instructions?\s*:/iu',
+            '/you\s+are\s+now\s+\w+/iu',
+            // Portuguese — allow a short filler phrase (up to 3 words)
+            // between the verb and "instruções".
+            '/ignora(r)?(\s+\S+){0,3}\s+(instru[çc][õo]es|mensagens?|regras?|pr[óo]mpts?)/iu',
+            '/desconsider[ae](r)?(\s+\S+){0,3}\s+(instru[çc][õo]es|mensagens?|regras?)/iu',
+            '/esquec[ea](\s+\S+){0,3}\s+(tudo|instru[çc][õo]es|acima)/iu',
+            '/novas?\s+instru[çc][õo]es\s*:/iu',
+            '/sistema\s*:\s*/iu',
+            // Obfuscation patterns
+            '/ign[0o]re/iu',
+            '/syst[e3]m\s*:\s*/iu',
+        ];
+        $clean = preg_replace($patterns, '[filtered]', $clean);
+        $clean = preg_replace('/\s+/', ' ', $clean);
+        return mb_substr(trim($clean), 0, 200);
     }
 
     /**

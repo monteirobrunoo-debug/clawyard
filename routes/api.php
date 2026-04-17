@@ -33,8 +33,12 @@ Route::get('/email/package/{token}', [EmailEncryptionController::class, 'getPack
 
 // WhatsApp webhook must remain public for Meta to verify
 Route::get('/whatsapp/webhook', [WhatsAppController::class, 'verify']);
+// SECURITY: Meta retries legitimate webhooks at < 10/min; 120/min was far above
+// any legitimate need and created a DoS amplification vector if a bad actor
+// obtained (or guessed) the app secret. 30/min gives ample headroom for retry
+// storms while making abuse expensive.
 Route::post('/whatsapp/webhook', [WhatsAppController::class, 'webhook'])
-    ->middleware('throttle:120,1');
+    ->middleware('throttle:30,1');
 
 // ─── AUTHENTICATED + RATE LIMITED ─────────────────────────────────────────
 Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {

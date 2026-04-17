@@ -18,6 +18,11 @@ class BriefingAgent implements AgentInterface
     use WebSearchTrait;
     use SharedContextTrait;
 
+    // PSI bus — publish the executive briefing so downstream agents
+    // (Engineer R&D, Finance, Strategist) reference today's conclusions.
+    protected string $contextKey  = 'briefing_intel';
+    protected array  $contextTags = ['briefing','executivo','strategy','daily','prioridade','acção'];
+
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'never';
     protected Client     $client;
@@ -308,7 +313,10 @@ SPECIALTY;
             }
         }
 
-        return trim($full);
+        $full = trim($full);
+        if ($full !== '') $this->publishSharedContext($full);
+
+        return $full;
     }
 
     // ─── chat() — delegates to stream() silently ──────────────────────────

@@ -70,7 +70,11 @@ SPECIALTY;
                 'headers' => $this->apiHeaders(),
                 'json'    => [
                     'model'      => 'claude-haiku-4-6',
-                    'max_tokens' => 100,
+                    // A JSON array like ["sap","sales","crm","finance"] can
+                    // easily exceed 100 tokens once the model adds any
+                    // framing. Truncation made json_decode fall back to
+                    // ["claude"], silently losing multi-agent routing.
+                    'max_tokens' => 256,
                     'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                     'messages'   => [
                         ['role' => 'user', 'content' => $message],
