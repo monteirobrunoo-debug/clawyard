@@ -35,6 +35,11 @@ class AgentManager
             'vessel'    => new VesselSearchAgent(),
             'mildef'    => new MilDefAgent(),
             'crm'       => new CrmAgent(),
+            // BriefingAgent was referenced by OrchestratorAgent's system prompt
+            // but not registered here — requests for "briefing" silently fell
+            // back to ClaudeAgent. Registering it fixes the orchestrator and
+            // lets the /briefing route resolve a real agent instance.
+            'briefing'  => new BriefingAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);

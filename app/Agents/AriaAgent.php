@@ -242,10 +242,14 @@ SPECIALTY;
             'connect_timeout' => 10,
         ]);
 
+        // SECURITY: TLS verification MUST stay on for a security-scanning agent.
+        // Disabling it makes AriaAgent's own checks MITM-vulnerable and taints
+        // the intelligence it reports back. Upstream sites (partyard.eu, etc.)
+        // have valid certs.
         $this->httpClient = new Client([
             'timeout'         => 8,
             'connect_timeout' => 5,
-            'verify'          => false,
+            'verify'          => true,
             'allow_redirects' => true,
             'headers'         => ['User-Agent' => 'AriaSecurityScanner/1.0 (ClawYard)'],
         ]);
@@ -304,8 +308,14 @@ SPECIALTY;
         $lines   = ["## LIVE SITE SECURITY CHECK — " . now()->format('d/m/Y H:i')];
         $targets = $this->monitoredSites;
 
-        // Also add SAP endpoint
-        $targets[] = 'https://sld.partyard.privatcloud.biz/b1s/v1';
+        // SECURITY (B3): only include the internal SAP endpoint when explicitly
+        // asked. Previously AriaAgent probed SAP on every security-check
+        // request, leaking endpoint existence and creating a DoS amplification
+        // vector (anyone could make AriaAgent hammer SAP by repeatedly
+        // triggering a security check). Opt-in via env flag.
+        if (config('services.aria.probe_sap', false)) {
+            $targets[] = config('services.sap.base_url', 'https://sld.partyard.privatcloud.biz/b1s/v1');
+        }
 
         foreach ($targets as $site) {
             try {

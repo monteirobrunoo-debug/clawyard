@@ -23,6 +23,11 @@ class ThinkingAgent implements AgentInterface
     use SharedContextTrait;
     protected string $systemPrompt = '';
 
+    // PSI bus — publish deep-thinking conclusions so other agents
+    // (Finance, Patent, Engineer, Strategist) see them.
+    protected string $contextKey  = 'thinking_intel';
+    protected array  $contextTags = ['estratégia','strategy','análise','complex','raciocínio','decisão','dilema'];
+
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
 
@@ -109,6 +114,7 @@ SPECIALTY;
         foreach ($data['content'] ?? [] as $block) {
             if (($block['type'] ?? '') === 'text') $text .= $block['text'];
         }
+        if ($text !== '') $this->publishSharedContext($text);
         return $text;
     }
 
@@ -179,6 +185,8 @@ SPECIALTY;
                 $lastBeat = time();
             }
         }
+
+        if ($full !== '') $this->publishSharedContext($full);
 
         return $full;
     }

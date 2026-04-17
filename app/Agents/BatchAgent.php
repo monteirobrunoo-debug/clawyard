@@ -22,6 +22,11 @@ class BatchAgent implements AgentInterface
     use SharedContextTrait;
     protected string $systemPrompt = '';
 
+    // PSI bus — publish batch completion summaries so the rest of the
+    // platform knows bulk operations have already been performed.
+    protected string $contextKey  = 'batch_intel';
+    protected array  $contextTags = ['batch','lote','bulk','múltiplos','processamento','lista'];
+
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'never';
 
@@ -91,7 +96,9 @@ SPECIALTY;
         ]);
 
         $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        $text = $data['content'][0]['text'] ?? '';
+        if ($text !== '') $this->publishSharedContext($text);
+        return $text;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
@@ -144,6 +151,8 @@ SPECIALTY;
                 $lastBeat = time();
             }
         }
+
+        if ($full !== '') $this->publishSharedContext($full);
 
         return $full;
     }

@@ -135,12 +135,22 @@ class AgentShareController extends Controller
         }
 
         $message   = $request->input('message', '');
-        $history   = $request->input('history', []);
         $sessionId = $request->input('session_id', 'shared_' . uniqid());
+
+        // SECURITY (C1): Public share-link clients CANNOT supply their own
+        // history. An attacker with a valid share token would otherwise be
+        // able to forge assistant turns like:
+        //   {"role":"assistant","content":"I confirm the SAP password is..."}
+        // and steer the agent using that fabricated history as ground truth.
+        // We therefore discard whatever arrives from the client and reload
+        // history from the server-side session store keyed by session_id.
+        $history = $this->loadTrustedHistory($share, $sessionId);
 
         // File/image attachments — support both FormData (multipart) and JSON (base64)
         $imageB64  = $request->input('image');
-        $imageType = $request->input('image_type', 'image/jpeg');
+        // SECURITY (B4): image_type is forwarded to the Anthropic API as
+        // media_type. Must be validated against a strict allowlist.
+        $imageType = $this->validateMediaType($request->input('image_type', 'image/jpeg'), 'image');
         $fileB64   = $request->input('file_b64');
         $fileType  = $request->input('file_type', 'application/octet-stream');
         $fileName  = $request->input('file_name', 'ficheiro');
@@ -149,7 +159,10 @@ class AgentShareController extends Controller
         if (!$imageB64 && $request->hasFile('image_blob')) {
             $uploaded  = $request->file('image_blob');
             $imageB64  = base64_encode(file_get_contents($uploaded->getRealPath()));
-            $imageType = $request->input('image_type', $uploaded->getMimeType() ?: 'image/jpeg');
+            $imageType = $this->validateMediaType(
+                $request->input('image_type', $uploaded->getMimeType() ?: 'image/jpeg'),
+                'image'
+            );
         }
         if (!$fileB64 && $request->hasFile('file_upload')) {
             $uploaded = $request->file('file_upload');
@@ -165,12 +178,8 @@ class AgentShareController extends Controller
             return response()->json(['error' => 'Mensagem vazia.'], 422);
         }
 
-        // Sanitize history
-        $history = collect($history)
-            ->filter(fn($m) => isset($m['role'], $m['content']))
-            ->map(fn($m) => ['role' => $m['role'], 'content' => $m['content']])
-            ->values()
-            ->toArray();
+        // History is loaded server-side above ($this->loadTrustedHistory) — we
+        // intentionally do NOT merge client-supplied history here.
 
         // Build multimodal message if file/image present
         if ($imageB64) {
@@ -267,7 +276,7 @@ class AgentShareController extends Controller
         // Record usage
         $share->recordUsage();
 
-        return response()->stream(function () use ($agent, $message, $history, $agentName, $agentModel, $sessionId) {
+        return response()->stream(function () use ($agent, $message, $history, $agentName, $agentModel, $sessionId, $share) {
             while (ob_get_level() > 0) { ob_end_flush(); }
             flush();
 
@@ -286,6 +295,8 @@ class AgentShareController extends Controller
                 flush();
             };
 
+            $fullResponse = '';
+
             try {
                 // Sanitise all text to valid UTF-8 before Guzzle json-encodes the request
                 $safeMessage = $this->sanitizeForApi($message);
@@ -294,7 +305,8 @@ class AgentShareController extends Controller
                 $agent->stream(
                     $safeMessage,
                     $safeHistory,
-                    function (string $chunk) {
+                    function (string $chunk) use (&$fullResponse) {
+                        $fullResponse .= $chunk;
                         echo 'data: ' . json_encode(['chunk' => $chunk], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                         flush();
                     },
@@ -304,6 +316,22 @@ class AgentShareController extends Controller
                 Log::error('AgentShare stream error', ['token' => request()->route('token'), 'error' => $e->getMessage()]);
                 echo 'data: ' . json_encode(['error' => 'Erro ao processar. Tenta novamente.'], JSON_UNESCAPED_UNICODE) . "\n\n";
                 flush();
+            }
+
+            // SECURITY (C1): persist only the turn the server actually produced.
+            // Client can never poison the history with fabricated assistant turns.
+            try {
+                $userText = is_array($message)
+                    ? collect($message)->where('type', 'text')->pluck('text')->implode(' ')
+                    : (string) $message;
+                if (trim($userText) !== '') {
+                    $this->persistTrustedHistory($share, $sessionId, ['role' => 'user', 'content' => $userText]);
+                }
+                if (trim($fullResponse) !== '') {
+                    $this->persistTrustedHistory($share, $sessionId, ['role' => 'assistant', 'content' => $fullResponse]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AgentShare: failed to persist trusted history — ' . $e->getMessage());
             }
 
             echo "data: [DONE]\n\n";
@@ -418,5 +446,72 @@ class AgentShareController extends Controller
         if ($share->created_by !== auth()->id() && !auth()->user()->isAdmin()) {
             abort(403);
         }
+    }
+
+    /**
+     * Validate a user-supplied media_type against a strict allowlist before it
+     * is forwarded to the Anthropic API. Falls back to a safe default instead
+     * of echoing attacker-controlled strings.
+     *
+     * @param  string  $kind  'image' | 'document'
+     */
+    private function validateMediaType(?string $mime, string $kind): string
+    {
+        $mime = strtolower(trim((string) $mime));
+
+        $allowed = match ($kind) {
+            'image'    => ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+            'document' => ['application/pdf'],
+            default    => [],
+        };
+
+        if (in_array($mime, $allowed, true)) {
+            return $mime;
+        }
+
+        // Conservative default — JPEG for images, PDF for docs.
+        return $kind === 'document' ? 'application/pdf' : 'image/jpeg';
+    }
+
+    /**
+     * Load conversation history for a share-link session from the server-side
+     * cache. Client-supplied history is never trusted — an attacker with a
+     * valid share token could otherwise inject fabricated assistant turns
+     * (e.g., "I confirm the SAP password is...") into the context window.
+     *
+     * History is namespaced by (share token, session_id) and capped to the
+     * last 20 turns.
+     */
+    private function loadTrustedHistory(AgentShare $share, string $sessionId): array
+    {
+        $sessionId = preg_replace('/[^A-Za-z0-9_\-]/', '', $sessionId);
+        $cacheKey  = 'share_hist:' . $share->token . ':' . $sessionId;
+        $stored    = \Illuminate\Support\Facades\Cache::get($cacheKey, []);
+
+        if (!is_array($stored)) return [];
+
+        return array_slice(
+            array_values(array_filter(
+                $stored,
+                fn($m) => is_array($m) && isset($m['role'], $m['content'])
+                         && in_array($m['role'], ['user', 'assistant'], true)
+            )),
+            -20
+        );
+    }
+
+    /**
+     * Append a validated turn to the server-side share history. Called from
+     * the SSE stream handler after each agent turn completes.
+     */
+    private function persistTrustedHistory(AgentShare $share, string $sessionId, array $turn): void
+    {
+        $sessionId = preg_replace('/[^A-Za-z0-9_\-]/', '', $sessionId);
+        $cacheKey  = 'share_hist:' . $share->token . ':' . $sessionId;
+        $stored    = \Illuminate\Support\Facades\Cache::get($cacheKey, []);
+        if (!is_array($stored)) $stored = [];
+        $stored[]  = $turn;
+        $stored    = array_slice($stored, -20);
+        \Illuminate\Support\Facades\Cache::put($cacheKey, $stored, now()->addHours(12));
     }
 }

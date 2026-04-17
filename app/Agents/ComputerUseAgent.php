@@ -30,6 +30,13 @@ class ComputerUseAgent implements AgentInterface
     protected string $searchPolicy = 'conditional';
     protected Client $client;
 
+    // PSI bus — share a summary of what was done on the user's Mac so the
+    // other agents (CRM, Sales) know an action was already performed via
+    // browser/desktop automation (prevents duplicate SAP writes, duplicate
+    // emails, etc.).
+    protected string $contextKey  = 'computer_use_intel';
+    protected array  $contextTags = ['robodesk','desktop','web','automation','formulário','portal'];
+
     /** Max Computer Use iterations per task (safety limit) */
     private const MAX_ITERATIONS = 30;
 
@@ -275,6 +282,10 @@ SPECIALTY;
 
         if ($iteration >= self::MAX_ITERATIONS) {
             $emit("\n\n⚠️ Limite de {$iteration} passos atingido. Tarefa interrompida por segurança.");
+        }
+
+        if ($fullOutput !== '') {
+            $this->publishSharedContext($fullOutput);
         }
 
         return $fullOutput;

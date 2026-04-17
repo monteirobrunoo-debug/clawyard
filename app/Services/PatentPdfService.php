@@ -22,10 +22,14 @@ class PatentPdfService
 
     public function __construct()
     {
+        // SECURITY: PDF downloads must be TLS-verified — a MITM could swap a
+        // legitimate patent PDF for a doctored one and poison the prior-art
+        // knowledge base. All targeted sources (EPO, USPTO, Google Patents,
+        // WIPO) publish valid certificates.
         $this->http = new Client([
             'timeout'         => 60,
             'connect_timeout' => 15,
-            'verify'          => false,
+            'verify'          => true,
             'allow_redirects' => ['max' => 10, 'strict' => false, 'referer' => true],
             'headers'         => [
                 'User-Agent' => 'Mozilla/5.0 (compatible; ClawYard PatentBot/1.0; research@hp-group.org)',

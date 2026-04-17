@@ -122,10 +122,13 @@ SPECIALTY;
             'connect_timeout' => 10,
         ]);
 
+        // SECURITY: arXiv, USPTO, Google Patents and EPO all have valid TLS certs.
+        // Keeping verify=true so downloaded papers / patents can't be tampered with
+        // by an on-path attacker.
         $this->httpClient = new Client([
             'timeout'         => 20,
             'connect_timeout' => 8,
-            'verify'          => false,
+            'verify'          => true,
             'headers'         => ['User-Agent' => 'Mozilla/5.0 (compatible; ClawYardBot/1.0)'],
         ]);
     }

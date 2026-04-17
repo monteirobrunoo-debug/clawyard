@@ -40,7 +40,9 @@ class NvidiaController extends Controller
             : 'u' . $userId . '_' . bin2hex(random_bytes(16));
 
         $imageB64  = $request->input('image');
-        $imageType = $request->input('image_type', 'image/jpeg');
+        // SECURITY (B4): image_type is sent to the Anthropic API as media_type.
+        // Validate against strict allowlist to prevent MIME injection.
+        $imageType = $this->validateImageMime($request->input('image_type', 'image/jpeg'));
 
         try {
             // Load or create conversation (Memory)
@@ -175,7 +177,7 @@ class NvidiaController extends Controller
             : 'u' . $userId . '_' . bin2hex(random_bytes(16));
 
         $imageB64   = $request->input('image');
-        $imageType  = $request->input('image_type', 'image/jpeg');
+        $imageType  = $this->validateImageMime($request->input('image_type', 'image/jpeg'));
         $fileB64    = $request->input('file_b64');
         $fileType   = $request->input('file_type', 'application/octet-stream');
         $fileName   = $request->input('file_name', 'ficheiro');
@@ -427,8 +429,11 @@ class NvidiaController extends Controller
                     'file'      => $e->getFile(),
                     'line'      => $e->getLine(),
                 ]);
+                // SECURITY (B7): never leak internal exception details to the
+                // client in production — hostnames, file paths, DB table names
+                // and URL-embedded API keys routinely appear in Guzzle errors.
                 $errMsg = app()->environment('production')
-                    ? 'Erro ao processar: ' . $e->getMessage()
+                    ? 'Erro ao processar. A equipa foi notificada. Tenta novamente.'
                     : $e->getMessage();
                 echo 'data: ' . json_encode(['error' => $errMsg], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                 flush();
@@ -692,6 +697,19 @@ PROMPT;
         // Second pass: strip any remaining invalid bytes via iconv
         $out = @iconv('UTF-8', 'UTF-8//IGNORE', $out ?? $s);
         return $out !== false ? $out : '';
+    }
+
+    /**
+     * Validate the user-supplied image_type against an allowlist before it is
+     * forwarded to the Anthropic API as media_type. Prevents the caller from
+     * injecting arbitrary strings (e.g. "text/html; <garbage>") into the API
+     * request, and keeps us aligned with the formats Claude actually accepts.
+     */
+    private function validateImageMime(?string $mime): string
+    {
+        $mime    = strtolower(trim((string) $mime));
+        $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        return in_array($mime, $allowed, true) ? $mime : 'image/jpeg';
     }
 
     /**

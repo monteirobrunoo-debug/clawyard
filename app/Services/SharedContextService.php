@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\SharedContext;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -48,40 +50,56 @@ class SharedContextService
         string $agentName,
         string $contextKey,
         string $rawContent,
-        array  $tags = []
+        array  $tags = [],
+        ?int   $userId = null
     ): void {
         try {
             $summary = $this->extractSummary($rawContent);
             if (strlen($summary) < 30) return;
 
-            // Reconcile with previous entry from this agent
-            $previous = SharedContext::where('agent_key', $agentKey)
-                ->orderBy('created_at', 'desc')
-                ->first();
+            // SECURITY: scope bus entries by owner. If caller didn't pass a user
+            // id, fall back to the authenticated user. Publishes from CLI/queues
+            // with no auth context stay null and are only readable system-wide
+            // by queries that explicitly include nulls.
+            $userId = $userId ?? Auth::id();
 
-            $reconciliation = $this->reconcile($summary, $previous?->summary);
+            // Wrap read→check→delete→insert in a transaction to prevent the
+            // TOCTOU race condition where two concurrent publishes both skip
+            // the delete and both insert, inflating the bus past MAX_PER_AGENT.
+            DB::transaction(function () use ($agentKey, $agentName, $contextKey, $summary, $tags, $userId) {
+                $previous = SharedContext::where('agent_key', $agentKey)
+                    ->where(fn($q) => $q->where('user_id', $userId)->orWhereNull('user_id'))
+                    ->orderBy('created_at', 'desc')
+                    ->lockForUpdate()
+                    ->first();
 
-            // Enforce max entries per agent
-            $count = SharedContext::where('agent_key', $agentKey)->count();
-            if ($count >= self::MAX_PER_AGENT) {
-                SharedContext::where('agent_key', $agentKey)
-                    ->orderBy('created_at')
-                    ->limit($count - self::MAX_PER_AGENT + 1)
-                    ->delete();
-            }
+                $reconciliation = $this->reconcile($summary, $previous?->summary);
 
-            SharedContext::create([
-                'agent_key'        => $agentKey,
-                'agent_name'       => $agentName,
-                'context_key'      => $contextKey,
-                'summary'          => $summary,
-                'tags'             => $tags,
-                'expires_at'       => now()->addHours(self::TTL_HOURS),
-                'change_type'      => $reconciliation['type'],
-                'similarity_score' => $reconciliation['score'],
-                'change_note'      => $reconciliation['note'],
-                'previous_summary' => $previous?->summary,
-            ]);
+                $count = SharedContext::where('agent_key', $agentKey)
+                    ->where('user_id', $userId)
+                    ->count();
+                if ($count >= self::MAX_PER_AGENT) {
+                    SharedContext::where('agent_key', $agentKey)
+                        ->where('user_id', $userId)
+                        ->orderBy('created_at')
+                        ->limit($count - self::MAX_PER_AGENT + 1)
+                        ->delete();
+                }
+
+                SharedContext::create([
+                    'user_id'          => $userId,
+                    'agent_key'        => $agentKey,
+                    'agent_name'       => $agentName,
+                    'context_key'      => $contextKey,
+                    'summary'          => $summary,
+                    'tags'             => $tags,
+                    'expires_at'       => now()->addHours(self::TTL_HOURS),
+                    'change_type'      => $reconciliation['type'],
+                    'similarity_score' => $reconciliation['score'],
+                    'change_note'      => $reconciliation['note'],
+                    'previous_summary' => $previous?->summary,
+                ]);
+            });
         } catch (\Throwable $e) {
             Log::warning("SharedContextService: publish failed for {$agentKey} — " . $e->getMessage());
         }
@@ -92,10 +110,24 @@ class SharedContextService
      * an agent's system prompt. Optionally filtered by relevance to $query.
      * Includes reconciliation indicators so agents know when data has changed.
      */
-    public function getContextBlock(?string $query = null, ?string $currentAgent = null): string
+    public function getContextBlock(?string $query = null, ?string $currentAgent = null, ?int $userId = null): string
     {
         try {
-            $query_obj = SharedContext::active()->orderBy('created_at', 'desc');
+            // SECURITY: only read entries owned by the current user (or
+            // userless system publishes). Prevents cross-tenant data leakage
+            // via the bus.
+            $userId = $userId ?? Auth::id();
+
+            $query_obj = SharedContext::active()
+                ->where(function ($q) use ($userId) {
+                    if ($userId !== null) {
+                        $q->where('user_id', $userId)->orWhereNull('user_id');
+                    } else {
+                        // No authenticated user — only system/userless entries
+                        $q->whereNull('user_id');
+                    }
+                })
+                ->orderBy('created_at', 'desc');
 
             // Block SAP intel from leaking via the shared bus on external share links
             if (config('app.sap_access_blocked', false)) {

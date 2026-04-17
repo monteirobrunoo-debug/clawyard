@@ -32,7 +32,8 @@ trait SharedContextTrait
     protected function enrichSystemPrompt(string $basePrompt, ?string $query = null): string
     {
         $agentKey = method_exists($this, 'getName') ? $this->getName() : null;
-        $block = (new SharedContextService())->getContextBlock($query, $agentKey);
+        $userId   = $this->sharedContextUserId();
+        $block    = (new SharedContextService())->getContextBlock($query, $agentKey, $userId);
         if (!$block) return $basePrompt;
         return $basePrompt . "\n" . $block;
     }
@@ -51,14 +52,30 @@ trait SharedContextTrait
         $tags      = property_exists($this, 'contextTags') ? $this->contextTags : [];
         $agentKey  = method_exists($this, 'getName') ? $this->getName() : 'unknown';
         $agentName = $this->getAgentDisplayName();
+        $userId    = $this->sharedContextUserId();
 
         (new SharedContextService())->publish(
             $agentKey,
             $agentName,
             $contextKey,
             $fullResponse,
-            $tags
+            $tags,
+            $userId
         );
+    }
+
+    /**
+     * Determine the user that owns bus activity for this request.
+     * Uses the authenticated web user if available. Falls back to null
+     * for system publishes (queues, CLI, scheduled briefings).
+     */
+    private function sharedContextUserId(): ?int
+    {
+        try {
+            return \Illuminate\Support\Facades\Auth::id();
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────

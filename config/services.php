@@ -54,19 +54,33 @@ return [
         'api_key' => env('TAVILY_API_KEY'),
     ],
 
+    'aria' => [
+        // When true, AriaAgent will include the internal SAP B1 endpoint in
+        // live-site checks. Defaults to false to avoid leaking the endpoint
+        // existence over the LLM channel and to prevent DoS amplification
+        // (users triggering ARIA → ARIA hammers SAP).
+        'probe_sap' => env('ARIA_PROBE_SAP', false),
+    ],
+
     'deploy_token' => env('DEPLOY_TOKEN', ''),
 
     'sap' => [
-        'base_url' => env('SAP_B1_URL', 'https://sld.partyard.privatcloud.biz/b1s/v1'),
-        'company'  => env('SAP_B1_COMPANY', 'PARTYARD'),
-        'username' => env('SAP_B1_USER', ''),
-        'password' => env('SAP_B1_PASSWORD', ''),
+        'base_url'   => env('SAP_B1_URL', 'https://sld.partyard.privatcloud.biz/b1s/v1'),
+        'company'    => env('SAP_B1_COMPANY', 'PARTYARD'),
+        'username'   => env('SAP_B1_USER', ''),
+        'password'   => env('SAP_B1_PASSWORD', ''),
+        // Set SAP_TLS_VERIFY=/etc/ssl/certs/sap-ca.pem in production to pin
+        // the SAP CA cert. SAP_TLS_VERIFY=false is a fallback only.
+        'tls_verify' => env('SAP_TLS_VERIFY', true),
     ],
 
     'whatsapp' => [
         'token'        => env('META_WHATSAPP_TOKEN'),
         'phone_id'     => env('META_WHATSAPP_PHONE_ID'),
         'verify_token' => env('META_WHATSAPP_VERIFY_TOKEN', 'clawyard_webhook_2026'),
+        // SECURITY: HMAC-SHA256 shared secret from Meta dev portal. Webhook
+        // requests without a valid X-Hub-Signature-256 signature are rejected.
+        'app_secret'   => env('META_APP_SECRET', ''),
     ],
 
     'epo' => [
@@ -75,8 +89,10 @@ return [
     ],
 
     'acingov' => [
-        'username' => env('ACINGOV_USERNAME'),
-        'password' => env('ACINGOV_PASSWORD'),
+        'username'   => env('ACINGOV_USERNAME'),
+        'password'   => env('ACINGOV_PASSWORD'),
+        // Defaults to true — acingov.pt has a valid Let's Encrypt cert.
+        'tls_verify' => env('ACINGOV_TLS_VERIFY', true),
     ],
 
     'vortal' => [

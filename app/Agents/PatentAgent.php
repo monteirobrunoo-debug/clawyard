@@ -171,10 +171,13 @@ SPECIALTY;
             'connect_timeout' => 10,
         ]);
 
+        // SECURITY: keep TLS verification on — EPO/USPTO/Espacenet/WIPO all
+        // have valid certs. verify=false would let an on-path attacker feed
+        // fake prior-art into the FTO analysis.
         $this->httpClient = new Client([
             'timeout'         => 15,
             'connect_timeout' => 8,
-            'verify'          => false,
+            'verify'          => true,
             'headers'         => ['User-Agent' => 'ClawYard/1.0 (research@hp-group.org)'],
         ]);
     }

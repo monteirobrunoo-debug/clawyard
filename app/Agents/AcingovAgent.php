@@ -230,10 +230,13 @@ SPECIALTY;
             'connect_timeout' => 10,
         ]);
 
+        // SECURITY: Acingov, base.gov.pt, SAM.gov, TED all have valid certs.
+        // Keeping TLS verification on protects scraped tender data and — more
+        // importantly — the portal credentials used on the login POST below.
         $this->httpClient = new Client([
             'timeout'         => 15,
             'connect_timeout' => 8,
-            'verify'          => false,
+            'verify'          => true,
             'headers'         => ['User-Agent' => 'ClawYard/1.0 (research@hp-group.org)'],
         ]);
 
@@ -374,6 +377,9 @@ SPECIALTY;
         $baseUrl = 'https://www.acingov.pt/acingovprod/2/';
         $jar     = new CookieJar();
 
+        // SECURITY: Acingov login sends real credentials — TLS verification is
+        // mandatory. Config switch only exists so we can point at a staging
+        // environment if ever needed, but defaults to true.
         $client = new Client([
             'cookies'         => $jar,
             'allow_redirects' => ['max' => 5],
@@ -383,7 +389,7 @@ SPECIALTY;
                 'Accept-Language' => 'pt-PT,pt;q=0.9,en;q=0.8',
             ],
             'timeout' => 15,
-            'verify'  => false,
+            'verify'  => config('services.acingov.tls_verify', true),
         ]);
 
         try {
@@ -517,7 +523,6 @@ SPECIALTY;
                     'query'   => ['procedure_search' => $kw],
                     'headers' => ['User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)', 'Accept' => 'text/html'],
                     'timeout' => 10,
-                    'verify'  => false,
                 ]);
                 $html  = $resp->getBody()->getContents();
                 $rows  = $this->parseAcingovTable($html, $seen, false);
@@ -532,7 +537,7 @@ SPECIALTY;
             try {
                 $resp  = $this->httpClient->get($baseUrl, [
                     'headers' => ['User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)', 'Accept' => 'text/html'],
-                    'timeout' => 10, 'verify' => false,
+                    'timeout' => 10,
                 ]);
                 $lines = $this->parseAcingovTable($resp->getBody()->getContents(), $seen, false);
             } catch (\Throwable $e) {

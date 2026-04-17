@@ -27,10 +27,14 @@ class SapService
         $this->username = trim(config('services.sap.username', ''), '"\'');
         $this->password = trim(config('services.sap.password', ''), '"\'');
 
+        // SECURITY: SAP B1 Service Layer often ships with a self-signed cert.
+        // We expose the switch via config so production can pin the CA bundle
+        // (SAP_TLS_VERIFY=/etc/ssl/certs/sap-ca.pem) instead of disabling TLS
+        // entirely. Default is true — operators must opt in to weaken it.
         $this->http = new Client([
             'timeout'         => 30,
             'connect_timeout' => 10,
-            'verify'          => false,
+            'verify'          => config('services.sap.tls_verify', true),
         ]);
     }
 

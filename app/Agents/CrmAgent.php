@@ -289,10 +289,17 @@ SPECIALTY;
         return null;
     }
 
+    /**
+     * Does the user message explicitly confirm creating/updating the opportunity?
+     *
+     * SECURITY (B6): the previous regex matched the single characters "s" and
+     * "y", which meant a casual keystroke would silently trigger a SAP B1
+     * write. Require the full Portuguese / English word (or "confirmo"/"ok criar").
+     */
     protected function isConfirmation(string $message): bool
     {
         return (bool) preg_match(
-            '/^\s*(sim|s|yes|y|confirma(r)?|ok|criar|cria|go|proceed|confirmo|afirmativo)\s*\.?$/i',
+            '/^\s*(sim|yes|confirma(r)?|ok\s+criar|criar|cria|proceed|confirmo|afirmativo)\s*\.?$/i',
             trim($message)
         );
     }
