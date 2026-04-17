@@ -129,9 +129,17 @@ class AgentShareController extends Controller
 
         $meta = AgentShare::agentMeta()[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900'];
 
+        // Expose the public session id to the chat view so the frontend can
+        // send it back as a header on every /api/a/{token}/stream call.
+        // This avoids having to rely on Laravel session cookies crossing the
+        // web → api middleware group boundary (which fetch() sometimes drops
+        // without `credentials: 'include'`).
+        $shareSid = $this->sharePublicSessionId($share);
+
         return view('agent-shares.chat', [
-            'share' => $share,
-            'meta'  => $meta,
+            'share'     => $share,
+            'meta'      => $meta,
+            'share_sid' => $shareSid,
         ]);
     }
 
@@ -237,8 +245,19 @@ class AgentShareController extends Controller
         // call — the client can't just keep POSTing to /stream after the
         // owner revokes or after the 24 h window expires.
         if ($share->require_otp) {
-            $publicSid = $this->sharePublicSessionId($share);
-            $status    = app(AgentShareAccessService::class)->sessionStatus($share, $publicSid, $request);
+            // Accept the sid from an explicit header first (set by chat.blade
+            // after show() renders) and fall back to the cookie. The header
+            // path is robust against fetch() dropping cookies across
+            // middleware groups.
+            $publicSid = $request->header('X-Share-SID')
+                      ?: $this->sharePublicSessionId($share);
+
+            // Basic shape check — must be 32 hex chars to match issuer.
+            if (!is_string($publicSid) || !preg_match('/^[a-f0-9]{32}$/', $publicSid)) {
+                return response()->json(['error' => 'Sessão inválida.', 'reauth' => true], 401);
+            }
+
+            $status = app(AgentShareAccessService::class)->sessionStatus($share, $publicSid, $request);
             if ($status !== 'ok') {
                 $msg = $status === 'revoked'
                     ? 'Este link foi revogado pelo administrador.'
@@ -564,17 +583,43 @@ class AgentShareController extends Controller
 
     /**
      * A stable per-browser identifier used by AgentShareAccessService to key
-     * the OTP and the trusted session. We derive it from the Laravel session
-     * cookie so reloads in the same browser stay authenticated, while a
-     * forwarded link in a different browser has to go through OTP again.
+     * the OTP and the trusted session.
+     *
+     * IMPORTANT: the streaming endpoint lives under routes/api.php which does
+     * NOT run the `web` middleware group, so Laravel's session() helper is
+     * unavailable there. We therefore use a signed cookie (SameSite=Lax,
+     * HttpOnly) so the identifier survives from show() → otp/verify →
+     * stream() on the same browser, while still being invisible to JS.
      */
     private function sharePublicSessionId(AgentShare $share): string
     {
-        $sid = session('share_public_sid_' . $share->id);
-        if (!$sid) {
-            $sid = bin2hex(random_bytes(16));
-            session(['share_public_sid_' . $share->id => $sid]);
+        $cookieName = 'share_sid_' . $share->id;
+        $request    = request();
+
+        // Laravel auto-decrypts incoming cookies if they were set via Cookie
+        // facade. If the decryption fails (tampered/new browser) we just
+        // issue a fresh id.
+        $existing = $request->cookie($cookieName);
+        if (is_string($existing) && preg_match('/^[a-f0-9]{32}$/', $existing)) {
+            return $existing;
         }
+
+        $sid = bin2hex(random_bytes(16));
+        // Queue it on the current response — Laravel attaches queued cookies
+        // to every response of the current request cycle.
+        \Illuminate\Support\Facades\Cookie::queue(
+            \Illuminate\Support\Facades\Cookie::make(
+                $cookieName,
+                $sid,
+                60 * 24,                      // 24h
+                '/',                          // path
+                null,                         // domain (default)
+                $request->secure(),           // secure
+                true,                         // httpOnly
+                false,                        // raw
+                'lax'                         // sameSite
+            )
+        );
         return $sid;
     }
 

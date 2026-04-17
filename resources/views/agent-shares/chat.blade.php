@@ -187,6 +187,10 @@ const TOKEN      = '{{ $share->token }}';
 const CSRF       = document.querySelector('meta[name="csrf-token"]').content;
 const SESSION_ID = 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
 const AGENT_EMOJI = '{{ $meta['emoji'] }}';
+// Public session id minted by show() — sent back as a header on every stream
+// call so the server can look up the authorised OTP session regardless of
+// how cookies happen to flow between web and api middleware groups.
+const SHARE_SID  = '{{ $share_sid ?? '' }}';
 const AGENT_PHOTO = '{{ $meta['photo'] ?? '' }}';
 const AGENT_COLOR = '{{ $meta['color'] }}';
 const AGENT_KEY   = '{{ $share->agent_key }}';
@@ -368,20 +372,33 @@ async function sendMessage() {
     const typingEl = addTyping();
 
     try {
+        // Attach the per-session id so the backend can re-validate the OTP
+        // session on every stream call (the cookie approach was unreliable
+        // across the web→api middleware split).
+        if (SHARE_SID) fetchHeaders['X-Share-SID'] = SHARE_SID;
+
         const resp = await fetch(`/api/a/${TOKEN}/stream`, {
             method: 'POST',
             headers: fetchHeaders,
             body:    fetchBody,
+            credentials: 'same-origin',
         });
 
         // Handle HTTP errors (413 Too Large, 422 Unprocessable, 500, etc.)
         if (!resp.ok) {
             typingEl?.remove();
             let errMsg = `Erro ${resp.status}`;
-            try { const j = await resp.json(); errMsg = j.error || errMsg; } catch(_){}
+            let reauth = false;
+            try {
+                const j = await resp.json();
+                errMsg = j.error || errMsg;
+                reauth = !!j.reauth;
+            } catch(_){}
             addMessage('assistant', `❌ ${errMsg}`);
             document.getElementById('send-btn').disabled = false;
             isStreaming = false;
+            // Sessão expirou / revogada → reenvia o visitante para a OTP gate.
+            if (reauth) setTimeout(() => { window.location.href = '/a/' + TOKEN; }, 1500);
             return;
         }
 
