@@ -21,34 +21,26 @@ class SecurityHeadersMiddleware
 
         // Content Security Policy
         //
-        // SECURITY: the blade views contain many inline <script> and inline
-        // event handlers. Removing 'unsafe-inline' entirely would break the
-        // UI, so instead we:
-        //   1. Generate a per-request nonce that legitimate inline scripts
-        //      can opt into (<script nonce="{{ csp_nonce() }}">).
-        //   2. Drop 'unsafe-eval' outright — no code in the repo uses eval()
-        //      or new Function(); Alpine.js/Vue compilers are not present.
-        //   3. Lock connect-src to self + Anthropic/NVIDIA APIs (SSE).
-        //   4. frame-ancestors 'none' prevents clickjacking.
+        // IMPORTANT: the blade views rely heavily on inline event handlers
+        // (onclick=, onchange=, onmouseover=) which ONLY work with
+        // 'unsafe-inline' and are NOT covered by nonce-based CSP. If we add
+        // a nonce to script-src alongside 'unsafe-inline', CSP3 browsers
+        // switch to "strict" mode and IGNORE 'unsafe-inline' — which breaks
+        // every inline handler (clicking an agent card stops responding).
         //
-        // The nonce is exposed as config('csp.nonce') for views to pull via
-        // the csp_nonce() helper if/when inline scripts are migrated off
-        // 'unsafe-inline'. Until then 'unsafe-inline' is kept as a transitional
-        // compatibility shim (nonce takes precedence in modern browsers, so
-        // once nonces are adopted browsers ignore 'unsafe-inline').
-        $nonce = base64_encode(random_bytes(16));
-        config(['csp.nonce' => $nonce]);
-
-        $scriptSrc = "'self' 'nonce-{$nonce}' 'unsafe-inline'";
-
+        // So we keep 'unsafe-inline' for now (no nonce) and only harden
+        // everything else: drop 'unsafe-eval', lock object/base/form/frame,
+        // and keep connect-src open enough for fetch/SSE calls made by the
+        // chat UI. A proper migration to addEventListener + strict CSP is
+        // tracked as a follow-up.
         $csp = implode('; ', [
             "default-src 'self'",
-            "script-src {$scriptSrc}",
+            "script-src 'self' 'unsafe-inline'",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' data: blob: https:",
             "connect-src 'self' https://api.anthropic.com https://integrate.api.nvidia.com",
-            "media-src 'self'",
+            "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
