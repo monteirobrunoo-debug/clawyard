@@ -242,6 +242,17 @@
         .kyber-status.err { color:#ff4444; }
         [contenteditable][data-placeholder]:empty:before { content:attr(data-placeholder); color:#555; pointer-events:none; }
 
+        /* ── MOBILE: Kyber compose ── */
+        @media (max-width: 640px) {
+            .kyber-card { margin-left:0; margin-right:0; width:100%; max-width:100%; box-sizing:border-box; }
+            .kyber-card-header { padding:10px 12px; flex-direction:column; align-items:flex-start; gap:2px; }
+            .kyber-actions { padding:10px 12px; flex-direction:column; gap:8px; }
+            .kyber-send-btn,
+            .kyber-store-btn,
+            .kyber-copy-btn2 { width:100%; justify-content:center; padding:12px 14px; font-size:14px; min-height:44px; }
+            .kyber-field { padding:8px 12px; }
+        }
+
         /* ── IMAGE PREVIEW ── */
         #image-preview { display:none; padding:8px 20px 0; position:relative; }
         #image-preview img { height:72px; border-radius:8px; border:1px solid var(--border2); }
@@ -1956,8 +1967,11 @@ function kyberCopyJson(json, btn) {
 function buildKyberComposeCard(data) {
     const id = 'kc_' + Date.now();
     const to = data.to || '';
+    // MOBILE: iOS Safari returns empty innerText for <div contenteditable>
+    // sporadically (autocorrect + magnifier race). Use <textarea> for 100%
+    // reliability. Also make the card fluid to the viewport width.
     return `
-    <div class="kyber-card" id="${id}" style="max-width:540px;">
+    <div class="kyber-card" id="${id}" style="max-width:min(540px,100%);width:100%;box-sizing:border-box;">
         <div class="kyber-card-header">
             <span class="kh-title">🔒 Compor Email Encriptado</span>
             <span class="kh-sub">Kyber-1024 + AES-256-GCM · NIST FIPS 203</span>
@@ -1965,21 +1979,21 @@ function buildKyberComposeCard(data) {
         <div class="email-field" style="margin-bottom:8px;">
             <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Para</label>
             <input type="email" id="${id}_to" value="${esc(to)}" placeholder="destinatario@empresa.com"
-                style="width:100%;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:9px 12px;color:#e0e0e0;font-size:13px;outline:none;box-sizing:border-box;"
+                autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="email"
+                style="width:100%;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#e0e0e0;font-size:16px;outline:none;box-sizing:border-box;"
                 onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'">
         </div>
         <div class="email-field" style="margin-bottom:8px;">
             <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Assunto</label>
             <input type="text" id="${id}_subject" placeholder="Assunto da mensagem"
-                style="width:100%;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:9px 12px;color:#e0e0e0;font-size:13px;outline:none;box-sizing:border-box;"
+                style="width:100%;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#e0e0e0;font-size:16px;outline:none;box-sizing:border-box;"
                 onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'">
         </div>
         <div style="margin-bottom:12px;">
             <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Mensagem</label>
-            <div id="${id}_body" contenteditable="true"
-                style="width:100%;min-height:100px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:9px 12px;color:#e0e0e0;font-size:13px;outline:none;box-sizing:border-box;line-height:1.6;white-space:pre-wrap;"
-                onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'"
-                data-placeholder="Escreve aqui a tua mensagem..."></div>
+            <textarea id="${id}_body" rows="6" placeholder="Escreve aqui a tua mensagem..."
+                style="width:100%;min-height:120px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:10px 12px;color:#e0e0e0;font-size:16px;outline:none;box-sizing:border-box;line-height:1.5;resize:vertical;font-family:inherit;"
+                onfocus="this.style.borderColor='#76b900'" onblur="this.style.borderColor='#333'"></textarea>
         </div>
         <div style="margin-bottom:12px;">
             <label style="color:#aaa;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Anexos <span style="color:#555;font-weight:400;text-transform:none">(opcional · máx 5 ficheiros · 20 MB cada)</span></label>
@@ -2024,12 +2038,25 @@ function kyberRemoveFile(id, idx, tagEl) {
 }
 
 async function kyberSendCompose(id, btn) {
+    // MOBILE: read from the textarea (switched away from contenteditable
+    // because iOS Safari returned empty innerText sporadically). Fallback
+    // to innerText for backwards compatibility with any stale card.
+    const bodyEl  = document.getElementById(id + '_body');
     const to      = document.getElementById(id + '_to')?.value.trim() || '';
     const subject = document.getElementById(id + '_subject')?.value.trim() || '';
-    const body    = document.getElementById(id + '_body')?.innerText.trim() || '';
+    const body    = (bodyEl?.value ?? bodyEl?.innerText ?? '').trim();
     const statusEl = document.getElementById(id + '_status');
 
+    // Blur the current field so the virtual keyboard doesn't steal focus
+    // from the button tap on iOS (common cause of "nothing happens").
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+    }
+
     if (!to)      { statusEl.className = 'kyber-status err'; statusEl.textContent = '❌ Preenche o destinatário.'; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+        statusEl.className = 'kyber-status err'; statusEl.textContent = '❌ Email do destinatário inválido.'; return;
+    }
     if (!subject) { statusEl.className = 'kyber-status err'; statusEl.textContent = '❌ Preenche o assunto.'; return; }
     if (!body)    { statusEl.className = 'kyber-status err'; statusEl.textContent = '❌ Escreve a mensagem.'; return; }
 
@@ -2051,7 +2078,8 @@ async function kyberSendCompose(id, btn) {
         const r = await fetch('/api/email/send', {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF },
-            body: fd
+            body: fd,
+            credentials: 'same-origin',   // ensure Safari iOS sends the session cookie
         });
         const rawText = await r.text();
         console.log('[KyberCompose] HTTP', r.status, rawText.substring(0, 500));
