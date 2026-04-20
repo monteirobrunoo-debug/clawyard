@@ -12,8 +12,8 @@ trait WebSearchTrait
     //
     // searchPolicy values (HDPO-inspired meta-cognitive tool use):
     //   'always'      → always search (web-specialist agents: RoboDesk, VesselSearch, Research)
-    //   'never'       → never search (knowledge-only agents: Kyber, Batch, Orchestrator)
-    //   'conditional' → keyword-gated search (default for most agents)
+    //   'never'       → never search (knowledge-only agents: Kyber, Orchestrator)
+    //   'conditional' → keyword-gated search (default for most agents, incl. Batch)
     //
     // Inspired by: "Act Wisely: Cultivating Meta-Cognitive Tool Use in
     // Agentic Multimodal Models" (arXiv:2604.08545) — HDPO framework
@@ -79,8 +79,12 @@ trait WebSearchTrait
     private function defaultWebSearchKeywords(): array
     {
         return [
-            // Portuguese
-            'pesquisa', 'pesquisa na web', 'procura na internet', 'busca online',
+            // Portuguese — explicit web/internet mentions (short forms too!)
+            'web', 'internet', 'online', 'na net', 'na rede',
+            'pesquisa', 'pesquisa na web', 'procura', 'procura na internet', 'busca online', 'busca',
+            'vê na web', 'vê na internet', 've na web', 've na internet',
+            'verifica', 'confere', 'consulta', 'investiga',
+            // Portuguese — topicality
             'notícias', 'noticias', 'hoje', 'atual', 'atualidade', 'recente', 'última hora',
             'o que é', 'quem é', 'quando foi', 'onde fica', 'quanto custa',
             'preço de', 'preco de', 'cotação de', 'cotacao de',
@@ -90,6 +94,7 @@ trait WebSearchTrait
             'search', 'look up', 'find', 'what is', 'who is', 'latest', 'current',
             'news', 'price of', 'cost of', 'how much', 'recent', 'today',
             'competitor', 'market', 'trend', 'company info',
+            'check the web', 'check online', 'browse',
             // Explicit triggers
             'web:', 'search:', 'pesquisa:', 'google',
         ];
