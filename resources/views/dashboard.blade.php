@@ -293,6 +293,38 @@
             box-shadow: 0 0 6px var(--green);
             animation: pulse-dot 2.5s ease-in-out infinite;
         }
+
+        /* ── FAVORITE STAR BUTTON ── */
+        .fav-btn {
+            position: absolute; top: 12px; left: 12px;
+            width: 28px; height: 28px; border-radius: 50%;
+            background: transparent; border: none;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; cursor: pointer; z-index: 5;
+            opacity: 0; transition: opacity 0.2s, transform 0.15s, background 0.15s;
+            color: var(--muted);
+            line-height: 1;
+        }
+        .agent-card:hover .fav-btn { opacity: 1; }
+        .fav-btn:hover { background: color-mix(in srgb, #fbbf24 18%, transparent); transform: scale(1.15); color: #fbbf24; }
+        .agent-card.is-favorite .fav-btn {
+            opacity: 1;
+            color: #fbbf24;
+            filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.6));
+        }
+        .agent-card.is-favorite {
+            box-shadow: inset 0 0 0 1px color-mix(in srgb, #fbbf24 30%, transparent);
+        }
+
+        /* ── FAVORITES SECTION (top of grid) ── */
+        #favoritesSection { display: none; }
+        #favoritesSection.has-items { display: block; }
+        #favoritesSection.empty { display: none; } /* search filter: no matches */
+        #favoritesSection .category-header { --cat-color: #fbbf24; }
+        #favoritesSection .category-icon {
+            background: color-mix(in srgb, #fbbf24 20%, transparent);
+            border-color: color-mix(in srgb, #fbbf24 50%, transparent);
+        }
         @keyframes pulse-dot {
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.4; transform: scale(0.8); }
@@ -492,6 +524,19 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 
 <div class="categories-wrap" id="categoriesWrap">
 
+{{-- Favorites section — populated by JS from localStorage. Hidden when empty. --}}
+<section class="category-section" id="favoritesSection" data-category="favorites">
+    <div class="category-header">
+        <div class="category-icon">⭐</div>
+        <div>
+            <div class="category-title">Your Favorites</div>
+            <div class="category-subtitle">Starred agents — quick access</div>
+        </div>
+        <span class="category-count" id="favoritesCount">0 agents</span>
+    </div>
+    <div class="agents-grid" id="favoritesGrid"></div>
+</section>
+
 @foreach($categories as $catKey => $cat)
     <section class="category-section" data-category="{{ $catKey }}">
         <div class="category-header" style="--cat-color: {{ $cat['color'] }}">
@@ -524,6 +569,7 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                    data-search="{{ $searchIdx }}"
                    data-agent-key="{{ $agent['key'] }}"
                    style="--card-color: {{ $agent['color'] }}">
+                    <button type="button" class="fav-btn" title="Adicionar aos favoritos" aria-label="Toggle favorite">★</button>
                     <div class="status-dot" style="{{ $isSpecial ? 'background:#00aaff;box-shadow:0 0 8px #00aaff' : 'background:' . $agent['color'] . ';box-shadow:0 0 6px ' . $agent['color'] }}"></div>
                     <div class="avatar">
                         @if($imgPath)
@@ -569,6 +615,83 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
         root.setAttribute('data-theme', next);
         try { localStorage.setItem('cy-theme', next); } catch (e) {}
     });
+})();
+
+// ── FAVORITES ─────────────────────────────────────────────
+(function () {
+    const STORAGE_KEY = 'cy-favorites';
+    const section = document.getElementById('favoritesSection');
+    const grid    = document.getElementById('favoritesGrid');
+    const count   = document.getElementById('favoritesCount');
+    if (!section || !grid) return;
+
+    function readFavs() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    }
+    function writeFavs(arr) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(arr)); } catch (e) {}
+    }
+
+    function refreshFavoritesSection() {
+        const favs = readFavs();
+        grid.innerHTML = '';
+
+        // Build clones in favorite-order
+        favs.forEach(key => {
+            const src = document.querySelector('.category-section:not(#favoritesSection) .agent-card[data-agent-key="' + key + '"]');
+            if (!src) return;
+            const clone = src.cloneNode(true);
+            clone.setAttribute('data-fav-clone', '1');
+            // Re-attach fav button handler on clone
+            const favBtn = clone.querySelector('.fav-btn');
+            if (favBtn) {
+                favBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleFavorite(key);
+                });
+            }
+            grid.appendChild(clone);
+        });
+
+        // Update originals' is-favorite class
+        document.querySelectorAll('.agent-card[data-agent-key]').forEach(card => {
+            if (card.hasAttribute('data-fav-clone')) return; // only originals
+            const k = card.getAttribute('data-agent-key');
+            card.classList.toggle('is-favorite', favs.includes(k));
+        });
+
+        // Show/hide section
+        section.classList.toggle('has-items', favs.length > 0);
+        count.textContent = favs.length + ' ' + (favs.length === 1 ? 'agent' : 'agents');
+    }
+
+    function toggleFavorite(key) {
+        const favs = readFavs();
+        const idx  = favs.indexOf(key);
+        if (idx >= 0) favs.splice(idx, 1);
+        else          favs.push(key);
+        writeFavs(favs);
+        refreshFavoritesSection();
+    }
+
+    // Wire up original fav buttons
+    document.querySelectorAll('.category-section:not(#favoritesSection) .agent-card .fav-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const card = btn.closest('.agent-card');
+            const key  = card?.getAttribute('data-agent-key');
+            if (key) toggleFavorite(key);
+        });
+    });
+
+    // Initial render
+    refreshFavoritesSection();
 })();
 
 // ── SEARCH FILTER ─────────────────────────────────────────
