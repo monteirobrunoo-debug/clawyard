@@ -40,7 +40,10 @@ class AgentManager
             // back to ClaudeAgent. Registering it fixes the orchestrator and
             // lets the /briefing route resolve a real agent instance.
             'briefing'  => new BriefingAgent(),
-            'shipping'  => new ShippingAgent(),
+            // 'shipping' intentionally NOT registered as a routable agent.
+            // UPS shipping is available as a SKILL (see ShippingSkillTrait)
+            // embedded in Sales/Support/Email/CRM/Claude. It should not
+            // appear in Auto-route or in the shared PSI history.
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -268,17 +271,19 @@ class AgentManager
             if (str_contains($lower, $kw)) return $this->agents['computer'];
         }
 
-        // Shipping / transport / UPS / FedEx keywords
+        // Shipping / transport queries are handled as a SKILL embedded in
+        // the customer-facing agents (Sales/Support/Email/CRM/Claude) via
+        // ShippingSkillTrait — we do NOT route to a dedicated shipping agent
+        // because Tânia should stay out of the Auto-route and shared history.
+        // Route shipping-style questions to Sales (pricing-oriented).
         $shippingKeywords = [
             'ups', 'fedex', 'dhl', 'envio', 'envios', 'transporte', 'transportadora',
             'custo de envio', 'quanto custa enviar', 'shipping', 'courier', 'frete',
-            'tarifa', 'tarifas', 'zona ups', 'express saver', 'expedited',
-            'entrega internacional', 'international delivery', 'carta de porte',
+            'tarifa ups', 'zona ups', 'express saver', 'expedited',
             'peso volumetrico', 'dimensional weight', 'palete', 'pallet freight',
-            'trackng', 'tracking number', 'número de seguimento',
         ];
         foreach ($shippingKeywords as $kw) {
-            if (str_contains($lower, $kw)) return $this->agents['shipping'];
+            if (str_contains($lower, $kw)) return $this->agents['sales'];
         }
 
         return $this->agents['claude'];
