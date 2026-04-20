@@ -34,6 +34,15 @@ class WebSearchService
             return '(Web search not available — TAVILY_API_KEY not configured)';
         }
 
+        // Tavily API requires queries between 2 and 400 characters.
+        // Clamp before sending to avoid 400 responses.
+        $clamped = $this->clampQuery($query);
+        if ($clamped === null) {
+            \Log::info('WebSearchService: query too short, skipping', ['query' => $query]);
+            return '(Query too short for web search — min 2 chars)';
+        }
+        $query = $clamped;
+
         try {
             $payload = [
                 'api_key'             => $this->apiKey,
@@ -95,6 +104,34 @@ class WebSearchService
     public function deepSearch(string $query): string
     {
         return $this->search($query, 8, 'advanced');
+    }
+
+    /**
+     * Normalize query to fit Tavily API constraints (2 ≤ length ≤ 400).
+     *
+     * - Trims whitespace.
+     * - Returns null when shorter than 2 chars (caller should skip the call).
+     * - Truncates at word boundary when longer than 400 chars.
+     */
+    private function clampQuery(string $query): ?string
+    {
+        $query = trim($query);
+        $len   = mb_strlen($query);
+
+        if ($len < 2) {
+            return null;
+        }
+        if ($len <= 400) {
+            return $query;
+        }
+
+        $truncated = mb_substr($query, 0, 400);
+        $lastSpace = mb_strrpos($truncated, ' ');
+        // Keep at least half the budget to avoid cutting too aggressively
+        if ($lastSpace !== false && $lastSpace >= 200) {
+            $truncated = mb_substr($truncated, 0, $lastSpace);
+        }
+        return rtrim($truncated);
     }
 
     /**
