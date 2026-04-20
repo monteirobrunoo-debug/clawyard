@@ -175,7 +175,7 @@ class EmailSendController extends Controller
   <div class="footer">
     ClawYard | IT Partyard LDA<br>
     Marine Spare Parts &amp; Technical Services<br>
-    Setúbal, Portugal · info@clawyard.com
+    Setúbal, Portugal · no-reply@hp-group.org
   </div>
 </div>
 </body>
