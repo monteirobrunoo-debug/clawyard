@@ -114,15 +114,35 @@
 
     <div class="shares-grid">
         @forelse($shares->groupBy('client_name') as $clientName => $clientShares)
-        @php $singleAgent = $clientShares->count() === 1; @endphp
+        @php
+            $singleAgent = $clientShares->count() === 1;
+            // All shares in the same batch share one portal_token. If the
+            // whole group has the same (non-null) portal_token, expose a
+            // unified portal URL at the top of the card.
+            $portalToken = $clientShares->pluck('portal_token')->unique()->filter()->first();
+            $allSamePortal = $portalToken && $clientShares->every(fn($s) => $s->portal_token === $portalToken);
+            $portalUrl   = $allSamePortal ? $clientShares->first()->getPortalUrl() : null;
+        @endphp
         <div class="client-group-card" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;overflow:hidden">
             <!-- Client group header -->
-            <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.02)">
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.02);flex-wrap:wrap">
                 <span style="font-size:15px;font-weight:800;color:var(--text)">{{ $clientName }}</span>
                 <span style="font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:2px 8px">
                     {{ $clientShares->count() }} {{ $clientShares->count() === 1 ? 'agente' : 'agentes' }}
                 </span>
+                @if($portalUrl && !$singleAgent)
+                    <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#a3e635;background:rgba(118,185,0,.08);border:1px solid rgba(118,185,0,.3);border-radius:10px;padding:3px 10px">🌐 Portal único</span>
+                @endif
             </div>
+
+            @if($portalUrl && !$singleAgent)
+            <div style="padding:10px 20px;background:rgba(118,185,0,.05);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font-size:10px;color:#a3e635;font-weight:700;letter-spacing:.5px;text-transform:uppercase">Link do portal cliente</span>
+                <span style="font-family:monospace;font-size:11px;color:#cbd5e1;word-break:break-all;flex:1;min-width:180px">{{ $portalUrl }}</span>
+                <button class="btn-action" onclick="copyUrl('{{ $portalUrl }}', this)">📋 Copiar</button>
+                <button class="btn-action" onclick="window.open('{{ $portalUrl }}','_blank')">↗ Abrir</button>
+            </div>
+            @endif
 
             @if($singleAgent)
             {{-- Single agent: full card layout --}}

@@ -2931,6 +2931,14 @@ async function submitShareModal() {
 
     btn.textContent = 'A criar…'; btn.disabled = true;
 
+    // Generate a single portal_token so multiple agents selected in this
+    // batch all land under /p/{portalToken} — one URL to send, one OTP to
+    // enter, and the visitor sees every agent in a ClawYard landing page.
+    const portalToken = Array.from({length:24}, () =>
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+            .charAt(Math.floor(Math.random() * 62))
+    ).join('');
+
     const common = {
         client_name:      client,
         client_email:     clientEmail,
@@ -2946,26 +2954,50 @@ async function submitShareModal() {
         require_otp:      true,
         lock_to_device:   true,
         notify_on_access: true,
+        // Groups this batch under one client portal.
+        portal_token:     portalToken,
     };
 
     try {
         const results = [];
+        let portalUrl = null;
         for (const agentKey of checked) {
             const r    = await fetch('/admin/shares', { method:'POST', headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF}, body:JSON.stringify({ ...common, agent_key: agentKey }) });
             const data = await r.json();
-            if (data.ok) results.push({ agent: AGENT_NAMES[agentKey] || agentKey, url: data.url });
-            else { alert('Erro ao criar link para ' + (AGENT_NAMES[agentKey] || agentKey) + ': ' + JSON.stringify(data)); }
+            if (data.ok) {
+                results.push({ agent: AGENT_NAMES[agentKey] || agentKey, url: data.url });
+                if (data.portal_url) portalUrl = data.portal_url;
+            } else {
+                alert('Erro ao criar link para ' + (AGENT_NAMES[agentKey] || agentKey) + ': ' + JSON.stringify(data));
+            }
         }
         if (results.length) {
             const display = document.getElementById('share-url-display');
-            display.innerHTML = results.map(r =>
-                `<div style="margin-bottom:6px"><span style="font-size:10px;opacity:.7">${r.agent}</span><br>${r.url}</div>`
-            ).join('');
+            // If multiple agents share a portal, feature the portal URL
+            // prominently (one link to send). Individual agent URLs are
+            // listed below for reference / fallback.
+            if (results.length > 1 && portalUrl) {
+                display.innerHTML =
+                    `<div style="padding:10px 12px;background:rgba(118,185,0,.08);border:1px solid rgba(118,185,0,.3);border-radius:8px;margin-bottom:10px">
+                        <div style="font-size:10px;color:#a3e635;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">🌐 Portal do Cliente — envia só este link</div>
+                        <div style="word-break:break-all;font-family:monospace;font-size:12px;color:#e2e8f0">${portalUrl}</div>
+                    </div>
+                    <div style="font-size:10px;color:#666;margin-bottom:4px">Links individuais dos agentes (opcional):</div>` +
+                    results.map(r =>
+                        `<div style="margin-bottom:4px;font-size:11px;opacity:.75"><span style="opacity:.7">${r.agent}:</span> <span style="word-break:break-all">${r.url}</span></div>`
+                    ).join('');
+                window._shareUrl  = portalUrl;         // clipboard copy uses portal URL
+                window._shareUrls = [portalUrl];
+            } else {
+                display.innerHTML = results.map(r =>
+                    `<div style="margin-bottom:6px"><span style="font-size:10px;opacity:.7">${r.agent}</span><br>${r.url}</div>`
+                ).join('');
+                window._shareUrls = results.map(r => r.url);
+                window._shareUrl  = results[0].url;
+            }
             document.getElementById('share-success-box').style.display = 'block';
             document.getElementById('share-form-body').style.display = 'none';
             document.getElementById('share-submit-btn').style.display = 'none';
-            window._shareUrls = results.map(r => r.url);
-            window._shareUrl  = results[0].url;
         } else {
             btn.textContent = 'Criar Link'; btn.disabled = false;
         }

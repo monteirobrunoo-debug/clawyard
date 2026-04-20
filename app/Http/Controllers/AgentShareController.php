@@ -44,10 +44,15 @@ class AgentShareController extends Controller
             'notify_email'     => 'nullable|email|max:150',
             'notify_whatsapp'  => 'nullable|string|max:30',
             'expires_at'       => 'nullable|date|after:now',
+            // When the client is creating N shares in one batch, it passes
+            // the same portal_token so the backend can group them into a
+            // single /p/{portal_token} landing page.
+            'portal_token'     => 'nullable|string|size:24|alpha_num',
         ]);
 
         $share = AgentShare::create([
             'token'            => AgentShare::generateToken(),
+            'portal_token'     => $data['portal_token'] ?? null,
             'agent_key'        => $data['agent_key'],
             'client_name'      => $data['client_name'],
             'client_email'     => strtolower(trim($data['client_email'])),
@@ -66,9 +71,10 @@ class AgentShareController extends Controller
         ]);
 
         return response()->json([
-            'ok'  => true,
-            'url' => $share->getUrl(),
-            'id'  => $share->id,
+            'ok'         => true,
+            'url'        => $share->getUrl(),
+            'portal_url' => $share->getPortalUrl(),
+            'id'         => $share->id,
         ]);
     }
 
@@ -108,7 +114,24 @@ class AgentShareController extends Controller
         // ── OTP + device-lock gate ──────────────────────────────────────────
         if ($share->require_otp) {
             $sessionId = $this->sharePublicSessionId($share);
-            $status    = app(AgentShareAccessService::class)->sessionStatus($share, $sessionId, $request);
+            $svc       = app(AgentShareAccessService::class);
+
+            // If this share belongs to a portal and the visitor has already
+            // authenticated at the portal level, inherit that session and
+            // skip the per-agent OTP challenge.
+            if ($share->portal_token) {
+                $portalSid = $this->sharePortalSessionId($share->portal_token);
+                if ($svc->portalCoversShare($share, $portalSid, $request)) {
+                    $meta = AgentShare::agentMeta()[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900'];
+                    return view('agent-shares.chat', [
+                        'share'     => $share,
+                        'meta'      => $meta,
+                        'share_sid' => $sessionId,
+                    ]);
+                }
+            }
+
+            $status = $svc->sessionStatus($share, $sessionId, $request);
 
             if ($status === 'revoked') {
                 return view('agent-shares.expired', ['reason' => 'revoked']);
@@ -117,7 +140,13 @@ class AgentShareController extends Controller
             if (in_array($status, ['otp_required', 'new_device'], true)) {
                 // Log the initial "open" hit so the owner sees attempts even
                 // if the user never completes the challenge.
-                app(AgentShareAccessService::class)->recordStream($share, $sessionId, $request);
+                $svc->recordStream($share, $sessionId, $request);
+
+                // If the share belongs to a portal, redirect to the portal
+                // OTP challenge so the visitor gets the unified flow.
+                if ($share->portal_token) {
+                    return redirect('/p/' . $share->portal_token);
+                }
 
                 return view('agent-shares.otp-challenge', [
                     'share'        => $share,
@@ -246,25 +275,35 @@ class AgentShareController extends Controller
         // owner revokes or after the 24 h window expires.
         if ($share->require_otp) {
             // Accept the sid from an explicit header first (set by chat.blade
-            // after show() renders) and fall back to the cookie. The header
-            // path is robust against fetch() dropping cookies across
-            // middleware groups.
+            // after show() renders) and fall back to the cookie.
             $publicSid = $request->header('X-Share-SID')
                       ?: $this->sharePublicSessionId($share);
 
-            // Basic shape check — must be 32 hex chars to match issuer.
             if (!is_string($publicSid) || !preg_match('/^[a-f0-9]{32}$/', $publicSid)) {
                 return response()->json(['error' => 'Sessão inválida.', 'reauth' => true], 401);
             }
 
-            $status = app(AgentShareAccessService::class)->sessionStatus($share, $publicSid, $request);
-            if ($status !== 'ok') {
-                $msg = $status === 'revoked'
-                    ? 'Este link foi revogado pelo administrador.'
-                    : 'Sessão expirada — volta à página inicial para reautenticar.';
-                return response()->json(['error' => $msg, 'reauth' => true], 401);
+            $svc = app(AgentShareAccessService::class);
+
+            // Portal session inheritance — if the parent portal has been
+            // authenticated, this per-agent stream is implicitly allowed.
+            $allowed = false;
+            if ($share->portal_token) {
+                $portalSid = $this->sharePortalSessionId($share->portal_token);
+                $allowed   = $svc->portalCoversShare($share, $portalSid, $request);
             }
-            app(AgentShareAccessService::class)->recordStream($share, $publicSid, $request);
+
+            if (!$allowed) {
+                $status = $svc->sessionStatus($share, $publicSid, $request);
+                if ($status !== 'ok') {
+                    $msg = $status === 'revoked'
+                        ? 'Este link foi revogado pelo administrador.'
+                        : 'Sessão expirada — volta à página inicial para reautenticar.';
+                    return response()->json(['error' => $msg, 'reauth' => true], 401);
+                }
+            }
+
+            $svc->recordStream($share, $publicSid, $request);
         }
 
         $message   = $request->input('message', '');
@@ -618,6 +657,31 @@ class AgentShareController extends Controller
                 true,                         // httpOnly
                 false,                        // raw
                 'lax'                         // sameSite
+            )
+        );
+        return $sid;
+    }
+
+    /**
+     * Portal-scoped session id — stable for a given browser across all agents
+     * that belong to the same portal_token. Used to unify the OTP so the
+     * visitor only authenticates once per portal visit.
+     */
+    public function sharePortalSessionId(string $portalToken): string
+    {
+        $cookieName = 'portal_sid_' . $portalToken;
+        $request    = request();
+
+        $existing = $request->cookie($cookieName);
+        if (is_string($existing) && preg_match('/^[a-f0-9]{32}$/', $existing)) {
+            return $existing;
+        }
+
+        $sid = bin2hex(random_bytes(16));
+        \Illuminate\Support\Facades\Cookie::queue(
+            \Illuminate\Support\Facades\Cookie::make(
+                $cookieName, $sid, 60 * 24, '/', null,
+                $request->secure(), true, false, 'lax'
             )
         );
         return $sid;

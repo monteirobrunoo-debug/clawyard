@@ -199,6 +199,160 @@ class AgentShareAccessService
         $this->log($share, 'revoked', 'allowed', null, null, $request, $reason);
     }
 
+    // ── Portal-level OTP ─────────────────────────────────────────────────────
+    //
+    // When multiple shares are created for the same client they share a
+    // portal_token. A single OTP challenge unlocks every agent in the
+    // bundle — the visitor only types one code per session.
+
+    public function issuePortalOtp(string $portalToken, string $email, string $sessionId, Request $request): bool
+    {
+        $email      = strtolower(trim($email));
+        $shares     = AgentShare::where('portal_token', $portalToken)->get();
+        if ($shares->isEmpty()) return true; // silent — don't leak existence
+
+        // All shares in a portal bundle must share the same client_email;
+        // compare against the first as the canonical authorised address.
+        $expected = strtolower(trim($shares->first()->client_email ?? ''));
+        if (!$expected || !hash_equals($expected, $email)) {
+            foreach ($shares as $s) {
+                $this->log($s, 'otp_requested', 'denied', $email, $sessionId, $request, 'portal email mismatch');
+            }
+            return true;
+        }
+
+        // Throttle per (portal, browser session)
+        $key   = 'portal_otp_rate:' . $portalToken . ':' . substr(hash('sha256', $sessionId), 0, 16);
+        $count = (int) Cache::get($key, 0);
+        if ($count >= 3) return false;
+        Cache::put($key, $count + 1, now()->addMinutes(10));
+
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+        // Store one OTP row per share for the audit trail — quick, indexed.
+        foreach ($shares as $s) {
+            AgentShareOtp::create([
+                'agent_share_id' => $s->id,
+                'email'          => $email,
+                'session_id'     => 'portal:' . $portalToken . ':' . $sessionId,
+                'code_hash'      => hash('sha256', $code),
+                'attempts'       => 0,
+                'expires_at'     => now()->addMinutes(self::OTP_TTL_MINUTES),
+                'ip'             => $request->ip(),
+            ]);
+        }
+
+        // Send the code once — preferred contact is the owner-configured
+        // notify_email or fall back to the client_email itself.
+        $this->sendOtpEmail($shares->first(), $email, $code);
+
+        foreach ($shares as $s) {
+            $this->log($s, 'otp_requested', 'allowed', $email, $sessionId, $request, 'portal');
+        }
+        return true;
+    }
+
+    public function verifyPortalOtp(string $portalToken, string $email, string $sessionId, string $code, Request $request): bool
+    {
+        $email  = strtolower(trim($email));
+        $shares = AgentShare::where('portal_token', $portalToken)->get();
+        if ($shares->isEmpty()) return false;
+
+        $portalSession = 'portal:' . $portalToken . ':' . $sessionId;
+
+        $otp = AgentShareOtp::whereIn('agent_share_id', $shares->pluck('id'))
+            ->where('session_id', $portalSession)
+            ->where('email', $email)
+            ->whereNull('used_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$otp || !$otp->isAlive()) {
+            foreach ($shares as $s) {
+                $this->log($s, 'otp_failed', 'denied', $email, $sessionId, $request, 'portal ' . ($otp ? 'expired' : 'missing'));
+            }
+            return false;
+        }
+
+        $otp->increment('attempts');
+        if (!$otp->matches($code)) {
+            foreach ($shares as $s) {
+                $this->log($s, 'otp_failed', 'denied', $email, $sessionId, $request, 'portal wrong code');
+            }
+            return false;
+        }
+
+        // Burn all codes issued in this batch — they have all been consumed.
+        AgentShareOtp::whereIn('agent_share_id', $shares->pluck('id'))
+            ->where('session_id', $portalSession)
+            ->whereNull('used_at')
+            ->update(['used_at' => now()]);
+
+        $fingerprint = $this->fingerprintFor($request);
+        $this->storePortalSession($portalToken, $sessionId, $email, $fingerprint);
+
+        foreach ($shares as $s) {
+            $this->log($s, 'otp_verified', 'allowed', $email, $sessionId, $request, 'portal');
+        }
+
+        $this->notifyOwner($shares->first(), $email, $request, 'portal autenticado');
+        return true;
+    }
+
+    /**
+     * Same semantics as sessionStatus() but keyed to a portal_token.
+     */
+    public function portalSessionStatus(string $portalToken, string $sessionId, Request $request): string
+    {
+        $shares = AgentShare::where('portal_token', $portalToken)->get();
+        if ($shares->isEmpty()) return 'revoked';
+
+        // If every sibling has been revoked, the whole portal is dead.
+        if ($shares->every(fn($s) => $s->isRevoked())) return 'revoked';
+
+        $session = Cache::get('share_session:portal:' . $portalToken . ':' . $sessionId);
+        if (!is_array($session)) return 'otp_required';
+
+        if (($session['issued_at'] ?? 0) < now()->subHours(self::SESSION_TTL_HOURS)->timestamp) {
+            return 'otp_required';
+        }
+
+        // Device lock is inherited if ANY share in the bundle requires it.
+        $lock = $shares->contains(fn($s) => (bool) $s->lock_to_device);
+        if ($lock) {
+            $currentFp = $this->fingerprintFor($request);
+            if (!isset($session['fingerprint']) || !hash_equals($session['fingerprint'], $currentFp)) {
+                return 'new_device';
+            }
+        }
+
+        return 'ok';
+    }
+
+    private function storePortalSession(string $portalToken, string $sessionId, string $email, string $fingerprint): void
+    {
+        Cache::put(
+            'share_session:portal:' . $portalToken . ':' . $sessionId,
+            [
+                'email'       => $email,
+                'fingerprint' => $fingerprint,
+                'issued_at'   => now()->timestamp,
+            ],
+            now()->addHours(self::SESSION_TTL_HOURS)
+        );
+    }
+
+    /**
+     * Does the current browser already hold a valid portal session that
+     * covers this specific agent share? Used to skip the per-agent OTP
+     * challenge once the parent portal has been authenticated.
+     */
+    public function portalCoversShare(AgentShare $share, string $sessionId, Request $request): bool
+    {
+        if (!$share->portal_token) return false;
+        return $this->portalSessionStatus($share->portal_token, $sessionId, $request) === 'ok';
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /**

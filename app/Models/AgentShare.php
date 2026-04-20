@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 class AgentShare extends Model
 {
     protected $fillable = [
-        'token', 'agent_key', 'client_name', 'client_email',
+        'token', 'portal_token', 'agent_key', 'client_name', 'client_email',
         'password_hash', 'custom_title', 'welcome_message',
         'show_branding', 'allow_sap_access', 'is_active', 'expires_at', 'created_by',
         'usage_count', 'last_used_at',
@@ -55,6 +55,33 @@ class AgentShare extends Model
         } while (static::where('token', $token)->exists());
 
         return $token;
+    }
+
+    public static function generatePortalToken(): string
+    {
+        do {
+            $token = Str::random(24);
+        } while (static::where('portal_token', $token)->exists());
+
+        return $token;
+    }
+
+    public function getPortalUrl(): ?string
+    {
+        if (!$this->portal_token) return null;
+        $base = rtrim(config('app.share_url', config('app.url')), '/');
+        return $base . '/p/' . $this->portal_token;
+    }
+
+    /**
+     * Every sibling share that belongs to the same client portal bundle
+     * (including this one). Returns an empty collection if the share is
+     * standalone (no portal_token).
+     */
+    public function portalSiblings()
+    {
+        if (!$this->portal_token) return collect();
+        return static::where('portal_token', $this->portal_token)->get();
     }
 
     public function isValid(): bool

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AgentPortalController;
 use App\Http\Controllers\AgentShareController;
 use App\Http\Controllers\BriefingController;
 use App\Http\Controllers\ConversationController;
@@ -227,6 +228,16 @@ Route::post('/a/{token}/otp/request', [AgentShareController::class, 'requestOtp'
     ->middleware('throttle:10,10'); // 10 req per 10 min per IP
 Route::post('/a/{token}/otp/verify', [AgentShareController::class, 'verifyOtp'])
     ->middleware('throttle:15,10'); // 15 attempts per 10 min per IP
+
+// ─── Client portal — one landing for multiple shared agents ──────────────
+Route::get('/p/{portalToken}', [AgentPortalController::class, 'show'])
+    ->where('portalToken', '[A-Za-z0-9]+');
+Route::post('/p/{portalToken}/otp/request', [AgentPortalController::class, 'requestOtp'])
+    ->middleware('throttle:10,10')
+    ->where('portalToken', '[A-Za-z0-9]+');
+Route::post('/p/{portalToken}/otp/verify', [AgentPortalController::class, 'verifyOtp'])
+    ->middleware('throttle:15,10')
+    ->where('portalToken', '[A-Za-z0-9]+');
 
 // Authenticated: manage shares
 Route::middleware(['auth'])->group(function () {
