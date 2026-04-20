@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -17,6 +18,7 @@ class ClaudeAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
 
+    use LogisticsSkillTrait;
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
     protected Client $client;
@@ -33,6 +35,9 @@ class ClaudeAgent implements AgentInterface
             PartYardProfileService::toPromptContext(),
             PromptLibrary::reasoning($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         // Every customer-facing agent gets the UPS shipping skill so it can
         // give cost estimates when asked — see app/Services/ShippingRateService.

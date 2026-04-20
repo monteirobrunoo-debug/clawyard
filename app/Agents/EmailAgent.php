@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -16,6 +17,7 @@ class EmailAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use ShippingSkillTrait;
+    use LogisticsSkillTrait;
     protected string $contextKey  = 'email_intel';
     protected array  $contextTags = ['email','cliente','proposta','cotação','follow-up','armador','navio','contacto'];
     protected string $systemPrompt = '';
@@ -112,6 +114,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::maritime($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         // Every customer-facing agent gets the UPS shipping skill so it can
         // give cost estimates when asked — see app/Services/ShippingRateService.

@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\SapService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -16,6 +17,7 @@ class SapAgent implements AgentInterface
     use AnthropicKeyTrait;
     use WebSearchTrait;
     use SharedContextTrait;
+    use LogisticsSkillTrait;
     protected string $contextKey  = 'sap_intel';
     protected array  $contextTags = ['SAP','stock','fatura','encomenda','ERP','inventário','parceiro','cliente SAP','fornecedor'];
     protected string $systemPrompt = '';
@@ -83,6 +85,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::commercial($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

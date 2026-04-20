@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -21,6 +22,7 @@ class ThinkingAgent implements AgentInterface
     use AnthropicKeyTrait;
     use WebSearchTrait;
     use SharedContextTrait;
+    use LogisticsSkillTrait;
     protected string $systemPrompt = '';
 
     // PSI bus — publish deep-thinking conclusions so other agents
@@ -83,6 +85,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::reasoning($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

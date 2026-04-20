@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\SapService;
 use App\Services\PromptLibrary;
 use App\Services\PartYardProfileService;
@@ -31,6 +32,7 @@ class CrmAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
     use WebSearchTrait;
+    use LogisticsSkillTrait;
     protected string $contextKey  = 'crm_intel';
     protected array  $contextTags = ['CRM','oportunidade','pipeline','SAP','cliente','negócio','proposta','contrato','vendedor'];
     protected string $systemPrompt = '';
@@ -254,6 +256,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::commercial($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         // Every customer-facing agent gets the UPS shipping skill so it can
         // give cost estimates when asked — see app/Services/ShippingRateService.

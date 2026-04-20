@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,7 @@ class AriaAgent implements AgentInterface
     use WebSearchTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    use LogisticsSkillTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -235,6 +237,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::security($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

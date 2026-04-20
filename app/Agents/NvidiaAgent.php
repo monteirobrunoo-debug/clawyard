@@ -5,10 +5,12 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\SharedContextTrait;
 
+use App\Agents\Traits\LogisticsSkillTrait;
 class NvidiaAgent implements AgentInterface
 {
     use SharedContextTrait;
 
+    use LogisticsSkillTrait;
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
     protected Client $client;
@@ -37,6 +39,9 @@ PROMPT;
                 'Content-Type'  => 'application/json',
             ],
         ]);
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPromptBase .= $this->logisticsSkillPromptBlock();
     }
 
     public function chat(string|array $message, array $history = []): string

@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use App\Services\SapService;
@@ -18,6 +19,7 @@ class SalesAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use ShippingSkillTrait;
+    use LogisticsSkillTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -113,6 +115,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::commercial($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         // Every customer-facing agent gets the UPS shipping skill so it can
         // give cost estimates when asked — see app/Services/ShippingRateService.

@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -14,6 +15,7 @@ class DocumentAgent implements AgentInterface
     use AnthropicKeyTrait;
     use WebSearchTrait;
     use SharedContextTrait;
+    use LogisticsSkillTrait;
     protected string $contextKey  = 'document_intel';
     protected array  $contextTags = ['documento','contrato','certificado','PDF','análise','cláusula','especificação','manual'];
     protected string $systemPrompt = '';
@@ -84,6 +86,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::technical($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

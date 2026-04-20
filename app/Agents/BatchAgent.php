@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,7 @@ class BatchAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    use LogisticsSkillTrait;
     protected string $systemPrompt = '';
 
     // PSI bus — publish batch completion summaries so the rest of the
@@ -71,6 +73,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::reasoning($persona, $specialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

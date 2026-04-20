@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\SharedContextTrait;
 
+use App\Agents\Traits\LogisticsSkillTrait;
 /**
  * MilDefAgent — "Coronel Rodrigues"
  *
@@ -29,6 +30,7 @@ class MilDefAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
 
+    use LogisticsSkillTrait;
     protected string $searchPolicy = 'always';
     protected string $contextKey   = 'mildef_intel';
     protected array  $contextTags  = [
@@ -268,6 +270,9 @@ SYSPROMPT;
             'timeout'         => 300,
             'connect_timeout' => 10,
         ]);
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
     }
 
     // ────────────────────────────────────────────────────────────────────────

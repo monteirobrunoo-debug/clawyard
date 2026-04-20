@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use App\Services\WebSearchService;
@@ -24,6 +25,7 @@ class AcingovAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
 
+    use LogisticsSkillTrait;
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'always';
 
@@ -223,6 +225,9 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::technical(self::$acingovPersona, $this->systemPromptSpecialty)
         );
+
+        // Universal logistics knowledge (applied to every agent)
+        $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
