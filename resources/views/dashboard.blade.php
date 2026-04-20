@@ -316,6 +316,20 @@
             box-shadow: inset 0 0 0 1px color-mix(in srgb, #fbbf24 30%, transparent);
         }
 
+        /* ── PROFILE INFO BUTTON ── */
+        .info-btn {
+            position: absolute; top: 12px; right: 12px;
+            width: 28px; height: 28px; border-radius: 50%;
+            background: transparent; border: none;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px; cursor: pointer; z-index: 5;
+            opacity: 0; transition: opacity 0.2s, transform 0.15s, background 0.15s;
+            color: var(--muted); line-height: 1;
+            text-decoration: none;
+        }
+        .agent-card:hover .info-btn { opacity: 1; }
+        .info-btn:hover { background: color-mix(in srgb, var(--card-color) 18%, transparent); transform: scale(1.15); color: var(--card-color); }
+
         /* ── FAVORITES SECTION (top of grid) ── */
         #favoritesSection { display: none; }
         #favoritesSection.has-items { display: block; }
@@ -578,6 +592,7 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                    data-agent-key="{{ $agent['key'] }}"
                    style="--card-color: {{ $agent['color'] }}">
                     <button type="button" class="fav-btn" title="Adicionar aos favoritos" aria-label="Toggle favorite">★</button>
+                    <button type="button" class="info-btn" data-agent-profile="{{ $agent['key'] }}" title="Ver perfil do agente" aria-label="Agent profile">ℹ</button>
                     <div class="status-dot" style="{{ $isSpecial ? 'background:#00aaff;box-shadow:0 0 8px #00aaff' : 'background:' . $agent['color'] . ';box-shadow:0 0 6px ' . $agent['color'] }}"></div>
                     <div class="avatar">
                         @if($imgPath)
@@ -696,6 +711,18 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
             const key  = card?.getAttribute('data-agent-key');
             if (key) toggleFavorite(key);
         });
+    });
+
+    // Profile info buttons — navigate to /agents/{key} without triggering
+    // the outer card's /chat link. Delegated so cloned cards in the
+    // Favorites section work too.
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-agent-profile]');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const key = btn.getAttribute('data-agent-profile');
+        if (key) window.location.href = '/agents/' + encodeURIComponent(key);
     });
 
     // Initial render

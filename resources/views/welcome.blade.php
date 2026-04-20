@@ -1164,6 +1164,24 @@ if (urlAgent && urlSession && /^[A-Za-z0-9_\-]+$/.test(urlSession)) {
     localStorage.setItem('cyw_session_' + urlAgent, urlSession);
 }
 
+// ── Prefill from URL (?q=...) — agent profile starter chips jump straight
+// into a chat with the question loaded in the textarea. User still hits
+// Enter to send, so they can tweak first.
+const urlQuery = new URLSearchParams(window.location.search).get('q');
+if (urlQuery) {
+    // Run on next tick so the textarea (defined earlier in this script file
+    // as `const input = document.getElementById('message-input')`) exists.
+    setTimeout(() => {
+        const ta = document.getElementById('message-input');
+        if (ta) {
+            ta.value = urlQuery;
+            ta.style.height = 'auto';
+            ta.style.height = Math.min(ta.scrollHeight, 150) + 'px';
+            ta.focus();
+        }
+    }, 0);
+}
+
 // Init on page load (after URL agent is applied)
 const initAgent = agentSelect.value || 'auto';
 selectedAgent = initAgent;

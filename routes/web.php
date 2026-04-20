@@ -179,6 +179,57 @@ Route::get('/chat', function () {
     return view('welcome');
 })->middleware(['auth'])->name('chat');
 
+// Agent profile — per-agent landing page with description, stats, starters
+// and recent conversations. Provides a deeper entry point than the dashboard
+// card (which just drops you into /chat). Linked from the card's long-press
+// or right-click, and from the /agents/{key} URL directly.
+Route::get('/agents/{key}', function (string $key) {
+    $agent = \App\Services\AgentCatalog::find($key);
+    abort_unless($agent, 404, 'Unknown agent');
+
+    $userId = auth()->id();
+    $prefix = 'u' . $userId . '_';
+
+    // Count conversations scoped to this user AND this agent.
+    $baseQuery = \App\Models\Conversation::query()
+        ->where('session_id', 'like', $prefix . '%')
+        ->where('agent', $key);
+
+    $totalConvs = (clone $baseQuery)->whereHas('messages')->count();
+    $totalMsgs  = (clone $baseQuery)
+        ->join('messages', 'conversations.id', '=', 'messages.conversation_id')
+        ->count();
+    $weekConvs  = (clone $baseQuery)
+        ->whereHas('messages')
+        ->where('updated_at', '>=', now()->subDays(7))
+        ->count();
+    $lastConv   = (clone $baseQuery)
+        ->whereHas('messages')
+        ->orderBy('updated_at', 'desc')
+        ->first();
+
+    $recentConversations = (clone $baseQuery)
+        ->whereHas('messages')
+        ->withCount('messages')
+        ->orderBy('updated_at', 'desc')
+        ->limit(10)
+        ->get();
+
+    return view('agents.profile', [
+        'agent'               => $agent,
+        'categories'          => \App\Services\AgentCatalog::categories(),
+        'photo'               => \App\Services\AgentCatalog::photo($key),
+        'starters'            => \App\Services\AgentCatalog::starters($key),
+        'stats'               => [
+            'total_conversations' => $totalConvs,
+            'total_messages'      => $totalMsgs,
+            'week_count'          => $weekConvs,
+            'last_used'           => $lastConv ? $lastConv->updated_at->diffForHumans() : null,
+        ],
+        'recentConversations' => $recentConversations,
+    ]);
+})->middleware(['auth', 'verified'])->name('agents.profile');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
