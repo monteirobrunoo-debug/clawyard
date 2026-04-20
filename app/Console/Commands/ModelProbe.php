@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Promise\Utils;
 use Illuminate\Console\Command;
 
 /**
@@ -51,44 +52,58 @@ class ModelProbe extends Command
         $this->line('   · model_haiku  = ' . config('services.anthropic.model_haiku'));
         $this->line('───────────────────────────────────────────────');
 
-        $client = new Client(['base_uri' => 'https://api.anthropic.com', 'timeout' => 15]);
+        // Run all probes concurrently — total wall time ≈ slowest model.
+        $client = new Client(['base_uri' => 'https://api.anthropic.com', 'timeout' => 10]);
         $works  = [];
         $fails  = [];
+        $t0     = microtime(true);
+
+        $promises = [];
+        foreach (self::CANDIDATES as $model) {
+            $promises[$model] = $client->postAsync('/v1/messages', [
+                'headers' => [
+                    'x-api-key'         => $key,
+                    'anthropic-version' => '2023-06-01',
+                    'content-type'      => 'application/json',
+                ],
+                'json' => [
+                    'model'      => $model,
+                    'max_tokens' => 10,
+                    'messages'   => [['role' => 'user', 'content' => 'say ok']],
+                ],
+                'http_errors' => false,
+            ]);
+        }
+
+        $this->line('  (testing ' . count($promises) . ' models in parallel — ~10 s)');
+        $responses = Utils::settle($promises)->wait();
+        $totalMs   = round((microtime(true) - $t0) * 1000);
 
         foreach (self::CANDIDATES as $model) {
-            $t   = microtime(true);
-            try {
-                $res = $client->post('/v1/messages', [
-                    'headers' => [
-                        'x-api-key'         => $key,
-                        'anthropic-version' => '2023-06-01',
-                        'content-type'      => 'application/json',
-                    ],
-                    'json' => [
-                        'model'      => $model,
-                        'max_tokens' => 10,
-                        'messages'   => [['role' => 'user', 'content' => 'say ok']],
-                    ],
-                    'http_errors' => false,
-                ]);
-                $ms   = round((microtime(true) - $t) * 1000);
-                $code = $res->getStatusCode();
-                $body = $res->getBody()->getContents();
+            $result = $responses[$model] ?? null;
+            if (!$result || ($result['state'] ?? '') !== 'fulfilled') {
+                $reason = $result['reason'] ?? null;
+                $msg    = $reason instanceof \Throwable ? $reason->getMessage() : 'unknown';
+                $this->error(sprintf('  ❌ %-35s  %s', $model, mb_substr($msg, 0, 80)));
+                $fails[] = $model;
+                continue;
+            }
+            $res  = $result['value'];
+            $code = $res->getStatusCode();
+            $body = $res->getBody()->getContents();
 
-                if ($code === 200) {
-                    $this->info(sprintf('  ✅ %-35s  %4d ms', $model, $ms));
-                    $works[] = $model;
-                } else {
-                    $data = json_decode($body, true);
-                    $err  = $data['error']['message'] ?? substr($body, 0, 80);
-                    $this->error(sprintf('  ❌ %-35s  %s (%s)', $model, $code, $err));
-                    $fails[] = $model;
-                }
-            } catch (\Throwable $e) {
-                $this->error(sprintf('  ❌ %-35s  %s', $model, $e->getMessage()));
+            if ($code === 200) {
+                $this->info(sprintf('  ✅ %-35s  reachable', $model));
+                $works[] = $model;
+            } else {
+                $data = json_decode($body, true);
+                $err  = $data['error']['message'] ?? substr($body, 0, 80);
+                $this->error(sprintf('  ❌ %-35s  %s (%s)', $model, $code, mb_substr($err, 0, 80)));
                 $fails[] = $model;
             }
         }
+
+        $this->line('  (total: ' . $totalMs . ' ms)');
 
         $this->line('');
         $this->line('───────────────────────────────────────────────');
