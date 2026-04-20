@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\SapService;
 use App\Services\PromptLibrary;
@@ -28,6 +29,7 @@ class CrmAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    use ShippingSkillTrait;
     use WebSearchTrait;
     protected string $contextKey  = 'crm_intel';
     protected array  $contextTags = ['CRM','oportunidade','pipeline','SAP','cliente','negócio','proposta','contrato','vendedor'];
@@ -252,6 +254,10 @@ SPECIALTY;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::commercial($persona, $specialty)
         );
+
+        // Every customer-facing agent gets the UPS shipping skill so it can
+        // give cost estimates when asked — see app/Services/ShippingRateService.
+        $this->systemPrompt .= $this->shippingSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

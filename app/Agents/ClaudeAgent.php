@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -14,6 +15,7 @@ class ClaudeAgent implements AgentInterface
     use WebSearchTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    use ShippingSkillTrait;
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
@@ -31,6 +33,10 @@ class ClaudeAgent implements AgentInterface
             PartYardProfileService::toPromptContext(),
             PromptLibrary::reasoning($persona, $specialty)
         );
+
+        // Every customer-facing agent gets the UPS shipping skill so it can
+        // give cost estimates when asked — see app/Services/ShippingRateService.
+        $this->systemPrompt .= $this->shippingSkillPromptBlock();
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',

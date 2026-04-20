@@ -40,6 +40,7 @@ class AgentManager
             // back to ClaudeAgent. Registering it fixes the orchestrator and
             // lets the /briefing route resolve a real agent instance.
             'briefing'  => new BriefingAgent(),
+            'shipping'  => new ShippingAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -265,6 +266,19 @@ class AgentManager
         ];
         foreach ($computerKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['computer'];
+        }
+
+        // Shipping / transport / UPS / FedEx keywords
+        $shippingKeywords = [
+            'ups', 'fedex', 'dhl', 'envio', 'envios', 'transporte', 'transportadora',
+            'custo de envio', 'quanto custa enviar', 'shipping', 'courier', 'frete',
+            'tarifa', 'tarifas', 'zona ups', 'express saver', 'expedited',
+            'entrega internacional', 'international delivery', 'carta de porte',
+            'peso volumetrico', 'dimensional weight', 'palete', 'pallet freight',
+            'trackng', 'tracking number', 'número de seguimento',
+        ];
+        foreach ($shippingKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['shipping'];
         }
 
         return $this->agents['claude'];

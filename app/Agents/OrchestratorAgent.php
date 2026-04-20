@@ -66,6 +66,7 @@ GENERAL / REASONING / AUTOMATION
 - thinking: extended thinking — multi-step reasoning, deep analysis, trade-off decisions
 - batch:    bulk/batch processing — multiple items, lists, parallel tasks
 - computer: web/desktop automation — browser control, form filling, portal navigation (RoboDesk)
+- shipping: transport quotes — UPS/FedEx/DHL prices, zones, weight, dimensional, customs
 
 ROUTING RULES:
 1. Return ONLY a compact JSON array of agent NAMES (lowercase, exactly as listed above).
@@ -375,6 +376,7 @@ SPECIALTY;
             'computer'     => '🖥️ RoboDesk',
             'vessel'       => '⚓ Capitão Vasco',
             'mildef'       => '🎖️ Cor. Rodrigues — Defesa',
+            'shipping'     => '🚚 Tânia — Transportes',
         ];
     }
 

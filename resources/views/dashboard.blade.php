@@ -157,7 +157,7 @@
 <body>
 
 <header class="header">
-    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/setq-logo.svg" alt="SETQ.AI" style="height:32px;filter:drop-shadow(0 0 1px rgba(255,255,255,0.1));"></a>
+    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/clawyard-logo.svg" alt="ClawYard" style="height:36px;filter:drop-shadow(0 0 4px rgba(118,185,0,0.3));"></a>
     <span class="badge">© PartYard/Setq.AI Rights reserved 2026</span>
     <div class="nav-links">
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
@@ -217,6 +217,7 @@
         ['key' => 'thinking',    'name' => 'Prof. Deep Thought',    'emoji' => '🧠', 'role' => 'Extended thinking — complex multi-step reasoning and deep analysis',                    'color' => '#a855f7'],
         ['key' => 'batch',       'name' => 'Max Batch',             'emoji' => '📦', 'role' => 'Batch processing — run multiple tasks in parallel with async queues',                   'color' => '#06b6d4'],
         ['key' => 'mildef',      'name' => 'Cor. Rodrigues Defesa', 'emoji' => '🎖️', 'role' => 'Military procurement — worldwide defence suppliers excl. China/Russia, NATO/EU/USLI context', 'color' => '#6b3fa0'],
+        ['key' => 'shipping',    'name' => 'Tânia Transportes',    'emoji' => '🚚', 'role' => 'Logística — estimativas de envio UPS (contrato PartYard Q9717213PT), zonas, peso volumétrico',   'color' => '#8b5cf6'],
     ];
     @endphp
 
