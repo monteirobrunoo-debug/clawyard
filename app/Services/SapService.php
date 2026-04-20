@@ -534,6 +534,93 @@ class SapService
     }
 
     /**
+     * Fetch a single opportunity with its Stages tab expanded.
+     *
+     * In the SAP B1 UI this corresponds to the "Níveis" (Stages) separator:
+     * each opportunity has a historical trail of stage transitions stored in
+     * SalesOpportunitiesLines. The LAST row (highest LineNum or most recent
+     * StartDate/CloseDate) represents the real current state — sometimes the
+     * header `CurrentStageNo` lags behind because it only reflects the open
+     * line.
+     *
+     * @param  int  $seqNo  SequentialNo (DocEntry) of the opportunity
+     * @return array|null   decoded opportunity payload with SalesOpportunitiesLines
+     */
+    public function getOpportunityWithStages(int $seqNo): ?array
+    {
+        try {
+            $data = $this->get("SalesOpportunities({$seqNo})", [
+                '$expand' => 'SalesOpportunitiesLines',
+            ]);
+            return is_array($data) && isset($data['SequentialNo']) ? $data : null;
+        } catch (\Throwable $e) {
+            Log::warning("SapService: getOpportunityWithStages({$seqNo}) failed — " . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Format an opportunity + its Níveis (stage lines) as a block to inject
+     * into the prompt. The last stage line is always highlighted because it
+     * is the one that reflects the TRUE current state of the opportunity.
+     */
+    public function formatOpportunityStages(array $opp): string
+    {
+        $seq   = $opp['SequentialNo']    ?? '?';
+        $card  = $opp['CardName']        ?? '?';
+        $name  = $opp['OpportunityName'] ?? '';
+        $curr  = (int) ($opp['CurrentStageNo'] ?? 0);
+        $max   = (float) ($opp['MaxLocalTotal'] ?? 0);
+
+        $lines = $opp['SalesOpportunitiesLines'] ?? [];
+        // Sort by LineNum ascending so the last element is the most recent level
+        if (is_array($lines) && count($lines) > 1) {
+            usort($lines, fn($a, $b) => ((int) ($a['LineNum'] ?? 0)) <=> ((int) ($b['LineNum'] ?? 0)));
+        }
+
+        $rows = [];
+        foreach ($lines as $i => $l) {
+            $rows[] = sprintf(
+                "    %2d) Stage=%s (%s) | Vend=%s | Início=%s | Fecho=%s | %%=%s | €%s%s",
+                (int) ($l['LineNum'] ?? $i),
+                (string) ($l['StageKey'] ?? '?'),
+                $this->getStageLabel((int) ($l['StageKey'] ?? 0)),
+                (string) ($l['SalesEmployee'] ?? '?'),
+                substr((string) ($l['StartDate'] ?? ''), 0, 10),
+                substr((string) ($l['CloseDate'] ?? ($l['ClosedDate'] ?? '')), 0, 10) ?: '—',
+                (string) ($l['PercentageRate'] ?? ''),
+                number_format((float) ($l['MaxLocalTotal'] ?? 0), 0, '.', ','),
+                !empty($l['Remarks']) ? ' | obs: ' . trim((string) $l['Remarks']) : ''
+            );
+        }
+
+        $last     = !empty($lines) ? end($lines) : null;
+        $lastTxt  = '—';
+        if ($last) {
+            $lastStage = (int) ($last['StageKey'] ?? 0);
+            $lastTxt   = sprintf(
+                "Stage=%d (%s) | LineNum=%s | Início=%s | Fecho=%s | %%=%s | €%s%s",
+                $lastStage,
+                $this->getStageLabel($lastStage),
+                (string) ($last['LineNum'] ?? '?'),
+                substr((string) ($last['StartDate'] ?? ''), 0, 10),
+                substr((string) ($last['CloseDate'] ?? ($last['ClosedDate'] ?? '')), 0, 10) ?: '—',
+                (string) ($last['PercentageRate'] ?? ''),
+                number_format((float) ($last['MaxLocalTotal'] ?? 0), 0, '.', ','),
+                !empty($last['Remarks']) ? ' | obs: ' . trim((string) $last['Remarks']) : ''
+            );
+        }
+
+        $out  = "🎯 OPORTUNIDADE #{$seq} — {$card}" . ($name ? " — «{$name}»" : '') . "\n";
+        $out .= "   Cabeçalho: CurrentStageNo={$curr} (" . $this->getStageLabel($curr) . ")"
+             .  " | MaxLocalTotal=€" . number_format($max, 0, '.', ',') . "\n";
+        $out .= "   ⬇️ Separador NÍVEIS (SalesOpportunitiesLines) — " . count($lines) . " linha(s):\n";
+        $out .= $rows ? implode("\n", $rows) . "\n" : "    (sem linhas)\n";
+        $out .= "   ⭐ ÚLTIMO ESTADO (última linha do separador Níveis) → {$lastTxt}";
+        return $out;
+    }
+
+    /**
      * Build a formatted CRM pipeline summary grouped by stage and salesperson.
      * Used by buildContext() when CRM keywords are detected in the user message.
      */
@@ -1439,6 +1526,26 @@ class SapService
                     }
                 }
                 break; // only lookup the first matched BP
+            }
+        }
+
+        // --- CRM: Specific opportunity by SequentialNo (e.g. "oportunidade 456", "opp #123") ---
+        //   When the user references a concrete opportunity, fetch it with the
+        //   "Níveis" (Stages) tab expanded — SalesOpportunitiesLines — so the
+        //   agent can report the LAST line as the true current state.
+        if (preg_match('/(?:oportunidad[ea]|opp(?:ortunity)?|oppty|#)\s*[#:]?\s*(\d{1,7})/iu', $message, $oppMatch)) {
+            try {
+                $seqNo = (int) $oppMatch[1];
+                if ($seqNo > 0) {
+                    $opp = $this->getOpportunityWithStages($seqNo);
+                    if ($opp) {
+                        $context[] = $this->formatOpportunityStages($opp);
+                    } else {
+                        $context[] = "⚠️ Oportunidade #{$seqNo}: não encontrada no SAP B1.";
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SapService: opportunity detail fetch failed — ' . $e->getMessage());
             }
         }
 
