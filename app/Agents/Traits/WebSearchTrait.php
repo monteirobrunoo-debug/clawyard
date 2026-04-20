@@ -117,9 +117,14 @@ trait WebSearchTrait
             return true;
         }
 
-        $keywords = property_exists($this, 'webSearchKeywords')
-            ? $this->webSearchKeywords
-            : $this->defaultWebSearchKeywords();
+        // Merge strategy: agent-specific keywords EXTEND the universal defaults,
+        // they do not replace them. Guarantees that explicit user commands like
+        // "vê na web", "procura", "verifica online" trigger for every
+        // conditional-policy agent regardless of their domain keyword list.
+        $keywords = $this->defaultWebSearchKeywords();
+        if (property_exists($this, 'webSearchKeywords') && is_array($this->webSearchKeywords)) {
+            $keywords = array_unique(array_merge($keywords, $this->webSearchKeywords));
+        }
 
         foreach ($keywords as $kw) {
             if (str_contains($lower, $kw)) return true;
