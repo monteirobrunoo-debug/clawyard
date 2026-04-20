@@ -769,5 +769,7 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 })();
 </script>
 
+@include('partials.keyboard-shortcuts')
+
 </body>
 </html>

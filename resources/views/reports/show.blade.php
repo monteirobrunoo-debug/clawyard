@@ -66,5 +66,6 @@
     <div class="report-content">{{ $report->content }}</div>
 </div>
 
+@include('partials.keyboard-shortcuts')
 </body>
 </html>

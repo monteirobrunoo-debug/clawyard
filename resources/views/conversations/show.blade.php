@@ -123,5 +123,6 @@ document.querySelectorAll('.msg-content[data-raw]').forEach(el => {
     el.innerHTML = renderMarkdown(el.dataset.raw);
 });
 </script>
+@include('partials.keyboard-shortcuts')
 </body>
 </html>

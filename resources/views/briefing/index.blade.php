@@ -229,5 +229,6 @@ function renderMarkdown(text) {
         .replace(/<p><\/p>/g, '');
 }
 </script>
+@include('partials.keyboard-shortcuts')
 </body>
 </html>

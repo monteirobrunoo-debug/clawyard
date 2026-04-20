@@ -141,5 +141,6 @@
     </div>
     @endif
 </div>
+@include('partials.keyboard-shortcuts')
 </body>
 </html>

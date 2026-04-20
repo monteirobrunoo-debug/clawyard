@@ -3302,5 +3302,7 @@ updateShareBtn();
     </div>
 </div>
 
+@include('partials.keyboard-shortcuts')
+
 </body>
 </html>

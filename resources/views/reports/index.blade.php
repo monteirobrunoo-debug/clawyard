@@ -349,5 +349,6 @@ document.getElementById('save-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeSaveModal();
 });
 </script>
+@include('partials.keyboard-shortcuts')
 </body>
 </html>
