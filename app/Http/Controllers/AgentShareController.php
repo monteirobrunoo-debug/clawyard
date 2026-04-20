@@ -7,6 +7,7 @@ use App\Agents\AgentManager;
 use App\Services\AgentShareAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class AgentShareController extends Controller
 {
@@ -70,12 +71,134 @@ class AgentShareController extends Controller
             'created_by'       => auth()->id(),
         ]);
 
+        // Notify the recipient with the share link. Errors must not break the
+        // share creation flow — the link is already persisted and the owner
+        // can still copy it manually from the UI.
+        $emailSent = $this->sendShareEmail($share, $data['password'] ?? null);
+
         return response()->json([
             'ok'         => true,
             'url'        => $share->getUrl(),
             'portal_url' => $share->getPortalUrl(),
             'id'         => $share->id,
+            'email_sent' => $emailSent,
         ]);
+    }
+
+    /**
+     * Send the share link to the client via email. Uses MAIL_FROM_ADDRESS
+     * (no-reply@hp-group.org) so recipients see a consistent HP-Group sender.
+     * Returns true on success, false on any Mail failure.
+     */
+    private function sendShareEmail(AgentShare $share, ?string $password): bool
+    {
+        try {
+            $meta     = AgentShare::agentMeta()[$share->agent_key] ?? [
+                'name' => ucfirst($share->agent_key), 'emoji' => '🤖', 'color' => '#76b900',
+            ];
+            $agentLbl = trim(($meta['emoji'] ?? '🤖') . ' ' . ($meta['name'] ?? $share->agent_key));
+            $url      = $share->getUrl();
+            $expires  = $share->expires_at?->format('d/m/Y H:i') ?? '—';
+            $ownerNm  = auth()->user()?->name  ?? 'Equipa HP-Group';
+            $ownerEm  = auth()->user()?->email ?? config('mail.from.address', 'no-reply@hp-group.org');
+
+            $passwordBlock = '';
+            if ($password) {
+                $passwordBlock = '<p style="margin:16px 0;padding:12px 16px;background:#fff7ed;border-left:3px solid #f59e0b;font-family:Menlo,monospace;font-size:14px;">'
+                    . '🔑 <strong>Palavra-passe:</strong> ' . htmlspecialchars($password)
+                    . '<br><span style="font-size:12px;color:#92400e;">Guarda esta palavra-passe — não a repetirei noutro email.</span>'
+                    . '</p>';
+            }
+
+            $welcome = $share->welcome_message
+                ? '<p style="margin:16px 0;padding:12px 16px;background:#f0f9ff;border-left:3px solid #0ea5e9;">'
+                    . nl2br(htmlspecialchars($share->welcome_message))
+                    . '</p>'
+                : '';
+
+            $clientName  = htmlspecialchars($share->client_name);
+            $agentLblEsc = htmlspecialchars($agentLbl);
+            $ownerNmEsc  = htmlspecialchars($ownerNm);
+            $ownerEmEsc  = htmlspecialchars($ownerEm);
+            $urlEsc      = htmlspecialchars($url);
+
+            $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; line-height: 1.65; background: #f4f4f4; margin: 0; padding: 0; }
+  .wrap { background: #fff; max-width: 640px; margin: 24px auto; padding: 32px; border-radius: 8px; }
+  .hdr { border-bottom: 3px solid #76b900; padding-bottom: 14px; margin-bottom: 20px; }
+  .logo { font-size: 22px; font-weight: bold; color: #76b900; }
+  .btn { display: inline-block; background: #76b900; color: #fff !important; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; margin: 16px 0; }
+  .meta { font-size: 13px; color: #555; }
+  .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #eee; font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr"><div class="logo">🐾 ClawYard</div></div>
+
+  <p>Olá <strong>{$clientName}</strong>,</p>
+
+  <p>Foi-te partilhado acesso ao agente <strong>{$agentLblEsc}</strong> na plataforma ClawYard.</p>
+
+  {$welcome}
+
+  <p style="text-align:center;">
+    <a href="{$urlEsc}" class="btn">Abrir agente {$agentLblEsc}</a>
+  </p>
+
+  <p class="meta">Ou copia este link:<br>
+    <a href="{$urlEsc}">{$urlEsc}</a>
+  </p>
+
+  {$passwordBlock}
+
+  <table class="meta" cellpadding="0" cellspacing="0" style="margin-top:18px;">
+    <tr><td style="padding:4px 12px 4px 0;"><strong>Válido até:</strong></td><td>{$expires}</td></tr>
+    <tr><td style="padding:4px 12px 4px 0;"><strong>Enviado por:</strong></td><td>{$ownerNmEsc} &lt;{$ownerEmEsc}&gt;</td></tr>
+  </table>
+
+  <p style="margin-top:20px;font-size:12px;color:#666;">
+    Se não estavas à espera deste acesso, podes simplesmente ignorar o email — o link expira automaticamente na data acima.
+  </p>
+
+  <div class="footer">
+    ClawYard | IT Partyard LDA<br>
+    Marine Spare Parts &amp; Technical Services<br>
+    Setúbal, Portugal · no-reply@hp-group.org
+  </div>
+</div>
+</body>
+</html>
+HTML;
+
+            Mail::html($html, function ($mail) use ($share, $agentLbl) {
+                $mail->to($share->client_email, $share->client_name)
+                     ->from(
+                         config('mail.from.address', 'no-reply@hp-group.org'),
+                         config('mail.from.name', 'HP-Group / ClawYard')
+                     )
+                     ->subject('[ClawYard] Acesso ao agente ' . $agentLbl);
+            });
+
+            Log::info('AgentShare email sent', [
+                'share_id'   => $share->id,
+                'to'         => $share->client_email,
+                'agent_key'  => $share->agent_key,
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('AgentShare email failed: ' . $e->getMessage(), [
+                'share_id' => $share->id ?? null,
+                'to'       => $share->client_email ?? null,
+            ]);
+            return false;
+        }
     }
 
     // ── ADMIN: Toggle active ─────────────────────────────────────────────────
