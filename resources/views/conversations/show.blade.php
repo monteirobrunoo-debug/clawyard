@@ -5,10 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conversa — ClawYard</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('cy-theme');
+                if (t === 'light' || t === 'dark') {
+                    document.documentElement.setAttribute('data-theme', t);
+                }
+            } catch (e) {}
+        })();
+    </script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh}
-        header{display:flex;align-items:center;gap:14px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111}
+        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh;transition:background .2s,color .2s}
+        header{display:flex;align-items:center;gap:14px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111;transition:background .2s,border-color .2s}
         .logo{font-size:18px;font-weight:800;color:#76b900}
         .back-btn{color:#555;text-decoration:none;font-size:20px}
         .back-btn:hover{color:#e5e5e5}
@@ -54,6 +64,31 @@
         .msg-content a{color:#76b900}
 
         .empty-msgs{text-align:center;padding:40px;color:#444;font-size:13px}
+
+        /* ── LIGHT THEME ── */
+        :root[data-theme="light"] body{background:#f8fafc;color:#1f2937}
+        :root[data-theme="light"] header{background:#fff;border-bottom-color:#e5e7eb}
+        :root[data-theme="light"] .back-btn{color:#6b7280}
+        :root[data-theme="light"] .back-btn:hover{color:#111}
+        :root[data-theme="light"] .btn{background:#fff;border-color:#d1d5db;color:#4b5563}
+        :root[data-theme="light"] .btn:hover{border-color:#059669;color:#059669}
+        :root[data-theme="light"] .conv-header{border-bottom-color:#e5e7eb}
+        :root[data-theme="light"] .meta{color:#6b7280}
+        :root[data-theme="light"] .msg-bubble{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .msg.user .msg-bubble{background:#ecfccb;border-color:#bef264}
+        :root[data-theme="light"] .msg-avatar{background:#f3f4f6}
+        :root[data-theme="light"] .msg-role{color:#9ca3af}
+        :root[data-theme="light"] .msg.user .msg-role{color:#365314}
+        :root[data-theme="light"] .msg-content{color:#374151}
+        :root[data-theme="light"] .msg.user .msg-content{color:#1a2e05}
+        :root[data-theme="light"] .msg-content strong{color:#111}
+        :root[data-theme="light"] .msg-content em{color:#4b5563}
+        :root[data-theme="light"] .msg-content code{background:#f3f4f6;border-color:#e5e7eb;color:#059669}
+        :root[data-theme="light"] .msg-content pre{background:#f3f4f6;border-color:#e5e7eb}
+        :root[data-theme="light"] .msg-content h1,
+        :root[data-theme="light"] .msg-content h2,
+        :root[data-theme="light"] .msg-content h3{color:#111}
+        :root[data-theme="light"] .empty-msgs{color:#9ca3af}
     </style>
 </head>
 <body>
@@ -62,6 +97,7 @@
     <span class="logo">⚡ ClawYard</span>
     <div class="hdr-right">
         <a href="{{ route('conversations.pdf', $conversation) }}" class="btn btn-pdf" target="_blank">⬇ Exportar PDF</a>
+        <button type="button" class="cy-theme-btn" id="cyThemeBtn" title="Toggle theme (t)">🌙</button>
     </div>
 </header>
 
@@ -123,6 +159,7 @@ document.querySelectorAll('.msg-content[data-raw]').forEach(el => {
     el.innerHTML = renderMarkdown(el.dataset.raw);
 });
 </script>
+@include('partials.theme-button')
 @include('partials.keyboard-shortcuts')
 </body>
 </html>

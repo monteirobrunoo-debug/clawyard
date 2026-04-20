@@ -6,10 +6,20 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>ClawYard — Relatórios</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('cy-theme');
+                if (t === 'light' || t === 'dark') {
+                    document.documentElement.setAttribute('data-theme', t);
+                }
+            } catch (e) {}
+        })();
+    </script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh}
-        header{display:flex;align-items:center;gap:12px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111}
+        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh;transition:background .2s,color .2s}
+        header{display:flex;align-items:center;gap:12px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111;transition:background .2s,border-color .2s}
         .logo{font-size:18px;font-weight:800;color:#76b900}
         .back-btn{color:#555;text-decoration:none;font-size:20px}
         .back-btn:hover{color:#e5e5e5}
@@ -102,6 +112,42 @@
         .modal-cancel:hover{color:#aaa}
 
         .toast{position:fixed;bottom:24px;right:24px;background:#76b900;color:#000;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:700;z-index:200;display:none}
+
+        /* ── LIGHT THEME ── */
+        :root[data-theme="light"] body{background:#f8fafc;color:#1f2937}
+        :root[data-theme="light"] header{background:#fff;border-bottom-color:#e5e7eb}
+        :root[data-theme="light"] .back-btn{color:#6b7280}
+        :root[data-theme="light"] .back-btn:hover{color:#111}
+        :root[data-theme="light"] .btn{background:#fff;border-color:#d1d5db;color:#4b5563}
+        :root[data-theme="light"] .btn:hover{border-color:#059669;color:#059669}
+        :root[data-theme="light"] .btn-green{background:#76b900;color:#000;border-color:#76b900}
+        :root[data-theme="light"] .btn-green:hover{background:#5e9400;color:#000}
+        :root[data-theme="light"] .subtitle{color:#6b7280}
+        :root[data-theme="light"] .stat-chip{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .stat-chip .lbl{color:#6b7280}
+        :root[data-theme="light"] .agent-tabs{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .agent-tab{color:#6b7280}
+        :root[data-theme="light"] .agent-tab:hover{color:#111;background:#f3f4f6}
+        :root[data-theme="light"] .agent-tab.active{background:#f3f4f6;color:#111}
+        :root[data-theme="light"] .tab-count{background:#e5e7eb;color:#6b7280}
+        :root[data-theme="light"] .search-input{background:#fff;border-color:#d1d5db;color:#1f2937}
+        :root[data-theme="light"] .search-input:focus{border-color:#059669}
+        :root[data-theme="light"] .report-card{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .report-card:hover{background:#fafafa;border-color:#9ca3af}
+        :root[data-theme="light"] .report-type-icon{background:#f3f4f6}
+        :root[data-theme="light"] .report-title{color:#111}
+        :root[data-theme="light"] .report-summary{color:#6b7280}
+        :root[data-theme="light"] .report-date{color:#9ca3af}
+        :root[data-theme="light"] .action-btn{background:#fff;border-color:#d1d5db;color:#6b7280}
+        :root[data-theme="light"] .empty{color:#9ca3af}
+        :root[data-theme="light"] .empty h3{color:#6b7280}
+        :root[data-theme="light"] .modal-overlay{background:rgba(17,24,39,.5)}
+        :root[data-theme="light"] .modal{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .form-group label{color:#6b7280}
+        :root[data-theme="light"] .form-group input,
+        :root[data-theme="light"] .form-group select,
+        :root[data-theme="light"] .form-group textarea{background:#f9fafb;border-color:#d1d5db;color:#1f2937}
+        :root[data-theme="light"] .modal-cancel{background:#fff;border-color:#d1d5db;color:#6b7280}
     </style>
 </head>
 <body>
@@ -116,6 +162,7 @@
         @if(Auth::user()->isAdmin())
         <a href="/admin/users" class="btn" style="border-color:#ff4444;color:#ff6666">⚙️ Admin</a>
         @endif
+        <button type="button" class="cy-theme-btn" id="cyThemeBtn" title="Toggle theme (t)">🌙</button>
     </div>
 </header>
 
@@ -349,6 +396,7 @@ document.getElementById('save-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closeSaveModal();
 });
 </script>
+@include('partials.theme-button')
 @include('partials.keyboard-shortcuts')
 </body>
 </html>

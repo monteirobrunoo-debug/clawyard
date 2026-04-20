@@ -5,10 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Histórico de Conversas — ClawYard</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('cy-theme');
+                if (t === 'light' || t === 'dark') {
+                    document.documentElement.setAttribute('data-theme', t);
+                }
+            } catch (e) {}
+        })();
+    </script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh}
-        header{display:flex;align-items:center;gap:14px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111}
+        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh;transition:background .2s,color .2s}
+        header{display:flex;align-items:center;gap:14px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111;transition:background .2s,border-color .2s}
         .logo{font-size:18px;font-weight:800;color:#76b900}
         .back-btn{color:#555;text-decoration:none;font-size:20px}
         .back-btn:hover{color:#e5e5e5}
@@ -55,6 +65,27 @@
         .stat{background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:14px 20px;flex:1;text-align:center}
         .stat-num{font-size:24px;font-weight:800;color:#76b900}
         .stat-label{font-size:11px;color:#555;margin-top:2px}
+
+        /* ── LIGHT THEME ── */
+        :root[data-theme="light"] body{background:#f8fafc;color:#1f2937}
+        :root[data-theme="light"] header{background:#fff;border-bottom-color:#e5e7eb}
+        :root[data-theme="light"] .back-btn{color:#6b7280}
+        :root[data-theme="light"] .back-btn:hover{color:#111}
+        :root[data-theme="light"] .header-title{color:#4b5563}
+        :root[data-theme="light"] .subtitle{color:#6b7280}
+        :root[data-theme="light"] .conv-card{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .conv-card:hover{border-color:#9ca3af;background:#fafafa}
+        :root[data-theme="light"] .conv-icon{background:#f3f4f6;border-color:#e5e7eb}
+        :root[data-theme="light"] .conv-session{color:#111}
+        :root[data-theme="light"] .conv-meta{color:#6b7280}
+        :root[data-theme="light"] .conv-preview{color:#9ca3af}
+        :root[data-theme="light"] .btn{background:#fff;border-color:#d1d5db;color:#4b5563}
+        :root[data-theme="light"] .btn:hover{border-color:#059669;color:#059669}
+        :root[data-theme="light"] .stat{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .stat-label{color:#6b7280}
+        :root[data-theme="light"] .pagination-wrap .page-item .page-link{background:#fff;border-color:#d1d5db;color:#4b5563}
+        :root[data-theme="light"] .empty{color:#9ca3af}
+        :root[data-theme="light"] .empty h2{color:#6b7280}
     </style>
 </head>
 <body>
@@ -62,6 +93,7 @@
     <a href="/dashboard" class="back-btn">←</a>
     <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/clawyard-logo.svg" alt="ClawYard" style="height:34px;filter:drop-shadow(0 0 4px rgba(118,185,0,0.3));"></a>
     <span class="header-title">/ Histórico de Conversas</span>
+    <div style="margin-left:auto"><button type="button" class="cy-theme-btn" id="cyThemeBtn" title="Toggle theme (t)">🌙</button></div>
 </header>
 
 <div class="container">
@@ -141,6 +173,7 @@
     </div>
     @endif
 </div>
+@include('partials.theme-button')
 @include('partials.keyboard-shortcuts')
 </body>
 </html>

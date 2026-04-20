@@ -5,10 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Briefing Executivo — ClawYard</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- Pre-paint theme so reload never flashes wrong colours --}}
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('cy-theme');
+                if (t === 'light' || t === 'dark') {
+                    document.documentElement.setAttribute('data-theme', t);
+                }
+            } catch (e) {}
+        })();
+    </script>
+
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh}
-        header{display:flex;align-items:center;gap:14px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111}
+        body{background:#0a0a0a;color:#e5e5e5;font-family:system-ui,sans-serif;min-height:100vh;transition:background .2s,color .2s}
+        header{display:flex;align-items:center;gap:14px;padding:14px 28px;border-bottom:1px solid #1e1e1e;background:#111;transition:background .2s,border-color .2s}
         .logo{font-size:18px;font-weight:800;color:#76b900}
         .back-btn{color:#555;text-decoration:none;font-size:20px}
         .back-btn:hover{color:#e5e5e5}
@@ -68,6 +81,36 @@
         .prev-briefing{background:#0d0d0d;border:1px solid #1a1a1a;border-radius:12px;padding:20px 24px;margin-bottom:24px}
         .prev-title{font-size:13px;font-weight:600;color:#666;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px}
         .prev-content{font-size:13px;color:#555;line-height:1.6;white-space:pre-wrap}
+
+        /* ── LIGHT THEME OVERRIDES ── */
+        :root[data-theme="light"] body{background:#f8fafc;color:#1f2937}
+        :root[data-theme="light"] header{background:#fff;border-bottom-color:#e5e7eb}
+        :root[data-theme="light"] .back-btn{color:#6b7280}
+        :root[data-theme="light"] .back-btn:hover{color:#111}
+        :root[data-theme="light"] .subtitle{color:#6b7280}
+        :root[data-theme="light"] .btn{border-color:#d1d5db;color:#4b5563;background:#fff}
+        :root[data-theme="light"] .btn:hover{border-color:#059669;color:#059669}
+        :root[data-theme="light"] .btn-primary{background:#76b900;border-color:#76b900;color:#000}
+        :root[data-theme="light"] .btn-primary:hover{background:#5e9400;border-color:#5e9400}
+        :root[data-theme="light"] .btn-pdf{border-color:#ff6600;color:#c2410c}
+        :root[data-theme="light"] .btn-pdf:hover{background:#fff7ed}
+        :root[data-theme="light"] .status-banner{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .status-sub{color:#6b7280}
+        :root[data-theme="light"] .briefing-content{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .briefing-content h1{color:#111;border-bottom-color:#e5e7eb}
+        :root[data-theme="light"] .briefing-content h3{color:#4b5563}
+        :root[data-theme="light"] .briefing-content p,
+        :root[data-theme="light"] .briefing-content ul,
+        :root[data-theme="light"] .briefing-content ol{color:#374151}
+        :root[data-theme="light"] .briefing-content strong{color:#111}
+        :root[data-theme="light"] .briefing-content em{color:#4b5563}
+        :root[data-theme="light"] .briefing-content hr{border-top-color:#e5e7eb}
+        :root[data-theme="light"] .briefing-content code{background:#f3f4f6;border-color:#e5e7eb;color:#059669}
+        :root[data-theme="light"] .briefing-content blockquote{color:#4b5563;border-left-color:#76b900}
+        :root[data-theme="light"] #generating-banner{background:#f0fdf4;border-color:#bbf7d0;color:#059669}
+        :root[data-theme="light"] .prev-briefing{background:#fff;border-color:#e5e7eb}
+        :root[data-theme="light"] .prev-title{color:#6b7280}
+        :root[data-theme="light"] .prev-content{color:#4b5563}
     </style>
 </head>
 <body>
@@ -78,6 +121,7 @@
     <div class="hdr-right">
         <a href="/briefing/latest/pdf" class="btn btn-pdf" id="btn-pdf" target="_blank" style="{{ $todayBriefing ? '' : 'display:none' }}">⬇ PDF</a>
         <button class="btn btn-primary" id="btn-generate" onclick="startBriefing()">⚡ Gerar Briefing Diário</button>
+        <button type="button" class="cy-theme-btn" id="cyThemeBtn" title="Toggle theme (t)">🌙</button>
     </div>
 </header>
 
@@ -229,6 +273,7 @@ function renderMarkdown(text) {
         .replace(/<p><\/p>/g, '');
 }
 </script>
+@include('partials.theme-button')
 @include('partials.keyboard-shortcuts')
 </body>
 </html>
