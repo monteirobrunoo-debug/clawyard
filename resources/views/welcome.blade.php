@@ -460,6 +460,7 @@
         <option value="computer">🖥️ RoboDesk</option>
         <option value="vessel">⚓ Capitão Vasco</option>
         <option value="mildef">🎖️ Cor. Rodrigues Defesa</option>
+        <option value="shipping">🚚 Logística/PartYard</option>
     </select>
     <button id="share-agent-btn" onclick="openShareModal()" title="Partilhar este agente com um cliente" style="background:var(--agent-color,#76b900);border:none;color:#000;font-size:12px;font-weight:800;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;flex-shrink:0;margin-left:auto;">🔗 Share</button>
     <div class="hdr-right" style="margin-left:8px;">
@@ -526,6 +527,10 @@
                 <div class="agent-grid-item" data-agent="finance"    title="Dr. Luís Finance"><span class="ag-icon"><img src="/images/agents/finance.png" class="ag-photo" alt="Luís"></span><span class="ag-name">Luís</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="acingov"    title="Dr. Ana Contracts"><span class="ag-icon"><img src="/images/agents/acingov.png" class="ag-photo" alt="Ana"></span><span class="ag-name">Ana</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="batch"      title="Max Batch — Bulk Processing"><span class="ag-icon">📦</span><span class="ag-name">Max Batch</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+
+                <!-- ── LOGÍSTICA ── -->
+                <div class="ag-section-hdr">🚚 Logística</div>
+                <div class="agent-grid-item" data-agent="shipping"   title="Logística/PartYard — transporte, faturação, alfândega e pauta aduaneira"><span class="ag-icon">🚚</span><span class="ag-name">Logística</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
 
                 <!-- ── DEFESA & SEGURANÇA ── -->
                 <div class="ag-section-hdr">🎖️ Defesa &amp; Segurança</div>
@@ -651,7 +656,8 @@ const AGENT_EMOJIS = {
     email:'📧', sap:'📊', crm:'🎯', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
-    thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓', mildef:'🎖️'
+    thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓', mildef:'🎖️',
+    shipping:'🚚'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -692,7 +698,8 @@ const AGENT_NAMES = {
     batch:    'Max Batch',
     computer: 'RoboDesk',
     vessel:   'Capitão Vasco',
-    mildef:   'Cor. Rodrigues Defesa'
+    mildef:   'Cor. Rodrigues Defesa',
+    shipping: 'Logística/PartYard'
 };
 
 const AGENT_COLORS = {
@@ -712,7 +719,8 @@ const AGENT_COLORS = {
     batch:'#06b6d4',
     computer:'#22c55e',
     vessel:'#0ea5e9',
-    mildef:'#6b3fa0'
+    mildef:'#6b3fa0',
+    shipping:'#8b5cf6'
 };
 
 const AGENT_DESCRIPTIONS = {
@@ -739,6 +747,7 @@ const AGENT_DESCRIPTIONS = {
     qnap:     'Arquivo documental PartYard — pesquisa preços, códigos, invoices, licenças e contratos',
     mildef:   'Procurement militar mundial (excl. China/Rússia) — radares, SAM, AAM, artilharia, munições, bombs — contexto NATO/EU/USLI',
     crm:      'Cria oportunidades SAP B1 a partir de emails recebidos — extrai campos automaticamente e grava no CRM',
+    shipping: 'Logística/PartYard — cotações UPS/FedEx, faturação pro-forma/CMR/AWB, Incoterms 2020 e pauta aduaneira HS/CN/TARIC',
 };
 
 const AGENT_CHIPS = {
@@ -984,6 +993,16 @@ const AGENT_CHIPS = {
         '✉️ Draft email de procurement para MBDA, Raytheon e Kongsberg — RFP mísseis SAM >70km',
         '📋 Ajuda-me a preencher o Anexo 1 e Anexo 2 para o Ukraine Support Loan Instrument EU',
         '📧 Cria emails em PT+EN para todos os fornecedores de bombas guiadas (SPICE, Paveway, JDAM)',
+    ],
+    shipping: [
+        '🚚 Cota UPS: 12 kg 50×40×30 cm para Hamburgo — Express Saver vs Expedited',
+        '📋 Emite fatura pro-forma + packing list para exportação de rolamentos para o Reino Unido',
+        '🏛️ Código pautal para válvula de esfera DN50 PN40 aço inox — confirma TARIC',
+        '🏛️ O que é o 8482.10.00? Dá-me o link TARIC e as medidas activas',
+        '📑 Classifica: "turbina de motor A400M" — propõe capítulo, posição e candidatos CN',
+        '💶 IVA intracomunitário B2B para Alemanha — tratamento correcto na fatura',
+        '✈️ EUR.1 para exportação de peças aeronáuticas para Marrocos — procedimento',
+        '📦 Envio de peças Collins Aerospace EUA→PT — direitos aduaneiros e IVA de importação',
     ],
 };
 
