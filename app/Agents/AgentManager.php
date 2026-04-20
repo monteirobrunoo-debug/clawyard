@@ -75,24 +75,34 @@ class AgentManager
         // Checked FIRST because "fatura pro-forma", "IVA intracomunitário" and
         // "envio" are shipping-specific and should not fall through to
         // sales/sap/finance which also match those generic words.
+        //
+        // IMPORTANT: ambiguous acronyms (ups, atr, cmr, awb, exw, fob, cif, ddp,
+        // dap, dhl, t1, t2) are matched via regex with WORD BOUNDARIES — plain
+        // str_contains would make "ups" match "groups", "atr" match "quatro",
+        // etc., causing random messages to route to shipping.
         $shippingPriorityKeywords = [
-            'fatura pro-forma', 'pro-forma', 'packing list', 'cmr', 'awb', 'bill of lading',
+            'fatura pro-forma', 'pro-forma', 'packing list', 'bill of lading',
             'conhecimento de transporte', 'catalogar fatura', 'arquivar fatura',
             'alfandega', 'alfândega', 'aduaneir', 'incoterm',
-            ' exw', ' fob', ' cif', ' ddp', ' dap',
             'taric', 'código pautal', 'codigo pautal', 'hs code',
             'iva intracomunitário', 'iva intra-ue', 'reverse charge', 'vies',
-            'eur.1', 'eur 1', 'atr', 'despacho aduaneiro',
-            'regime aduaneiro', 'trânsito t1', 'transito t1',
+            'despacho aduaneiro', 'regime aduaneiro',
+            'trânsito t1', 'transito t1', 'trânsito t2', 'transito t2',
             'aperfeiçoamento activo', 'entreposto aduaneiro',
-            'ups', 'fedex', 'dhl', 'envio', 'envios', 'transporte', 'transportadora',
+            'envio internacional', 'envios internacionais', 'transportadora',
             'custo de envio', 'quanto custa enviar', 'shipping', 'courier', 'frete',
-            'tarifa ups', 'zona ups', 'express saver', 'expedited',
+            'tarifa ups', 'zona ups', 'ups worldwide', 'ups express', 'ups.com',
+            'express saver', 'expedited',
             'peso volumetrico', 'peso volumétrico', 'dimensional weight',
             'palete', 'pallet freight', 'carta de porte', 'guia de transporte',
         ];
         foreach ($shippingPriorityKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['shipping'];
+        }
+        // Word-bounded acronym match — avoids false positives like "groups"/"ups",
+        // "quatro"/"atr", "teatro"/"atr", "setups"/"ups".
+        if (preg_match('/\b(ups|fedex|dhl|cmr|awb|exw|fob|cif|ddp|dap|eur\.?1|atr)\b/iu', $lower)) {
+            return $this->agents['shipping'];
         }
 
         // Sales keywords
