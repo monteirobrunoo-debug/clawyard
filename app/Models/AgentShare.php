@@ -152,7 +152,7 @@ class AgentShare extends Model
             'batch'        => ['name' => 'Max Batch',          'emoji' => '📦', 'color' => '#06b6d4', 'photo' => '/images/agents/batch.png'],
             'computer'     => ['name' => 'RoboDesk',           'emoji' => '🖥️', 'color' => '#22c55e', 'photo' => null],
             'vessel'       => ['name' => 'Capitão Vasco',      'emoji' => '⚓', 'color' => '#0ea5e9', 'photo' => '/images/agents/vessel.png'],
-            // shipping/Tânia removed — UPS is a skill embedded in other agents
+            // shipping (Logística/PartYard) removed — UPS is a skill embedded in other agents
         ];
     }
 }

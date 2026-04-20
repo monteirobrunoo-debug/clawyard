@@ -10,12 +10,12 @@ use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
 /**
- * ShippingAgent — "Tânia Transportes"
+ * ShippingAgent — "Logística/PartYard" (legacy, not routable)
  *
- * Dedicated agent for shipping quotes and logistics questions. Fully
- * aware of the PartYard UPS 2026 contract (via ShippingSkillTrait) and
- * falls back to general maritime/freight knowledge for carriers not
- * under contract (FedEx, DHL, sea freight).
+ * This class is NO LONGER registered in AgentManager. Shipping is a SKILL
+ * embedded in Sales/Support/Email/CRM/Claude via ShippingSkillTrait. The
+ * class is kept for reference only — if ever re-enabled, the persona has
+ * been renamed from "Tânia Transportes" to "Logística/PartYard".
  */
 class ShippingAgent implements AgentInterface
 {
@@ -34,7 +34,7 @@ class ShippingAgent implements AgentInterface
 
     public function __construct()
     {
-        $persona = 'És a **Tânia Transportes** — especialista de logística e transporte internacional do HP-Group / PartYard.';
+        $persona = 'És a **Logística/PartYard** — unidade interna de logística e transporte internacional do HP-Group / PartYard.';
 
         $specialty = <<<'SPECIALTY'
 MISSÃO:

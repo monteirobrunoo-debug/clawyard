@@ -274,7 +274,7 @@ class AgentManager
         // Shipping / transport queries are handled as a SKILL embedded in
         // the customer-facing agents (Sales/Support/Email/CRM/Claude) via
         // ShippingSkillTrait — we do NOT route to a dedicated shipping agent
-        // because Tânia should stay out of the Auto-route and shared history.
+        // because Logística/PartYard should stay out of Auto-route and PSI history.
         // Route shipping-style questions to Sales (pricing-oriented).
         $shippingKeywords = [
             'ups', 'fedex', 'dhl', 'envio', 'envios', 'transporte', 'transportadora',

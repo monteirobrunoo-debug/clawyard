@@ -322,7 +322,7 @@ class ShippingRateService
         return <<<SKILL
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🚚 SKILL: ESTIMATIVAS DE TRANSPORTE UPS
+🚚 SKILL: LOGÍSTICA/PARTYARD — ESTIMATIVAS DE TRANSPORTE UPS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Tens acesso às tarifas PartYard (contrato {$contract}, válido até {$effective})
@@ -341,8 +341,8 @@ Se o utilizador fornecer origem, destino, peso e (opcional) dimensões,
 indica o valor estimado em EUR (excl. IVA) e avisa que é indicativo —
 exclui IVA, taxa de combustível e sobretaxas de área remota.
 
-Para cálculos precisos, existe o endpoint interno ShippingRateService::quote()
-usado pelo agente RoboTransportes (key "shipping").
+Para cálculos precisos existe o endpoint interno ShippingRateService::quote()
+— disponível a qualquer colaborador da PartYard como skill "Logística/PartYard".
 
 SKILL;
     }
