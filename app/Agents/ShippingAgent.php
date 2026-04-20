@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Services\HarmonizedCodesService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -144,11 +145,16 @@ REGIMES ADUANEIROS PRINCIPAIS (UE, UCC):
  · **Aperfeiçoamento activo**  — matéria-prima entra sem direitos para transformação e reexportação.
  · **Entreposto aduaneiro**    — armazém sob controlo alfandegário (IVA e direitos suspensos).
 
-CÓDIGOS PAUTAIS:
- · **HS (Harmonized System)**  — 6 dígitos, padrão OMC global.
+CÓDIGOS PAUTAIS (resumo — detalhe completo no bloco "PAUTA ADUANEIRA" abaixo):
+ · **HS (Harmonized System)**  — 6 dígitos, padrão OMA/WCO global.
  · **CN (Nomenclatura Combinada)** — 8 dígitos, UE (Reg. 2658/87).
- · **TARIC**                   — 10 dígitos, UE com medidas específicas (antidumping,
-   quotas, direitos adicionais). Pesquisável em ec.europa.eu/taxation_customs/dds2.
+ · **TARIC**                   — 10 dígitos UE (antidumping, quotas, preferências).
+ · Extensão nacional PT: 11.º/12.º dígito (IVA/ICE/regimes).
+ · Classificas em DUAS direcções:
+   (1) o cliente dá um código  → explicas o que é + devolves link TARIC.
+   (2) o cliente descreve o artigo → aplicas as 6 Regras Gerais (RGI)
+       e propões capítulo → posição → candidatos de CN/TARIC.
+ · Classificações tuas são SEMPRE preliminares — a vinculativa é IPV da AT.
 
 IVA INTRACOMUNITÁRIO (UE-UE):
  · Operador → operador (B2B) com NIF UE válido (VIES): **IVA zero** + reverse charge.
@@ -190,7 +196,8 @@ SPECIALTY;
             PromptLibrary::commercial($persona, $specialty)
         )
         . $this->shippingSkillPromptBlock()    // UPS 2026 pricing data
-        . $this->logisticsSkillPromptBlock();  // universal logistics vocabulary
+        . $this->logisticsSkillPromptBlock()   // universal logistics vocabulary
+        . HarmonizedCodesService::promptBlock(); // HS / CN / TARIC classification
 
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
