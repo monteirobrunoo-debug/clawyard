@@ -1210,39 +1210,134 @@ document.getElementById('toggle-panel').addEventListener('click', () => {
     actPanel.classList.toggle('collapsed', !panelOpen);
 });
 
-// ── Voice ──
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+// ── Voice input (Web Speech API) ─────────────────────────────────────────────
+// Improved UX:
+//  - Continuous dictation (doesn't stop after 1 sentence)
+//  - Interim results render live in the textarea so you see what you're saying
+//  - Does NOT auto-send — user reviews and hits Enter (safer, fewer surprises)
+//  - Remembers the last committed text so interim doesn't overwrite what you typed
+//  - Language toggle on the button: pt-PT ↔ en-US (double-click to cycle)
+//  - Toast notifications on errors instead of alert()
+// ────────────────────────────────────────────────────────────────────────────────
+
+let voiceLang         = localStorage.getItem('cy-voice-lang') || 'pt-PT';
+let voiceBaseText     = '';          // text already committed before current dictation
+let voiceFinalBuffer  = '';          // final results accumulated during this session
+
+// Mini toast helper (used for voice + other transient notifications)
+function showVoiceToast(text, type = 'info', ms = 3000) {
+    let toast = document.getElementById('cy-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'cy-toast';
+        toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:99999;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:90%;box-shadow:0 8px 30px rgba(0,0,0,.35);';
+        document.body.appendChild(toast);
+    }
+    const colours = {
+        info:   { bg: '#111827', fg: '#f3f4f6', border: '#374151' },
+        error:  { bg: '#450a0a', fg: '#fecaca', border: '#dc2626' },
+        ok:     { bg: '#052e16', fg: '#bbf7d0', border: '#16a34a' },
+    }[type] || { bg: '#111827', fg: '#f3f4f6', border: '#374151' };
+    toast.style.background   = colours.bg;
+    toast.style.color        = colours.fg;
+    toast.style.border       = '1px solid ' + colours.border;
+    toast.textContent        = text;
+    requestAnimationFrame(() => {
+        toast.style.opacity   = '1';
+        toast.style.transform = 'translateX(-50%) translateY(-6px)';
+    });
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.style.opacity   = '0';
+        toast.style.transform = 'translateX(-50%) translateY(0)';
+    }, ms);
+}
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
     recognition = new SR();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'pt-PT';
+    recognition.continuous     = true;   // keep listening after pauses
+    recognition.interimResults = true;   // stream partial transcripts
+    recognition.lang           = voiceLang;
+    recognition.maxAlternatives = 1;
+
     recognition.onresult = (e) => {
-        input.value = e.results[0][0].transcript;
-        stopRecording();
-        sendMessage();
+        let interim = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+            const r = e.results[i];
+            if (r.isFinal) voiceFinalBuffer += r[0].transcript;
+            else            interim += r[0].transcript;
+        }
+        // Build the textarea content = base + final + interim (visually marked)
+        const separator = (voiceBaseText && !voiceBaseText.endsWith(' ')) ? ' ' : '';
+        input.value = voiceBaseText + separator + voiceFinalBuffer + interim;
+        // Auto-grow textarea
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 150) + 'px';
     };
-    recognition.onerror = stopRecording;
-    recognition.onend   = stopRecording;
+
+    recognition.onerror = (e) => {
+        const msg = {
+            'not-allowed':    'Permissão do microfone negada. Abre as definições do browser e autoriza.',
+            'no-speech':      'Não ouvi nada. Tenta falar mais perto do microfone.',
+            'audio-capture':  'Sem microfone disponível no dispositivo.',
+            'network':        'Erro de rede na transcrição de voz.',
+            'aborted':        null, // user stopped — silent
+        }[e.error] || ('Erro no reconhecimento de voz: ' + e.error);
+        if (msg) showVoiceToast(msg, 'error', 4500);
+        stopRecording();
+    };
+    recognition.onend = () => stopRecording();
 }
 
 function stopRecording() {
     const btn = document.getElementById('voice-btn');
-    btn.classList.remove('active','recording');
+    if (btn) btn.classList.remove('active', 'recording');
     isRecording = false;
+    if (input.value.trim() && voiceFinalBuffer.trim()) {
+        showVoiceToast('✓ Transcrito — revê e Enter para enviar', 'ok', 2500);
+    }
 }
 
 document.getElementById('voice-btn').addEventListener('click', () => {
-    if (!recognition) { alert('Voz não suportada neste browser'); return; }
+    if (!recognition) {
+        showVoiceToast('Voz não suportada neste browser. Usa Chrome ou Edge no desktop.', 'error', 4500);
+        return;
+    }
     const btn = document.getElementById('voice-btn');
     if (isRecording) {
         recognition.stop();
-    } else {
+        return;
+    }
+    // Start: lock in whatever the user already typed
+    voiceBaseText    = input.value || '';
+    voiceFinalBuffer = '';
+    try {
         recognition.start();
-        btn.classList.add('active','recording');
+        btn.classList.add('active', 'recording');
         isRecording = true;
+        showVoiceToast('🎤 A ouvir em ' + voiceLang + ' — clica outra vez para parar', 'info', 2200);
+    } catch (err) {
+        showVoiceToast('Não consegui iniciar o microfone — recarrega a página e tenta outra vez.', 'error', 4500);
     }
 });
+
+// Double-click the voice button to toggle PT/EN
+document.getElementById('voice-btn').addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    if (!recognition) return;
+    voiceLang = (voiceLang === 'pt-PT') ? 'en-US' : 'pt-PT';
+    recognition.lang = voiceLang;
+    localStorage.setItem('cy-voice-lang', voiceLang);
+    document.getElementById('voice-btn').title = 'Voz (' + voiceLang + ') — duplo-clique alterna idioma';
+    showVoiceToast('Idioma do microfone: ' + voiceLang, 'info', 1800);
+});
+
+// Reflect current lang in tooltip on load
+(function () {
+    const btn = document.getElementById('voice-btn');
+    if (btn) btn.title = 'Voz (' + voiceLang + ') — duplo-clique alterna idioma';
+})();
 
 // ── File / Image attachment ──
 const FILE_ICONS = {
