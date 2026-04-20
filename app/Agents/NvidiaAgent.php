@@ -6,11 +6,13 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\SharedContextTrait;
 
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\WebSearchTrait;
 class NvidiaAgent implements AgentInterface
 {
     use SharedContextTrait;
 
     use LogisticsSkillTrait;
+    use WebSearchTrait;
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
     protected Client $client;
@@ -46,6 +48,7 @@ PROMPT;
 
     public function chat(string|array $message, array $history = []): string
     {
+        $message      = $this->smartAugment($message);
         $systemPrompt = $this->enrichSystemPrompt($this->systemPromptBase, $this->messageText($message));
 
         $messages = array_merge(
@@ -71,6 +74,7 @@ PROMPT;
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $message      = $this->smartAugment($message, $heartbeat);
         $systemPrompt = $this->enrichSystemPrompt($this->systemPromptBase, $this->messageText($message));
 
         $messages = array_merge(

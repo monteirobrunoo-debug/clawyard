@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\WebSearchTrait;
 use App\Services\QnapIndexService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -22,10 +23,12 @@ class QnapAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use WebSearchTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
-    protected string $searchPolicy = 'never';
+    // Conditional = falls back to web when archive doesn't have the answer.
+    protected string $searchPolicy = 'conditional';
 
     protected Client $client;
     protected QnapIndexService $indexer;
@@ -99,6 +102,9 @@ SPECIALTY;
         $context  = $this->buildContext($text);
         $augmented = $context ? $context . "\n\n---\nPergunta: " . $text : $text;
 
+        // Optionally enrich with live web search (conditional policy)
+        $augmented = $this->smartAugment($augmented);
+
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $augmented],
         ]);
@@ -128,6 +134,9 @@ SPECIALTY;
         $augmented = $context
             ? $context . "\n\n---\nPergunta do utilizador: " . $text
             : $text;
+
+        // Optionally enrich with live web search (conditional policy)
+        $augmented = $this->smartAugment($augmented, $heartbeat);
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $augmented],

@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -29,6 +30,7 @@ class ShippingAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
     use LogisticsSkillTrait;
+    use WebSearchTrait;
 
     protected string $systemPrompt = '';
 
@@ -199,6 +201,7 @@ SPECIALTY;
 
     public function chat(string|array $message, array $history = []): string
     {
+        $message  = $this->smartAugment($message);
         $messages = array_merge($history, [['role' => 'user', 'content' => $message]]);
 
         $response = $this->client->post('/v1/messages', [
@@ -219,6 +222,7 @@ SPECIALTY;
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $message  = $this->smartAugment($message, $heartbeat);
         $messages = array_merge($history, [['role' => 'user', 'content' => $message]]);
 
         $response = $this->client->post('/v1/messages', [

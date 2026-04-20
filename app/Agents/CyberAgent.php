@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -14,6 +15,7 @@ class CyberAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use WebSearchTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -74,6 +76,7 @@ SPECIALTY;
 
     public function chat(string|array $message, array $history = []): string
     {
+        $message  = $this->smartAugment($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -94,6 +97,7 @@ SPECIALTY;
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $message  = $this->smartAugment($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);

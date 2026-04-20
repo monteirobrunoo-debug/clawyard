@@ -11,6 +11,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\WebSearchTrait;
 /**
  * Kyber Agent — post-quantum email encryption assistant.
  *
@@ -26,10 +27,12 @@ class KyberAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use WebSearchTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
-    protected string $searchPolicy = 'never';
+    // Conditional = keyword-gated (looks up NIST PQC updates when asked).
+    protected string $searchPolicy = 'conditional';
 
     protected Client $client;
     protected KyberEncryptionService $kyber;
@@ -120,7 +123,8 @@ SPECIALTY;
             return $this->buildComposePayload($text);
         }
 
-        // Normal LLM conversation
+        // Normal LLM conversation — augment with web search if relevant
+        $message   = $this->smartAugment($message);
         $messages  = array_merge($history, [['role' => 'user', 'content' => $message]]);
         $response  = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
@@ -153,7 +157,8 @@ SPECIALTY;
             return $payload;
         }
 
-        // ── 3. Normal LLM streaming ───────────────────────────────────────────
+        // ── 3. Normal LLM streaming — augment with web search if relevant ────
+        $message  = $this->smartAugment($message, $heartbeat);
         $messages = array_merge($history, [['role' => 'user', 'content' => $message]]);
 
         $response = $this->client->post('/v1/messages', [

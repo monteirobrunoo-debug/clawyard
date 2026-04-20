@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\WebSearchTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
@@ -22,6 +23,7 @@ class BatchAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use WebSearchTrait;
     protected string $systemPrompt = '';
 
     // PSI bus — publish batch completion summaries so the rest of the
@@ -30,7 +32,8 @@ class BatchAgent implements AgentInterface
     protected array  $contextTags = ['batch','lote','bulk','múltiplos','processamento','lista'];
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
-    protected string $searchPolicy = 'never';
+    // Conditional = keyword-gated; batch tasks may need current suppliers/prices.
+    protected string $searchPolicy = 'conditional';
 
     protected Client $client;
 
@@ -86,6 +89,7 @@ SPECIALTY;
 
     public function chat(string|array $message, array $history = []): string
     {
+        $message  = $this->smartAugment($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -110,6 +114,7 @@ SPECIALTY;
     {
         if ($heartbeat) $heartbeat('a processar em lote 📦');
 
+        $message  = $this->smartAugment($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
