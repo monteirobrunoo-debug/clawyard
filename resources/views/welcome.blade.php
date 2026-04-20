@@ -8,9 +8,23 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+    {{-- Apply saved theme BEFORE first paint to avoid FOUC --}}
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('cy-theme');
+                if (t === 'light' || t === 'dark') {
+                    document.documentElement.setAttribute('data-theme', t);
+                }
+            } catch (e) {}
+        })();
+    </script>
+
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        /* ── DARK (default) ── */
         :root {
             --green: #76b900;
             --green-hover: #8fd400;
@@ -20,10 +34,53 @@
             --border: #222;
             --border2: #2a2a2a;
             --text: #e5e5e5;
+            --text-strong: #ffffff;
             --muted: #555;
             --muted2: #444;
             --agent-color: #76b900;
+
+            /* bubble + content colors */
+            --bubble-user-bg: #1a2a0a;
+            --bubble-user-border: #2a4a0a;
+            --bubble-ai-bg: #111;
+            --bubble-ai-border: #2a2a2a;
+            --code-bg: #0a0a0a;
+            --code-border: #2a2a2a;
+            --link: #76b900;
         }
+
+        /* ── LIGHT ── */
+        :root[data-theme="light"] {
+            --green: #5a9300;
+            --green-hover: #6ead00;
+            --bg: #f7f8fa;
+            --bg2: #ffffff;
+            --bg3: #f1f3f5;
+            --border: #e5e7eb;
+            --border2: #d1d5db;
+            --text: #1f2937;
+            --text-strong: #0f172a;
+            --muted: #6b7280;
+            --muted2: #9ca3af;
+            --agent-color: #5a9300;
+
+            --bubble-user-bg: #f1f8e4;
+            --bubble-user-border: #c5e08a;
+            --bubble-ai-bg: #ffffff;
+            --bubble-ai-border: #e5e7eb;
+            --code-bg: #f4f4f5;
+            --code-border: #e5e7eb;
+            --link: #1d6f00;
+        }
+
+        body, header, .main, #activity-panel, .chat-area, input, textarea, button { transition: background 0.2s, color 0.2s, border-color 0.2s; }
+
+        /* Theme toggle icon swap — only one visible at a time */
+        #theme-toggle .theme-icon-dark, #theme-toggle .theme-icon-light { display: none; line-height: 1; }
+        :root[data-theme="light"] #theme-toggle .theme-icon-dark { display: inline; }
+        :root[data-theme="dark"]  #theme-toggle .theme-icon-light,
+        :root:not([data-theme])   #theme-toggle .theme-icon-light { display: inline; }
+        #theme-toggle:hover { color: var(--text); border-color: var(--muted); transform: rotate(20deg); }
 
         body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 
@@ -476,6 +533,10 @@
         @if(Auth::user()->isAdmin())
         <a href="/admin/users" title="Admin" style="background:var(--bg3);border:1px solid #ff4444;color:#ff6666;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">⚙️ Admin</a>
         @endif
+        <button id="theme-toggle" title="Alternar tema dark/light" aria-label="Toggle theme" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 10px;border-radius:8px;font-size:14px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;width:32px;height:32px;">
+            <span class="theme-icon-light">🌙</span>
+            <span class="theme-icon-dark">☀️</span>
+        </button>
         <button id="toggle-panel" title="Toggle activity panel">⚡</button>
     </div>
 </header>
@@ -3040,6 +3101,24 @@ function updateShareBtn() {
     if (manage) manage.style.display = 'block';
 }
 updateShareBtn();
+
+// ── THEME TOGGLE (dark/light) ─────────────────────────────
+(function () {
+    const root = document.documentElement;
+    const btn  = document.getElementById('theme-toggle');
+    if (!btn) return;
+
+    // Default to dark if nothing set yet
+    if (!root.hasAttribute('data-theme')) root.setAttribute('data-theme', 'dark');
+
+    btn.addEventListener('click', () => {
+        const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        root.setAttribute('data-theme', next);
+        try { localStorage.setItem('cy-theme', next); } catch (e) {}
+        // Re-colour agent share button (which uses --agent-color) after theme swap
+        try { updateShareBtn(); } catch (e) {}
+    });
+})();
 </script>
 
 <!-- ── SHARE AGENT MODAL ── -->
