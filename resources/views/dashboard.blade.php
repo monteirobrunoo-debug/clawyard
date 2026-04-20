@@ -406,6 +406,7 @@
         <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
         <a href="/patents/library" class="nav-link">🏛️ Patents</a>
         <a href="/reports" class="nav-link">📋 Reports</a>
+        <a href="/stats" class="nav-link">📊 Stats</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
         <a href="/shares" class="nav-link" style="color:#60a5fa;border-color:#1e3a5f;background:#0a1a2e">🔗 Shared Agents</a>
         @if(Auth::user()->isAdmin())

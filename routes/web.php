@@ -179,6 +179,77 @@ Route::get('/chat', function () {
     return view('welcome');
 })->middleware(['auth'])->name('chat');
 
+// Usage analytics — personal dashboard showing which agents the user
+// leans on most, activity patterns and message volume. Pure read-only,
+// scoped to the current user's conversations via the u{userId}_ session
+// prefix convention (same approach the rest of the app uses).
+Route::get('/stats', function () {
+    $userId = auth()->id();
+    $prefix = 'u' . $userId . '_';
+
+    $conv = \App\Models\Conversation::query()
+        ->where('session_id', 'like', $prefix . '%')
+        ->whereHas('messages');
+
+    $totalConv = (clone $conv)->count();
+    $totalMsg  = (clone $conv)
+        ->join('messages', 'conversations.id', '=', 'messages.conversation_id')
+        ->count();
+
+    // Top agents by conversation count
+    $byAgent = (clone $conv)
+        ->selectRaw('agent, COUNT(*) as conv_count')
+        ->groupBy('agent')
+        ->orderByDesc('conv_count')
+        ->limit(10)
+        ->get();
+
+    // Daily activity (last 30 days) — counts conversations with at least
+    // one message updated in that window, keyed by date.
+    $daily = (clone $conv)
+        ->where('updated_at', '>=', now()->subDays(30))
+        ->selectRaw("DATE(updated_at) as day, COUNT(*) as c")
+        ->groupBy('day')
+        ->orderBy('day')
+        ->get()
+        ->keyBy('day');
+
+    // Fill gaps with zero so the chart shows a continuous line.
+    $days = [];
+    for ($i = 29; $i >= 0; $i--) {
+        $d = now()->subDays($i)->toDateString();
+        $days[] = ['day' => $d, 'count' => (int) ($daily[$d]->c ?? 0)];
+    }
+
+    // Hour-of-day histogram (all time, UTC from DB)
+    $hourly = \App\Models\Message::query()
+        ->join('conversations', 'messages.conversation_id', '=', 'conversations.id')
+        ->where('conversations.session_id', 'like', $prefix . '%')
+        ->where('messages.role', 'user')
+        ->selectRaw('CAST(strftime("%H", messages.created_at) AS INTEGER) as hour, COUNT(*) as c')
+        ->groupBy('hour')
+        ->orderBy('hour')
+        ->get()
+        ->keyBy('hour');
+
+    $hourBuckets = [];
+    for ($h = 0; $h < 24; $h++) {
+        $hourBuckets[] = ['hour' => $h, 'count' => (int) ($hourly[$h]->c ?? 0)];
+    }
+
+    $avgMsgs = $totalConv > 0 ? round($totalMsg / $totalConv, 1) : 0;
+
+    return view('agents.stats', [
+        'totalConv'   => $totalConv,
+        'totalMsg'    => $totalMsg,
+        'avgMsgs'     => $avgMsgs,
+        'byAgent'     => $byAgent,
+        'agentByKey'  => \App\Services\AgentCatalog::byKey(),
+        'days'        => $days,
+        'hourBuckets' => $hourBuckets,
+    ]);
+})->middleware(['auth', 'verified'])->name('stats');
+
 // Agent profile — per-agent landing page with description, stats, starters
 // and recent conversations. Provides a deeper entry point than the dashboard
 // card (which just drops you into /chat). Linked from the card's long-press
