@@ -267,7 +267,7 @@ SPECIALTY;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($augmented),
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -321,7 +321,7 @@ SPECIALTY;
             'headers' => $this->headersForMessage($augmented),
             'stream'  => true,
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $this->sanitizeForApi($this->enrichSystemPrompt($this->systemPrompt)),
@@ -366,7 +366,7 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'engineer'; }
-    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-7'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
 
     /**
      * Re-encode every string inside the message tree as valid UTF-8 so

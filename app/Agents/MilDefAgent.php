@@ -282,7 +282,7 @@ SYSPROMPT;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 8192,
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
@@ -311,7 +311,7 @@ SYSPROMPT;
             'headers' => $this->headersForMessage($finalMessage),
             'stream'  => true,
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-7'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 8192,
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
                 'messages'   => $messages,
@@ -355,5 +355,5 @@ SYSPROMPT;
     }
 
     public function getName(): string  { return 'mildef'; }
-    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-7'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
 }

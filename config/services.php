@@ -46,8 +46,9 @@ return [
         // Default (fast, high-volume agents: Sales, Support, Email, CRM, Claude chat…)
         'model'       => env('ANTHROPIC_MODEL',        'claude-sonnet-4-6'),
         // Deep reasoning tier — used by Thinking, Briefing, Engineer, Patent, Finance, MilDef.
-        // Set ANTHROPIC_MODEL_OPUS in .env to override per environment.
-        'model_opus'  => env('ANTHROPIC_MODEL_OPUS',   'claude-opus-4-7'),
+        // Default: claude-opus-4-5 (known-good). Set ANTHROPIC_MODEL_OPUS in
+        // .env to upgrade to claude-opus-4-7 once it is generally available.
+        'model_opus'  => env('ANTHROPIC_MODEL_OPUS',   'claude-opus-4-5'),
         // Ultra-fast tier for suggestions/smart-chips. Keep on haiku.
         'model_haiku' => env('ANTHROPIC_MODEL_HAIKU',  'claude-haiku-4-6'),
     ],
