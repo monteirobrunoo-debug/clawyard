@@ -115,7 +115,7 @@
 
 <header>
     <a href="/dashboard" class="back-btn">←</a>
-    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/setq-logo.svg" alt="SETQ.AI" style="height:32px;filter:drop-shadow(0 0 1px rgba(255,255,255,0.1));"></a>
+    <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/clawyard-logo.svg" alt="ClawYard" style="height:36px;filter:drop-shadow(0 0 4px rgba(118,185,0,0.3));"></a>
     <span style="font-size:13px;color:#555;">/ Descobertas & Patentes</span>
     <div class="hdr-right">
         <a href="/reports" class="btn">📋 Relatórios</a>
