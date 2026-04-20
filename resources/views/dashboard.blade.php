@@ -182,7 +182,7 @@
 <div class="hero">
     <p class="hero-label">HP-Group · PartYard Marine · PartYard Military</p>
     <h1>Choose your <span>Agent</span></h1>
-    <p>© PartYard/Setq.AI Rights reserved 2026 — 14 specialised agents ready to help</p>
+    <p>© PartYard/Setq.AI Rights reserved 2026 — {{ $agentCount ?? 27 }} specialised agents ready to help</p>
 </div>
 
 <p class="section-title">Available Agents</p>

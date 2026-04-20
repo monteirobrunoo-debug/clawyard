@@ -151,7 +151,11 @@ Route::get('/sap-diag', function () {
 
 // Dashboard — agent selector portal
 Route::get('/dashboard', function () {
-    return view('dashboard');
+    // Count registered specialist agents dynamically so the hero line
+    // never goes stale when we add/remove agents in AgentManager.
+    // Excludes the orchestrator (it's a meta-agent, not a specialist).
+    $agentCount = count((new \App\Agents\AgentManager())->available()) - 1;
+    return view('dashboard', ['agentCount' => $agentCount]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 // Chat — with optional agent pre-selected
