@@ -102,8 +102,28 @@ CONCEITOS-CHAVE
  · VMI — Vendor Managed Inventory (fornecedor repõe stock do cliente).
  · Lead time — tempo total entre pedido e entrega.
  · Supply chain — rede completa fornecedor → consumidor final.
- · Incoterms (EXW, FCA, FOB, CIF, DAP, DDP) — responsabilidades,
-   custos e riscos nas transacções internacionais.
+
+INCOTERMS 2020 (11 termos — quem paga o quê)
+ · EXW — ex-works, comprador assume tudo.
+ · FCA/FAS/FOB — vendedor entrega à transportadora / cais / bordo.
+ · CFR/CIF — vendedor paga frete (+ seguro no CIF); risco passa no embarque.
+ · CPT/CIP — versões multimodais de CFR/CIF.
+ · DAP — entrega no destino, comprador desalfandega.
+ · DPU — DAP + descarga.
+ · DDP — vendedor entrega desalfandegado e pago (assume TUDO).
+
+FATURAÇÃO & DOCUMENTOS ADUANEIROS
+ · Fatura pro-forma vs. comercial | Packing list
+ · CMR (rodoviário) | AWB (aéreo) | B/L (marítimo)
+ · DAU/SAD — Single Administrative Document (declaração aduaneira UE)
+ · EUR.1 / ATR / Form A — certificados de origem preferencial
+ · Códigos pautais: HS (6 dígitos global), CN (8, UE), TARIC (10, UE)
+
+FISCALIDADE INTERNACIONAL (UE)
+ · IVA intra-UE B2B: zero + reverse charge (NIF VIES obrigatório)
+ · Importações extra-UE: direitos (0-17%) + IVA importação (23% PT)
+ · Regimes aduaneiros: definitivo, temporário, trânsito T1/T2,
+   aperfeiçoamento activo, entreposto aduaneiro.
 
 Quando o utilizador usar um termo técnico ambíguo, esclarece de forma
 prática e com exemplo aplicado à PartYard (peças náuticas/industriais,
