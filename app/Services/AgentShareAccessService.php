@@ -447,8 +447,8 @@ class AgentShareAccessService
                     $msg->to($email)
                         ->subject("[ClawYard] Código de acesso — {$agentName}")
                         ->from(
-                            config('mail.from.address', 'no-reply@partyard.eu'),
-                            config('mail.from.name', 'ClawYard')
+                            config('mail.from.address', 'no-reply@hp-group.org'),
+                            config('mail.from.name', 'HP-Group / ClawYard')
                         );
                 }
             );
@@ -487,8 +487,8 @@ class AgentShareAccessService
                     $msg->to($notifyEmail)
                         ->subject($subject)
                         ->from(
-                            config('mail.from.address', 'no-reply@partyard.eu'),
-                            config('mail.from.name', 'ClawYard')
+                            config('mail.from.address', 'no-reply@hp-group.org'),
+                            config('mail.from.name', 'HP-Group / ClawYard')
                         );
                 });
             } catch (\Throwable $e) {

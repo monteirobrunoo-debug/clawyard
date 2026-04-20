@@ -42,8 +42,8 @@ class EmailSendController extends Controller
             $cc      = $request->input('cc');
             $subject = $request->input('subject');
             $body    = $request->input('body');
-            $from    = config('mail.from.address', 'info@clawyard.com');
-            $name    = config('mail.from.name', 'ClawYard');
+            $from    = config('mail.from.address', 'no-reply@hp-group.org');
+            $name    = config('mail.from.name', 'HP-Group / ClawYard');
 
             // ── Generate-key path (compose card) — fresh keypair per email ──
             if ($request->boolean('generate_key', false)) {
