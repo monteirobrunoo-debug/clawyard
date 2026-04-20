@@ -66,9 +66,7 @@ GENERAL / REASONING / AUTOMATION
 - thinking: extended thinking — multi-step reasoning, deep analysis, trade-off decisions
 - batch:    bulk/batch processing — multiple items, lists, parallel tasks
 - computer: web/desktop automation — browser control, form filling, portal navigation (RoboDesk)
-
-NOTE: UPS/FedEx shipping quotes are a SKILL embedded in sales/support/email/crm/claude —
-do NOT route to a dedicated shipping agent; send shipping questions to "sales" instead.
+- shipping: Logística/PartYard — UPS/FedEx quotes, invoice cataloguing, customs (Incoterms, TARIC, VIES, DAU/SAD, IVA intra-UE)
 
 ROUTING RULES:
 1. Return ONLY a compact JSON array of agent NAMES (lowercase, exactly as listed above).
@@ -167,12 +165,6 @@ SPECIALTY;
     {
         $names = array_map(
             fn($n) => strtolower(trim((string) $n)),
-            $names
-        );
-        // Back-compat remap: 'shipping' is no longer a routable agent —
-        // it's a skill embedded in sales/support/email/crm/claude.
-        $names = array_map(
-            fn($n) => $n === 'shipping' ? 'sales' : $n,
             $names
         );
         $names = array_values(array_unique(array_filter($names)));
@@ -384,7 +376,7 @@ SPECIALTY;
             'computer'     => '🖥️ RoboDesk',
             'vessel'       => '⚓ Capitão Vasco',
             'mildef'       => '🎖️ Cor. Rodrigues — Defesa',
-            // shipping intentionally omitted — UPS is a skill, not an agent
+            'shipping'     => '🚚 Logística/PartYard',
         ];
     }
 

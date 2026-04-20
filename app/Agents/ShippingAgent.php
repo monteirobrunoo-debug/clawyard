@@ -11,12 +11,17 @@ use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
 /**
- * ShippingAgent — "Logística/PartYard" (legacy, not routable)
+ * ShippingAgent — "Logística/PartYard"
  *
- * This class is NO LONGER registered in AgentManager. Shipping is a SKILL
- * embedded in Sales/Support/Email/CRM/Claude via ShippingSkillTrait. The
- * class is kept for reference only — if ever re-enabled, the persona has
- * been renamed from "Tânia Transportes" to "Logística/PartYard".
+ * Dedicated logistics agent for the HP-Group / PartYard. Three pillars:
+ *   (A) Transport quotes (UPS 2026 contract, FedEx TBD)
+ *   (B) Invoice cataloguing (pro-forma, commercial, CMR, AWB, B/L, DAU/SAD)
+ *   (C) Customs & fiscal (Incoterms 2020, TARIC/CN/HS, IVA intra-UE,
+ *       regimes aduaneiros UE UCC 952/2013)
+ *
+ * Also exposes the UPS shipping skill as a TRAIT embedded in Sales/
+ * Support/Email/CRM/Claude so even non-shipping agents can answer basic
+ * transport-price questions on their own.
  */
 class ShippingAgent implements AgentInterface
 {

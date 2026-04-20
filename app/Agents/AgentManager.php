@@ -40,10 +40,12 @@ class AgentManager
             // back to ClaudeAgent. Registering it fixes the orchestrator and
             // lets the /briefing route resolve a real agent instance.
             'briefing'  => new BriefingAgent(),
-            // 'shipping' intentionally NOT registered as a routable agent.
-            // UPS shipping is available as a SKILL (see ShippingSkillTrait)
-            // embedded in Sales/Support/Email/CRM/Claude. It should not
-            // appear in Auto-route or in the shared PSI history.
+            // Logística/PartYard — dedicated logistics agent. Handles UPS
+            // pricing, invoice cataloguing, customs/fiscal questions.
+            // The skill is ALSO embedded in Sales/Support/Email/CRM/Claude
+            // via ShippingSkillTrait, so even non-shipping conversations
+            // can answer basic transport questions.
+            'shipping'  => new ShippingAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
@@ -68,6 +70,30 @@ class AgentManager
     public function route(string $message): AgentInterface
     {
         $lower = strtolower($message);
+
+        // Logística/PartYard — transport quotes + invoice cataloguing + customs/fiscal
+        // Checked FIRST because "fatura pro-forma", "IVA intracomunitário" and
+        // "envio" are shipping-specific and should not fall through to
+        // sales/sap/finance which also match those generic words.
+        $shippingPriorityKeywords = [
+            'fatura pro-forma', 'pro-forma', 'packing list', 'cmr', 'awb', 'bill of lading',
+            'conhecimento de transporte', 'catalogar fatura', 'arquivar fatura',
+            'alfandega', 'alfândega', 'aduaneir', 'incoterm',
+            ' exw', ' fob', ' cif', ' ddp', ' dap',
+            'taric', 'código pautal', 'codigo pautal', 'hs code',
+            'iva intracomunitário', 'iva intra-ue', 'reverse charge', 'vies',
+            'eur.1', 'eur 1', 'atr', 'despacho aduaneiro',
+            'regime aduaneiro', 'trânsito t1', 'transito t1',
+            'aperfeiçoamento activo', 'entreposto aduaneiro',
+            'ups', 'fedex', 'dhl', 'envio', 'envios', 'transporte', 'transportadora',
+            'custo de envio', 'quanto custa enviar', 'shipping', 'courier', 'frete',
+            'tarifa ups', 'zona ups', 'express saver', 'expedited',
+            'peso volumetrico', 'peso volumétrico', 'dimensional weight',
+            'palete', 'pallet freight', 'carta de porte', 'guia de transporte',
+        ];
+        foreach ($shippingPriorityKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['shipping'];
+        }
 
         // Sales keywords
         $salesKeywords = ['price', 'quote', 'buy', 'purchase', 'order', 'cost', 'preco', 'cotacao', 'comprar', 'encomenda'];
@@ -271,20 +297,9 @@ class AgentManager
             if (str_contains($lower, $kw)) return $this->agents['computer'];
         }
 
-        // Shipping / transport queries are handled as a SKILL embedded in
-        // the customer-facing agents (Sales/Support/Email/CRM/Claude) via
-        // ShippingSkillTrait — we do NOT route to a dedicated shipping agent
-        // because Logística/PartYard should stay out of Auto-route and PSI history.
-        // Route shipping-style questions to Sales (pricing-oriented).
-        $shippingKeywords = [
-            'ups', 'fedex', 'dhl', 'envio', 'envios', 'transporte', 'transportadora',
-            'custo de envio', 'quanto custa enviar', 'shipping', 'courier', 'frete',
-            'tarifa ups', 'zona ups', 'express saver', 'expedited',
-            'peso volumetrico', 'dimensional weight', 'palete', 'pallet freight',
-        ];
-        foreach ($shippingKeywords as $kw) {
-            if (str_contains($lower, $kw)) return $this->agents['sales'];
-        }
+        // (Logística/PartYard keywords are checked at the top of this method
+        //  so they take priority over generic "fatura"/"stock"/"invoice"/"IVA"
+        //  matches that would otherwise route to SAP/Finance.)
 
         return $this->agents['claude'];
     }

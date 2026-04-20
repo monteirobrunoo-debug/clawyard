@@ -217,8 +217,7 @@
         ['key' => 'thinking',    'name' => 'Prof. Deep Thought',    'emoji' => '🧠', 'role' => 'Extended thinking — complex multi-step reasoning and deep analysis',                    'color' => '#a855f7'],
         ['key' => 'batch',       'name' => 'Max Batch',             'emoji' => '📦', 'role' => 'Batch processing — run multiple tasks in parallel with async queues',                   'color' => '#06b6d4'],
         ['key' => 'mildef',      'name' => 'Cor. Rodrigues Defesa', 'emoji' => '🎖️', 'role' => 'Military procurement — worldwide defence suppliers excl. China/Russia, NATO/EU/USLI context', 'color' => '#6b3fa0'],
-        // Logística/PartYard (UPS) removed as standalone agent — it's an
-        // embedded skill in Sales/Support/Email/CRM/Claude via ShippingSkillTrait.
+        ['key' => 'shipping',    'name' => 'Logística/PartYard',    'emoji' => '🚚', 'role' => 'Transporte UPS 2026, catalogação de faturas, alfândega (Incoterms, TARIC, VIES, DAU/SAD, IVA intra-UE)', 'color' => '#8b5cf6'],
     ];
     @endphp
 
