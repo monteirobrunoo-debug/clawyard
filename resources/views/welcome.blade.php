@@ -1155,6 +1155,15 @@ if (urlAgent && agentSelect.querySelector(`option[value="${urlAgent}"]`)) {
     agentSelect.value = urlAgent;
 }
 
+// ── Session from URL — restores a specific conversation when coming
+// from "Continue where you left off" on the dashboard. We pin the client
+// session id into localStorage BEFORE getSessionId() runs so the existing
+// history-restore path picks it up instead of spawning a fresh session.
+const urlSession = new URLSearchParams(window.location.search).get('session');
+if (urlAgent && urlSession && /^[A-Za-z0-9_\-]+$/.test(urlSession)) {
+    localStorage.setItem('cyw_session_' + urlAgent, urlSession);
+}
+
 // Init on page load (after URL agent is applied)
 const initAgent = agentSelect.value || 'auto';
 selectedAgent = initAgent;

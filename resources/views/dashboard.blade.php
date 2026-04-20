@@ -500,8 +500,16 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                         }
                     }
                 }
+                // DB session_id is `u{userId}_cyw_TIMESTAMP_RAND`; welcome.blade.php
+                // stores only the `cyw_...` part in localStorage. Strip the prefix
+                // so the chat view can re-pin this exact session and auto-load
+                // history — making the card a true "continue" action, not a
+                // read-only history view.
+                $clientSid = preg_replace('/^u\d+_/', '', (string) $conv->session_id);
+                $chatUrl   = '/chat?agent=' . urlencode($conv->agent ?: 'auto')
+                           . '&session=' . urlencode($clientSid);
             @endphp
-            <a href="{{ route('conversations.show', $conv->id) }}" class="recent-card" style="--card-color: {{ $color }}">
+            <a href="{{ $chatUrl }}" class="recent-card" style="--card-color: {{ $color }}">
                 <div class="recent-avatar">
                     @if($imgPath)
                         <img src="{{ $imgPath }}" alt="{{ $label }}">
