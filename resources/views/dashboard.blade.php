@@ -151,6 +151,60 @@
         }
         .search-clear.visible { display: flex; }
 
+        /* ── RECENT CONVERSATIONS STRIP ── */
+        .recent-wrap {
+            max-width: 1280px; margin: 40px auto 0; padding: 0 32px;
+        }
+        .recent-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .recent-title {
+            font-size: 13px; font-weight: 700; color: var(--text-strong);
+            letter-spacing: 0.3px;
+        }
+        .recent-view-all {
+            font-size: 12px; color: var(--muted2); text-decoration: none;
+            padding: 4px 12px; border: 1px solid var(--border2); border-radius: 20px;
+            transition: all 0.15s;
+        }
+        .recent-view-all:hover { color: var(--text); border-color: var(--muted); }
+        .recent-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 12px;
+        }
+        .recent-card {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 14px;
+            background: var(--bg2); border: 1px solid var(--border); border-radius: 14px;
+            text-decoration: none; color: inherit;
+            transition: all 0.2s;
+            border-left: 3px solid var(--card-color, var(--green));
+        }
+        .recent-card:hover {
+            transform: translateX(3px);
+            border-color: color-mix(in srgb, var(--card-color, var(--green)) 35%, transparent);
+            box-shadow: 0 4px 16px color-mix(in srgb, var(--card-color, var(--green)) 12%, transparent);
+        }
+        .recent-avatar {
+            width: 42px; height: 42px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 20px; background: var(--bg3);
+            border: 1px solid var(--border2); overflow: hidden; flex-shrink: 0;
+        }
+        .recent-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .recent-body { flex: 1; min-width: 0; }
+        .recent-agent-name {
+            font-size: 13px; font-weight: 700; color: var(--text-strong);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .recent-meta {
+            font-size: 11px; color: var(--muted);
+            margin-top: 2px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
         /* ── CATEGORIES ── */
         .categories-wrap { max-width: 1280px; margin: 40px auto 0; padding: 0 32px 60px; }
         .category-section { margin-bottom: 44px; }
@@ -281,6 +335,9 @@
             .nav-link { font-size: 11px; padding: 4px 9px; }
             .hero { padding: 32px 16px 20px; }
             .hero h1 { font-size: 26px; }
+            .recent-wrap { padding: 0 16px; margin-top: 26px; }
+            .recent-strip { grid-template-columns: 1fr; }
+            .recent-card { padding: 10px 12px; }
             .categories-wrap { padding: 0 16px 40px; margin-top: 26px; }
             .category-section { margin-bottom: 32px; }
             .agents-grid { gap: 12px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
@@ -382,7 +439,56 @@ $grouped = [];
 foreach ($categories as $catKey => $catMeta) {
     $grouped[$catKey] = array_values(array_filter($agents, fn($a) => $a['category'] === $catKey));
 }
+
+// Quick lookup by key for the recent-conversations strip
+$agentByKey = [];
+foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 @endphp
+
+@if(!empty($recentConversations) && $recentConversations->count() > 0)
+<div class="recent-wrap">
+    <div class="recent-header">
+        <span class="recent-title">💬 Continue where you left off</span>
+        <a href="/conversations" class="recent-view-all">View all →</a>
+    </div>
+    <div class="recent-strip">
+        @foreach($recentConversations as $conv)
+            @php
+                $agent   = $agentByKey[$conv->agent] ?? null;
+                $label   = $agent['name'] ?? ucfirst($conv->agent ?: 'Chat');
+                $emoji   = $agent['emoji'] ?? '💬';
+                $color   = $agent['color'] ?? '#76b900';
+                $agentK  = $agent['key'] ?? $conv->agent;
+                $imgPath = null;
+                if ($agentK) {
+                    foreach (['.png', '.jpg', '.jpeg', '.webp'] as $ext) {
+                        if (file_exists(public_path('images/agents/' . $agentK . $ext))) {
+                            $imgPath = '/images/agents/' . $agentK . $ext;
+                            break;
+                        }
+                    }
+                }
+            @endphp
+            <a href="{{ route('conversations.show', $conv->id) }}" class="recent-card" style="--card-color: {{ $color }}">
+                <div class="recent-avatar">
+                    @if($imgPath)
+                        <img src="{{ $imgPath }}" alt="{{ $label }}">
+                    @else
+                        {{ $emoji }}
+                    @endif
+                </div>
+                <div class="recent-body">
+                    <div class="recent-agent-name">{{ $label }}</div>
+                    <div class="recent-meta">
+                        {{ $conv->messages_count }} {{ $conv->messages_count === 1 ? 'mensagem' : 'mensagens' }}
+                        · {{ $conv->updated_at->diffForHumans() }}
+                    </div>
+                </div>
+            </a>
+        @endforeach
+    </div>
+</div>
+@endif
 
 <div class="categories-wrap" id="categoriesWrap">
 

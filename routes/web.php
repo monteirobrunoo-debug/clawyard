@@ -155,7 +155,23 @@ Route::get('/dashboard', function () {
     // never goes stale when we add/remove agents in AgentManager.
     // Excludes the orchestrator (it's a meta-agent, not a specialist).
     $agentCount = count((new \App\Agents\AgentManager())->available()) - 1;
-    return view('dashboard', ['agentCount' => $agentCount]);
+
+    // Recent conversations for "Continue where you left off" strip.
+    // Conversations are scoped by session_id prefix "u{userId}_" — same
+    // convention used in ConversationController.
+    $userId = auth()->id();
+    $recentConversations = \App\Models\Conversation::query()
+        ->where('session_id', 'like', 'u' . $userId . '_%')
+        ->whereHas('messages')
+        ->withCount('messages')
+        ->orderBy('updated_at', 'desc')
+        ->limit(5)
+        ->get();
+
+    return view('dashboard', [
+        'agentCount'          => $agentCount,
+        'recentConversations' => $recentConversations,
+    ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 // Chat — with optional agent pre-selected
