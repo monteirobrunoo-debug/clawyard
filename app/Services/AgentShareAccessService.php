@@ -433,29 +433,34 @@ class AgentShareAccessService
 
     private function sendOtpEmail(AgentShare $share, string $email, string $code): void
     {
-        try {
-            $agentMeta = AgentShare::agentMeta()[$share->agent_key] ?? ['name' => $share->agent_key];
-            $agentName = $agentMeta['name'] ?? $share->agent_key;
-            $minutes   = self::OTP_TTL_MINUTES;
+        $agentMeta = AgentShare::agentMeta()[$share->agent_key] ?? ['name' => $share->agent_key];
+        $agentName = $agentMeta['name'] ?? $share->agent_key;
+        $minutes   = self::OTP_TTL_MINUTES;
 
-            Mail::raw(
-                "Código de acesso ao agente {$agentName} (ClawYard):\n\n" .
-                "   {$code}\n\n" .
-                "Este código é válido por {$minutes} minutos e só pode ser usado uma vez.\n" .
-                "Se não foste tu a pedir, ignora este email — ninguém consegue entrar sem o código.\n\n" .
-                "— ClawYard / PartYard",
-                function ($msg) use ($email, $agentName) {
-                    $msg->to($email)
-                        ->subject("[ClawYard] Código de acesso — {$agentName}")
-                        ->from(
-                            config('mail.from.address', 'no-reply@hp-group.org'),
-                            config('mail.from.name', 'HP-Group / ClawYard')
-                        );
-                }
-            );
-        } catch (\Throwable $e) {
-            Log::warning('AgentShareAccess: OTP email failed — ' . $e->getMessage());
-        }
+        $body = "Código de acesso ao agente {$agentName} (ClawYard):\n\n"
+              . "   {$code}\n\n"
+              . "Este código é válido por {$minutes} minutos e só pode ser usado uma vez.\n"
+              . "Se não foste tu a pedir, ignora este email — ninguém consegue entrar sem o código.\n\n"
+              . "— ClawYard / PartYard";
+
+        $subject  = "[ClawYard] Código de acesso — {$agentName}";
+        $fromAddr = config('mail.from.address', 'no-reply@hp-group.org');
+        $fromName = config('mail.from.name', 'HP-Group / ClawYard');
+
+        // Defer the SMTP handshake until AFTER the HTTP response has been
+        // flushed to the browser. The OTP code is already in the DB, so the
+        // frontend can advance to the "check your inbox" screen instantly;
+        // the email actually leaves the server a few seconds later on the
+        // same PHP worker — no queue worker required.
+        dispatch(function () use ($email, $body, $subject, $fromAddr, $fromName) {
+            try {
+                Mail::raw($body, function ($msg) use ($email, $subject, $fromAddr, $fromName) {
+                    $msg->to($email)->subject($subject)->from($fromAddr, $fromName);
+                });
+            } catch (\Throwable $e) {
+                Log::warning('AgentShareAccess: OTP email failed — ' . $e->getMessage());
+            }
+        })->afterResponse();
     }
 
     private function notifyOwner(AgentShare $share, string $email, Request $request, string $event): void
@@ -483,25 +488,47 @@ class AgentShareAccessService
 
         $notifyEmail = $share->notify_email ?: optional($share->creator)->email;
         if ($notifyEmail) {
-            try {
-                Mail::raw($body, function ($msg) use ($notifyEmail, $subject) {
-                    $msg->to($notifyEmail)
-                        ->subject($subject)
-                        ->from(
-                            config('mail.from.address', 'no-reply@hp-group.org'),
-                            config('mail.from.name', 'HP-Group / ClawYard')
-                        );
-                });
-            } catch (\Throwable $e) {
-                Log::warning('AgentShareAccess: owner email failed — ' . $e->getMessage());
-            }
+            $fromAddr = config('mail.from.address', 'no-reply@hp-group.org');
+            $fromName = config('mail.from.name', 'HP-Group / ClawYard');
+            dispatch(function () use ($notifyEmail, $subject, $body, $fromAddr, $fromName) {
+                try {
+                    Mail::raw($body, function ($msg) use ($notifyEmail, $subject, $fromAddr, $fromName) {
+                        $msg->to($notifyEmail)->subject($subject)->from($fromAddr, $fromName);
+                    });
+                } catch (\Throwable $e) {
+                    Log::warning('AgentShareAccess: owner email failed — ' . $e->getMessage());
+                }
+            })->afterResponse();
         }
 
         if ($share->notify_whatsapp) {
-            $this->sendWhatsAppNotification(
-                $share->notify_whatsapp,
-                "🔔 *ClawYard* — {$email} abriu *{$agentName}*\n{$when} · IP {$ip} ({$country})\nRevogar: {$revokeUrl}"
-            );
+            $waTo   = $share->notify_whatsapp;
+            $waText = "🔔 *ClawYard* — {$email} abriu *{$agentName}*\n{$when} · IP {$ip} ({$country})\nRevogar: {$revokeUrl}";
+            // Inline the Graph API call so the deferred closure stays
+            // serialisable (no captured $this with its Guzzle client).
+            $token   = config('services.whatsapp.token');
+            $phoneId = config('services.whatsapp.phone_id');
+            if ($token && $phoneId) {
+                dispatch(function () use ($waTo, $waText, $token, $phoneId) {
+                    try {
+                        $client = new \GuzzleHttp\Client(['base_uri' => 'https://graph.facebook.com/v18.0/', 'timeout' => 8]);
+                        $client->post("{$phoneId}/messages", [
+                            'headers' => [
+                                'Authorization' => "Bearer {$token}",
+                                'Content-Type'  => 'application/json',
+                            ],
+                            'json' => [
+                                'messaging_product' => 'whatsapp',
+                                'to'                => preg_replace('/[^\d+]/', '', $waTo),
+                                'type'              => 'text',
+                                'text'              => ['body' => $waText],
+                            ],
+                        ]);
+                    } catch (\Throwable $e) {
+                        Log::warning('AgentShareAccess: WhatsApp notify failed — ' . $e->getMessage());
+                    }
+                })->afterResponse();
+            }
         }
     }
 
