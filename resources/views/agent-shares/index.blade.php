@@ -7,8 +7,31 @@
     <title>Agentes Partilhados — ClawYard</title>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        :root{--bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--border:#2a2a3a;--text:#e2e8f0;--muted:#64748b;--green:#76b900;--red:#ef4444;--blue:#3b82f6}
-        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+        :root{
+            --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--border:#2a2a3a;
+            --text:#e2e8f0;--muted:#64748b;--green:#76b900;--red:#ef4444;--blue:#3b82f6;
+            --subtle:#94a3b8;
+            --link:#60a5fa;
+            --tag-bg:rgba(255,255,255,.05);
+            --toggle-bg:rgba(255,255,255,.04);--toggle-border:rgba(255,255,255,.10);
+            --overlay:rgba(0,0,0,.7);
+            --hover-row:rgba(255,255,255,.02);
+            --pill-bg:rgba(255,255,255,.06);
+        }
+        :root[data-theme="day"]{
+            --bg:#f4f6fa;--bg2:#ffffff;--bg3:#f1f5f9;--border:#e2e8f0;
+            --text:#0f172a;--muted:#475569;--green:#4d7a00;--red:#b91c1c;--blue:#1d4ed8;
+            --subtle:#64748b;
+            --link:#1d4ed8;
+            --tag-bg:rgba(15,23,42,.05);
+            --toggle-bg:rgba(15,23,42,.04);--toggle-border:rgba(15,23,42,.12);
+            --overlay:rgba(15,23,42,.35);
+            --hover-row:rgba(15,23,42,.03);
+            --pill-bg:rgba(15,23,42,.06);
+        }
+        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;transition:background .2s,color .2s}
+        .theme-toggle{margin-left:8px;width:34px;height:34px;border-radius:9px;background:var(--toggle-bg);border:1px solid var(--toggle-border);color:var(--muted);cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:.15s}
+        .theme-toggle:hover{color:var(--text);border-color:var(--green)}
 
         /* NAV */
         .nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;gap:16px}
@@ -85,6 +108,7 @@
     <a href="/dashboard" class="nav-back">← Dashboard</a>
     <div class="nav-spacer"></div>
     <button class="btn-new" onclick="openModal()">+ Novo Agente Partilhado</button>
+    <button type="button" class="theme-toggle" onclick="toggleClawTheme()" aria-label="Alternar modo claro/escuro" title="Alternar modo claro/escuro"><span id="themeIcon">🌙</span></button>
 </nav>
 
 <div class="main">
@@ -160,9 +184,18 @@
                     @endif
                 </div>
                 <div class="share-info">
-                    <div class="share-agent-name" style="font-size:13px;font-weight:700;color:var(--text)">{{ $share->custom_title ?: $meta['name'] }}</div>
+                    {{-- Agent identity: real name first (otherwise every
+                         card in a "Marine Agents" portal looks identical),
+                         role underneath, and custom_title kept as a small
+                         suffix tag when set so we don't lose the context. --}}
+                    <div class="share-agent-name" style="font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span>{{ $meta['emoji'] ?? '🤖' }} {{ $meta['name'] }}</span>
+                        @if($share->custom_title && $share->custom_title !== ($meta['name'] ?? ''))
+                            <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--pill-bg);color:var(--muted);text-transform:uppercase;letter-spacing:.4px">{{ $share->custom_title }}</span>
+                        @endif
+                    </div>
                     @if(!empty($meta['role']))
-                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.4">{{ $meta['role'] }}</div>
+                        <div style="font-size:11px;color:var(--subtle);margin-top:2px;line-height:1.4">{{ $meta['role'] }}</div>
                     @endif
                     <div class="share-url">{{ $share->getUrl() }}</div>
                     <div class="share-meta">
@@ -219,11 +252,20 @@
                         </div>
                     </td>
                     <td style="padding:10px 12px;min-width:140px">
-                        <div style="font-size:13px;font-weight:700;color:var(--text)">{{ $share->custom_title ?: $meta['name'] }}</div>
+                        {{-- Always show the agent's real name so portal bundles
+                             with a shared custom_title don't collapse into
+                             N copies of the same label. custom_title becomes
+                             a small suffix pill. --}}
+                        <div style="font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                            <span>{{ $meta['emoji'] ?? '🤖' }} {{ $meta['name'] }}</span>
+                            @if($share->custom_title && $share->custom_title !== ($meta['name'] ?? ''))
+                                <span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--pill-bg);color:var(--muted);text-transform:uppercase;letter-spacing:.4px">{{ $share->custom_title }}</span>
+                            @endif
+                        </div>
                         @if(!empty($meta['role']))
-                            <div style="font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.35">{{ $meta['role'] }}</div>
+                            <div style="font-size:11px;color:var(--subtle);margin-top:2px;line-height:1.35">{{ $meta['role'] }}</div>
                         @endif
-                        <div style="font-size:11px;color:#60a5fa;word-break:break-all;margin-top:2px">{{ $share->getUrl() }}</div>
+                        <div style="font-size:11px;color:var(--link);word-break:break-all;margin-top:2px">{{ $share->getUrl() }}</div>
                     </td>
                     <td style="padding:10px 12px;white-space:nowrap">
                         <span class="share-tag {{ $valid ? 'green' : 'red' }}">
@@ -313,6 +355,12 @@
                     <input id="f-email" class="form-input" type="email" placeholder="cliente@empresa.com" required>
                     <div class="form-hint">Obrigatório — é para este email que vai o código de acesso (OTP).</div>
                 </div>
+            </div>
+
+            <div class="form-row">
+                <label class="form-label">Emails adicionais <span style="opacity:.5">(opcional)</span></label>
+                <textarea id="f-extra-emails" class="form-textarea" rows="2" placeholder="colega1@empresa.com, colega2@empresa.com"></textarea>
+                <div class="form-hint">Separa por vírgula, ponto-e-vírgula ou nova linha. Cada pessoa recebe o mesmo link e pede o código de acesso ao próprio email.</div>
             </div>
 
             <div style="background:rgba(118,185,0,.06);border:1px solid rgba(118,185,0,.25);border-radius:10px;padding:12px 14px;margin:6px 0">
@@ -420,11 +468,21 @@ async function createShare() {
     btn.textContent = 'A criar...';
     btn.disabled = true;
 
+    // Split the additional-emails textarea on comma / semicolon / whitespace
+    // into a clean array. Empty → null so the backend keeps the column NULL
+    // instead of storing an empty JSON array.
+    const extraRaw = document.getElementById('f-extra-emails').value || '';
+    const extraList = extraRaw
+        .split(/[\s,;]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
     const payload = {
-        agent_key:        document.getElementById('f-agent').value,
-        client_name:      document.getElementById('f-client').value.trim(),
-        client_email:     document.getElementById('f-email').value.trim(),
-        custom_title:     document.getElementById('f-title').value.trim() || null,
+        agent_key:         document.getElementById('f-agent').value,
+        client_name:       document.getElementById('f-client').value.trim(),
+        client_email:      document.getElementById('f-email').value.trim(),
+        additional_emails: extraList.length ? extraList : null,
+        custom_title:      document.getElementById('f-title').value.trim() || null,
         welcome_message:  document.getElementById('f-welcome').value.trim() || null,
         password:         document.getElementById('f-pass').value || null,
         expires_at:       document.getElementById('f-expires').value || null,
@@ -546,6 +604,22 @@ async function showAccessLog(id) {
         return `${status} ${when}  ·  ${l.event.padEnd(15)}  ·  ${l.email || '-'}  ·  ${l.ip || '-'} (${l.country || '?'})${l.note ? '  · ' + l.note : ''}`;
     }).join('\n');
     alert('📜 Últimos acessos:\n\n' + rows);
+}
+
+// ── Day/Night theme toggle (shared with /a/* and /p/* via localStorage) ─────
+(function(){
+    var KEY='clawyard_theme',saved=null;
+    try{saved=localStorage.getItem(KEY);}catch(e){}
+    var t=(saved==='day'?'day':'night');
+    document.documentElement.setAttribute('data-theme',t);
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(t==='day'?'☀️':'🌙');
+})();
+function toggleClawTheme(){
+    var cur=document.documentElement.getAttribute('data-theme')==='day'?'day':'night';
+    var next=cur==='day'?'night':'day';
+    document.documentElement.setAttribute('data-theme',next);
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(next==='day'?'☀️':'🌙');
+    try{localStorage.setItem('clawyard_theme',next);}catch(e){}
 }
 </script>
 </body>

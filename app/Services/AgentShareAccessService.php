@@ -52,11 +52,12 @@ class AgentShareAccessService
     {
         $email = strtolower(trim($email));
 
-        // Constant-time comparison on the authorised recipient. If they don't
-        // match we log + return true anyway so an attacker can't enumerate.
-        $expected = strtolower(trim($share->client_email ?? ''));
-        if (!$expected || !hash_equals($expected, $email)) {
-            $this->log($share, 'otp_requested', 'denied', $email, $sessionId, $request, 'email mismatch');
+        // Multi-recipient aware check: the authorised set is client_email ∪
+        // additional_emails. Any email OUTSIDE the set is silently dropped
+        // (log denied + return true) so attackers can't probe which addresses
+        // are on the allowlist.
+        if ($email === '' || !$share->isAuthorisedEmail($email)) {
+            $this->log($share, 'otp_requested', 'denied', $email, $sessionId, $request, 'email not authorised');
             return true;
         }
 

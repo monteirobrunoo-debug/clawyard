@@ -12,6 +12,7 @@ class AgentShare extends Model
 {
     protected $fillable = [
         'token', 'portal_token', 'agent_key', 'client_name', 'client_email',
+        'additional_emails',
         'password_hash', 'custom_title', 'welcome_message',
         'show_branding', 'allow_sap_access', 'is_active', 'expires_at', 'created_by',
         'usage_count', 'last_used_at',
@@ -21,15 +22,16 @@ class AgentShare extends Model
     ];
 
     protected $casts = [
-        'show_branding'    => 'boolean',
-        'allow_sap_access' => 'boolean',
-        'is_active'        => 'boolean',
-        'require_otp'      => 'boolean',
-        'lock_to_device'   => 'boolean',
-        'notify_on_access' => 'boolean',
-        'expires_at'       => 'datetime',
-        'last_used_at'     => 'datetime',
-        'revoked_at'       => 'datetime',
+        'show_branding'     => 'boolean',
+        'allow_sap_access'  => 'boolean',
+        'is_active'         => 'boolean',
+        'require_otp'       => 'boolean',
+        'lock_to_device'    => 'boolean',
+        'notify_on_access'  => 'boolean',
+        'expires_at'        => 'datetime',
+        'last_used_at'      => 'datetime',
+        'revoked_at'        => 'datetime',
+        'additional_emails' => 'array',   // JSON array of extra recipients
     ];
 
     // ── Relationships ────────────────────────────────────────────────────────
@@ -111,6 +113,58 @@ class AgentShare extends Model
     {
         if (!$this->password_hash) return true; // no password set
         return password_verify($password, $this->password_hash);
+    }
+
+    /**
+     * All email addresses authorised to claim this share — primary
+     * (client_email) unioned with the optional additional_emails list.
+     * Lowercased, trimmed, deduped. Returns an empty array if the share has
+     * no recipient on file (legacy rows).
+     *
+     * Used by AgentShareAccessService when validating an OTP request: any
+     * email on this list is a valid recipient, the rest are silently dropped
+     * (anti-enumeration).
+     *
+     * @return array<int,string>
+     */
+    public function authorisedEmails(): array
+    {
+        $emails = [];
+        if (!empty($this->client_email)) {
+            $emails[] = strtolower(trim((string) $this->client_email));
+        }
+        foreach ((array) ($this->additional_emails ?? []) as $extra) {
+            $e = strtolower(trim((string) $extra));
+            if ($e !== '') $emails[] = $e;
+        }
+        return array_values(array_unique(array_filter($emails)));
+    }
+
+    /**
+     * True when the share has more than one authorised recipient. The public
+     * OTP flow uses this to decide between:
+     *   • single: auto-issue the code to the only recipient and skip the
+     *     email-input step (no-friction flow)
+     *   • multi: keep the email-input step so the person on the browser
+     *     receives the code at *their* address rather than a teammate's
+     */
+    public function hasMultipleRecipients(): bool
+    {
+        return count($this->authorisedEmails()) > 1;
+    }
+
+    /**
+     * Case-insensitive membership check — is the given email one of the
+     * recipients this share was issued to?
+     */
+    public function isAuthorisedEmail(string $email): bool
+    {
+        $email = strtolower(trim($email));
+        if ($email === '') return false;
+        foreach ($this->authorisedEmails() as $authorised) {
+            if (hash_equals($authorised, $email)) return true;
+        }
+        return false;
     }
 
     public function recordUsage(): void

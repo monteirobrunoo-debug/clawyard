@@ -28,72 +28,127 @@ class AgentShareController extends Controller
     // ── ADMIN: Create new share ──────────────────────────────────────────────
     public function store(Request $request)
     {
-        // SECURITY: client_email is now REQUIRED. Without it we can't enforce
-        // the OTP challenge nor notify anyone. We also cap the default expiry
-        // at 24 h so forgotten links don't hang around forever.
+        // SECURITY: client_email is REQUIRED (primary recipient). additional_emails
+        // is optional and accepts a list (array OR comma/newline-separated string
+        // coming from the admin form). All recipients in this union are valid
+        // for OTP — see AgentShare::authorisedEmails().
         $data = $request->validate([
-            'agent_key'        => 'required|string|max:50',
-            'client_name'      => 'required|string|max:100',
-            'client_email'     => 'required|email|max:150',
-            'password'         => 'nullable|string|min:4|max:100',
-            'custom_title'     => 'nullable|string|max:100',
-            'welcome_message'  => 'nullable|string|max:500',
-            'show_branding'    => 'nullable|boolean',
-            'allow_sap_access' => 'nullable|boolean',
-            'require_otp'      => 'nullable|boolean',
-            'lock_to_device'   => 'nullable|boolean',
-            'notify_on_access' => 'nullable|boolean',
-            'notify_email'     => 'nullable|email|max:150',
-            'notify_whatsapp'  => 'nullable|string|max:30',
-            'expires_at'       => 'nullable|date|after:now',
+            'agent_key'         => 'required|string|max:50',
+            'client_name'       => 'required|string|max:100',
+            'client_email'      => 'required|email|max:150',
+            // Accept either a raw textarea string ("a@x.pt, b@x.pt\nc@x.pt")
+            // or an array of emails submitted as additional_emails[].
+            'additional_emails' => 'nullable',
+            'password'          => 'nullable|string|min:4|max:100',
+            'custom_title'      => 'nullable|string|max:100',
+            'welcome_message'   => 'nullable|string|max:500',
+            'show_branding'     => 'nullable|boolean',
+            'allow_sap_access'  => 'nullable|boolean',
+            'require_otp'       => 'nullable|boolean',
+            'lock_to_device'    => 'nullable|boolean',
+            'notify_on_access'  => 'nullable|boolean',
+            'notify_email'      => 'nullable|email|max:150',
+            'notify_whatsapp'   => 'nullable|string|max:30',
+            'expires_at'        => 'nullable|date|after:now',
             // When the client is creating N shares in one batch, it passes
             // the same portal_token so the backend can group them into a
             // single /p/{portal_token} landing page.
-            'portal_token'     => 'nullable|string|size:24|alpha_num',
+            'portal_token'      => 'nullable|string|size:24|alpha_num',
         ]);
+
+        $primaryEmail     = strtolower(trim($data['client_email']));
+        $additionalEmails = $this->parseAdditionalEmails($data['additional_emails'] ?? null, $primaryEmail);
 
         $share = AgentShare::create([
-            'token'            => AgentShare::generateToken(),
-            'portal_token'     => $data['portal_token'] ?? null,
-            'agent_key'        => $data['agent_key'],
-            'client_name'      => $data['client_name'],
-            'client_email'     => strtolower(trim($data['client_email'])),
-            'password_hash'    => !empty($data['password']) ? password_hash($data['password'], PASSWORD_DEFAULT) : null,
-            'custom_title'     => $data['custom_title'] ?? null,
-            'welcome_message'  => $data['welcome_message'] ?? null,
-            'show_branding'    => $request->boolean('show_branding', true),
-            'allow_sap_access' => $request->boolean('allow_sap_access', false),
-            'require_otp'      => $request->boolean('require_otp', true),
-            'lock_to_device'   => $request->boolean('lock_to_device', true),
-            'notify_on_access' => $request->boolean('notify_on_access', true),
-            'notify_email'     => $data['notify_email'] ?? auth()->user()->email,
-            'notify_whatsapp'  => $data['notify_whatsapp'] ?? null,
-            'expires_at'       => $data['expires_at'] ?? now()->addHours(24),
-            'created_by'       => auth()->id(),
+            'token'             => AgentShare::generateToken(),
+            'portal_token'      => $data['portal_token'] ?? null,
+            'agent_key'         => $data['agent_key'],
+            'client_name'       => $data['client_name'],
+            'client_email'      => $primaryEmail,
+            'additional_emails' => !empty($additionalEmails) ? $additionalEmails : null,
+            'password_hash'     => !empty($data['password']) ? password_hash($data['password'], PASSWORD_DEFAULT) : null,
+            'custom_title'      => $data['custom_title'] ?? null,
+            'welcome_message'   => $data['welcome_message'] ?? null,
+            'show_branding'     => $request->boolean('show_branding', true),
+            'allow_sap_access'  => $request->boolean('allow_sap_access', false),
+            'require_otp'       => $request->boolean('require_otp', true),
+            'lock_to_device'    => $request->boolean('lock_to_device', true),
+            'notify_on_access'  => $request->boolean('notify_on_access', true),
+            'notify_email'      => $data['notify_email'] ?? auth()->user()->email,
+            'notify_whatsapp'   => $data['notify_whatsapp'] ?? null,
+            'expires_at'        => $data['expires_at'] ?? now()->addHours(24),
+            'created_by'        => auth()->id(),
         ]);
 
-        // Notify the recipient with the share link. Errors must not break the
-        // share creation flow — the link is already persisted and the owner
-        // can still copy it manually from the UI.
-        $emailSent = $this->sendShareEmail($share, $data['password'] ?? null);
+        // Notify every recipient with the share link. Each recipient gets their
+        // own email (separate TO header) so the thread looks personalised.
+        $emailsSent = 0;
+        foreach ($share->authorisedEmails() as $recipient) {
+            if ($this->sendShareEmail($share, $data['password'] ?? null, $recipient)) {
+                $emailsSent++;
+            }
+        }
 
         return response()->json([
-            'ok'         => true,
-            'url'        => $share->getUrl(),
-            'portal_url' => $share->getPortalUrl(),
-            'id'         => $share->id,
-            'email_sent' => $emailSent,
+            'ok'                 => true,
+            'url'                => $share->getUrl(),
+            'portal_url'         => $share->getPortalUrl(),
+            'id'                 => $share->id,
+            'email_sent'         => $emailsSent > 0,
+            'emails_sent_count'  => $emailsSent,
+            'recipients'         => $share->authorisedEmails(),
         ]);
     }
 
     /**
-     * Send the share link to the client via email. Uses MAIL_FROM_ADDRESS
-     * (no-reply@hp-group.org) so recipients see a consistent HP-Group sender.
+     * Normalise the "additional emails" input the admin submits. Accepts:
+     *   - an array already ["a@x.pt", "b@x.pt"]
+     *   - a textarea string with comma / newline / semicolon separators
+     * Returns a deduped, lowercased array EXCLUDING the primary email (we
+     * never list the primary twice) and capped to 20 to prevent abuse.
+     */
+    private function parseAdditionalEmails(mixed $raw, string $primaryEmail): array
+    {
+        if (empty($raw)) return [];
+        $list = is_array($raw) ? $raw : preg_split('/[\s,;]+/', (string) $raw);
+        $out  = [];
+        foreach ($list as $e) {
+            $e = strtolower(trim((string) $e));
+            if ($e === '' || $e === $primaryEmail) continue;
+            if (!filter_var($e, FILTER_VALIDATE_EMAIL)) continue;
+            $out[] = $e;
+        }
+        return array_slice(array_values(array_unique($out)), 0, 20);
+    }
+
+    /**
+     * Send the share link via email. Uses MAIL_FROM_ADDRESS (no-reply@…) as
+     * the From header so recipients see a consistent HP-Group sender.
+     *
+     * $recipientEmail — if provided, the message is delivered to THAT address
+     * (enables multi-recipient shares: one email per authorised recipient,
+     * separate TO headers so the thread looks personalised). If null we fall
+     * back to $share->client_email for backward compatibility.
+     *
      * Returns true on success, false on any Mail failure.
      */
-    private function sendShareEmail(AgentShare $share, ?string $password): bool
+    private function sendShareEmail(AgentShare $share, ?string $password, ?string $recipientEmail = null): bool
     {
         try {
+            // Resolve who this email is actually going to. We only deliver to
+            // an address that is part of the authorised set to defend against
+            // a caller passing an arbitrary email.
+            $recipientEmail = $recipientEmail
+                ? strtolower(trim($recipientEmail))
+                : strtolower(trim((string) $share->client_email));
+
+            if ($recipientEmail !== '' && !$share->isAuthorisedEmail($recipientEmail)) {
+                Log::warning('AgentShare: refused to email non-authorised recipient', [
+                    'share_id'  => $share->id,
+                    'recipient' => $recipientEmail,
+                ]);
+                return false;
+            }
             $meta     = AgentShare::agentMeta()[$share->agent_key] ?? [
                 'name'  => ucfirst($share->agent_key),
                 'emoji' => '🤖',
@@ -304,7 +359,11 @@ HTML;
             $textLines[] = '── COMO ENTRAR ──';
             $textLines[] = '1. Abre: ' . $url;
             if ($share->require_otp) {
-                $textLines[] = '2. Insere o teu email (' . $share->client_email . ')';
+                // Tell the recipient to use THEIR own email (the one this
+                // message was delivered to). For single-recipient shares this
+                // is the same as client_email; for multi-recipient shares
+                // each recipient sees their own address here.
+                $textLines[] = '2. Insere o teu email (' . $recipientEmail . ')';
                 $textLines[] = '3. Recebes um código de 6 dígitos — cola-o para entrar.';
             }
             if ($password) {
@@ -330,8 +389,8 @@ HTML;
             // Use Mail::send so we can attach BOTH HTML and plain-text bodies
             // (html() alone would leave us with HTML-only, which some strict
             // corporate filters downgrade to "empty" and quarantine).
-            Mail::send([], [], function ($mail) use ($share, $agentLbl, $fromAddress, $fromName, $replyTo, $html, $plain) {
-                $mail->to($share->client_email, $share->client_name)
+            Mail::send([], [], function ($mail) use ($share, $agentLbl, $recipientEmail, $fromAddress, $fromName, $replyTo, $html, $plain) {
+                $mail->to($recipientEmail, $share->client_name)
                      ->from($fromAddress, $fromName)
                      ->replyTo($replyTo, $fromName)
                      ->subject('[ClawYard] Acesso ao agente ' . $agentLbl);
@@ -345,7 +404,7 @@ HTML;
 
             Log::info('AgentShare email sent', [
                 'share_id'   => $share->id,
-                'to'         => $share->client_email,
+                'to'         => $recipientEmail,
                 'agent_key'  => $share->agent_key,
                 'from'       => $fromAddress,
             ]);
@@ -435,21 +494,28 @@ HTML;
                 // retype that same address is pointless friction (and a
                 // typo silently fails due to anti-enumeration). So we
                 // auto-issue the OTP to the stored address and land the
-                // recipient directly on the code-input step. We only fall
-                // back to the email-input step if, for some legacy reason,
-                // the share has no client_email on file.
-                $authorisedEmail = strtolower(trim((string) $share->client_email));
-                if ($authorisedEmail !== '') {
-                    $svc->issueOtp($share, $authorisedEmail, $sessionId, $request);
+                // recipient directly on the code-input step.
+                //
+                // EXCEPTION: multi-recipient shares (additional_emails set).
+                // We don't know which teammate just opened the browser, so
+                // we keep the email-input step — whichever address the
+                // visitor types (if it's on the allowlist) gets the code.
+                // This avoids leaking the code to the primary recipient
+                // when a teammate opens the link.
+                if (!$share->hasMultipleRecipients()) {
+                    $authorisedEmail = strtolower(trim((string) $share->client_email));
+                    if ($authorisedEmail !== '') {
+                        $svc->issueOtp($share, $authorisedEmail, $sessionId, $request);
 
-                    return view('agent-shares.otp-challenge', [
-                        'share'        => $share,
-                        'new_device'   => $status === 'new_device',
-                        'suggested'    => $share->client_email,
-                        'otp_sent'     => true,
-                        'sent_to'      => $this->maskEmail($authorisedEmail),
-                        'auto_issued'  => true,
-                    ]);
+                        return view('agent-shares.otp-challenge', [
+                            'share'        => $share,
+                            'new_device'   => $status === 'new_device',
+                            'suggested'    => $share->client_email,
+                            'otp_sent'     => true,
+                            'sent_to'      => $this->maskEmail($authorisedEmail),
+                            'auto_issued'  => true,
+                        ]);
+                    }
                 }
 
                 return view('agent-shares.otp-challenge', [
