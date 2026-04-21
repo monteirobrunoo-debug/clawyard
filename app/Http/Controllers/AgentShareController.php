@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AgentShare;
 use App\Agents\AgentManager;
+use App\Services\AgentCatalog;
 use App\Services\AgentShareAccessService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -94,46 +95,119 @@ class AgentShareController extends Controller
     {
         try {
             $meta     = AgentShare::agentMeta()[$share->agent_key] ?? [
-                'name' => ucfirst($share->agent_key), 'emoji' => '🤖', 'color' => '#76b900',
-                'role' => 'Agente ClawYard',
+                'name'  => ucfirst($share->agent_key),
+                'emoji' => '🤖',
+                'color' => '#76b900',
+                'role'  => 'Agente ClawYard',
             ];
-            $agentLbl  = trim(($meta['emoji'] ?? '🤖') . ' ' . ($meta['name'] ?? $share->agent_key));
-            $agentRole = trim((string)($meta['role'] ?? ''));
-            $url       = $share->getUrl();
-            $expires  = $share->expires_at?->format('d/m/Y H:i') ?? '—';
+
+            $agentName  = (string)($meta['name']  ?? ucfirst($share->agent_key));
+            $agentEmoji = (string)($meta['emoji'] ?? '🤖');
+            $agentColor = (string)($meta['color'] ?? '#76b900');
+            $agentRole  = trim((string)($meta['role'] ?? ''));
+            $agentLbl   = trim($agentEmoji . ' ' . $agentName);
+
+            // Top-3 starter prompts ("O que podes pedir") so the recipient
+            // immediately understands the practical value of this agent.
+            $starters = array_slice(AgentCatalog::starters($share->agent_key), 0, 3);
+
+            $url      = $share->getUrl();
+            $expires  = $share->expires_at?->format('d/m/Y \à\s H:i') ?? '— sem expiração —';
             $ownerNm  = auth()->user()?->name  ?? 'Equipa HP-Group';
             $ownerEm  = auth()->user()?->email ?? config('mail.from.address', 'no-reply@hp-group.org');
 
+            // ── Escaped variables (all user-controlled content) ────────────
+            $clientName     = htmlspecialchars($share->client_name);
+            $agentNameEsc   = htmlspecialchars($agentName);
+            $agentEmojiEsc  = htmlspecialchars($agentEmoji);
+            $agentLblEsc    = htmlspecialchars($agentLbl);
+            $agentRoleEsc   = htmlspecialchars($agentRole);
+            $agentColorEsc  = htmlspecialchars($agentColor);
+            $ownerNmEsc     = htmlspecialchars($ownerNm);
+            $ownerEmEsc     = htmlspecialchars($ownerEm);
+            $urlEsc         = htmlspecialchars($url);
+            $expiresEsc     = htmlspecialchars($expires);
+            $clientEmailEsc = htmlspecialchars((string) $share->client_email);
+
+            // ── Agent card (big visual header with name + role) ────────────
+            $agentCard = <<<HTMLCARD
+<div style="background:linear-gradient(135deg,{$agentColorEsc}18,{$agentColorEsc}08);border:1px solid {$agentColorEsc}40;border-radius:10px;padding:20px 22px;margin:22px 0;">
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div style="width:56px;height:56px;border-radius:12px;background:{$agentColorEsc}25;display:inline-flex;align-items:center;justify-content:center;font-size:30px;line-height:1;flex-shrink:0;">{$agentEmojiEsc}</div>
+    <div>
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:#4d7a00;font-weight:700;margin-bottom:2px;">Agente atribuído</div>
+      <div style="font-size:19px;font-weight:800;color:#111;line-height:1.25;">{$agentNameEsc}</div>
+    </div>
+  </div>
+HTMLCARD;
+
+            if ($agentRole !== '') {
+                $agentCard .= '<div style="font-size:13px;color:#333;margin-top:14px;padding-top:14px;border-top:1px solid ' . $agentColorEsc . '30;line-height:1.55;">'
+                    . '<strong style="color:#111;">O que faz este agente:</strong> '
+                    . $agentRoleEsc
+                    . '</div>';
+            }
+
+            // "O que podes pedir" — list of 3 sample prompts
+            if (!empty($starters)) {
+                $agentCard .= '<div style="margin-top:14px;">';
+                $agentCard .= '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#4d7a00;font-weight:700;margin-bottom:8px;">Exemplos do que podes pedir</div>';
+                foreach ($starters as $starter) {
+                    $agentCard .= '<div style="font-size:13px;color:#222;background:#fff;border:1px solid ' . $agentColorEsc . '25;border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
+                        . '💬 ' . htmlspecialchars((string) $starter)
+                        . '</div>';
+                }
+                $agentCard .= '</div>';
+            }
+            $agentCard .= '</div>';
+
+            // ── Access instructions (how to actually get in) ───────────────
+            $accessSteps = '<ol style="margin:8px 0 0 0;padding-left:20px;color:#374151;">'
+                . '<li style="margin-bottom:6px;">Clica no botão <strong>&quot;Abrir agente&quot;</strong> abaixo (ou copia o link).</li>';
+
+            if ($share->require_otp) {
+                $accessSteps .= '<li style="margin-bottom:6px;">Insere o teu email (<strong>' . $clientEmailEsc . '</strong>) — vais receber um <strong>código de 6 dígitos</strong> no mesmo momento.</li>'
+                    . '<li style="margin-bottom:6px;">Cola o código para entrar. A sessão fica válida 24&nbsp;horas neste browser.</li>';
+            } else {
+                $accessSteps .= '<li style="margin-bottom:6px;">Entras directamente na conversa com o agente.</li>';
+            }
+
+            if ($password) {
+                $accessSteps .= '<li style="margin-bottom:6px;">Será pedida a <strong>palavra-passe</strong> indicada em baixo.</li>';
+            }
+            $accessSteps .= '</ol>';
+
             $passwordBlock = '';
             if ($password) {
-                $passwordBlock = '<p style="margin:16px 0;padding:12px 16px;background:#fff7ed;border-left:3px solid #f59e0b;font-family:Menlo,monospace;font-size:14px;">'
-                    . '🔑 <strong>Palavra-passe:</strong> ' . htmlspecialchars($password)
-                    . '<br><span style="font-size:12px;color:#92400e;">Guarda esta palavra-passe — não a repetirei noutro email.</span>'
-                    . '</p>';
+                $passwordBlock = '<div style="margin:16px 0;padding:14px 18px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:4px;">'
+                    . '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#92400e;font-weight:700;margin-bottom:4px;">Palavra-passe</div>'
+                    . '<div style="font-family:Menlo,Consolas,monospace;font-size:16px;color:#111;font-weight:700;">' . htmlspecialchars($password) . '</div>'
+                    . '<div style="font-size:11px;color:#92400e;margin-top:6px;">Guarda esta palavra-passe — não a repetirei noutro email.</div>'
+                    . '</div>';
             }
 
             $welcome = $share->welcome_message
-                ? '<p style="margin:16px 0;padding:12px 16px;background:#f0f9ff;border-left:3px solid #0ea5e9;">'
-                    . nl2br(htmlspecialchars($share->welcome_message))
-                    . '</p>'
-                : '';
-
-            $clientName  = htmlspecialchars($share->client_name);
-            $agentLblEsc = htmlspecialchars($agentLbl);
-            $agentRoleEsc= htmlspecialchars($agentRole);
-            $ownerNmEsc  = htmlspecialchars($ownerNm);
-            $ownerEmEsc  = htmlspecialchars($ownerEm);
-            $urlEsc      = htmlspecialchars($url);
-
-            // Role card gives the client a one-line explanation of what the
-            // agent actually does. Reduces confusion when many agents are
-            // shared — the recipient no longer has to guess from the name.
-            $roleBlock = $agentRole !== ''
-                ? '<div style="margin:18px 0;padding:14px 18px;background:#f5fbe8;border-left:3px solid #76b900;border-radius:4px;">'
-                    . '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#4d7a00;font-weight:700;margin-bottom:4px;">O que faz este agente</div>'
-                    . '<div style="font-size:14px;color:#1a2e05;">' . $agentRoleEsc . '</div>'
+                ? '<div style="margin:16px 0;padding:14px 18px;background:#f0f9ff;border-left:3px solid #0ea5e9;border-radius:4px;">'
+                    . '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#0369a1;font-weight:700;margin-bottom:4px;">Mensagem de boas-vindas</div>'
+                    . '<div style="font-size:14px;color:#0c4a6e;">' . nl2br(htmlspecialchars($share->welcome_message)) . '</div>'
                     . '</div>'
                 : '';
+
+            // Security flags shown at the bottom so the recipient understands
+            // the protections in place (OTP, device-lock, expiry).
+            $securityFlags = [];
+            if ($share->require_otp)   $securityFlags[] = '🔐 Autenticação por código email (OTP)';
+            if ($share->lock_to_device) $securityFlags[] = '📱 Sessão fixada a este dispositivo/browser';
+            if ($share->expires_at)     $securityFlags[] = '⏱ Expira automaticamente a ' . htmlspecialchars($share->expires_at->format('d/m/Y H:i'));
+            if ($password)              $securityFlags[] = '🔑 Protegido por palavra-passe adicional';
+            $securityBlock = '';
+            if (!empty($securityFlags)) {
+                $securityBlock = '<div style="margin-top:20px;padding:14px 18px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;">'
+                    . '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;margin-bottom:8px;">Segurança deste link</div>'
+                    . '<div style="font-size:13px;color:#374151;line-height:1.8;">'
+                    . implode('<br>', $securityFlags)
+                    . '</div></div>';
+            }
 
             $html = <<<HTML
 <!DOCTYPE html>
@@ -143,67 +217,137 @@ class AgentShareController extends Controller
 <style>
   body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; line-height: 1.65; background: #f4f4f4; margin: 0; padding: 0; }
   .wrap { background: #fff; max-width: 640px; margin: 24px auto; padding: 32px; border-radius: 8px; }
-  .hdr { border-bottom: 3px solid #76b900; padding-bottom: 14px; margin-bottom: 20px; }
+  .hdr { border-bottom: 3px solid #76b900; padding-bottom: 14px; margin-bottom: 20px; display:flex;align-items:center;justify-content:space-between; }
   .logo { font-size: 22px; font-weight: bold; color: #76b900; }
-  .btn { display: inline-block; background: #76b900; color: #fff !important; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: 600; margin: 16px 0; }
+  .tagline { font-size:11px;color:#6b7280;margin-top:2px; }
+  .btn { display: inline-block; background: #76b900; color: #fff !important; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; margin: 8px 0; font-size:15px; }
   .meta { font-size: 13px; color: #555; }
   .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #eee; font-size: 12px; color: #888; }
+  .link-box { background:#f9fafb;border:1px dashed #d1d5db;border-radius:6px;padding:10px 14px;font-family:Menlo,Consolas,monospace;font-size:12px;color:#374151;word-break:break-all; }
+  .section-title { font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;margin:24px 0 8px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div class="hdr"><div class="logo">🐾 ClawYard</div></div>
+  <div class="hdr">
+    <div>
+      <div class="logo">🐾 ClawYard</div>
+      <div class="tagline">PartYard · Setq.AI — Maritime Intelligence Platform</div>
+    </div>
+  </div>
 
-  <p>Olá <strong>{$clientName}</strong>,</p>
+  <p style="font-size:15px;">Olá <strong>{$clientName}</strong>,</p>
 
-  <p>Foi-te partilhado acesso ao agente <strong>{$agentLblEsc}</strong> na plataforma ClawYard.</p>
+  <p>O <strong>{$ownerNmEsc}</strong> partilhou contigo um agente na plataforma <strong>ClawYard</strong>.
+     Este email contém toda a informação necessária para entrares na conversa.</p>
 
-  {$roleBlock}
+  {$agentCard}
 
   {$welcome}
 
-  <p style="text-align:center;">
-    <a href="{$urlEsc}" class="btn">Abrir agente {$agentLblEsc}</a>
+  <div class="section-title">Como entrar</div>
+  {$accessSteps}
+
+  <p style="text-align:center;margin:22px 0 8px;">
+    <a href="{$urlEsc}" class="btn">▶ Abrir agente {$agentLblEsc}</a>
   </p>
 
-  <p class="meta">Ou copia este link:<br>
-    <a href="{$urlEsc}">{$urlEsc}</a>
-  </p>
+  <div class="section-title">Link directo</div>
+  <div class="link-box"><a href="{$urlEsc}" style="color:#374151;text-decoration:none;">{$urlEsc}</a></div>
 
   {$passwordBlock}
 
-  <table class="meta" cellpadding="0" cellspacing="0" style="margin-top:18px;">
-    <tr><td style="padding:4px 12px 4px 0;"><strong>Válido até:</strong></td><td>{$expires}</td></tr>
-    <tr><td style="padding:4px 12px 4px 0;"><strong>Enviado por:</strong></td><td>{$ownerNmEsc} &lt;{$ownerEmEsc}&gt;</td></tr>
+  {$securityBlock}
+
+  <table class="meta" cellpadding="0" cellspacing="0" style="margin-top:22px;width:100%;">
+    <tr><td style="padding:4px 12px 4px 0;width:130px;"><strong>Enviado para:</strong></td><td>{$clientEmailEsc}</td></tr>
+    <tr><td style="padding:4px 12px 4px 0;"><strong>Válido até:</strong></td><td>{$expiresEsc}</td></tr>
+    <tr><td style="padding:4px 12px 4px 0;"><strong>Partilhado por:</strong></td><td>{$ownerNmEsc} &lt;{$ownerEmEsc}&gt;</td></tr>
   </table>
 
   <p style="margin-top:20px;font-size:12px;color:#666;">
-    Se não estavas à espera deste acesso, podes simplesmente ignorar o email — o link expira automaticamente na data acima.
+    Se não estavas à espera deste acesso, podes simplesmente ignorar o email — o link expira automaticamente na data acima
+    e nenhum código será gerado sem alguém o pedir.
   </p>
 
   <div class="footer">
-    ClawYard | IT Partyard LDA<br>
+    <strong>ClawYard</strong> | IT Partyard LDA<br>
     Marine Spare Parts &amp; Technical Services<br>
-    Setúbal, Portugal · no-reply@hp-group.org
+    Setúbal, Portugal · <a href="mailto:no-reply@hp-group.org" style="color:#888;">no-reply@hp-group.org</a><br>
+    <span style="color:#aaa;font-size:11px;">Este email foi enviado automaticamente pelo sistema — não respondas directamente.</span>
   </div>
 </div>
 </body>
 </html>
 HTML;
 
-            Mail::html($html, function ($mail) use ($share, $agentLbl) {
+            // Plain-text fallback for clients that block HTML. Contains the
+            // same essential information (agent name, role, link, OTP steps)
+            // so the recipient is never locked out.
+            $textLines = [
+                'Olá ' . $share->client_name . ',',
+                '',
+                $ownerNm . ' partilhou contigo um agente na plataforma ClawYard.',
+                '',
+                '── AGENTE ──',
+                $agentName . ' ' . $agentEmoji,
+            ];
+            if ($agentRole !== '') {
+                $textLines[] = 'O que faz: ' . $agentRole;
+            }
+            if (!empty($starters)) {
+                $textLines[] = '';
+                $textLines[] = 'Exemplos do que podes pedir:';
+                foreach ($starters as $s) $textLines[] = '  • ' . $s;
+            }
+            $textLines[] = '';
+            $textLines[] = '── COMO ENTRAR ──';
+            $textLines[] = '1. Abre: ' . $url;
+            if ($share->require_otp) {
+                $textLines[] = '2. Insere o teu email (' . $share->client_email . ')';
+                $textLines[] = '3. Recebes um código de 6 dígitos — cola-o para entrar.';
+            }
+            if ($password) {
+                $textLines[] = 'Palavra-passe adicional: ' . $password;
+            }
+            $textLines[] = '';
+            $textLines[] = 'Válido até: ' . $expires;
+            $textLines[] = 'Partilhado por: ' . $ownerNm . ' <' . $ownerEm . '>';
+            $textLines[] = '';
+            $textLines[] = 'Se não estavas à espera deste acesso, ignora o email — o link expira.';
+            $textLines[] = '';
+            $textLines[] = 'ClawYard | IT Partyard LDA · Setúbal, Portugal';
+            $textLines[] = 'no-reply@hp-group.org (não respondas a este email)';
+            $plain = implode("\n", $textLines);
+
+            // Explicit no-reply sender — overrides whatever authn identity is
+            // on the current request, so the recipient always sees
+            // "HP-Group / ClawYard <no-reply@hp-group.org>".
+            $fromAddress = config('mail.from.address', 'no-reply@hp-group.org');
+            $fromName    = config('mail.from.name',    'HP-Group / ClawYard');
+            $replyTo     = config('mail.reply_to.address') ?: $fromAddress;
+
+            // Use Mail::send so we can attach BOTH HTML and plain-text bodies
+            // (html() alone would leave us with HTML-only, which some strict
+            // corporate filters downgrade to "empty" and quarantine).
+            Mail::send([], [], function ($mail) use ($share, $agentLbl, $fromAddress, $fromName, $replyTo, $html, $plain) {
                 $mail->to($share->client_email, $share->client_name)
-                     ->from(
-                         config('mail.from.address', 'no-reply@hp-group.org'),
-                         config('mail.from.name', 'HP-Group / ClawYard')
-                     )
+                     ->from($fromAddress, $fromName)
+                     ->replyTo($replyTo, $fromName)
                      ->subject('[ClawYard] Acesso ao agente ' . $agentLbl);
+
+                // Reach through to the underlying Symfony Email so we can
+                // set both parts without creating a dedicated Mailable class.
+                $symfony = $mail->getSymfonyMessage();
+                $symfony->html($html, 'utf-8');
+                $symfony->text($plain, 'utf-8');
             });
 
             Log::info('AgentShare email sent', [
                 'share_id'   => $share->id,
                 'to'         => $share->client_email,
                 'agent_key'  => $share->agent_key,
+                'from'       => $fromAddress,
             ]);
 
             return true;
