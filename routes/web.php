@@ -389,6 +389,9 @@ Route::middleware(['auth'])->group(function () {
 // Admin: create/delete shares (any authenticated user can manage their own)
 Route::middleware(['auth'])->prefix('admin')->group(function () {
     Route::post('/shares',                  [AgentShareController::class, 'store'])->name('shares.store');
+    // Sends a SINGLE bundled portal email per recipient after a batch of
+    // shares is created with the same portal_token and skip_email=true.
+    Route::post('/shares/portal-email',     [AgentShareController::class, 'sendPortalEmail'])->name('shares.portalEmail');
     Route::patch('/shares/{share}/toggle',  [AgentShareController::class, 'toggle'])->name('shares.toggle');
     Route::post('/shares/{share}/revoke',   [AgentShareController::class, 'revoke'])->name('shares.revoke');
     Route::get('/shares/{share}/log',       [AgentShareController::class, 'accessLog'])->name('shares.log');

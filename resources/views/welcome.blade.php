@@ -3151,6 +3151,14 @@ async function submitShareModal() {
         .map(s => s.trim().toLowerCase())
         .filter(s => s.length > 0 && s !== clientEmail.toLowerCase());
 
+    // BUNDLED EMAIL STRATEGY:
+    // When more than one agent is selected we create all shares with
+    // skip_email=true and then fire a single POST to /admin/shares/portal-email
+    // at the end. That endpoint sends ONE email per recipient listing every
+    // agent (with real photos/avatars) so the client gets a single clean
+    // message instead of N separate emails. For a single-agent selection we
+    // keep the legacy per-share email path — there's nothing to bundle.
+    const isBundle = checked.length > 1;
     const common = {
         client_name:       client,
         client_email:      clientEmail,
@@ -3169,6 +3177,9 @@ async function submitShareModal() {
         notify_on_access: true,
         // Groups this batch under one client portal.
         portal_token:     portalToken,
+        // Suppress the per-share email when we're going to send a bundled
+        // portal email right after all shares exist.
+        skip_email:       isBundle,
     };
 
     try {
@@ -3182,6 +3193,24 @@ async function submitShareModal() {
                 if (data.portal_url) portalUrl = data.portal_url;
             } else {
                 alert('Erro ao criar link para ' + (AGENT_NAMES[agentKey] || agentKey) + ': ' + JSON.stringify(data));
+            }
+        }
+
+        // After every share in the bundle was created, trigger the single
+        // portal email. We do this OUT of the per-share loop so the recipient
+        // receives exactly one message listing all agents.
+        if (isBundle && results.length > 0) {
+            try {
+                await fetch('/admin/shares/portal-email', {
+                    method:'POST',
+                    headers:{'Content-Type':'application/json','X-CSRF-TOKEN':CSRF},
+                    body:JSON.stringify({
+                        portal_token: portalToken,
+                        password:     common.password,
+                    }),
+                });
+            } catch (e) {
+                console.warn('Portal bundled email failed — individual shares still exist', e);
             }
         }
         if (results.length) {
