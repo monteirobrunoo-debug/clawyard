@@ -3105,12 +3105,13 @@ function openShareModal() {
                 ? `<img src="${photo}" alt="${name}" style="width:22px;height:22px;border-radius:5px;object-fit:cover;flex-shrink:0">`
                 : `<span style="font-size:16px;line-height:1;flex-shrink:0">${emoji}</span>`;
             list.innerHTML += `
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:5px 6px;border-radius:6px;transition:.12s;user-select:none"
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:5px 6px;border-radius:6px;transition:.12s;user-select:none;min-width:0;overflow:hidden"
+                       title="${name.replace(/"/g,'&quot;')}"
                        onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background=''">
                     <input type="checkbox" value="${key}" ${checked}
                         style="accent-color:#76b900;width:14px;height:14px;cursor:pointer;flex-shrink:0">
                     ${avatar}
-                    <span style="font-size:12px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</span>
+                    <span style="font-size:12px;color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1">${name}</span>
                 </label>`;
         });
     }
@@ -3261,7 +3262,7 @@ updateShareBtn();
         <div style="font-size:17px;font-weight:800;margin-bottom:16px">🔗 Share Agent</div>
         <div style="margin-bottom:14px">
             <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px">Agentes a partilhar</label>
-            <div id="share-agent-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-height:200px;overflow-y:auto;border:1px solid #2a2a3a;border-radius:8px;padding:8px;background:#1a1a24">
+            <div id="share-agent-list" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px;max-height:200px;overflow-y:auto;overflow-x:hidden;border:1px solid #2a2a3a;border-radius:8px;padding:8px;background:#1a1a24">
                 <!-- filled by JS from AGENT_NAMES + AGENT_PHOTOS -->
             </div>
         </div>
