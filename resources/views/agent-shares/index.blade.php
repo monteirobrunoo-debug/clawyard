@@ -198,6 +198,18 @@
                         <div style="font-size:11px;color:var(--subtle);margin-top:2px;line-height:1.4">{{ $meta['role'] }}</div>
                     @endif
                     <div class="share-url">{{ $share->getUrl() }}</div>
+                    @php $recipients = $share->authorisedEmails(); @endphp
+                    @if(count($recipients) > 0)
+                        <div style="font-size:11px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                            <span style="color:var(--subtle)">📧 Destinatários:</span>
+                            @if(count($recipients) === 1)
+                                <span style="color:var(--text)">{{ $recipients[0] }}</span>
+                            @else
+                                <span style="color:var(--text)">{{ $recipients[0] }}</span>
+                                <span title="{{ implode(', ', array_slice($recipients, 1)) }}" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:rgba(118,185,0,.12);border:1px solid rgba(118,185,0,.3);color:#a3e635;cursor:help">+{{ count($recipients) - 1 }} {{ count($recipients) - 1 === 1 ? 'email' : 'emails' }}</span>
+                            @endif
+                        </div>
+                    @endif
                     <div class="share-meta">
                         <span class="share-tag {{ $valid ? 'green' : 'red' }}">
                             {{ $valid ? ($share->is_active ? '● Activo' : '● Pausado') : '● Expirado' }}
@@ -266,6 +278,18 @@
                             <div style="font-size:11px;color:var(--subtle);margin-top:2px;line-height:1.35">{{ $meta['role'] }}</div>
                         @endif
                         <div style="font-size:11px;color:var(--link);word-break:break-all;margin-top:2px">{{ $share->getUrl() }}</div>
+                        @php $recipients = $share->authorisedEmails(); @endphp
+                        @if(count($recipients) > 0)
+                            <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+                                <span style="color:var(--subtle)">📧</span>
+                                @if(count($recipients) === 1)
+                                    <span>{{ $recipients[0] }}</span>
+                                @else
+                                    <span>{{ $recipients[0] }}</span>
+                                    <span title="{{ implode(', ', array_slice($recipients, 1)) }}" style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px;background:rgba(118,185,0,.12);border:1px solid rgba(118,185,0,.3);color:#a3e635;cursor:help">+{{ count($recipients) - 1 }}</span>
+                                @endif
+                            </div>
+                        @endif
                     </td>
                     <td style="padding:10px 12px;white-space:nowrap">
                         <span class="share-tag {{ $valid ? 'green' : 'red' }}">
