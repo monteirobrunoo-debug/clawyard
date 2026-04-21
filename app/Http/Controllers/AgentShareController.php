@@ -82,10 +82,18 @@ class AgentShareController extends Controller
 
         // Notify every recipient with the share link. Each recipient gets their
         // own email (separate TO header) so the thread looks personalised.
+        //
+        // BATCH MODE: when the caller is creating N shares under the same
+        // portal_token it passes `skip_email=true` on every create and then
+        // calls `/admin/shares/portal-email` once at the end. That sends a
+        // SINGLE bundled email per recipient listing every agent (with
+        // original photos/avatars) instead of N separate emails.
         $emailsSent = 0;
-        foreach ($share->authorisedEmails() as $recipient) {
-            if ($this->sendShareEmail($share, $data['password'] ?? null, $recipient)) {
-                $emailsSent++;
+        if (!$request->boolean('skip_email', false)) {
+            foreach ($share->authorisedEmails() as $recipient) {
+                if ($this->sendShareEmail($share, $data['password'] ?? null, $recipient)) {
+                    $emailsSent++;
+                }
             }
         }
 
@@ -96,6 +104,7 @@ class AgentShareController extends Controller
             'id'                 => $share->id,
             'email_sent'         => $emailsSent > 0,
             'emails_sent_count'  => $emailsSent,
+            'email_skipped'      => $request->boolean('skip_email', false),
             'recipients'         => $share->authorisedEmails(),
         ]);
     }
@@ -419,6 +428,286 @@ HTML;
         }
     }
 
+    // ── ADMIN: Send the bundled portal email ─────────────────────────────────
+    //
+    // Called once after a batch of shares has been created with a shared
+    // `portal_token` (and `skip_email=true` so no per-share emails went out).
+    // Sends ONE email per recipient listing every agent in the portal with
+    // their original photos/avatars and a single landing URL.
+    public function sendPortalEmail(Request $request)
+    {
+        $data = $request->validate([
+            'portal_token' => 'required|string|size:24|alpha_num',
+            'password'     => 'nullable|string|max:100',
+        ]);
+
+        $shares = AgentShare::where('portal_token', $data['portal_token'])
+            ->where('created_by', auth()->id())
+            ->orderBy('id')
+            ->get();
+
+        if ($shares->isEmpty()) {
+            return response()->json(['ok' => false, 'error' => 'Portal não encontrado.'], 404);
+        }
+
+        // Union of every authorised recipient across every share in the bundle.
+        // One person might be on every share; others might be on a subset. We
+        // still send one email per unique address.
+        $recipients = [];
+        foreach ($shares as $s) {
+            foreach ($s->authorisedEmails() as $e) {
+                $recipients[$e] = true;
+            }
+        }
+        $recipients = array_keys($recipients);
+
+        $sent = 0;
+        $failed = [];
+        foreach ($recipients as $recipient) {
+            if ($this->sendPortalBundleEmail($shares, $recipient, $data['password'] ?? null)) {
+                $sent++;
+            } else {
+                $failed[] = $recipient;
+            }
+        }
+
+        return response()->json([
+            'ok'               => true,
+            'recipients'       => $recipients,
+            'emails_sent'      => $sent,
+            'emails_failed'    => $failed,
+            'agents_in_portal' => $shares->count(),
+        ]);
+    }
+
+    /**
+     * Render and deliver the "one email, every agent" portal bundle.
+     *
+     * Each agent row includes:
+     *   - the agent's original photo (from AgentShare::agentMeta, resolved to
+     *     an absolute URL so remote mail clients can fetch it)
+     *   - name + role + per-agent direct link (for fallback if the portal
+     *     URL is blocked by the recipient's firewall)
+     * The primary CTA is the portal URL — one link that unlocks all agents
+     * with a single OTP.
+     */
+    private function sendPortalBundleEmail($shares, string $recipientEmail, ?string $password): bool
+    {
+        try {
+            $first = $shares->first();
+            if (!$first || !$first->portal_token) return false;
+
+            // Filter the bundle to shares this recipient is actually authorised
+            // for. Someone added only to 2 of 5 shares sees just those 2 cards.
+            $visibleShares = $shares->filter(fn($s) => $s->isAuthorisedEmail($recipientEmail))->values();
+            if ($visibleShares->isEmpty()) return false;
+
+            $meta      = AgentShare::agentMeta();
+            $portalUrl = $first->getPortalUrl();
+            $clientNm  = htmlspecialchars($first->client_name);
+            $ownerNm   = auth()->user()?->name  ?? 'Equipa HP-Group';
+            $ownerEm   = auth()->user()?->email ?? config('mail.from.address', 'no-reply@hp-group.org');
+            $ownerNmEs = htmlspecialchars($ownerNm);
+            $ownerEmEs = htmlspecialchars($ownerEm);
+            $portalUrlEs = htmlspecialchars($portalUrl);
+            $expires   = $first->expires_at?->format('d/m/Y \à\s H:i') ?? '— sem expiração —';
+            $expiresEs = htmlspecialchars($expires);
+            // Public base URL for the avatar images. Most mail clients will
+            // fetch these over HTTPS after the user clicks "show images".
+            $assetBase = rtrim(config('app.share_url', config('app.url')), '/');
+
+            // ── Build one card per agent ────────────────────────────────────
+            $agentCards = '';
+            foreach ($visibleShares as $s) {
+                $m          = $meta[$s->agent_key] ?? ['name' => ucfirst($s->agent_key), 'emoji' => '🤖', 'color' => '#76b900', 'photo' => null, 'role' => 'Agente ClawYard'];
+                $agentName  = (string) ($m['name']  ?? ucfirst($s->agent_key));
+                $agentEmoji = (string) ($m['emoji'] ?? '🤖');
+                $agentColor = (string) ($m['color'] ?? '#76b900');
+                $agentRole  = trim((string) ($m['role']  ?? ''));
+                $photoPath  = $m['photo'] ?? null;
+
+                $photoUrl   = $photoPath ? $assetBase . $photoPath : null;
+
+                $agentNameEs  = htmlspecialchars($agentName);
+                $agentRoleEs  = htmlspecialchars($agentRole);
+                $agentColorEs = htmlspecialchars($agentColor);
+                $agentEmojiEs = htmlspecialchars($agentEmoji);
+                $agentUrlEs   = htmlspecialchars($s->getUrl());
+
+                // Avatar — real photo if available (with emoji fallback as
+                // alt text + background colour so blocked images still look
+                // good), else a coloured circle + emoji.
+                if ($photoUrl) {
+                    $avatar = '<img src="' . htmlspecialchars($photoUrl) . '" alt="' . $agentEmojiEs . '" width="56" height="56" '
+                            . 'style="width:56px;height:56px;border-radius:50%;object-fit:cover;display:block;border:2px solid ' . $agentColorEs . '40;background:' . $agentColorEs . '20;">';
+                } else {
+                    $avatar = '<div style="width:56px;height:56px;border-radius:50%;background:' . $agentColorEs . '25;display:inline-flex;align-items:center;justify-content:center;font-size:28px;line-height:1;">' . $agentEmojiEs . '</div>';
+                }
+
+                $agentCards .= <<<HTMLCARD
+<tr>
+  <td style="padding:0 0 12px 0;">
+    <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#fff;border:1px solid {$agentColorEs}30;border-left:4px solid {$agentColorEs};border-radius:10px;">
+      <tr>
+        <td width="72" style="padding:14px 0 14px 16px;vertical-align:top;">{$avatar}</td>
+        <td style="padding:14px 16px;vertical-align:top;">
+          <div style="font-size:15px;font-weight:700;color:#111;line-height:1.2;margin-bottom:3px;">{$agentNameEs}</div>
+          <div style="font-size:12px;color:#4b5563;line-height:1.55;">{$agentRoleEs}</div>
+          <div style="margin-top:8px;">
+            <a href="{$agentUrlEs}" style="color:{$agentColorEs};text-decoration:none;font-size:12px;font-weight:600;">▶ Abrir {$agentNameEs}</a>
+          </div>
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
+HTMLCARD;
+            }
+
+            $passwordBlock = '';
+            if ($password) {
+                $passwordBlock = '<div style="margin:16px 0;padding:14px 18px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:4px;">'
+                    . '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#92400e;font-weight:700;margin-bottom:4px;">Palavra-passe</div>'
+                    . '<div style="font-family:Menlo,Consolas,monospace;font-size:16px;color:#111;font-weight:700;">' . htmlspecialchars($password) . '</div>'
+                    . '<div style="font-size:11px;color:#92400e;margin-top:6px;">Guarda esta palavra-passe — não a repetirei noutro email.</div>'
+                    . '</div>';
+            }
+
+            $agentCount = $visibleShares->count();
+            $agentNoun  = $agentCount === 1 ? 'agente' : 'agentes';
+
+            $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 14px; color: #222; line-height: 1.6; background: #f4f4f4; margin:0; padding:0; }
+  .wrap { background: #fff; max-width: 640px; margin: 24px auto; padding: 32px; border-radius: 8px; }
+  .hdr { border-bottom: 3px solid #76b900; padding-bottom: 14px; margin-bottom: 20px; }
+  .logo { font-size: 22px; font-weight: bold; color: #76b900; }
+  .tagline { font-size: 11px; color: #6b7280; margin-top: 2px; }
+  .btn { display: inline-block; background: #76b900; color: #fff !important; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 15px; }
+  .footer { margin-top: 28px; padding-top: 14px; border-top: 1px solid #eee; font-size: 12px; color: #888; }
+  .section-title { font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#6b7280;font-weight:700;margin:22px 0 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="logo">🐾 ClawYard</div>
+    <div class="tagline">PartYard · Setq.AI — Maritime Intelligence Platform</div>
+  </div>
+
+  <p style="font-size:15px;">Olá <strong>{$clientNm}</strong>,</p>
+
+  <p>O <strong>{$ownerNmEs}</strong> preparou para ti um portal com <strong>{$agentCount} {$agentNoun}</strong> na plataforma <strong>ClawYard</strong>.
+     Um único link, uma única verificação — acedes a todos os agentes que precisares.</p>
+
+  <p style="text-align:center;margin:22px 0 8px;">
+    <a href="{$portalUrlEs}" class="btn">▶ Abrir o meu portal</a>
+  </p>
+
+  <div style="text-align:center;font-size:11px;color:#888;margin-bottom:20px;word-break:break-all;">
+    ou cola este endereço: <a href="{$portalUrlEs}" style="color:#76b900;">{$portalUrlEs}</a>
+  </div>
+
+  <div class="section-title">Agentes disponíveis neste portal</div>
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+    {$agentCards}
+  </table>
+
+  {$passwordBlock}
+
+  <div class="section-title">Como entrar</div>
+  <ol style="margin:8px 0 0 18px;padding:0;color:#374151;font-size:13px;line-height:1.8;">
+    <li>Clica em <strong>&quot;Abrir o meu portal&quot;</strong> acima.</li>
+    <li>Introduz o teu email — recebes um <strong>código de 6 dígitos</strong>.</li>
+    <li>Cola o código para entrar. A sessão fica válida 24 h neste browser e cobre TODOS os agentes do portal.</li>
+  </ol>
+
+  <p style="margin-top:18px;font-size:12px;color:#6b7280;">
+    <strong>Válido até:</strong> {$expiresEs} &middot;
+    <strong>Partilhado por:</strong> {$ownerNmEs} &lt;{$ownerEmEs}&gt;
+  </p>
+
+  <p style="margin-top:12px;font-size:12px;color:#6b7280;">
+    Se não estavas à espera deste acesso, ignora o email — o portal expira automaticamente na data acima.
+  </p>
+
+  <div class="footer">
+    <strong>ClawYard</strong> | IT Partyard LDA<br>
+    Marine Spare Parts &amp; Technical Services<br>
+    Setúbal, Portugal · <a href="mailto:no-reply@hp-group.org" style="color:#888;">no-reply@hp-group.org</a><br>
+    <span style="color:#aaa;font-size:11px;">Este email foi enviado automaticamente — não respondas directamente.</span>
+  </div>
+</div>
+</body>
+</html>
+HTML;
+
+            // Plain-text fallback: same structure, no images.
+            $lines = [
+                'Olá ' . $first->client_name . ',',
+                '',
+                $ownerNm . ' preparou um portal com ' . $agentCount . ' ' . $agentNoun . ' na plataforma ClawYard.',
+                '',
+                'PORTAL: ' . $portalUrl,
+                '',
+                'AGENTES INCLUÍDOS:',
+            ];
+            foreach ($visibleShares as $s) {
+                $m = $meta[$s->agent_key] ?? ['name' => ucfirst($s->agent_key), 'emoji' => '🤖', 'role' => ''];
+                $lines[] = '  ' . ($m['emoji'] ?? '🤖') . ' ' . ($m['name'] ?? $s->agent_key)
+                         . (!empty($m['role']) ? ' — ' . $m['role'] : '');
+                $lines[] = '     ' . $s->getUrl();
+            }
+            if ($password) {
+                $lines[] = '';
+                $lines[] = 'Palavra-passe: ' . $password;
+            }
+            $lines[] = '';
+            $lines[] = 'COMO ENTRAR:';
+            $lines[] = '  1. Abre o link do portal.';
+            $lines[] = '  2. Introduz o teu email — recebes um código de 6 dígitos.';
+            $lines[] = '  3. Uma verificação só — cobre todos os agentes por 24 h.';
+            $lines[] = '';
+            $lines[] = 'Válido até: ' . $expires;
+            $lines[] = 'Partilhado por: ' . $ownerNm . ' <' . $ownerEm . '>';
+            $lines[] = '';
+            $lines[] = 'ClawYard | IT Partyard LDA · Setúbal, Portugal';
+            $plain = implode("\n", $lines);
+
+            $fromAddress = config('mail.from.address', 'no-reply@hp-group.org');
+            $fromName    = config('mail.from.name',    'HP-Group / ClawYard');
+            $replyTo     = config('mail.reply_to.address') ?: $fromAddress;
+            $subject     = '[ClawYard] O teu portal com ' . $agentCount . ' ' . $agentNoun;
+
+            Mail::send([], [], function ($mail) use ($recipientEmail, $first, $fromAddress, $fromName, $replyTo, $subject, $html, $plain) {
+                $mail->to($recipientEmail, $first->client_name)
+                     ->from($fromAddress, $fromName)
+                     ->replyTo($replyTo, $fromName)
+                     ->subject($subject);
+                $symfony = $mail->getSymfonyMessage();
+                $symfony->html($html, 'utf-8');
+                $symfony->text($plain, 'utf-8');
+            });
+
+            Log::info('AgentShare portal email sent', [
+                'portal_token' => $first->portal_token,
+                'to'           => $recipientEmail,
+                'agent_count'  => $agentCount,
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('AgentShare portal email failed: ' . $e->getMessage(), [
+                'to' => $recipientEmail,
+            ]);
+            return false;
+        }
+    }
+
     // ── ADMIN: Toggle active ─────────────────────────────────────────────────
     public function toggle(AgentShare $share)
     {
@@ -508,12 +797,13 @@ HTML;
                         $svc->issueOtp($share, $authorisedEmail, $sessionId, $request);
 
                         return view('agent-shares.otp-challenge', [
-                            'share'        => $share,
-                            'new_device'   => $status === 'new_device',
-                            'suggested'    => $share->client_email,
-                            'otp_sent'     => true,
-                            'sent_to'      => $this->maskEmail($authorisedEmail),
-                            'auto_issued'  => true,
+                            'share'         => $share,
+                            'new_device'    => $status === 'new_device',
+                            'suggested'     => $share->client_email,
+                            'otp_sent'      => true,
+                            'sent_to'       => $this->maskEmail($authorisedEmail),
+                            'auto_issued'   => true,
+                            'entered_email' => $authorisedEmail,
                         ]);
                     }
                 }
@@ -566,9 +856,9 @@ HTML;
         $share = AgentShare::where('token', $token)->firstOrFail();
         if (!$share->isValid()) abort(403, 'Link inválido.');
 
-        $email = (string) $request->input('email', '');
+        $email = strtolower(trim((string) $request->input('email', '')));
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return back()->withErrors(['email' => 'Email inválido.']);
+            return back()->withErrors(['email' => 'Email inválido.'])->withInput();
         }
 
         $sessionId = $this->sharePublicSessionId($share);
@@ -576,10 +866,16 @@ HTML;
 
         // Always report success to the client — we never reveal whether the
         // email matched, to avoid enumeration.
+        //
+        // MULTI-RECIPIENT NOTE: we pass $entered_email explicitly so step 2's
+        // hidden email input has a reliable source — `request()->input()`
+        // only works on THIS render; after a failed code (which redirects via
+        // back()) the request no longer carries the email field.
         return view('agent-shares.otp-challenge', [
-            'share'        => $share,
-            'otp_sent'     => true,
-            'sent_to'      => $this->maskEmail($email),
+            'share'         => $share,
+            'otp_sent'      => true,
+            'sent_to'       => $this->maskEmail($email),
+            'entered_email' => $email,
         ]);
     }
 
@@ -592,15 +888,31 @@ HTML;
         $email = strtolower(trim((string) $request->input('email', '')));
         $code  = preg_replace('/\D/', '', (string) $request->input('code', ''));
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($code) !== 6) {
-            return back()->withErrors(['code' => 'Código inválido.']);
+        // Shared renderer for "still on step 2, please try again" — avoids
+        // back()ing to /otp/request (a POST-only URL → 405) and keeps the
+        // recipient's typed email pinned on the retry form.
+        $rerenderStep2 = function (string $message) use ($share, $email) {
+            return view('agent-shares.otp-challenge', [
+                'share'         => $share,
+                'otp_sent'      => true,
+                'sent_to'       => $email !== '' ? $this->maskEmail($email) : 'o email indicado',
+                'entered_email' => $email,
+                'error_code'    => $message,
+            ]);
+        };
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return $rerenderStep2('Volta ao passo anterior e introduz o teu email.');
+        }
+        if (strlen($code) !== 6) {
+            return $rerenderStep2('O código tem de ter 6 dígitos.');
         }
 
         $sessionId = $this->sharePublicSessionId($share);
         $ok = app(AgentShareAccessService::class)->verifyOtp($share, $email, $sessionId, $code, $request);
 
         if (!$ok) {
-            return back()->withErrors(['code' => 'Código incorrecto ou expirado.']);
+            return $rerenderStep2('Código incorrecto ou expirado.');
         }
 
         return redirect('/a/' . $token);

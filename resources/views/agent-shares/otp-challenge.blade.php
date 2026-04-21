@@ -111,7 +111,10 @@
 
         <form method="POST" action="/a/{{ $share->token }}/otp/request">
             @csrf
-            <input type="email" name="email" placeholder="o-teu-email@empresa.pt" autocomplete="email" required autofocus>
+            <input type="email" name="email"
+                   value="{{ old('email') }}"
+                   placeholder="o-teu-email@empresa.pt"
+                   autocomplete="email" required autofocus>
             <button type="submit">Enviar código →</button>
         </form>
     @else
@@ -124,21 +127,27 @@
             O código tem <strong>6 dígitos</strong> e é válido por 10 minutos.
         </div>
 
-        @if($errors->has('code'))
-        <div class="error">{{ $errors->first('code') }}</div>
+        @if(!empty($error_code) || $errors->has('code'))
+        <div class="error">{{ $error_code ?? $errors->first('code') }}</div>
         @endif
 
         <form method="POST" action="/a/{{ $share->token }}/otp/verify">
             @csrf
-            {{-- Email pinning:
-                 • If the OTP was auto-issued (user never saw step 1), we
-                   must send the authorised client_email back — that's the
-                   row the service created in agent_share_otps.
-                 • Otherwise fall back to whatever the user typed in step 1
-                   (old('email') → request input).                       --}}
+            {{-- Email pinning (CRITICAL for multi-recipient):
+                 The OTP row was stored against a SPECIFIC email (the one the
+                 recipient typed on step 1, or client_email if auto-issued).
+                 Step 2 MUST POST back that same email or verifyOtp can't
+                 find the row. Priority order:
+                 1) $entered_email — always passed from the controller, the
+                    source of truth. Covers request/verify/auto-issue flows.
+                 2) old('email') — if the view was rendered from a redirect
+                    that flashed input.
+                 3) request()->input('email') — legacy fallback for the
+                    first render from requestOtp() (no longer strictly
+                    needed, kept defensively). --}}
             <input type="hidden"
                    name="email"
-                   value="{{ old('email', !empty($auto_issued) ? ($share->client_email ?? '') : request()->input('email', '')) }}">
+                   value="{{ $entered_email ?? old('email', !empty($auto_issued) ? ($share->client_email ?? '') : request()->input('email', '')) }}">
             <input type="text" name="code" class="code" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="······" required autofocus>
             <button type="submit">Entrar →</button>
         </form>
