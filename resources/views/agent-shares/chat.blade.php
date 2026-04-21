@@ -129,12 +129,25 @@
         .file-preview-bar button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;margin-left:auto;padding:0 4px}
         .file-preview-bar button:hover{color:var(--text)}
 
+        /* Markdown tables rendered inside the bubble */
+        .bubble table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12.5px}
+        .bubble th{background:var(--bg3);font-weight:700;padding:6px 9px;border:1px solid var(--border);text-align:left;white-space:nowrap}
+        .bubble td{padding:5px 9px;border:1px solid var(--border)}
+        .bubble tr:nth-child(even) td{background:color-mix(in srgb,var(--bg3) 50%,transparent)}
+
+        /* Export toolbar (PDF / Excel) — shown under each AI bubble */
+        .msg-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+        .msg-actions button{background:var(--bg3);border:1px solid var(--border);color:var(--muted);font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;transition:.15s}
+        .msg-actions button:hover{border-color:var(--agent-color);color:var(--text)}
+        .msg-actions .excel-btn:hover{background:#217346;color:#fff;border-color:#217346}
+
         /* MARKDOWN render */
         @media(max-width:640px){
             .header{padding:0 12px}
             .messages{padding:12px}
             .input-area{padding:12px}
             .bubble{font-size:13px}
+            .msg-actions button{font-size:10px;padding:3px 8px}
         }
     </style>
 </head>
@@ -501,7 +514,14 @@ async function sendMessage() {
             }
         }
 
-        if (full) history.push({ role: 'assistant', content: full });
+        if (full) {
+            history.push({ role: 'assistant', content: full });
+            // Re-render final HTML so pipe-tables become real <table> elements,
+            // then add PDF + (if there is a table) Excel export buttons under
+            // the bubble — parity with the main ClawYard view.
+            bubble.innerHTML = renderMarkdown(full);
+            addMsgActions(bubble);
+        }
 
     } catch(e) {
         typingEl?.remove();
@@ -594,6 +614,25 @@ renderStarterChips();
 
 // ── Simple markdown renderer ──
 function renderMarkdown(md) {
+    // Step 1 — pull markdown pipe-tables out BEFORE escaping so we can build
+    // real <table> HTML. Finance/Sales/SAP agents answer with tables and the
+    // shared view used to render them as plain text.
+    const tablePlaceholders = [];
+    md = md.replace(/(^|\n)((?:\|[^\n]*\|\s*\n)+)/g, (full, lead, block) => {
+        const lines = block.trim().split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) return full; // need header + separator minimum
+        const sep = lines[1];
+        if (!/^\|?\s*:?-{2,}/.test(sep.replace(/\s/g,''))) return full; // not a table
+        const splitRow = r => r.replace(/^\||\|$/g,'').split('|').map(c => c.trim());
+        const head = splitRow(lines[0]);
+        const body = lines.slice(2).map(splitRow);
+        const th = head.map(c => `<th>${escMd(c)}</th>`).join('');
+        const rows = body.map(r => '<tr>' + r.map(c => `<td>${escMd(c)}</td>`).join('') + '</tr>').join('');
+        const html = `<table><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
+        tablePlaceholders.push(html);
+        return lead + `@@TABLE_${tablePlaceholders.length - 1}@@`;
+    });
+
     let html = md
         .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
         // Code blocks
@@ -621,11 +660,95 @@ function renderMarkdown(md) {
         // Newlines → paragraphs
         .split(/\n{2,}/).map(p => {
             if (p.startsWith('<h') || p.startsWith('<pre') || p.startsWith('<hr')) return p;
+            if (/^@@TABLE_\d+@@$/.test(p.trim())) return p.trim();
             if (p.includes('<li>')) return '<ul>' + p + '</ul>';
             return '<p>' + p.replace(/\n/g,'<br>') + '</p>';
         }).join('');
 
+    // Step 2 — put the real <table> blocks back in place.
+    html = html.replace(/@@TABLE_(\d+)@@/g, (_, i) => tablePlaceholders[+i] || '');
+
     return html;
+}
+function escMd(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Per-message export toolbar (PDF + Excel) ─────────────────────────────
+// Mirrors welcome.blade.php so external clients (e.g. Luís Finance recipients)
+// can export analyses without needing access to the main dashboard.
+function addMsgActions(bubble) {
+    if (!bubble || bubble.parentElement?.querySelector('.msg-actions')) return;
+    const hasTable = !!bubble.querySelector('table');
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-actions';
+    wrap.innerHTML = `
+        <button type="button" class="pdf-btn"   title="Exportar esta resposta em PDF">📄 PDF</button>
+        ${hasTable ? '<button type="button" class="excel-btn" title="Exportar tabela para Excel (CSV)">📥 Excel</button>' : ''}
+    `;
+    wrap.querySelector('.pdf-btn').addEventListener('click', () => exportBubblePDF(bubble));
+    if (hasTable) wrap.querySelector('.excel-btn').addEventListener('click', () => exportBubbleExcel(bubble));
+    bubble.insertAdjacentElement('afterend', wrap);
+}
+
+function exportBubblePDF(bubble) {
+    const agentLabel = @json($meta['name'] ?? $share->agent_key);
+    const date = new Date().toLocaleString('pt-PT', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const win = window.open('', '_blank', 'width=860,height=900');
+    win.document.write(`<!DOCTYPE html>
+<html lang="pt"><head>
+<meta charset="UTF-8"><title>${agentLabel} — ${date}</title>
+<style>
+  body{font-family:'Segoe UI',Arial,sans-serif;margin:40px;color:#1a1a1a;font-size:13.5px;line-height:1.65}
+  h1{font-size:16px;color:#1a1a1a;margin-bottom:4px;border-bottom:2px solid ${AGENT_COLOR};padding-bottom:8px}
+  .meta{font-size:11px;color:#666;margin-bottom:20px}
+  table{border-collapse:collapse;width:100%;font-size:12px;margin:10px 0}
+  th{background:#f0f0f0;font-weight:700;padding:7px 10px;border:1px solid #ccc;text-align:left}
+  td{padding:6px 10px;border:1px solid #ddd}
+  tr:nth-child(even) td{background:#fafafa}
+  h2{font-size:14px;margin:14px 0 5px;color:#333}
+  h3{font-size:13px;margin:10px 0 4px;color:#555}
+  ul,ol{padding-left:20px} li{margin:2px 0}
+  pre{background:#f6f6f6;border:1px solid #ddd;border-radius:6px;padding:12px;overflow-x:auto}
+  hr{border:none;border-top:1px solid #ddd;margin:12px 0}
+  .footer{margin-top:32px;font-size:10px;color:#999;border-top:1px solid #eee;padding-top:8px}
+  @media print{body{margin:20px}.no-print{display:none}}
+</style>
+</head><body>
+<h1>${agentLabel}</h1>
+<div class="meta">Gerado em ${date} · ClawYard</div>
+${bubble.innerHTML}
+<div class="footer">ClawYard AI Platform · Documento gerado automaticamente</div>
+<div class="no-print" style="margin-top:20px">
+  <button onclick="window.print()" style="background:${AGENT_COLOR};color:#fff;border:none;padding:10px 24px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
+  <button onclick="window.close()" style="background:#eee;color:#333;border:none;padding:10px 20px;border-radius:6px;font-size:13px;cursor:pointer;margin-left:8px">✕ Fechar</button>
+</div>
+</body></html>`);
+    win.document.close();
+    win.focus();
+}
+
+function exportBubbleExcel(bubble) {
+    const tables = bubble.querySelectorAll('table');
+    if (!tables.length) return;
+    // Concatenate all tables in this bubble into one CSV (separated by blank line)
+    const sheets = Array.from(tables).map(tbl => {
+        return Array.from(tbl.querySelectorAll('tr')).map(tr =>
+            Array.from(tr.querySelectorAll('th,td'))
+                 .map(c => '"' + (c.innerText||c.textContent||'').replace(/"/g,'""').trim() + '"')
+                 .join(',')
+        ).join('\n');
+    });
+    const bom = '\uFEFF';
+    const csv = bom + sheets.join('\n\n');
+    const agentSlug = @json($share->agent_key);
+    const stamp = new Date().toISOString().slice(0,10);
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `${agentSlug}_${stamp}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // ── Day/Night theme toggle ─────────────────────────────────────────────────
