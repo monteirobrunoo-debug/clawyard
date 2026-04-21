@@ -57,6 +57,30 @@
         .info-box { background:#0a1500; border:1px solid #1a3300; border-radius:12px; padding:16px 20px; margin-bottom:24px; }
         .info-box p { font-size:13px; color:#76b900; line-height:1.6; }
         .info-box strong { color:#8fd400; }
+
+        /* ── LIGHT THEME OVERRIDES ─────────────────────────────── */
+        html[data-theme="light"] body { background:#f8fafc; color:#1f2937; }
+        html[data-theme="light"] header { background:#ffffff; border-bottom-color:#e5e7eb; }
+        html[data-theme="light"] .back-btn { color:#6b7280; }
+        html[data-theme="light"] .back-btn:hover { color:#1f2937; }
+        html[data-theme="light"] .page-title { color:#374151; }
+        html[data-theme="light"] .btn-sm { border-color:#e5e7eb; color:#6b7280; }
+        html[data-theme="light"] .btn-sm:hover { border-color:#76b900; color:#059669; }
+        html[data-theme="light"] .subtitle { color:#6b7280; }
+        html[data-theme="light"] .task-card { background:#ffffff; border-color:#e5e7eb; }
+        html[data-theme="light"] .task-card:hover { border-color:#d1d5db; }
+        html[data-theme="light"] .task-name { color:#1f2937; }
+        html[data-theme="light"] .task-desc { color:#4b5563; }
+        html[data-theme="light"] .tag { background:#f1f5f9; border-color:#e5e7eb; color:#6b7280; }
+        html[data-theme="light"] .tag.green { background:#dcfce7; border-color:#bbf7d0; color:#15803d; }
+        html[data-theme="light"] .tag.yellow { background:#fef3c7; border-color:#fde68a; color:#b45309; }
+        html[data-theme="light"] .tag.blue { background:#dbeafe; border-color:#bfdbfe; color:#1d4ed8; }
+        html[data-theme="light"] .btn-secondary { border-color:#e5e7eb; color:#6b7280; }
+        html[data-theme="light"] .btn-secondary:hover { border-color:#9ca3af; color:#1f2937; }
+        html[data-theme="light"] .divider { background:#e5e7eb; }
+        html[data-theme="light"] .info-box { background:#f0fdf4; border-color:#bbf7d0; }
+        html[data-theme="light"] .info-box p { color:#15803d; }
+        html[data-theme="light"] .info-box strong { color:#166534; }
     </style>
 </head>
 <body>
@@ -70,6 +94,7 @@
         @if(Auth::user()->isAdmin())
             <a href="/admin/users" class="btn-sm" style="border-color:#ff4444;color:#ff6666;">⚙️ Admin</a>
         @endif
+        <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme">☀️</button>
     </div>
 </header>
 
@@ -181,5 +206,6 @@
     </div>
 </div>
 
+@include('partials.theme-button')
 </body>
 </html>

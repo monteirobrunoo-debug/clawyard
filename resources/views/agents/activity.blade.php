@@ -27,7 +27,18 @@
             --green:#76b900; --bg:#0c0c0c; --bg2:#141414; --bg3:#1c1c1c;
             --card:#181818; --border:#222; --text:#f0f0f0; --muted:#666; --muted2:#3a3a3a;
         }
-        body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+        :root[data-theme="light"] {
+            --bg:#f8fafc; --bg2:#ffffff; --bg3:#f1f5f9;
+            --card:#ffffff; --border:#e5e7eb; --text:#1f2937; --muted:#6b7280; --muted2:#9ca3af;
+        }
+        body { font-family:'Inter',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; transition: background .2s, color .2s; }
+
+        /* Light-mode adjustments for green scan strip and dark-native chips */
+        html[data-theme="light"] .scan-strip { background:#f0fdf4; border-top-color:#bbf7d0; }
+        html[data-theme="light"] .scan-label { color:#15803d; }
+        html[data-theme="light"] .scan-item { color:#374151; }
+        html[data-theme="light"] .status-dot.on { border-color:#ffffff; }
+        html[data-theme="light"] .status-dot.off { background:#cbd5e1; border-color:#ffffff; }
 
         /* NAV */
         .topnav { height:52px; background:var(--bg2); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; padding:0 28px; position:sticky; top:0; z-index:200; }
@@ -204,6 +215,7 @@
     <div class="nav-right">
         <span class="update-badge" id="updateBadge"></span>
         <a href="/dashboard" class="nav-link">← Dashboard</a>
+        <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme">☀️</button>
     </div>
 </nav>
 
@@ -418,5 +430,6 @@ async function load() {
 load();
 setInterval(load, 30000);
 </script>
+@include('partials.theme-button')
 </body>
 </html>

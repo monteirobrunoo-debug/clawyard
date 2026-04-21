@@ -109,6 +109,38 @@
         /* Pagination */
         .pagination-wrap { margin-top:20px; display:flex; justify-content:center; }
         .pagination-wrap nav { display:flex; gap:4px; }
+
+        /* ── LIGHT THEME OVERRIDES ─────────────────────────────── */
+        html[data-theme="light"] body{background:#f8fafc;color:#1f2937}
+        html[data-theme="light"] header{background:#ffffff;border-bottom-color:#e5e7eb}
+        html[data-theme="light"] .back-btn{color:#6b7280}
+        html[data-theme="light"] .back-btn:hover{color:#1f2937}
+        html[data-theme="light"] .btn{border-color:#e5e7eb;color:#6b7280}
+        html[data-theme="light"] .btn:hover{border-color:#76b900;color:#76b900}
+        html[data-theme="light"] .subtitle{color:#6b7280}
+        html[data-theme="light"] .stat-box{background:#ffffff;border-color:#e5e7eb}
+        html[data-theme="light"] .stat-label{color:#6b7280}
+        html[data-theme="light"] .filter-select,
+        html[data-theme="light"] .search-input{background:#ffffff;border-color:#d1d5db;color:#1f2937}
+        html[data-theme="light"] .filter-select{color:#374151}
+        html[data-theme="light"] .count-badge{background:#f1f5f9;border-color:#e5e7eb;color:#6b7280}
+        html[data-theme="light"] .filter-btn-clear{border-color:#e5e7eb;color:#6b7280}
+        html[data-theme="light"] .table-wrap{border-color:#e5e7eb;background:#ffffff}
+        html[data-theme="light"] thead th{background:#f8fafc;color:#6b7280;border-bottom-color:#e5e7eb}
+        html[data-theme="light"] tbody tr{border-bottom-color:#f1f5f9}
+        html[data-theme="light"] tbody tr:hover{background:#f8fafc}
+        html[data-theme="light"] .disc-title a{color:#1f2937 !important}
+        html[data-theme="light"] .disc-authors{color:#9ca3af}
+        html[data-theme="light"] .activity-chip{background:#f1f5f9;border-color:#e5e7eb;color:#374151}
+        html[data-theme="light"] .score-bar{background:#f1f5f9}
+        html[data-theme="light"] .opp-cell{color:#4b5563}
+        html[data-theme="light"] .row-btn{border-color:#e5e7eb;color:#6b7280}
+        html[data-theme="light"] .expand-row{background:#f8fafc}
+        html[data-theme="light"] .expand-content{border-top-color:#e5e7eb}
+        html[data-theme="light"] .expand-section h4{color:#6b7280}
+        html[data-theme="light"] .expand-section p{color:#374151}
+        html[data-theme="light"] .empty h3{color:#6b7280}
+        html[data-theme="light"] .empty p{color:#9ca3af}
     </style>
 </head>
 <body>
@@ -123,6 +155,7 @@
         @if(Auth::user()->isAdmin())
         <a href="/admin/users" class="btn" style="border-color:#ff4444;color:#ff6666;">⚙️ Admin</a>
         @endif
+        <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme">☀️</button>
     </div>
 </header>
 
@@ -380,5 +413,6 @@ function showToast(msg, color = '#76b900') {
 }
 </script>
 
+@include('partials.theme-button')
 </body>
 </html>

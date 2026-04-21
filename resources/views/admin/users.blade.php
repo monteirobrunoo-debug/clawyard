@@ -128,6 +128,38 @@
         }
         .stat-card .label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
         .stat-card .value { font-size: 28px; font-weight: 800; color: #76b900; margin-top: 4px; }
+
+        /* ── LIGHT THEME OVERRIDES ─────────────────────────────── */
+        html[data-theme="light"] body { background:#f8fafc; color:#1f2937; }
+        html[data-theme="light"] .header { background:#ffffff; border-bottom-color:#e5e7eb; }
+        html[data-theme="light"] .nav a { color:#6b7280; }
+        html[data-theme="light"] .nav a:hover, html[data-theme="light"] .nav a.active { color:#1f2937; background:#f1f5f9; }
+        html[data-theme="light"] .user-name { color:#374151; }
+        html[data-theme="light"] .logout-btn { color:#6b7280; border-color:#e5e7eb; }
+        html[data-theme="light"] .logout-btn:hover { color:#1f2937; border-color:#9ca3af; }
+        html[data-theme="light"] .filters input, html[data-theme="light"] .filters select {
+            background:#ffffff; border-color:#d1d5db; color:#1f2937;
+        }
+        html[data-theme="light"] .table-card { background:#ffffff; border-color:#e5e7eb; }
+        html[data-theme="light"] thead { background:#f8fafc; }
+        html[data-theme="light"] th { color:#6b7280; }
+        html[data-theme="light"] td { border-top-color:#f1f5f9; }
+        html[data-theme="light"] tr:hover td { background:#f8fafc; }
+        html[data-theme="light"] .action-btn { background:#f8fafc; border-color:#e5e7eb; color:#374151; }
+        html[data-theme="light"] .action-btn:hover { border-color:#76b900; color:#059669; }
+        html[data-theme="light"] .modal-overlay { background:rgba(15,23,42,.5); }
+        html[data-theme="light"] .modal { background:#ffffff; border-color:#e5e7eb; }
+        html[data-theme="light"] .modal h2 { color:#1f2937; }
+        html[data-theme="light"] .form-group label { color:#6b7280; }
+        html[data-theme="light"] .form-group input, html[data-theme="light"] .form-group select {
+            background:#f8fafc; border-color:#d1d5db; color:#1f2937;
+        }
+        html[data-theme="light"] .btn-secondary { color:#6b7280; border-color:#e5e7eb; }
+        html[data-theme="light"] .pagination a, html[data-theme="light"] .pagination span {
+            background:#ffffff; border-color:#e5e7eb; color:#374151;
+        }
+        html[data-theme="light"] .stat-card { background:#ffffff; border-color:#e5e7eb; }
+        html[data-theme="light"] .stat-card .label { color:#6b7280; }
     </style>
 </head>
 <body>
@@ -146,6 +178,7 @@
             @csrf
             <button type="submit" class="logout-btn">Sair</button>
         </form>
+        <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme">☀️</button>
     </div>
 </header>
 
@@ -349,5 +382,6 @@ function editUser(id, name, email, role, isActive) {
 }
 </script>
 
+@include('partials.theme-button')
 </body>
 </html>

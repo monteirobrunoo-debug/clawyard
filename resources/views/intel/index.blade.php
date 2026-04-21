@@ -62,6 +62,32 @@
         /* Auto-refresh bar */
         .refresh-bar{display:flex;align-items:center;gap:8px;font-size:11px;color:#444;margin-bottom:20px}
         .refresh-bar input[type=checkbox]{accent-color:#76b900}
+
+        /* ── LIGHT THEME OVERRIDES ─────────────────────────────── */
+        html[data-theme="light"] body{background:#f8fafc;color:#1f2937}
+        html[data-theme="light"] header{background:#ffffff;border-bottom-color:#e5e7eb}
+        html[data-theme="light"] .back-btn{color:#6b7280}
+        html[data-theme="light"] .back-btn:hover{color:#1f2937}
+        html[data-theme="light"] .btn{border-color:#e5e7eb;color:#6b7280}
+        html[data-theme="light"] .btn:hover{border-color:#76b900;color:#76b900}
+        html[data-theme="light"] .subtitle{color:#6b7280}
+        html[data-theme="light"] .stat-chip{background:#ffffff;border-color:#e5e7eb}
+        html[data-theme="light"] .stat-chip .lbl{color:#6b7280}
+        html[data-theme="light"] .bus-label{color:#1f2937}
+        html[data-theme="light"] .bus-sub{color:#6b7280}
+        html[data-theme="light"] .entry-card{background:#ffffff;border-color:#e5e7eb}
+        html[data-theme="light"] .entry-card:hover{border-color:#d1d5db}
+        html[data-theme="light"] .agent-icon-emoji{background:#f1f5f9;border-color:#e5e7eb}
+        html[data-theme="light"] .agent-icon{border-color:#e5e7eb}
+        html[data-theme="light"] .agent-name{color:#1f2937}
+        html[data-theme="light"] .context-key{background:#f1f5f9;color:#6b7280}
+        html[data-theme="light"] .time-badge{color:#6b7280}
+        html[data-theme="light"] .expiry-badge{color:#9ca3af}
+        html[data-theme="light"] .entry-summary{color:#374151}
+        html[data-theme="light"] .tag{background:#f1f5f9;border-color:#e5e7eb;color:#6b7280}
+        html[data-theme="light"] .empty-title{color:#6b7280}
+        html[data-theme="light"] .empty-desc{color:#9ca3af}
+        html[data-theme="light"] .refresh-bar{color:#6b7280}
     </style>
 </head>
 <body>
@@ -73,6 +99,7 @@
     <div class="hdr-right">
         <a href="/dashboard" class="btn">Dashboard</a>
         <a href="/chat" class="btn">Chat</a>
+        <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme">☀️</button>
     </div>
 </header>
 
@@ -176,5 +203,6 @@
 })();
 </script>
 
+@include('partials.theme-button')
 </body>
 </html>

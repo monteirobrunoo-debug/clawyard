@@ -35,6 +35,20 @@
 
         .view-btn { font-size: 11px; padding: 5px 12px; border-radius: 6px; cursor: pointer; border: 1px solid #2a2a2a; background: #1a1a1a; color: #aaa; text-decoration: none; }
         .view-btn:hover { border-color: #76b900; color: #76b900; }
+
+        /* ── LIGHT THEME OVERRIDES ─────────────────────────────── */
+        html[data-theme="light"] body { background:#f8fafc; color:#1f2937; }
+        html[data-theme="light"] .header { background:#ffffff; border-bottom-color:#e5e7eb; }
+        html[data-theme="light"] .nav a { color:#6b7280; }
+        html[data-theme="light"] .nav a:hover, html[data-theme="light"] .nav a.active { color:#1f2937; background:#f1f5f9; }
+        html[data-theme="light"] .user-name { color:#374151; }
+        html[data-theme="light"] .logout-btn { color:#6b7280; border-color:#e5e7eb; }
+        html[data-theme="light"] .table-card { background:#ffffff; border-color:#e5e7eb; }
+        html[data-theme="light"] thead { background:#f8fafc; }
+        html[data-theme="light"] th { color:#6b7280; }
+        html[data-theme="light"] td { border-top-color:#f1f5f9; color:#374151; }
+        html[data-theme="light"] tr:hover td { background:#f8fafc; }
+        html[data-theme="light"] .view-btn { background:#f8fafc; border-color:#e5e7eb; color:#374151; }
     </style>
 </head>
 <body>
@@ -53,6 +67,7 @@
             @csrf
             <button type="submit" class="logout-btn">Sair</button>
         </form>
+        <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme">☀️</button>
     </div>
 </header>
 
@@ -91,5 +106,6 @@
     <div style="margin-top:20px">{{ $conversations->links() }}</div>
 </div>
 
+@include('partials.theme-button')
 </body>
 </html>

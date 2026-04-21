@@ -13,7 +13,20 @@
             --border: #1e1e1e; --border2: #2a2a2a; --text: #e5e5e5; --muted: #555;
             --blue: #3b82f6; --purple: #8b5cf6;
         }
-        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        :root[data-theme="light"] {
+            --bg: #f8fafc; --bg2: #ffffff; --bg3: #f1f5f9;
+            --border: #e5e7eb; --border2: #d1d5db; --text: #1f2937; --muted: #6b7280;
+        }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; transition: background .2s, color .2s; }
+
+        /* Light-mode fine-tuning for chips that used dark backgrounds */
+        html[data-theme="light"] .patent-type.us { background:#dbeafe; color:#1d4ed8; }
+        html[data-theme="light"] .patent-type.ep { background:#dcfce7; color:#15803d; }
+        html[data-theme="light"] .patent-type.wo { background:#ede9fe; color:#6d28d9; }
+        html[data-theme="light"] .patent-type.pt { background:#fef3c7; color:#b45309; }
+        html[data-theme="light"] .header-nav a.active { background:#dcfce7; }
+        html[data-theme="light"] .filter-btn:hover, html[data-theme="light"] .filter-btn.active { background:#dcfce7; }
+        html[data-theme="light"] .patent-actions { background:#f8fafc; }
 
         /* ── HEADER ── */
         .header { display:flex; align-items:center; gap:12px; padding:14px 32px; border-bottom:1px solid var(--border); background:var(--bg2); }
@@ -112,6 +125,7 @@
         <a href="/chat?agent=patent">🏛️ Dra. Sofia IP</a>
         <a href="/chat?agent=quantum">⚛️ Prof. Quantum</a>
         <a href="/patents" class="active">📄 Patentes</a>
+        <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme" style="margin-left:8px">☀️</button>
     </div>
 </div>
 
@@ -330,5 +344,6 @@ async function redownloadPatent(patent, btn) {
 
 loadPatents();
 </script>
+@include('partials.theme-button')
 </body>
 </html>

@@ -28,8 +28,33 @@
             --warn:    #d97706;
             --sidebar-w: 220px;
         }
+        /* This page is LIGHT by default — toggle switches INTO dark. */
+        :root[data-theme="light"] {
+            --bg:      #0a0a0a;
+            --surface: #111;
+            --border:  #1e1e1e;
+            --border2: #2a2a2a;
+            --text:    #e5e5e5;
+            --muted:   #888;
+            --muted2:  #555;
+            --success-bg: #052e16;
+            --danger-bg:  #3b0a0a;
+            --warn-bg:    #3b2a05;
+        }
 
-        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; transition: background .2s, color .2s; }
+
+        /* Dark-mode fine-tuning for hardcoded light accents */
+        html[data-theme="light"] .topnav .logo { color: var(--text); }
+        html[data-theme="light"] tr:hover td { background: #151515; }
+        html[data-theme="light"] .sidebar-item.active { background: #0a1a20; }
+        html[data-theme="light"] .act-btn.view:hover { background: #0a1a20; border-color: #0369a1; }
+        html[data-theme="light"] .act-btn.print:hover { background: #1a102e; border-color: #6d28d9; }
+        html[data-theme="light"] .badge-open { background: #052e16; color: #4ade80; }
+        html[data-theme="light"] .badge-closed { background: #1a1a1a; color: #9ca3af; }
+        html[data-theme="light"] .order-chip { background: #0a1a2e; color: #60a5fa; border-color: #1e3a5f; }
+        html[data-theme="light"] .conn-banner.error { background: #3b0a0a; color: #fca5a5; }
+        html[data-theme="light"] .conn-banner.ok { background: #052e16; color: #86efac; }
 
         /* ── TOP NAV ─────────────────────────────────────────────────── */
         .topnav {
@@ -267,6 +292,7 @@
         Falar com Richard
     </a>
     <span class="user">{{ auth()->user()->name ?? '' }}</span>
+    <button id="cyThemeBtn" class="cy-theme-btn" type="button" aria-label="Toggle theme" style="margin-left:8px">☀️</button>
 </nav>
 
 <div class="layout">
@@ -722,5 +748,6 @@ setupSlider();
 pingSap();
 loadYears().then(loadData);
 </script>
+@include('partials.theme-button')
 </body>
 </html>
