@@ -6,31 +6,48 @@
     <meta name="robots" content="noindex, nofollow">
     <title>ClawYard · Portal {{ $client_name }}</title>
     <style>
+        :root{
+            --bg:#0a0a0f;--card:#111118;--border:#2a2a3a;--text:#e2e8f0;--text-strong:#cbd5e1;
+            --muted:#94a3b8;--muted2:#64748b;--input:#1a1a24;--accent:#76b900;--accent-ink:#000;
+            --danger:#ef4444;--danger-ink:#fca5a5;--danger-bg:rgba(239,68,68,.1);--danger-border:rgba(239,68,68,.3);
+            --ok-ink:#a3e635;--ok-bg:rgba(118,185,0,.1);--ok-border:rgba(118,185,0,.3);
+            --toggle-bg:rgba(255,255,255,.04);--toggle-border:rgba(255,255,255,.10);
+        }
+        :root[data-theme="day"]{
+            --bg:#f4f6fa;--card:#ffffff;--border:#e2e8f0;--text:#111827;--text-strong:#0b1220;
+            --muted:#4b5563;--muted2:#6b7280;--input:#f9fafb;--accent:#4d7a00;--accent-ink:#fff;
+            --danger:#b91c1c;--danger-ink:#991b1b;--danger-bg:rgba(239,68,68,.08);--danger-border:rgba(239,68,68,.35);
+            --ok-ink:#3f6212;--ok-bg:rgba(118,185,0,.12);--ok-border:rgba(77,122,0,.35);
+            --toggle-bg:rgba(0,0,0,.04);--toggle-border:rgba(0,0,0,.10);
+        }
         *{box-sizing:border-box;margin:0;padding:0}
-        body{background:#0a0a0f;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-        .card{background:#111118;border:1px solid #2a2a3a;border-radius:16px;padding:36px 32px;width:100%;max-width:420px;text-align:center}
-        .brand{font-size:20px;font-weight:800;color:#76b900;margin-bottom:2px;letter-spacing:-0.5px}
-        .brand-sub{font-size:10px;color:#64748b;letter-spacing:2px;text-transform:uppercase;margin-bottom:22px}
+        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;transition:background .2s,color .2s}
+        .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px 32px;width:100%;max-width:420px;text-align:center;position:relative}
+        .brand{font-size:20px;font-weight:800;color:var(--accent);margin-bottom:2px;letter-spacing:-0.5px}
+        .brand-sub{font-size:10px;color:var(--muted2);letter-spacing:2px;text-transform:uppercase;margin-bottom:22px}
         .icon{font-size:42px;margin-bottom:10px}
         .title{font-size:18px;font-weight:800;margin-bottom:4px}
-        .sub{font-size:13px;color:#94a3b8;margin-bottom:22px;line-height:1.5}
-        .sub strong{color:#cbd5e1}
-        input{width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:12px 16px;border-radius:10px;font-size:16px;outline:none;margin-bottom:10px;transition:.15s}
-        input:focus{border-color:#76b900}
+        .sub{font-size:13px;color:var(--muted);margin-bottom:22px;line-height:1.5}
+        .sub strong{color:var(--text-strong)}
+        input{width:100%;background:var(--input);border:1px solid var(--border);color:var(--text);padding:12px 16px;border-radius:10px;font-size:16px;outline:none;margin-bottom:10px;transition:.15s}
+        input:focus{border-color:var(--accent)}
         input.code{text-align:center;letter-spacing:8px;font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
-        .error{font-size:12px;color:#ef4444;margin:-4px 0 12px;text-align:left}
-        button{width:100%;background:#76b900;color:#000;font-weight:700;padding:12px;border:none;border-radius:10px;cursor:pointer;font-size:14px;transition:.15s;min-height:44px}
+        .error{font-size:12px;color:var(--danger);margin:-4px 0 12px;text-align:left}
+        button{width:100%;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:12px;border:none;border-radius:10px;cursor:pointer;font-size:14px;transition:.15s;min-height:44px}
         button:hover{filter:brightness(1.1)}
-        .muted{font-size:12px;color:#64748b;margin-top:16px}
-        .muted a{color:#76b900;text-decoration:none}
-        .badge{display:inline-block;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5;padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:14px}
-        .badge.success{background:rgba(118,185,0,.1);border-color:rgba(118,185,0,.3);color:#a3e635}
-        .client{font-size:13px;color:#94a3b8;margin-bottom:18px}
-        .client strong{color:#e2e8f0}
+        .muted{font-size:12px;color:var(--muted2);margin-top:16px}
+        .muted a{color:var(--accent);text-decoration:none}
+        .badge{display:inline-block;background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger-ink);padding:5px 10px;border-radius:999px;font-size:11px;font-weight:600;margin-bottom:14px}
+        .badge.success{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok-ink)}
+        .client{font-size:13px;color:var(--muted);margin-bottom:18px}
+        .client strong{color:var(--text)}
+        .theme-toggle{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:10px;background:var(--toggle-bg);border:1px solid var(--toggle-border);color:var(--muted);cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:.15s}
+        .theme-toggle:hover{color:var(--text);border-color:var(--accent)}
     </style>
 </head>
 <body>
 <div class="card">
+    <button type="button" class="theme-toggle" onclick="toggleClawTheme()" aria-label="Alternar modo claro/escuro" title="Alternar modo claro/escuro"><span id="themeIcon">🌙</span></button>
     <div class="brand">ClawYard</div>
     <div class="brand-sub">HP-Group · PartYard</div>
 
@@ -80,5 +97,21 @@
         </div>
     @endif
 </div>
+<script>
+(function(){
+    var KEY='clawyard_theme',saved=null;
+    try{saved=localStorage.getItem(KEY);}catch(e){}
+    var t=(saved==='day'?'day':'night');
+    document.documentElement.setAttribute('data-theme',t);
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(t==='day'?'☀️':'🌙');
+})();
+function toggleClawTheme(){
+    var cur=document.documentElement.getAttribute('data-theme')==='day'?'day':'night';
+    var next=cur==='day'?'night':'day';
+    document.documentElement.setAttribute('data-theme',next);
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(next==='day'?'☀️':'🌙');
+    try{localStorage.setItem('clawyard_theme',next);}catch(e){}
+}
+</script>
 </body>
 </html>

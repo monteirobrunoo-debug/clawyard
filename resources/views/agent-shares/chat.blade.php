@@ -9,11 +9,43 @@
         *{box-sizing:border-box;margin:0;padding:0}
         :root{
             --agent-color: {{ $meta['color'] }};
+            /* Night (default) tokens */
             --bg:#0a0a0f;--bg2:#111118;--bg3:#1a1a24;--bg4:#0f0f18;
             --border:#2a2a3a;--text:#e2e8f0;--muted:#64748b;
+            --text-soft:#94a3b8;
+            --code-bg:rgba(255,255,255,.08);
+            --pre-bg:rgba(0,0,0,.4);
+            --toggle-bg:rgba(255,255,255,.04);
+            --toggle-border:rgba(255,255,255,.10);
+        }
+        /* Day mode — override tokens. Keeps --agent-color untouched so
+           each agent's accent stays on-brand in both themes. */
+        :root[data-theme="day"]{
+            --bg:#f4f6fa;
+            --bg2:#ffffff;
+            --bg3:#f1f5f9;
+            --bg4:#eef2f7;
+            --border:#e2e8f0;
+            --text:#0f172a;
+            --muted:#64748b;
+            --text-soft:#475569;
+            --code-bg:rgba(15,23,42,.06);
+            --pre-bg:rgba(15,23,42,.04);
+            --toggle-bg:rgba(15,23,42,.04);
+            --toggle-border:rgba(15,23,42,.12);
         }
         html,body{height:100%;overflow:hidden}
-        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column}
+        body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column;transition:background .2s,color .2s}
+
+        /* Header theme toggle */
+        .theme-toggle{
+            width:34px;height:34px;border-radius:9px;
+            background:var(--toggle-bg);border:1px solid var(--toggle-border);
+            color:var(--muted);cursor:pointer;font-size:14px;line-height:1;
+            display:inline-flex;align-items:center;justify-content:center;
+            padding:0;transition:.15s;flex-shrink:0;
+        }
+        .theme-toggle:hover{color:var(--text);border-color:var(--agent-color)}
 
         /* HEADER */
         .header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;height:54px;display:flex;align-items:center;gap:12px;flex-shrink:0}
@@ -128,6 +160,14 @@
     @if($share->show_branding)
     <div class="branding">© PartYard/Setq.AI Rights reserved 2026</div>
     @endif
+    <button type="button"
+            class="theme-toggle"
+            id="themeToggle"
+            onclick="toggleClawTheme()"
+            aria-label="Alternar modo claro/escuro"
+            title="Alternar modo claro/escuro">
+        <span id="themeIcon">🌙</span>
+    </button>
 </div>
 
 <!-- CHAT -->
@@ -569,6 +609,30 @@ function renderMarkdown(md) {
         }).join('');
 
     return html;
+}
+
+// ── Day/Night theme toggle ─────────────────────────────────────────────────
+// Any recipient can flip the UI between modes — the choice is remembered in
+// localStorage (scoped "clawyard_theme") so it persists across /a/{token},
+// /p/{portal_token}, and the OTP challenge page.
+(function initClawTheme(){
+    var KEY = 'clawyard_theme';
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    applyClawTheme(saved === 'day' ? 'day' : 'night');
+})();
+
+function applyClawTheme(t){
+    document.documentElement.setAttribute('data-theme', t);
+    var ic = document.getElementById('themeIcon');
+    if (ic) ic.textContent = (t === 'day' ? '☀️' : '🌙');
+}
+
+function toggleClawTheme(){
+    var cur = document.documentElement.getAttribute('data-theme') === 'day' ? 'day' : 'night';
+    var next = cur === 'day' ? 'night' : 'day';
+    applyClawTheme(next);
+    try { localStorage.setItem('clawyard_theme', next); } catch (e) {}
 }
 </script>
 </body>

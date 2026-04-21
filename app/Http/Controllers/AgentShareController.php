@@ -430,6 +430,28 @@ HTML;
                     return redirect('/p/' . $share->portal_token);
                 }
 
+                // UX: the admin already bound this share to a specific
+                // client_email when creating it. Asking the recipient to
+                // retype that same address is pointless friction (and a
+                // typo silently fails due to anti-enumeration). So we
+                // auto-issue the OTP to the stored address and land the
+                // recipient directly on the code-input step. We only fall
+                // back to the email-input step if, for some legacy reason,
+                // the share has no client_email on file.
+                $authorisedEmail = strtolower(trim((string) $share->client_email));
+                if ($authorisedEmail !== '') {
+                    $svc->issueOtp($share, $authorisedEmail, $sessionId, $request);
+
+                    return view('agent-shares.otp-challenge', [
+                        'share'        => $share,
+                        'new_device'   => $status === 'new_device',
+                        'suggested'    => $share->client_email,
+                        'otp_sent'     => true,
+                        'sent_to'      => $this->maskEmail($authorisedEmail),
+                        'auto_issued'  => true,
+                    ]);
+                }
+
                 return view('agent-shares.otp-challenge', [
                     'share'        => $share,
                     'new_device'   => $status === 'new_device',

@@ -7,8 +7,25 @@
     <title>ClawYard · {{ $client_name }}</title>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
-        :root { --green:#76b900; --bg:#0a0a0a; --bg2:#111; --bg3:#1a1a1a; --border:#1e1e1e; --border2:#2a2a2a; --text:#e5e5e5; --muted:#555; }
-        body{font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;margin:0}
+        :root {
+            --green:#76b900;
+            --bg:#0a0a0a; --bg2:#111; --bg3:#1a1a1a;
+            --border:#1e1e1e; --border2:#2a2a2a;
+            --text:#e5e5e5; --muted:#555;
+            --role-ink:#666;
+            --toggle-bg:rgba(255,255,255,.04); --toggle-border:rgba(255,255,255,.10);
+        }
+        :root[data-theme="day"]{
+            --green:#4d7a00;
+            --bg:#f4f6fa; --bg2:#ffffff; --bg3:#f1f5f9;
+            --border:#e2e8f0; --border2:#cbd5e1;
+            --text:#0f172a; --muted:#64748b;
+            --role-ink:#64748b;
+            --toggle-bg:rgba(15,23,42,.04); --toggle-border:rgba(15,23,42,.12);
+        }
+        body{font-family:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;margin:0;transition:background .2s,color .2s}
+        .theme-toggle{margin-left:8px;width:34px;height:34px;border-radius:10px;background:var(--toggle-bg);border:1px solid var(--toggle-border);color:var(--muted);cursor:pointer;font-size:14px;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:.15s}
+        .theme-toggle:hover{color:var(--text);border-color:var(--green)}
 
         .header{display:flex;align-items:center;gap:12px;padding:14px 28px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:100;flex-wrap:wrap}
         .logo{font-size:20px;font-weight:800;color:var(--green);letter-spacing:-0.5px}
@@ -33,7 +50,7 @@
         .card:hover .avatar{border-color:color-mix(in srgb, var(--card-color,var(--green)) 60%, transparent)}
         .avatar img{width:100%;height:100%;object-fit:cover}
         .name{font-size:13px;font-weight:700;margin-bottom:4px}
-        .role{font-size:11px;color:#666;line-height:1.4;min-height:30px;margin-bottom:14px}
+        .role{font-size:11px;color:var(--role-ink);line-height:1.4;min-height:30px;margin-bottom:14px}
         .btn{display:inline-block;background:var(--green);color:#000;padding:7px 20px;border-radius:20px;font-size:12px;font-weight:700;transition:background .15s,transform .15s}
         .card:hover .btn{background:#8fd400;transform:scale(1.05)}
         .dot{position:absolute;top:12px;right:12px;width:8px;height:8px;background:var(--green);border-radius:50%;box-shadow:0 0 6px var(--green);animation:pulse 2.5s ease-in-out infinite}
@@ -59,6 +76,7 @@
     <span class="logo">ClawYard</span>
     <span class="badge">Portal privado</span>
     <div class="user">Bem-vindo, <strong>{{ $client_name }}</strong></div>
+    <button type="button" class="theme-toggle" onclick="toggleClawTheme()" aria-label="Alternar modo claro/escuro" title="Alternar modo claro/escuro"><span id="themeIcon">🌙</span></button>
 </header>
 
 <div class="hero">
@@ -92,5 +110,21 @@
     @endforelse
 </div>
 
+<script>
+(function(){
+    var KEY='clawyard_theme',saved=null;
+    try{saved=localStorage.getItem(KEY);}catch(e){}
+    var t=(saved==='day'?'day':'night');
+    document.documentElement.setAttribute('data-theme',t);
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(t==='day'?'☀️':'🌙');
+})();
+function toggleClawTheme(){
+    var cur=document.documentElement.getAttribute('data-theme')==='day'?'day':'night';
+    var next=cur==='day'?'night':'day';
+    document.documentElement.setAttribute('data-theme',next);
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(next==='day'?'☀️':'🌙');
+    try{localStorage.setItem('clawyard_theme',next);}catch(e){}
+}
+</script>
 </body>
 </html>
