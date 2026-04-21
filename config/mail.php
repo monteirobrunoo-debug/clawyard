@@ -39,10 +39,16 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            // Default to STARTTLS (opportunistic TLS on port 587) whenever the
+            // mail host is NOT a loopback address. Loopback relays (sendmail
+            // on 127.0.0.1:2525) stay plaintext because the traffic never
+            // leaves the machine. This protects production deployments even
+            // if the Forge .env forgets to set MAIL_SCHEME explicitly.
+            'scheme' => env('MAIL_SCHEME', in_array(env('MAIL_HOST', '127.0.0.1'), ['127.0.0.1', 'localhost', '::1'], true) ? null : 'smtp'),
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),
+            'encryption' => env('MAIL_ENCRYPTION', in_array(env('MAIL_HOST', '127.0.0.1'), ['127.0.0.1', 'localhost', '::1'], true) ? null : 'tls'),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
