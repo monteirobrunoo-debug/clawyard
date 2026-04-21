@@ -150,7 +150,14 @@
         @endif
     </div>
     <div class="agent-info">
-        <div class="agent-name">{{ $share->custom_title ?: $meta['name'] }}</div>
+        {{-- Header ALWAYS shows the real agent name. custom_title is the
+             portal-level label (same across every share in a batch) so
+             using it here hides *which* agent the client is actually
+             talking to. We render it as a small context line above. --}}
+        @if($share->custom_title && $share->custom_title !== ($meta['name'] ?? ''))
+            <div style="font-size:10px;color:#94a3b8;opacity:.7;text-transform:uppercase;letter-spacing:.6px;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:460px">{{ $share->custom_title }}</div>
+        @endif
+        <div class="agent-name">{{ $meta['name'] ?? $share->agent_key }}</div>
         @if(!empty($meta['role']))
             <div style="font-size:11px;color:#94a3b8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:460px" title="{{ $meta['role'] }}">{{ $meta['role'] }}</div>
         @else
@@ -181,11 +188,17 @@
                     {{ $meta['emoji'] }}
                 @endif
             </div>
-            <div class="welcome-name">{{ $share->custom_title ?: $meta['name'] }}</div>
+            {{-- Primary = real agent name. custom_title (portal label) is
+                 rendered as a small subtitle so the client still sees the
+                 portal context but knows exactly which agent this is. --}}
+            <div class="welcome-name">{{ $meta['name'] ?? $share->agent_key }}</div>
             @if(!empty($meta['role']))
             <div class="welcome-role" style="font-size:13px;color:var(--agent-color);font-weight:600;margin-top:4px;margin-bottom:10px;opacity:.9">
                 {{ $meta['role'] }}
             </div>
+            @endif
+            @if($share->custom_title && $share->custom_title !== ($meta['name'] ?? ''))
+            <div style="font-size:11px;color:#94a3b8;opacity:.65;margin-bottom:10px">{{ $share->custom_title }}</div>
             @endif
             <div class="welcome-msg">
                 @if($share->welcome_message)
@@ -321,10 +334,14 @@ function clearAttachment() {
 }
 
 // ── Starter chips per agent ───────────────────────────────────────────────
-const AGENT_CHIPS = @json(\App\Services\AgentChipsService::all());
+// Resolved server-side via AgentChipsService::forAgent() so we get the
+// correct cascade: curated chips → AgentCatalog::starters() → auto. This
+// avoids the empty/mismatched-prompts bug when a share is for an agent
+// that AgentChipsService doesn't explicitly define (e.g. mildef, crm).
+const AGENT_CHIPS = @json(\App\Services\AgentChipsService::forAgent($share->agent_key));
 
 function renderStarterChips() {
-    const chips = AGENT_CHIPS[AGENT_KEY] || AGENT_CHIPS['auto'] || [];
+    const chips = AGENT_CHIPS || [];
     const container = document.getElementById('starter-chips');
     if (!container || !chips.length) return;
     container.innerHTML = chips.map(c =>

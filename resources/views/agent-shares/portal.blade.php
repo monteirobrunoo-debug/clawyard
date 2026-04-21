@@ -79,30 +79,47 @@
     <button type="button" class="theme-toggle" onclick="toggleClawTheme()" aria-label="Alternar modo claro/escuro" title="Alternar modo claro/escuro"><span id="themeIcon">🌙</span></button>
 </header>
 
+@php
+    // Portal-level labels — set ONCE by the admin when creating the batch.
+    // The first share's custom_title / welcome_message are treated as the
+    // portal's own title/subtitle (they're the same on every share anyway
+    // because they come from the shared modal). Per-agent cards below MUST
+    // still show the real agent name + role.
+    $portalTitle   = optional($shares->first())->custom_title ?: 'Os teus Agentes';
+    $portalWelcome = optional($shares->first())->welcome_message ?: null;
+@endphp
+
 <div class="hero">
     <p class="hero-label">HP-Group · PartYard</p>
-    <h1>Os teus <span>Agentes</span></h1>
-    <p>{{ count($shares) }} assistente{{ count($shares) === 1 ? '' : 's' }} disponíve{{ count($shares) === 1 ? 'l' : 'is' }} para ti. Escolhe um para começar.</p>
+    <h1>{{ $portalTitle }}</h1>
+    @if($portalWelcome)
+        <p style="margin-top:10px">{{ $portalWelcome }}</p>
+    @endif
+    <p style="margin-top:10px">{{ count($shares) }} assistente{{ count($shares) === 1 ? '' : 's' }} disponíve{{ count($shares) === 1 ? 'l' : 'is' }} para ti. Escolhe um para começar.</p>
 </div>
 
 <div class="grid">
     @forelse($shares as $share)
         @php
-            $meta  = $agentMeta[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900', 'photo' => null];
-            $title = $share->custom_title ?: $meta['name'];
-            $href  = '/a/' . $share->token;
+            $meta = $agentMeta[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900', 'photo' => null, 'role' => 'Agente ClawYard'];
+            // Per-card: ALWAYS real agent name + real role. custom_title /
+            // welcome_message are portal-scoped (rendered in the hero above)
+            // and would otherwise make every card look identical.
+            $agentName = $meta['name'] ?? $share->agent_key;
+            $agentRole = trim((string) ($meta['role'] ?? ''));
+            $href      = '/a/' . $share->token;
         @endphp
         <a class="card" href="{{ $href }}" style="--card-color: {{ $meta['color'] ?? '#76b900' }}">
             <div class="dot" style="background:{{ $meta['color'] ?? '#76b900' }};box-shadow:0 0 6px {{ $meta['color'] ?? '#76b900' }}"></div>
             <div class="avatar">
                 @if(!empty($meta['photo']))
-                    <img src="{{ $meta['photo'] }}" alt="{{ $title }}">
+                    <img src="{{ $meta['photo'] }}" alt="{{ $agentName }}">
                 @else
                     <span>{{ $meta['emoji'] ?? '🤖' }}</span>
                 @endif
             </div>
-            <div class="name">{{ $title }}</div>
-            <div class="role">{{ \Illuminate\Support\Str::limit($share->welcome_message ?: ($meta['name'] ?? ''), 90) }}</div>
+            <div class="name">{{ $agentName }}</div>
+            <div class="role">{{ \Illuminate\Support\Str::limit($agentRole, 110) }}</div>
             <span class="btn">Conversar</span>
         </a>
     @empty

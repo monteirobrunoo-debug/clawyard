@@ -227,11 +227,70 @@ class AgentChipsService
                 '⚓ Analisa a oferta Mi Vida (ENI 08023148) — especificações, preço e gap de certificação',
                 '⚓ Empresas de reparação naval no Reno/Main para overhaul de motor e renovação de casco',
             ],
+            // ── Cor. Rodrigues Defesa (Military Procurement) ─────────────
+            'mildef' => [
+                '🎖️ Fornecedores NATO/EDA para peça NSN 1290-01-XXX-XXXX — alternativas excl. China/Russia',
+                '🎖️ Faz RFI militar para armador NATO — motor marítimo CODAG classe fragata',
+                '🎖️ Cold outreach a procurement da Marinha Francesa — peças para Aquitaine-class',
+                '🎖️ US DoD SAM.gov: contratos Navy abertos para propulsão e thruster naval esta semana',
+                '🎖️ EDA/OCCAR: oportunidades NATO supply chain para PartYard Military 2026',
+                '🎖️ Compliance ITAR/EAR para exportação de componentes duais PT→US Navy',
+            ],
+            // ── Marta CRM ────────────────────────────────────────────────
+            'crm' => [
+                '🎯 Cria oportunidade SAP B1 a partir deste email de armador grego',
+                '🎯 Pipeline por vendedor em estágio 5 — valor total e probabilidade de fecho',
+                '🎯 Que oportunidades estão a escorregar no pipeline esta semana?',
+                '🎯 Transforma este thread de follow-up em lead qualificado + próximos passos',
+                '🎯 Resumo semanal CRM: top 5 deals, conversão e próximas acções',
+                '🎯 Clientes inactivos há 90+ dias — lista de reactivação priorizada',
+            ],
+            // ── Strategist Renato (Executive Briefing) ───────────────────
+            'briefing' => [
+                '📊 Dá-me o briefing executivo de hoje — KPIs, riscos, oportunidades',
+                '📊 Resume a semana em 10 pontos accionáveis para o board',
+                '📊 Quais são os 3 riscos operacionais mais urgentes agora?',
+                '📊 Health check completo PartYard: vendas, caixa, pipeline, equipa',
+                '📊 Briefing combinado de todos os agentes → plano de acção consolidado',
+                '📊 Top oportunidades comerciais cruzadas com capacidade R&D e SAP stock',
+            ],
+            // ── Logística / Shipping ─────────────────────────────────────
+            'shipping' => [
+                '🚚 Cotação UPS Setúbal → Niterói (BR) — peça 12 kg / 40×30×25 cm',
+                '🚚 Cataloga esta fatura UPS e extrai Incoterm, TARIC e IVA',
+                '🚚 IVA intra-UE França → Portugal: enquadramento e documentação',
+                '🚚 Preenche DAU/SAD para exportação de spare parts via sea freight',
+                '🚚 Compara DHL vs UPS vs FedEx para envio urgente Sines → Pireu',
+                '🚚 Classificação TARIC correcta para peças MTU Série 4000 exportadas para Brasil',
+            ],
         ];
     }
 
+    /**
+     * Return the starter chips for the given agent. Priority:
+     *  1) AgentChipsService::all()[key] — curated, 6 prompts, with emoji.
+     *  2) AgentCatalog::starters(key)   — 3-prompt fallback defined in the
+     *     catalog alongside the agent metadata (covers agents that don't
+     *     have a custom chip set here).
+     *  3) The `auto` router chips as an absolute last resort.
+     */
     public static function forAgent(string $key): array
     {
-        return static::all()[$key] ?? static::all()['auto'];
+        $all = static::all();
+        if (isset($all[$key]) && !empty($all[$key])) {
+            return $all[$key];
+        }
+
+        // AgentCatalog has per-agent starters that are agent-specific and
+        // safer than defaulting to `auto` (which advertises prompts from
+        // other agents the recipient might not even have access to).
+        if (class_exists(AgentCatalog::class)) {
+            $starters = AgentCatalog::starters($key);
+            if (!empty($starters)) {
+                return $starters;
+            }
+        }
+
+        return $all['auto'] ?? [];
     }
 }
