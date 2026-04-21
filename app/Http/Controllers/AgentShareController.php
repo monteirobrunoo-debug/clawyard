@@ -95,9 +95,11 @@ class AgentShareController extends Controller
         try {
             $meta     = AgentShare::agentMeta()[$share->agent_key] ?? [
                 'name' => ucfirst($share->agent_key), 'emoji' => '🤖', 'color' => '#76b900',
+                'role' => 'Agente ClawYard',
             ];
-            $agentLbl = trim(($meta['emoji'] ?? '🤖') . ' ' . ($meta['name'] ?? $share->agent_key));
-            $url      = $share->getUrl();
+            $agentLbl  = trim(($meta['emoji'] ?? '🤖') . ' ' . ($meta['name'] ?? $share->agent_key));
+            $agentRole = trim((string)($meta['role'] ?? ''));
+            $url       = $share->getUrl();
             $expires  = $share->expires_at?->format('d/m/Y H:i') ?? '—';
             $ownerNm  = auth()->user()?->name  ?? 'Equipa HP-Group';
             $ownerEm  = auth()->user()?->email ?? config('mail.from.address', 'no-reply@hp-group.org');
@@ -118,9 +120,20 @@ class AgentShareController extends Controller
 
             $clientName  = htmlspecialchars($share->client_name);
             $agentLblEsc = htmlspecialchars($agentLbl);
+            $agentRoleEsc= htmlspecialchars($agentRole);
             $ownerNmEsc  = htmlspecialchars($ownerNm);
             $ownerEmEsc  = htmlspecialchars($ownerEm);
             $urlEsc      = htmlspecialchars($url);
+
+            // Role card gives the client a one-line explanation of what the
+            // agent actually does. Reduces confusion when many agents are
+            // shared — the recipient no longer has to guess from the name.
+            $roleBlock = $agentRole !== ''
+                ? '<div style="margin:18px 0;padding:14px 18px;background:#f5fbe8;border-left:3px solid #76b900;border-radius:4px;">'
+                    . '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#4d7a00;font-weight:700;margin-bottom:4px;">O que faz este agente</div>'
+                    . '<div style="font-size:14px;color:#1a2e05;">' . $agentRoleEsc . '</div>'
+                    . '</div>'
+                : '';
 
             $html = <<<HTML
 <!DOCTYPE html>
@@ -144,6 +157,8 @@ class AgentShareController extends Controller
   <p>Olá <strong>{$clientName}</strong>,</p>
 
   <p>Foi-te partilhado acesso ao agente <strong>{$agentLblEsc}</strong> na plataforma ClawYard.</p>
+
+  {$roleBlock}
 
   {$welcome}
 

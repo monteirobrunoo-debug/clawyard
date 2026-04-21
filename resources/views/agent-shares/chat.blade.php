@@ -119,7 +119,11 @@
     </div>
     <div class="agent-info">
         <div class="agent-name">{{ $share->custom_title ?: $meta['name'] }}</div>
-        <div class="agent-status"><span class="status-dot"></span> Online</div>
+        @if(!empty($meta['role']))
+            <div style="font-size:11px;color:#94a3b8;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:460px" title="{{ $meta['role'] }}">{{ $meta['role'] }}</div>
+        @else
+            <div class="agent-status"><span class="status-dot"></span> Online</div>
+        @endif
     </div>
     @if($share->show_branding)
     <div class="branding">© PartYard/Setq.AI Rights reserved 2026</div>
@@ -138,11 +142,16 @@
                 @endif
             </div>
             <div class="welcome-name">{{ $share->custom_title ?: $meta['name'] }}</div>
+            @if(!empty($meta['role']))
+            <div class="welcome-role" style="font-size:13px;color:var(--agent-color);font-weight:600;margin-top:4px;margin-bottom:10px;opacity:.9">
+                {{ $meta['role'] }}
+            </div>
+            @endif
             <div class="welcome-msg">
                 @if($share->welcome_message)
                     {{ $share->welcome_message }}
                 @else
-                    Olá! Como posso ajudar?
+                    Olá! Sou o <strong>{{ $meta['name'] }}</strong>. Como posso ajudar?
                 @endif
             </div>
             <div class="starter-chips" id="starter-chips"></div>

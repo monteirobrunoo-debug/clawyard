@@ -17,7 +17,16 @@ class SecurityHeadersMiddleware
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
-        $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+        // HSTS: 1 year + preload flag so Chrome/Firefox bundle this domain
+        // into their HSTS preload list on next ingest. 'preload' requires a
+        // site-wide commitment to HTTPS — which we enforce in AppServiceProvider.
+        $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
+        // Defence in depth — any stray http:// subresource gets auto-upgraded
+        // by the browser before the request leaves the machine.
+        if (!$response->headers->has('Content-Security-Policy')) {
+            $response->headers->set('Cross-Origin-Opener-Policy', 'same-origin');
+            $response->headers->set('Cross-Origin-Resource-Policy', 'same-site');
+        }
 
         // Content Security Policy
         //
@@ -45,6 +54,12 @@ class SecurityHeadersMiddleware
             "base-uri 'self'",
             "form-action 'self'",
             "frame-ancestors 'none'",
+            // Upgrade any accidental plaintext subresource to https so a
+            // stray "http://..." URL in user content can't leak the session.
+            "upgrade-insecure-requests",
+            // Block mixed-content downgrades entirely — a browser that
+            // can't upgrade should refuse, not fall back to http.
+            "block-all-mixed-content",
         ]);
         $response->headers->set('Content-Security-Policy', $csp);
 

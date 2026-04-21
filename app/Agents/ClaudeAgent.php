@@ -43,10 +43,23 @@ class ClaudeAgent implements AgentInterface
         // give cost estimates when asked — see app/Services/ShippingRateService.
         $this->systemPrompt .= $this->shippingSkillPromptBlock();
 
+        // Strict TLS: peer + host verification, TLS 1.2+, tight timeouts.
+        // The Anthropic endpoint is hardcoded to https:// — we keep it as a
+        // literal here so a mistaken env override can't downgrade the
+        // transport. Set ANTHROPIC_CA_BUNDLE to pin a specific CA file.
         $this->client = new Client([
             'base_uri'        => 'https://api.anthropic.com',
             'timeout'         => 120,
             'connect_timeout' => 10,
+            'verify'          => env('ANTHROPIC_CA_BUNDLE', true),
+            'curl'            => [
+                CURLOPT_SSLVERSION     => CURL_SSLVERSION_TLSv1_2,
+                CURLOPT_SSL_VERIFYPEER => true,
+                CURLOPT_SSL_VERIFYHOST => 2,
+            ],
+            'headers'         => [
+                'User-Agent' => 'ClawYard/1.0 (+https://clawyard.partyard.eu)',
+            ],
         ]);
     }
 

@@ -161,6 +161,9 @@
                 </div>
                 <div class="share-info">
                     <div class="share-agent-name" style="font-size:13px;font-weight:700;color:var(--text)">{{ $share->custom_title ?: $meta['name'] }}</div>
+                    @if(!empty($meta['role']))
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.4">{{ $meta['role'] }}</div>
+                    @endif
                     <div class="share-url">{{ $share->getUrl() }}</div>
                     <div class="share-meta">
                         <span class="share-tag {{ $valid ? 'green' : 'red' }}">
@@ -217,6 +220,9 @@
                     </td>
                     <td style="padding:10px 12px;min-width:140px">
                         <div style="font-size:13px;font-weight:700;color:var(--text)">{{ $share->custom_title ?: $meta['name'] }}</div>
+                        @if(!empty($meta['role']))
+                            <div style="font-size:11px;color:#94a3b8;margin-top:2px;line-height:1.35">{{ $meta['role'] }}</div>
+                        @endif
                         <div style="font-size:11px;color:#60a5fa;word-break:break-all;margin-top:2px">{{ $share->getUrl() }}</div>
                     </td>
                     <td style="padding:10px 12px;white-space:nowrap">
@@ -271,11 +277,15 @@
         <div id="create-form">
             <div class="form-row">
                 <label class="form-label">Agente</label>
-                <select id="f-agent" class="form-select">
+                <select id="f-agent" class="form-select" onchange="updateAgentRole()">
                     @foreach($agentMeta as $key => $m)
-                    <option value="{{ $key }}">{{ $m['emoji'] }} {{ $m['name'] }}</option>
+                    <option value="{{ $key }}" data-role="{{ $m['role'] ?? '' }}">{{ $m['emoji'] }} {{ $m['name'] }}</option>
                     @endforeach
                 </select>
+                <div id="agent-role-preview" style="margin-top:8px;padding:10px 14px;background:rgba(118,185,0,.06);border:1px solid rgba(118,185,0,.2);border-radius:8px;font-size:12px;color:#cbd5e1;line-height:1.5;display:none">
+                    <div style="font-size:10px;color:#a3e635;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">O que faz este agente</div>
+                    <div id="agent-role-text"></div>
+                </div>
             </div>
 
             <!-- SAP access toggle — posição de destaque, logo após escolha do agente -->
@@ -383,6 +393,22 @@ function openModal() {
     document.getElementById('success-box').classList.remove('show');
     document.getElementById('create-form').style.display = '';
     document.getElementById('btn-create').style.display = '';
+    updateAgentRole();
+}
+
+function updateAgentRole() {
+    const sel  = document.getElementById('f-agent');
+    const opt  = sel && sel.options[sel.selectedIndex];
+    const role = opt ? (opt.dataset.role || '') : '';
+    const box  = document.getElementById('agent-role-preview');
+    const txt  = document.getElementById('agent-role-text');
+    if (!box || !txt) return;
+    if (role && role.trim() !== '') {
+        txt.textContent = role;
+        box.style.display = '';
+    } else {
+        box.style.display = 'none';
+    }
 }
 function closeModal() {
     document.getElementById('modal').classList.remove('open');

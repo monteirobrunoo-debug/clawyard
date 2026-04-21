@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\AgentCatalog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -125,11 +126,18 @@ class AgentShare extends Model
         return $base . '/a/' . $this->token;
     }
 
-    // Agent display info
+    // Agent display info.
+    //
+    // `role` is the human-friendly description of what the agent does — it
+    // is shown to the share recipient on the welcome screen, in the share
+    // email and as a subtitle on admin cards so the client understands
+    // exactly which agent was just shared with them. `role` is sourced from
+    // AgentCatalog so we have a single source of truth; the local overrides
+    // below (photo/emoji) are kept because some names differ slightly.
     public static function agentMeta(): array
     {
-        return [
-            'auto'         => ['name' => 'Auto',               'emoji' => '🤖', 'color' => '#76b900', 'photo' => null],
+        $overrides = [
+            'auto'         => ['name' => 'Auto',               'emoji' => '🤖', 'color' => '#76b900', 'photo' => null,                               'role' => 'Auto — escolhe o melhor agente para cada pedido'],
             'sales'        => ['name' => 'Marco Sales',        'emoji' => '💼', 'color' => '#3b82f6', 'photo' => '/images/agents/sales.png'],
             'support'      => ['name' => 'Marcus Suporte',     'emoji' => '🔧', 'color' => '#f59e0b', 'photo' => '/images/agents/support.png'],
             'email'        => ['name' => 'Daniel Email',       'emoji' => '📧', 'color' => '#8b5cf6', 'photo' => '/images/agents/email.png'],
@@ -154,5 +162,34 @@ class AgentShare extends Model
             'vessel'       => ['name' => 'Capitão Vasco',      'emoji' => '⚓', 'color' => '#0ea5e9', 'photo' => '/images/agents/vessel.png'],
             'shipping'     => ['name' => 'Logística/PartYard', 'emoji' => '🚚', 'color' => '#8b5cf6', 'photo' => null],
         ];
+
+        // Merge role from AgentCatalog. If an agent is registered there but
+        // missing here we still expose it (future-proof for new agents).
+        $meta = $overrides;
+        foreach (AgentCatalog::all() as $cat) {
+            $key  = $cat['key'];
+            $role = $cat['role'] ?? '';
+            if (isset($meta[$key])) {
+                $meta[$key]['role'] = $meta[$key]['role'] ?? $role;
+            } else {
+                $meta[$key] = [
+                    'name'  => $cat['name']  ?? ucfirst($key),
+                    'emoji' => $cat['emoji'] ?? '🤖',
+                    'color' => $cat['color'] ?? '#76b900',
+                    'photo' => null,
+                    'role'  => $role,
+                ];
+            }
+        }
+
+        // Any local-only override that is still missing a role gets a safe
+        // default so callers can render without a null check.
+        foreach ($meta as $k => $v) {
+            if (empty($v['role'])) {
+                $meta[$k]['role'] = 'Agente ClawYard';
+            }
+        }
+
+        return $meta;
     }
 }

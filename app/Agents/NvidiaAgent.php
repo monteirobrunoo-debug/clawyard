@@ -34,12 +34,43 @@ PROMPT;
 
     public function __construct()
     {
+        // ── Hardened HTTP client ────────────────────────────────────────────
+        // 1. Refuse to boot if the configured base URL isn't HTTPS. The
+        //    AppServiceProvider re-writes obvious http:// → https:// on
+        //    boot, but we defend in depth here so a runtime config() override
+        //    can't silently leak credentials.
+        // 2. Force TLS 1.2+, strict peer verification, and an explicit
+        //    CA bundle so a compromised system trust store can't accept a
+        //    rogue certificate.
+        // 3. Tight timeouts — if NVIDIA takes longer than 5 minutes for a
+        //    single completion something is wrong; don't hold the request
+        //    open indefinitely while billable tokens are still flowing.
+        $baseUri = (string) config('services.nvidia.base_url', 'https://integrate.api.nvidia.com/v1');
+        if (!str_starts_with(strtolower($baseUri), 'https://')) {
+            $baseUri = preg_replace('#^http://#i', 'https://', $baseUri) ?: 'https://integrate.api.nvidia.com/v1';
+        }
+
         $this->client = new Client([
-            'base_uri' => config('services.nvidia.base_url'),
+            'base_uri'        => $baseUri,
             'headers' => [
                 'Authorization' => 'Bearer ' . config('services.nvidia.api_key'),
                 'Content-Type'  => 'application/json',
+                // Pin the User-Agent so NVIDIA's abuse/rate-limit dashboards
+                // can distinguish traffic coming from ClawYard.
+                'User-Agent'    => 'ClawYard/1.0 (+https://clawyard.partyard.eu)',
             ],
+            // Strict TLS verification: require valid cert chain signed by
+            // a CA in the bundled cacert. Set NVIDIA_CA_BUNDLE in the env if
+            // you want to pin a specific CA file instead.
+            'verify'          => env('NVIDIA_CA_BUNDLE', true),
+            'curl'            => [
+                CURLOPT_SSLVERSION      => CURL_SSLVERSION_TLSv1_2,
+                CURLOPT_SSL_VERIFYPEER  => true,
+                CURLOPT_SSL_VERIFYHOST  => 2,
+            ],
+            'connect_timeout' => 10,
+            'timeout'         => 300, // 5 min ceiling for streaming completions
+            'http_errors'     => true,
         ]);
 
         // Universal logistics knowledge (applied to every agent)

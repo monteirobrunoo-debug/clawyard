@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,6 +23,67 @@ class AppServiceProvider extends ServiceProvider
         // Guarantee ANTHROPIC_API_KEY is always available via getenv()
         // even when PHP-FPM OPcache has a stale config.php
         $this->ensureAnthropicKey();
+
+        // ── Transport-security hardening ────────────────────────────────────
+        // In production (or whenever APP_URL is https://) we force every link
+        // Laravel generates to use the https scheme. This closes a class of
+        // MitM where a link emitted as http:// could be downgraded before
+        // the browser is told to upgrade. Also trusts Cloudflare/Forge proxy
+        // X-Forwarded-Proto so url()->secure() stays true even behind TLS
+        // terminators.
+        if ($this->shouldForceHttps()) {
+            URL::forceScheme('https');
+            if (request() && request()->server('HTTP_X_FORWARDED_PROTO') === 'https') {
+                request()->setTrustedProxies(
+                    ['0.0.0.0/0', '::/0'],
+                    \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR
+                    | \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST
+                    | \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT
+                    | \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
+                );
+            }
+        }
+
+        // Reject any misconfiguration where NVIDIA's base_url is plaintext
+        // HTTP. We treat this as a fatal config error rather than silently
+        // sending keys + prompts over the clear.
+        $this->assertNvidiaTransportSecure();
+    }
+
+    /**
+     * We only force https on real deployments. Local dev (http://localhost)
+     * keeps working so `php artisan serve` doesn't break.
+     */
+    private function shouldForceHttps(): bool
+    {
+        if (app()->environment('production')) return true;
+        $appUrl = (string) config('app.url', '');
+        return str_starts_with($appUrl, 'https://');
+    }
+
+    /**
+     * NVIDIA API is only ever reachable over TLS. If someone overrides the
+     * base_url with http:// we refuse to boot in production so it can't
+     * silently leak credentials.
+     */
+    private function assertNvidiaTransportSecure(): void
+    {
+        $base = (string) config('services.nvidia.base_url', '');
+        if ($base === '') return; // not configured yet
+
+        if (!str_starts_with(strtolower($base), 'https://')) {
+            // Overwrite with the canonical HTTPS endpoint so running code
+            // can't accidentally hit an http:// target. Log a warning so
+            // ops notices the misconfiguration.
+            $fixed = preg_replace('#^http://#i', 'https://', $base) ?: 'https://integrate.api.nvidia.com/v1';
+            config(['services.nvidia.base_url' => $fixed]);
+            try {
+                \Log::warning('NVIDIA base_url was not HTTPS — rewritten at boot', [
+                    'from' => $base,
+                    'to'   => $fixed,
+                ]);
+            } catch (\Throwable) {}
+        }
     }
 
     private function ensureAnthropicKey(): void

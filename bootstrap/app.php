@@ -19,11 +19,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeadersMiddleware::class,
         ]);
-        // Allow API routes to read web session (for session-based auth)
+        // Allow API routes to read web session (for session-based auth),
+        // and append security headers so JSON/SSE responses also carry
+        // HSTS + X-Content-Type-Options + Referrer-Policy.
         $middleware->api(prepend: [
             \Illuminate\Cookie\Middleware\EncryptCookies::class,
             \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
             \Illuminate\Session\Middleware\StartSession::class,
+        ]);
+        $middleware->api(append: [
+            \App\Http\Middleware\SecurityHeadersMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
