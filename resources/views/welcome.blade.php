@@ -3141,10 +3141,20 @@ async function submitShareModal() {
             .charAt(Math.floor(Math.random() * 62))
     ).join('');
 
+    // Additional recipients: split on comma/semicolon/whitespace, dedupe
+    // against the primary, null out if empty so the JSON column stays NULL
+    // for single-recipient shares.
+    const extraRaw = (document.getElementById('share-extra-emails') || {}).value || '';
+    const extraList = extraRaw
+        .split(/[\s,;]+/)
+        .map(s => s.trim().toLowerCase())
+        .filter(s => s.length > 0 && s !== clientEmail.toLowerCase());
+
     const common = {
-        client_name:      client,
-        client_email:     clientEmail,
-        custom_title:     document.getElementById('share-title').value.trim() || null,
+        client_name:       client,
+        client_email:      clientEmail,
+        additional_emails: extraList.length ? extraList : null,
+        custom_title:      document.getElementById('share-title').value.trim() || null,
         welcome_message:  document.getElementById('share-welcome').value.trim() || null,
         password:         document.getElementById('share-pass').value || null,
         expires_at:       document.getElementById('share-expires').value || null,
@@ -3282,6 +3292,12 @@ updateShareBtn();
                     <input id="share-pass" type="password" placeholder="Optional"
                         style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:14px;outline:none">
                 </div>
+            </div>
+            <div style="margin-bottom:14px">
+                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Additional emails <span style="color:#64748b;text-transform:none;letter-spacing:0;font-weight:500">(opcional)</span></label>
+                <textarea id="share-extra-emails" rows="2" placeholder="colega1@empresa.com, colega2@empresa.com"
+                    style="width:100%;background:#1a1a24;border:1px solid #2a2a3a;color:#e2e8f0;padding:10px 14px;border-radius:8px;font-size:13px;outline:none;resize:vertical;font-family:inherit"></textarea>
+                <div style="font-size:10px;color:#64748b;margin-top:4px">Separa por vírgula, ponto-e-vírgula ou nova linha. Cada pessoa recebe o mesmo link e pede o código ao próprio email.</div>
             </div>
             <div style="margin-bottom:14px">
                 <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px">Custom Title</label>
