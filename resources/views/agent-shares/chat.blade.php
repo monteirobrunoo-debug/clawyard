@@ -20,7 +20,7 @@
         }
         /* Day mode — override tokens. Keeps --agent-color untouched so
            each agent's accent stays on-brand in both themes. */
-        :root[data-theme="day"]{
+        :root[data-theme="light"]{
             --bg:#f4f6fa;
             --bg2:#ffffff;
             --bg3:#f1f5f9;
@@ -613,26 +613,26 @@ function renderMarkdown(md) {
 
 // ── Day/Night theme toggle ─────────────────────────────────────────────────
 // Any recipient can flip the UI between modes — the choice is remembered in
-// localStorage (scoped "clawyard_theme") so it persists across /a/{token},
+// localStorage (scoped "cy-theme") so it persists across /a/{token},
 // /p/{portal_token}, and the OTP challenge page.
 (function initClawTheme(){
-    var KEY = 'clawyard_theme';
+    var KEY = 'cy-theme';
     var saved = null;
     try { saved = localStorage.getItem(KEY); } catch (e) {}
-    applyClawTheme(saved === 'day' ? 'day' : 'night');
+    applyClawTheme(saved === 'light' ? 'light' : 'dark');
 })();
 
 function applyClawTheme(t){
     document.documentElement.setAttribute('data-theme', t);
     var ic = document.getElementById('themeIcon');
-    if (ic) ic.textContent = (t === 'day' ? '☀️' : '🌙');
+    if (ic) ic.textContent = (t === 'light' ? '☀️' : '🌙');
 }
 
 function toggleClawTheme(){
-    var cur = document.documentElement.getAttribute('data-theme') === 'day' ? 'day' : 'night';
-    var next = cur === 'day' ? 'night' : 'day';
+    var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    var next = cur === 'light' ? 'dark' : 'light';
     applyClawTheme(next);
-    try { localStorage.setItem('clawyard_theme', next); } catch (e) {}
+    try { localStorage.setItem('cy-theme', next); } catch (e) {}
 }
 </script>
 </body>

@@ -18,7 +18,7 @@
             --hover-row:rgba(255,255,255,.02);
             --pill-bg:rgba(255,255,255,.06);
         }
-        :root[data-theme="day"]{
+        :root[data-theme="light"]{
             --bg:#f4f6fa;--bg2:#ffffff;--bg3:#f1f5f9;--border:#e2e8f0;
             --text:#0f172a;--muted:#475569;--green:#4d7a00;--red:#b91c1c;--blue:#1d4ed8;
             --subtle:#64748b;
@@ -632,18 +632,18 @@ async function showAccessLog(id) {
 
 // ── Day/Night theme toggle (shared with /a/* and /p/* via localStorage) ─────
 (function(){
-    var KEY='clawyard_theme',saved=null;
+    var KEY='cy-theme',saved=null;
     try{saved=localStorage.getItem(KEY);}catch(e){}
-    var t=(saved==='day'?'day':'night');
+    var t=(saved==='light'?'light':'dark');
     document.documentElement.setAttribute('data-theme',t);
-    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(t==='day'?'☀️':'🌙');
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(t==='light'?'☀️':'🌙');
 })();
 function toggleClawTheme(){
-    var cur=document.documentElement.getAttribute('data-theme')==='day'?'day':'night';
-    var next=cur==='day'?'night':'day';
+    var cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';
+    var next=cur==='light'?'dark':'light';
     document.documentElement.setAttribute('data-theme',next);
-    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(next==='day'?'☀️':'🌙');
-    try{localStorage.setItem('clawyard_theme',next);}catch(e){}
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(next==='light'?'☀️':'🌙');
+    try{localStorage.setItem('cy-theme',next);}catch(e){}
 }
 </script>
 </body>

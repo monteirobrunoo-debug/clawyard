@@ -13,7 +13,7 @@
             --ok-ink:#a3e635;--ok-bg:rgba(118,185,0,.1);--ok-border:rgba(118,185,0,.3);
             --toggle-bg:rgba(255,255,255,.04);--toggle-border:rgba(255,255,255,.10);
         }
-        :root[data-theme="day"]{
+        :root[data-theme="light"]{
             --bg:#f4f6fa;--card:#ffffff;--border:#e2e8f0;--text:#111827;--text-strong:#0b1220;
             --muted:#4b5563;--muted2:#6b7280;--input:#f9fafb;--accent:#4d7a00;--accent-ink:#fff;
             --danger:#b91c1c;--danger-ink:#991b1b;--danger-bg:rgba(239,68,68,.08);--danger-border:rgba(239,68,68,.35);
@@ -99,18 +99,18 @@
 </div>
 <script>
 (function(){
-    var KEY='clawyard_theme',saved=null;
+    var KEY='cy-theme',saved=null;
     try{saved=localStorage.getItem(KEY);}catch(e){}
-    var t=(saved==='day'?'day':'night');
+    var t=(saved==='light'?'light':'dark');
     document.documentElement.setAttribute('data-theme',t);
-    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(t==='day'?'☀️':'🌙');
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(t==='light'?'☀️':'🌙');
 })();
 function toggleClawTheme(){
-    var cur=document.documentElement.getAttribute('data-theme')==='day'?'day':'night';
-    var next=cur==='day'?'night':'day';
+    var cur=document.documentElement.getAttribute('data-theme')==='light'?'light':'dark';
+    var next=cur==='light'?'dark':'light';
     document.documentElement.setAttribute('data-theme',next);
-    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(next==='day'?'☀️':'🌙');
-    try{localStorage.setItem('clawyard_theme',next);}catch(e){}
+    var ic=document.getElementById('themeIcon');if(ic)ic.textContent=(next==='light'?'☀️':'🌙');
+    try{localStorage.setItem('cy-theme',next);}catch(e){}
 }
 </script>
 </body>

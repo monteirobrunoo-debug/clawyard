@@ -7,7 +7,7 @@
     <title>Verificação — ClawYard</title>
     <style>
         /* ── Theme tokens ────────────────────────────────────────────────
-           Defaults below are "night" (dark). The [data-theme="day"] block
+           Defaults below are "night" (dark). The [data-theme="light"] block
            overrides them for light mode. Toggle is stored in localStorage
            so the recipient's choice persists across share/portal pages. */
         :root{
@@ -31,7 +31,7 @@
             --toggle-bg:rgba(255,255,255,.04);
             --toggle-border:rgba(255,255,255,.10);
         }
-        :root[data-theme="day"]{
+        :root[data-theme="light"]{
             --bg:#f4f6fa;
             --card:#ffffff;
             --border:#e2e8f0;
@@ -153,19 +153,19 @@
    Key is scoped to 'clawyard' so it persists across /a/{token},
    /p/{portal_token} and the chat view. */
 (function(){
-    var KEY = 'clawyard_theme';
+    var KEY = 'cy-theme';
     function apply(t){
         document.documentElement.setAttribute('data-theme', t);
         var ic = document.getElementById('themeIcon');
-        if (ic) ic.textContent = (t === 'day' ? '☀️' : '🌙');
+        if (ic) ic.textContent = (t === 'light' ? '☀️' : '🌙');
     }
     var saved = null;
     try { saved = localStorage.getItem(KEY); } catch (e) {}
-    apply(saved === 'day' ? 'day' : 'night');
+    apply(saved === 'light' ? 'light' : 'dark');
 
     window.__toggleClawTheme = function(){
-        var cur = document.documentElement.getAttribute('data-theme') === 'day' ? 'day' : 'night';
-        var next = cur === 'day' ? 'night' : 'day';
+        var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+        var next = cur === 'light' ? 'dark' : 'light';
         apply(next);
         try { localStorage.setItem(KEY, next); } catch (e) {}
     };
