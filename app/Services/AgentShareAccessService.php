@@ -76,7 +76,10 @@ class AgentShareAccessService
             'agent_share_id' => $share->id,
             'email'          => $email,
             'session_id'     => $sessionId,
-            'code_hash'      => hash('sha256', $code),
+            // bcrypt via the model helper — unreversible off-box even if
+            // the DB dump leaks (vs the old unsalted sha256 which was
+            // brute-force in seconds for a 6-digit code).
+            'code_hash'      => AgentShareOtp::hashCode($code),
             'attempts'       => 0,
             'expires_at'     => now()->addMinutes(self::OTP_TTL_MINUTES),
             'ip'             => $request->ip(),
