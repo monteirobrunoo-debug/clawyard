@@ -44,11 +44,13 @@ class ClaudeAgent implements AgentInterface
         $this->systemPrompt .= $this->shippingSkillPromptBlock();
 
         // Strict TLS: peer + host verification, TLS 1.2+, tight timeouts.
-        // The Anthropic endpoint is hardcoded to https:// — we keep it as a
-        // literal here so a mistaken env override can't downgrade the
-        // transport. Set ANTHROPIC_CA_BUNDLE to pin a specific CA file.
+        // Base URI comes from AnthropicKeyTrait::getAnthropicBaseUri(), which
+        // reads ANTHROPIC_BASE_URL via config and auto-upgrades http→https
+        // (unknown schemes fall back to the canonical api.anthropic.com),
+        // so a mistyped .env cannot downgrade the transport.
+        // Set ANTHROPIC_CA_BUNDLE to pin a specific CA file.
         $this->client = new Client([
-            'base_uri'        => 'https://api.anthropic.com',
+            'base_uri'        => self::getAnthropicBaseUri(),
             'timeout'         => 120,
             'connect_timeout' => 10,
             'verify'          => env('ANTHROPIC_CA_BUNDLE', true),

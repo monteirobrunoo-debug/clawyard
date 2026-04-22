@@ -200,7 +200,7 @@ SPECIALTY;
         . HarmonizedCodesService::promptBlock(); // HS / CN / TARIC classification
 
         $this->client = new Client([
-            'base_uri'        => 'https://api.anthropic.com',
+            'base_uri'        => self::getAnthropicBaseUri(),
             'timeout'         => 120,
             'connect_timeout' => 10,
         ]);

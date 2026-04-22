@@ -42,13 +42,39 @@ class SecurityHeadersMiddleware
         // and keep connect-src open enough for fetch/SSE calls made by the
         // chat UI. A proper migration to addEventListener + strict CSP is
         // tracked as a follow-up.
+        // connect-src must include whatever ANTHROPIC_BASE_URL points at —
+        // otherwise the browser blocks fetch() when we reroute through the
+        // company Digital Ocean proxy. Same goes for the NVIDIA endpoint.
+        $connectExtras = [];
+        $extra = config('services.anthropic.base_uri');
+        if ($extra) {
+            $origin = parse_url((string) $extra, PHP_URL_SCHEME) . '://' . parse_url((string) $extra, PHP_URL_HOST);
+            if ($origin && $origin !== '://') $connectExtras[] = $origin;
+        }
+        $nvidia = config('services.nvidia.base_url');
+        if ($nvidia) {
+            $origin = parse_url((string) $nvidia, PHP_URL_SCHEME) . '://' . parse_url((string) $nvidia, PHP_URL_HOST);
+            if ($origin && $origin !== '://') $connectExtras[] = $origin;
+        }
+        // Always include the canonical upstreams so a misconfigured env
+        // doesn't accidentally break fetch on a direct-to-Anthropic install.
+        $connectExtras = array_unique(array_merge($connectExtras, [
+            'https://api.anthropic.com',
+            'https://integrate.api.nvidia.com',
+        ]));
+
         $csp = implode('; ', [
             "default-src 'self'",
+            // 'unsafe-inline' is retained because Blade views still use
+            // onclick= / inline <script> handlers. Explicitly REJECT
+            // 'unsafe-eval' + data: scripts — those buy nothing and open
+            // XSS-to-RCE bridges. A full strict-CSP migration (nonces +
+            // addEventListener) is tracked separately.
             "script-src 'self' 'unsafe-inline'",
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' data: blob: https:",
-            "connect-src 'self' https://api.anthropic.com https://integrate.api.nvidia.com",
+            "connect-src 'self' " . implode(' ', $connectExtras),
             "media-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'self'",
@@ -57,9 +83,10 @@ class SecurityHeadersMiddleware
             // Upgrade any accidental plaintext subresource to https so a
             // stray "http://..." URL in user content can't leak the session.
             "upgrade-insecure-requests",
-            // Block mixed-content downgrades entirely — a browser that
-            // can't upgrade should refuse, not fall back to http.
-            "block-all-mixed-content",
+            // NOTE: block-all-mixed-content is deprecated in CSP3 — the
+            // HSTS preload + upgrade-insecure-requests above achieve the
+            // same effect on current browsers. Dropped to keep the header
+            // byte-budget tight.
         ]);
         $response->headers->set('Content-Security-Policy', $csp);
 

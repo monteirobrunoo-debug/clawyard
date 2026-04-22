@@ -12,8 +12,15 @@ class Conversation extends Model
         'session_id', 'channel', 'agent', 'phone', 'email', 'name', 'metadata',
     ];
 
+    /**
+     * SECURITY: metadata holds the Claude-generated summary of older turns
+     * (which inherits all PII from the original messages) plus contact
+     * points (phone/email). Encrypt at rest — same APP_KEY-based cast we
+     * use on Message::content so the whole conversation is opaque in a
+     * DB dump.
+     */
     protected $casts = [
-        'metadata' => 'array',
+        'metadata' => 'encrypted:array',
     ];
 
     // ── Sliding window config ────────────────────────────────────────────────
@@ -98,10 +105,22 @@ class Conversation extends Model
             $apiKey = config('services.anthropic.api_key');
             if (!$apiKey) return $cachedSummary; // graceful degradation
 
+            // Route through the configured base URI so the summariser also
+            // honours ANTHROPIC_BASE_URL (Digital Ocean proxy or direct).
+            $baseUri = rtrim((string) config('services.anthropic.base_uri', 'https://api.anthropic.com'), '/');
+
             $client = new \GuzzleHttp\Client([
-                'base_uri' => 'https://api.anthropic.com',
+                'base_uri' => $baseUri,
                 'timeout'  => 30,
             ]);
+
+            // Optional PII scrub before sending the concatenated excerpt.
+            $payloadMessages = [
+                ['role' => 'user', 'content' => "Summarise this conversation:\n\n{$older}"],
+            ];
+            if (config('services.anthropic.redact_pii', false)) {
+                $payloadMessages = \App\Support\PiiRedactor::scrubMessages($payloadMessages);
+            }
 
             $resp = $client->post('/v1/messages', [
                 'headers' => [
@@ -113,9 +132,7 @@ class Conversation extends Model
                     'model'      => config('services.anthropic.model', 'claude-haiku-4-5'),
                     'max_tokens' => 400,
                     'system'     => 'You are a conversation summariser. Given a conversation excerpt, produce a concise summary in Portuguese (max 300 words) that captures the key topics, decisions, and context. Respond ONLY with the summary text.',
-                    'messages'   => [
-                        ['role' => 'user', 'content' => "Summarise this conversation:\n\n{$older}"],
-                    ],
+                    'messages'   => $payloadMessages,
                 ],
             ]);
 

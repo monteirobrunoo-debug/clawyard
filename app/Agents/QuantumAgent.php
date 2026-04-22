@@ -122,7 +122,7 @@ SPECIALTY;
         $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
-            'base_uri'        => 'https://api.anthropic.com',
+            'base_uri'        => self::getAnthropicBaseUri(),
             'timeout'         => 600,  // 10 min — large reports with extended thinking can take >2 min
             'connect_timeout' => 10,
         ]);

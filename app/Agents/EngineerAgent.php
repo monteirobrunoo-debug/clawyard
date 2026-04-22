@@ -179,7 +179,7 @@ SPECIALTY;
         $this->systemPrompt .= $this->logisticsSkillPromptBlock();
 
         $this->client = new Client([
-            'base_uri'        => 'https://api.anthropic.com',
+            'base_uri'        => self::getAnthropicBaseUri(),
             'timeout'         => 180,
             'connect_timeout' => 10,
         ]);

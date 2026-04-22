@@ -51,6 +51,20 @@ return [
         'model_opus'  => env('ANTHROPIC_MODEL_OPUS',   'claude-opus-4-5'),
         // Ultra-fast tier for suggestions/smart-chips. Keep on haiku.
         'model_haiku' => env('ANTHROPIC_MODEL_HAIKU',  'claude-haiku-4-6'),
+        // ── Egress control ────────────────────────────────────────────────
+        // Upstream base URI. Defaults to Anthropic's public API. Override
+        // with ANTHROPIC_BASE_URL to point every agent through the company
+        // Digital Ocean proxy (e.g. https://llm-proxy.partyard.eu) — the
+        // proxy can then log, redact PII and enforce rate limits in-house
+        // before forwarding to Anthropic. Every agent reads this via
+        // AnthropicKeyTrait::anthropicBaseUri() so flipping one env var
+        // reroutes ALL 24 agents.
+        'base_uri'    => env('ANTHROPIC_BASE_URL',     'https://api.anthropic.com'),
+        // PII redaction — when true, prompts are scrubbed (emails, phones,
+        // NIF, IBAN, card numbers, passwords) BEFORE leaving the server.
+        // Default false so existing behaviour is preserved; flip per-env
+        // to enforce. See App\Support\PiiRedactor.
+        'redact_pii'  => env('ANTHROPIC_REDACT_PII',   false),
     ],
 
     'patentsview' => [
