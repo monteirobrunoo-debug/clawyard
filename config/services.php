@@ -44,13 +44,19 @@ return [
     'anthropic' => [
         'api_key' => env('ANTHROPIC_API_KEY'),
         // Default (fast, high-volume agents: Sales, Support, Email, CRM, Claude chat…)
+        // `claude-sonnet-4-6` alias validated 2026-04-22 — resolves to the
+        // newest 4.6 sonnet snapshot on Anthropic's side.
         'model'       => env('ANTHROPIC_MODEL',        'claude-sonnet-4-6'),
         // Deep reasoning tier — used by Thinking, Briefing, Engineer, Patent, Finance, MilDef.
-        // Default: claude-opus-4-5 (known-good). Set ANTHROPIC_MODEL_OPUS in
-        // .env to upgrade to claude-opus-4-7 once it is generally available.
+        // Alias `claude-opus-4-5` validated 2026-04-22. Do NOT pin to a
+        // dated snapshot without re-probing (`claude-opus-4-5-20250929`
+        // returned 404).
         'model_opus'  => env('ANTHROPIC_MODEL_OPUS',   'claude-opus-4-5'),
         // Ultra-fast tier for suggestions/smart-chips. Keep on haiku.
-        'model_haiku' => env('ANTHROPIC_MODEL_HAIKU',  'claude-haiku-4-6'),
+        // NOTE: `claude-haiku-4-6` does NOT exist (probe returned 404) —
+        // haiku is still at 4.5. Pin to the dated 4.5 snapshot we validated
+        // so the env-less fallback never explodes.
+        'model_haiku' => env('ANTHROPIC_MODEL_HAIKU',  'claude-haiku-4-5-20251001'),
         // ── Egress control ────────────────────────────────────────────────
         // Upstream base URI. Defaults to Anthropic's public API. Override
         // with ANTHROPIC_BASE_URL to point every agent through the company
