@@ -664,6 +664,7 @@
         <!-- ── INPUT ── -->
         <div id="input-area">
             <button class="icon-btn" id="voice-btn" title="Voz (pt-PT)">🎤</button>
+            <button class="icon-btn" id="jarvis-btn" title="Jarvis Voice OFF — click to enable">🔇</button>
             <button type="button" class="icon-btn" id="image-btn" title="Anexar ficheiros (PDF, imagem, Excel, Word, TXT, Email) — múltiplos permitidos" onclick="document.getElementById('image-input').click()" style="cursor:pointer">📎</button>
             <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
             <button class="icon-btn" id="clear-btn" title="Limpar histórico desta conversa" onclick="clearHistory()">🗑️</button>
@@ -1359,6 +1360,100 @@ document.getElementById('voice-btn').addEventListener('dblclick', (e) => {
     document.getElementById('voice-btn').title = 'Voz (' + voiceLang + ') — duplo-clique alterna idioma';
     showVoiceToast('Idioma do microfone: ' + voiceLang, 'info', 1800);
 });
+
+// ── JARVIS TTS (Text-to-Speech) ───────────────────────────────────────────────
+// Reads AI responses aloud in a British male voice à la Jarvis from Iron Man.
+// Toggle with the 🔊/🔇 button; preference persisted in localStorage.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const JARVIS_KEY  = 'cy-jarvis-tts';
+let jarvisEnabled = localStorage.getItem(JARVIS_KEY) === '1';
+let jarvisVoice   = null;
+
+function pickJarvisVoice() {
+    const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    // Prefer en-GB male voices in this order
+    const preferred = ['Daniel', 'George', 'Arthur', 'Oliver', 'Malcolm'];
+    for (const name of preferred) {
+        const v = voices.find(v => v.name.includes(name));
+        if (v) { jarvisVoice = v; return; }
+    }
+    // Any en-GB voice next
+    const gb = voices.find(v => v.lang === 'en-GB' || v.lang === 'en_GB');
+    if (gb) { jarvisVoice = gb; return; }
+    // Any English voice as last resort
+    jarvisVoice = voices.find(v => v.lang.startsWith('en')) || voices[0] || null;
+}
+
+if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = pickJarvisVoice;
+    pickJarvisVoice();
+}
+
+function stripForSpeech(text) {
+    return text
+        .replace(/```[\s\S]*?```/g, 'code block omitted.')
+        .replace(/`[^`]+`/g, '')
+        .replace(/#{1,6}\s/g, '')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+        .replace(/[|─┼┬┴├┤]/g, '')
+        .replace(/__\w+__/g, '')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+}
+
+function jarvisSpeak(text) {
+    if (!jarvisEnabled || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const clean = stripForSpeech(text);
+    if (!clean) return;
+    const utt  = new SpeechSynthesisUtterance(clean);
+    if (jarvisVoice) utt.voice = jarvisVoice;
+    utt.lang   = 'en-GB';
+    utt.pitch  = 0.88;
+    utt.rate   = 0.92;
+    utt.volume = 1.0;
+    window.speechSynthesis.speak(utt);
+}
+
+function updateJarvisBtn() {
+    const btn = document.getElementById('jarvis-btn');
+    if (!btn) return;
+    if (jarvisEnabled) {
+        btn.title             = 'Jarvis Voice ON — click to disable';
+        btn.textContent       = '🔊';
+        btn.style.background  = '#001a3a';
+        btn.style.borderColor = '#00aaff';
+        btn.style.color       = '#00aaff';
+        btn.style.boxShadow   = '0 0 8px #00aaff55';
+    } else {
+        btn.title             = 'Jarvis Voice OFF — click to enable';
+        btn.textContent       = '🔇';
+        btn.style.background  = '';
+        btn.style.borderColor = '';
+        btn.style.color       = '';
+        btn.style.boxShadow   = '';
+    }
+}
+
+document.getElementById('jarvis-btn').addEventListener('click', () => {
+    jarvisEnabled = !jarvisEnabled;
+    localStorage.setItem(JARVIS_KEY, jarvisEnabled ? '1' : '0');
+    updateJarvisBtn();
+    if (jarvisEnabled) {
+        pickJarvisVoice();
+        jarvisSpeak('Jarvis online. Ready to assist, sir.');
+        showVoiceToast('🔊 Jarvis Voice enabled', 'ok', 2000);
+    } else {
+        window.speechSynthesis?.cancel();
+        showVoiceToast('🔇 Jarvis Voice disabled', 'info', 1800);
+    }
+});
+
+updateJarvisBtn();
 
 // Reflect current lang in tooltip on load
 (function () {
@@ -2961,6 +3056,7 @@ async function sendMessage() {
                                 /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
                             ).trim();
                             streamBubble.innerHTML = renderMarkdown(finalDisplay);
+                            jarvisSpeak(finalDisplay);
                             const meta = streamMsg.querySelector('.msg-meta');
                             const saveBtn = document.createElement('button');
                             saveBtn.className = 'save-report-btn';
