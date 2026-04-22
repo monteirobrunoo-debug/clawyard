@@ -420,9 +420,21 @@ HTML;
 
             return true;
         } catch (\Throwable $e) {
-            Log::warning('AgentShare email failed: ' . $e->getMessage(), [
-                'share_id' => $share->id ?? null,
-                'to'       => $share->client_email ?? null,
+            // Rich error log so Forge → Logs shows the actual cause (SMTP
+            // auth failure, relay denied, TLS mismatch, DNS, etc.) instead
+            // of a generic "failed". We log at error (not warning) because
+            // the recipient silently receives nothing and that's a real
+            // incident, not a soft edge case.
+            Log::error('AgentShare email failed', [
+                'share_id'    => $share->id ?? null,
+                'to'          => $recipientEmail ?? ($share->client_email ?? null),
+                'agent_key'   => $share->agent_key ?? null,
+                'mailer'      => config('mail.default'),
+                'smtp_host'   => config('mail.mailers.smtp.host'),
+                'smtp_port'   => config('mail.mailers.smtp.port'),
+                'error_class' => get_class($e),
+                'error'       => $e->getMessage(),
+                'file'        => basename($e->getFile()) . ':' . $e->getLine(),
             ]);
             return false;
         }
@@ -701,8 +713,18 @@ HTML;
 
             return true;
         } catch (\Throwable $e) {
-            Log::warning('AgentShare portal email failed: ' . $e->getMessage(), [
-                'to' => $recipientEmail,
+            // Same rich diagnostics as sendShareEmail — the silent-failure
+            // mode is the worst UX (recipient waits for an email that never
+            // arrives), so log exception class + file:line + mailer config
+            // to make the post-mortem trivial.
+            Log::error('AgentShare portal email failed', [
+                'to'          => $recipientEmail,
+                'mailer'      => config('mail.default'),
+                'smtp_host'   => config('mail.mailers.smtp.host'),
+                'smtp_port'   => config('mail.mailers.smtp.port'),
+                'error_class' => get_class($e),
+                'error'       => $e->getMessage(),
+                'file'        => basename($e->getFile()) . ':' . $e->getLine(),
             ]);
             return false;
         }
