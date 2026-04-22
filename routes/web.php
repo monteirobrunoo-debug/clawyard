@@ -128,24 +128,37 @@ Route::get('/patents/download/{patent}', function (string $patent) {
     );
 })->middleware(['auth']);
 
-// SAP diagnostic — temporary, remove after fix
-Route::get('/sap-diag', function () {
+// SAP diagnostic — admin-gated reachability check (no body leaked).
+//
+// SECURITY: previously this was a fully public endpoint that performed a
+// live SAP /Login with the server's service-account credentials AND
+// returned the raw SAP response body — which includes the B1SESSION
+// cookie on success. It now:
+//   1) requires auth + admin middleware (no anonymous access), and
+//   2) returns only status + URL metadata so the session token never
+//      crosses the wire a second time even for logged-in admins,
+//   3) honours config('services.sap.tls_verify') — no more hardcoded
+//      `verify => false`.
+Route::middleware(['auth', 'admin'])->get('/sap-diag', function () {
     $url  = config('services.sap.base_url', 'https://sld.partyard.privatcloud.biz/b1s/v1');
     $user = trim(config('services.sap.username', ''), '"\'');
     $pass = trim(config('services.sap.password', ''), '"\'');
     $comp = config('services.sap.company', 'PARTYARD');
 
-    $client = new \GuzzleHttp\Client(['verify' => false, 'timeout' => 15, 'http_errors' => false]);
+    $verify = config('services.sap.tls_verify', true);
+    $client = new \GuzzleHttp\Client(['verify' => $verify, 'timeout' => 15, 'http_errors' => false]);
     $res    = $client->post("{$url}/Login", [
         'headers' => ['Content-Type' => 'application/json'],
         'json'    => ['CompanyDB' => $comp, 'UserName' => $user, 'Password' => $pass],
     ]);
 
     return response()->json([
-        'url'    => $url,
-        'user'   => $user,
-        'status' => $res->getStatusCode(),
-        'body'   => json_decode($res->getBody()->getContents(), true),
+        'url'       => $url,
+        'user'      => $user,
+        'status'    => $res->getStatusCode(),
+        'reachable' => $res->getStatusCode() !== 0,
+        'ok'        => $res->getStatusCode() === 200,
+        'when'      => now()->toIso8601String(),
     ]);
 });
 
