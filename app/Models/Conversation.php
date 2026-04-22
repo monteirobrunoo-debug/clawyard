@@ -15,12 +15,17 @@ class Conversation extends Model
     /**
      * SECURITY: metadata holds the Claude-generated summary of older turns
      * (which inherits all PII from the original messages) plus contact
-     * points (phone/email). Encrypt at rest — same APP_KEY-based cast we
-     * use on Message::content so the whole conversation is opaque in a
-     * DB dump.
+     * points (phone/email). Encrypted at rest so the whole conversation is
+     * opaque in a DB dump.
+     *
+     * Uses SafeEncryptedArray (not the built-in `encrypted:array`) because
+     * a past APP_KEY rotation left most Message rows unreadable and many
+     * Conversation.metadata blobs are in the same state. The safe cast
+     * returns a placeholder array instead of throwing — see
+     * App\Casts\SafeEncryptedString for the full rationale.
      */
     protected $casts = [
-        'metadata' => 'encrypted:array',
+        'metadata' => \App\Casts\SafeEncryptedArray::class,
     ];
 
     // ── Sliding window config ────────────────────────────────────────────────

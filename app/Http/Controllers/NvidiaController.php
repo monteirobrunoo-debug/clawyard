@@ -664,7 +664,11 @@ PROMPT;
             $apiKey = config('services.anthropic.api_key');
             if (!$apiKey) return [];
 
-            $client = new \GuzzleHttp\Client(['base_uri' => 'https://api.anthropic.com', 'timeout' => 8]);
+            // Route through ANTHROPIC_BASE_URL (e.g. llm-proxy.partyard.eu) so
+            // these auxiliary "smart suggestion" calls are also logged/audited
+            // like the main agent traffic. Falls back to api.anthropic.com.
+            $baseUri = rtrim((string) config('services.anthropic.base_uri', 'https://api.anthropic.com'), '/');
+            $client  = new \GuzzleHttp\Client(['base_uri' => $baseUri, 'timeout' => 8]);
             $res    = $client->post('/v1/messages', [
                 'headers' => [
                     'x-api-key'         => $apiKey,
