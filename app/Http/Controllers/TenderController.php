@@ -392,18 +392,38 @@ class TenderController extends Controller
         }
     }
 
+    /**
+     * Header stat cards on /tenders.
+     *
+     * The headline card is the "live pipeline" — active status AND not
+     * expired past the 15-day overdue window. That way the big number
+     * reflects actual actionable work, not lifetime imports (which was
+     * previously counting 280 including 100+ expired / terminal rows and
+     * making the dashboard look busier than it really was).
+     *
+     * All downstream breakdowns are subsets of that pipeline so the sum
+     * of the slices is consistent with the headline.
+     */
     private function dashboardStats(?int $userId): array
     {
         $base = Tender::query();
         if ($userId) $base->forUser($userId);
 
+        $pipeline = (clone $base)->livePipeline();
+
         return [
-            'total'        => (clone $base)->count(),
-            // "Activos" excludes overdue on purpose — overdue has its own card.
-            'active'       => (clone $base)->activeInProgress()->count(),
-            // Capped at OVERDUE_WINDOW_DAYS — older ones are "expired".
+            // Live pipeline: active status + within 15d overdue window.
+            // This is the number managers care about.
+            'total'        => (clone $pipeline)->count(),
+            // Active AND deadline still in the future (or no deadline).
+            'active'       => (clone $pipeline)
+                ->where(fn($w) => $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', now()))
+                ->count(),
+            // 0..OVERDUE_WINDOW_DAYS past deadline — still rescuable.
             'overdue'      => (clone $base)->overdue()->count(),
+            // ≤7d AND still in the future (fixed: was including past-deadline).
             'urgent'       => (clone $base)->urgent(7)->count(),
+            // Assigned rows inside the live pipeline missing a SAP opportunity.
             'needing_sap'  => (clone $base)->needingSapOpportunity()->count(),
         ];
     }

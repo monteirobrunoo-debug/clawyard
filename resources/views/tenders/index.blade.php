@@ -71,18 +71,25 @@
                 </div>
             @endif
 
-            {{-- ─── Stat cards ────────────────────────────────────────────── --}}
+            {{-- ─── Stat cards ──────────────────────────────────────────────
+                 All numbers reflect the "live pipeline" — active status
+                 (pending/em_tratamento/submetido/avaliação) AND not expired
+                 past the {{ \App\Models\Tender::OVERDUE_WINDOW_DAYS }}-day overdue window. Terminal
+                 statuses (ganho/perdido/cancelado/não tratar) and long-
+                 expired rows are intentionally excluded so the headline
+                 reflects actionable work, not lifetime imports. --}}
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 @foreach([
-                    ['label' => 'Total',                  'value' => $stats['total'],       'color' => 'text-gray-800'],
-                    ['label' => 'Activos',                'value' => $stats['active'],      'color' => 'text-indigo-700'],
-                    ['label' => 'Em atraso ≤'.\App\Models\Tender::OVERDUE_WINDOW_DAYS.'d', 'value' => $stats['overdue'], 'color' => 'text-red-600'],
-                    ['label' => 'Urgentes ≤7d',           'value' => $stats['urgent'],      'color' => 'text-orange-600'],
-                    ['label' => 'Sem nº SAP',             'value' => $stats['needing_sap'], 'color' => 'text-yellow-700'],
+                    ['label' => 'Em curso',               'hint' => 'activos + dentro do prazo', 'value' => $stats['total'],       'color' => 'text-gray-800'],
+                    ['label' => 'Dentro do prazo',        'hint' => 'deadline no futuro',        'value' => $stats['active'],      'color' => 'text-indigo-700'],
+                    ['label' => 'Em atraso ≤'.\App\Models\Tender::OVERDUE_WINDOW_DAYS.'d', 'hint' => 'ainda recuperáveis', 'value' => $stats['overdue'], 'color' => 'text-red-600'],
+                    ['label' => 'Urgentes ≤7d',           'hint' => 'deadline em ≤7 dias',       'value' => $stats['urgent'],      'color' => 'text-orange-600'],
+                    ['label' => 'Sem nº SAP',             'hint' => 'atribuídos, sem oportunidade', 'value' => $stats['needing_sap'], 'color' => 'text-yellow-700'],
                 ] as $card)
                     <div class="rounded-lg bg-white p-4 shadow-sm border border-gray-100">
                         <div class="text-xs uppercase tracking-wide text-gray-500">{{ $card['label'] }}</div>
                         <div class="mt-1 text-2xl font-bold {{ $card['color'] }}">{{ $card['value'] }}</div>
+                        <div class="mt-0.5 text-[10px] text-gray-400">{{ $card['hint'] }}</div>
                     </div>
                 @endforeach
             </div>

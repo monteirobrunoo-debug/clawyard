@@ -181,18 +181,45 @@ class Tender extends Model
         return $q->whereHas('collaborator', fn($c) => $c->where('user_id', $userId));
     }
 
+    /**
+     * Tenders whose deadline is within the next $daysThreshold days AND
+     * still in the future. Past-deadline rows are excluded — they belong
+     * to the overdue/expired buckets and would otherwise double-count on
+     * the stat cards (a 10-day overdue tender was being counted as
+     * "urgent ≤7d" because only the upper bound was enforced).
+     */
     public function scopeUrgent(Builder $q, int $daysThreshold = 7): Builder
     {
+        $now = now();
         return $q->active()
             ->whereNotNull('deadline_at')
-            ->where('deadline_at', '<=', now()->addDays($daysThreshold));
+            ->where('deadline_at', '>=', $now)
+            ->where('deadline_at', '<=', $now->copy()->addDays($daysThreshold));
     }
 
     public function scopeNeedingSapOpportunity(Builder $q): Builder
     {
+        // Scoped to the live pipeline (active + not expired past the 15d
+        // window) so expired tenders don't inflate the "sem nº SAP" badge.
+        $cutoff = now()->copy()->subDays(self::OVERDUE_WINDOW_DAYS);
         return $q->active()
             ->whereNotNull('assigned_collaborator_id')
+            ->where(fn($w) => $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', $cutoff))
             ->where(fn($w) => $w->whereNull('sap_opportunity_number')->orWhere('sap_opportunity_number', ''));
+    }
+
+    /**
+     * The "live pipeline" — everything still on someone's plate: active
+     * status AND deadline either in the future or at most
+     * OVERDUE_WINDOW_DAYS in the past. Used for the TOTAL card so the
+     * number reflects actionable backlog instead of lifetime imports.
+     */
+    public function scopeLivePipeline(Builder $q): Builder
+    {
+        $cutoff = now()->copy()->subDays(self::OVERDUE_WINDOW_DAYS);
+        return $q->active()->where(function ($w) use ($cutoff) {
+            $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', $cutoff);
+        });
     }
 
     // ── Timezone accessors ───────────────────────────────────────────────
