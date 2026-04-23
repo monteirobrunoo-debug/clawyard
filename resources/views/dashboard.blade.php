@@ -409,6 +409,7 @@
         <a href="/stats" class="nav-link">📊 Stats</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
         <a href="/shares" class="nav-link" style="color:#60a5fa;border-color:#1e3a5f;background:#0a1a2e">🔗 Shared Agents</a>
+        <a href="{{ route('tenders.index') }}" class="nav-link" style="color:#fbbf24;border-color:#3a2a0a;background:#1a1200">📑 Concursos</a>
         @if(Auth::user()->isAdmin())
             <a href="/admin/users" class="nav-link admin">⚙️ Admin</a>
         @endif
