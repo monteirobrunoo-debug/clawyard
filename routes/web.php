@@ -478,6 +478,10 @@ Route::middleware(['auth'])->group(function () {
 
     // Dashboard + per-tender detail + edit + append-only observation.
     Route::get('/tenders',                      [TenderController::class, 'index'])->name('tenders.index');
+    // JSON endpoint for the async SAP Opportunity card on the show page.
+    // Registered BEFORE the /{tender} wildcard so "sap-preview" isn't swallowed
+    // as a slug — same trap that bit /agents/activity earlier.
+    Route::get('/tenders/{tender}/sap-preview', [TenderController::class, 'sapPreview'])->name('tenders.sap_preview');
     Route::get('/tenders/{tender}',             [TenderController::class, 'show'])->name('tenders.show');
     Route::patch('/tenders/{tender}',           [TenderController::class, 'update'])->name('tenders.update');
     Route::post('/tenders/{tender}/observe',    [TenderController::class, 'observe'])->name('tenders.observe');

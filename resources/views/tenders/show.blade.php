@@ -128,6 +128,138 @@
                 </dl>
             </section>
 
+            {{-- ─── SAP B1 Opportunity card ───────────────────────────────
+                 Phase 1 of the SAP integration: when the tender has a SAP
+                 opportunity number, fetch live data from the Service Layer
+                 (via /tenders/{id}/sap-preview JSON endpoint) and show it
+                 here. Async so a slow SAP doesn't block the page render.
+            --}}
+            <section id="sap-opp-card"
+                     class="rounded-lg bg-white shadow-sm border border-gray-100 p-5"
+                     data-sap-url="{{ route('tenders.sap_preview', $tender) }}">
+                <header class="flex items-center justify-between mb-3">
+                    <h3 class="text-base font-semibold text-gray-800 flex items-center gap-2">
+                        🔗 SAP Opportunity
+                        <span id="sap-opp-ref" class="text-xs font-mono font-normal text-gray-500">{{ $tender->sap_opportunity_number ?: '—' }}</span>
+                    </h3>
+                    <button type="button" id="sap-opp-refresh"
+                            class="text-xs text-indigo-600 hover:text-indigo-800"
+                            title="Buscar outra vez ao SAP">↻ Actualizar</button>
+                </header>
+
+                <div id="sap-opp-body" class="text-sm text-gray-600">
+                    <div class="flex items-center gap-2 text-gray-400">
+                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        A contactar o SAP…
+                    </div>
+                </div>
+            </section>
+
+            <script>
+            (function () {
+                const root     = document.getElementById('sap-opp-card');
+                const body     = document.getElementById('sap-opp-body');
+                const refresh  = document.getElementById('sap-opp-refresh');
+                if (!root || !body) return;
+
+                const fmtEur = (n) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Number(n) || 0);
+                const fmtDate = (iso) => {
+                    if (!iso) return '—';
+                    const s = String(iso).slice(0, 10);
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+                    const [y, m, d] = s.split('-');
+                    return `${d}/${m}/${y}`;
+                };
+                const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+                // State → human-friendly rendering
+                const renderEmpty = (msg, tone = 'gray') => {
+                    const colors = {
+                        gray:   'bg-gray-50 border-gray-200 text-gray-600',
+                        amber:  'bg-amber-50 border-amber-200 text-amber-800',
+                        red:    'bg-red-50 border-red-200 text-red-800',
+                    };
+                    body.innerHTML = `<div class="rounded-md border p-3 text-xs ${colors[tone] || colors.gray}">${esc(msg)}</div>`;
+                };
+
+                const renderOk = (d) => {
+                    const statusLabel = { O: 'Open', W: 'Won', L: 'Lost' }[d.status] || d.status || '—';
+                    const statusColor = { O: 'bg-blue-100 text-blue-800', W: 'bg-emerald-100 text-emerald-800', L: 'bg-red-100 text-red-800' }[d.status] || 'bg-gray-100 text-gray-800';
+                    const remarks = d.remarks ? esc(d.remarks) : '<span class="text-gray-400 italic">(sem Remarks no SAP)</span>';
+
+                    const lastStage = d.last_stage ? `
+                        <div class="mt-3 rounded-md bg-gray-50 border border-gray-200 p-2 text-xs text-gray-700">
+                            <div class="font-semibold text-gray-800">Último estado (Níveis)</div>
+                            <div>Stage #${d.last_stage.stage_key} · ${d.last_stage.percentage_rate}% · Vendedor: ${esc(d.last_stage.sales_employee) || '—'}</div>
+                            <div class="text-gray-500">Início: ${fmtDate(d.last_stage.start_date)} · Fecho: ${fmtDate(d.last_stage.close_date)}</div>
+                        </div>` : '';
+
+                    body.innerHTML = `
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div>
+                                <div class="text-[10px] uppercase text-gray-500">Estado SAP</div>
+                                <span class="inline-flex mt-0.5 rounded px-2 py-0.5 text-xs font-medium ${statusColor}">${esc(statusLabel)}</span>
+                            </div>
+                            <div>
+                                <div class="text-[10px] uppercase text-gray-500">Cliente (BP)</div>
+                                <div class="font-medium text-gray-900 truncate" title="${esc(d.bp_code)} · ${esc(d.bp_name)}">${esc(d.bp_name) || '—'}</div>
+                                <div class="text-[10px] font-mono text-gray-400">${esc(d.bp_code) || ''}</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] uppercase text-gray-500">Valor</div>
+                                <div class="font-semibold text-gray-900">${fmtEur(d.max_local_total)}</div>
+                                <div class="text-[10px] text-gray-400">Ponderado: ${fmtEur(d.weighted_total)}</div>
+                            </div>
+                            <div>
+                                <div class="text-[10px] uppercase text-gray-500">Fecho previsto</div>
+                                <div class="text-gray-900">${fmtDate(d.predicted_closing)}</div>
+                                <div class="text-[10px] text-gray-400">${d.closing_percentage || 0}% prob.</div>
+                            </div>
+                        </div>
+                        ${lastStage}
+                        <div class="mt-3">
+                            <div class="text-[10px] uppercase text-gray-500 mb-0.5">Remarks (SAP)</div>
+                            <div class="rounded-md bg-indigo-50 border border-indigo-200 p-2 text-xs text-indigo-900 whitespace-pre-wrap">${remarks}</div>
+                            <div class="text-[10px] text-gray-400 mt-1">
+                                Ao guardar o campo <strong>Notas</strong> abaixo, este campo <em>Remarks</em> no SAP é actualizado automaticamente.
+                            </div>
+                        </div>
+                    `;
+                };
+
+                const load = () => {
+                    body.innerHTML = `<div class="flex items-center gap-2 text-gray-400">
+                        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        A contactar o SAP…
+                    </div>`;
+
+                    fetch(root.dataset.sapUrl, { headers: { 'Accept': 'application/json' } })
+                        .then(r => r.json().then(j => ({ status: r.status, body: j })))
+                        .then(({ status, body: payload }) => {
+                            switch (payload.state) {
+                                case 'ok':          return renderOk(payload.data);
+                                case 'empty':       return renderEmpty(payload.message, 'gray');
+                                case 'unparseable': return renderEmpty(payload.message, 'amber');
+                                case 'not_found':   return renderEmpty(payload.message, 'amber');
+                                case 'disabled':    return renderEmpty(payload.message, 'gray');
+                                case 'error':       return renderEmpty(payload.message, 'red');
+                                default:            return renderEmpty('Resposta inesperada do servidor.', 'red');
+                            }
+                        })
+                        .catch(err => renderEmpty('Erro de rede: ' + err.message, 'red'));
+                };
+
+                refresh.addEventListener('click', load);
+                load();
+            })();
+            </script>
+
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {{-- ─── Edit form (spans 2 cols) ──────────────────────────── --}}

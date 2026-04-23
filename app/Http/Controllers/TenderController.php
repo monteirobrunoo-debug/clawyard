@@ -7,9 +7,12 @@ use App\Http\Requests\TenderUpdateRequest;
 use App\Models\AgentShare;
 use App\Models\Tender;
 use App\Models\TenderCollaborator;
+use App\Services\SapService;
 use App\Services\TenderSimilarityService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Tender dashboard — list, show, update, bulk assign, observe.
@@ -220,14 +223,159 @@ class TenderController extends Controller
     }
 
     // ── Inline edit ──────────────────────────────────────────────────────
-    public function update(TenderUpdateRequest $request, Tender $tender)
+    public function update(TenderUpdateRequest $request, Tender $tender, SapService $sap)
     {
+        $before = [
+            'notes'      => (string) $tender->notes,
+            'sap_number' => (string) $tender->sap_opportunity_number,
+        ];
+
         $tender->fill($request->validated());
         $tender->save();
 
+        // Fase 2 of SAP integration — push Notas → SAP Opportunity Remarks.
+        //
+        // Triggered only when:
+        //   1. The tender has a parseable SAP SequentialNo, AND
+        //   2. The `notes` column actually changed in this save (avoid
+        //      silently rewriting Remarks on every unrelated edit), AND
+        //   3. The Service Layer is configured (username + password).
+        //
+        // Any SAP failure is logged but does NOT rollback the local save —
+        // the ClawYard record of truth is saved first, SAP sync is a
+        // side-effect. Users see the sync status in the flash message.
+        $sapStatus = null;
+        $seqNo     = $tender->getSapSequentialNo();
+        $notesChanged = ((string) $tender->notes) !== $before['notes'];
+
+        if ($seqNo && $notesChanged && config('services.sap.username')) {
+            try {
+                $ok = $sap->updateOpportunity($seqNo, [
+                    'Remarks' => (string) $tender->notes,
+                ]);
+                $sapStatus = $ok
+                    ? "✓ Notas sincronizadas com SAP Opp #{$seqNo}"
+                    : "⚠ Falha a sincronizar com SAP Opp #{$seqNo}: " . ($sap->getLastError() ?: 'erro desconhecido');
+            } catch (\Throwable $e) {
+                Log::warning('Tender update → SAP sync failed', [
+                    'tender_id' => $tender->id,
+                    'seq_no'    => $seqNo,
+                    'error'     => $e->getMessage(),
+                ]);
+                $sapStatus = "⚠ Excepção ao sincronizar com SAP Opp #{$seqNo}: {$e->getMessage()}";
+            }
+        }
+
+        $msg = 'Concurso actualizado.';
+        if ($sapStatus) $msg .= ' · ' . $sapStatus;
+
         return redirect()
             ->route('tenders.show', $tender)
-            ->with('status', 'Concurso actualizado.');
+            ->with('status', $msg);
+    }
+
+    // ── SAP Opportunity preview (Fase 1 — read-only) ──────────────────────
+    /**
+     * JSON endpoint that fetches the SAP B1 Opportunity linked to this tender
+     * (via sap_opportunity_number) so the show page can render a live status
+     * card without blocking the server-side render.
+     *
+     * Response shape:
+     *   { state: "ok",         data: {...} }
+     *   { state: "empty",      message: "Preenche Nº Oportunidade SAP primeiro" }
+     *   { state: "unparseable",message: "'ABC' não é um nº SAP válido" }
+     *   { state: "not_found",  message: "Opp #16836 não existe no SAP" }
+     *   { state: "disabled",   message: "Integração SAP não configurada" }
+     *   { state: "error",      message: "..." }
+     *
+     * Stays GET + cacheable at the view layer — we don't mutate anything
+     * here. Visibility is enforced so regular users can only peek at SAP
+     * for tenders they can see.
+     */
+    public function sapPreview(Tender $tender, SapService $sap): JsonResponse
+    {
+        $user = Auth::user();
+        $this->enforceVisibility($tender, $user);
+
+        if (!config('services.sap.username') || !config('services.sap.password')) {
+            return response()->json([
+                'state'   => 'disabled',
+                'message' => 'Integração SAP não configurada — falta SAP_B1_USER / SAP_B1_PASSWORD no .env do servidor.',
+            ]);
+        }
+
+        $raw = (string) $tender->sap_opportunity_number;
+        if ($raw === '') {
+            return response()->json([
+                'state'   => 'empty',
+                'message' => 'Preenche o campo "Nº Oportunidade SAP" acima e guarda para ver os dados da oportunidade.',
+            ]);
+        }
+
+        $seqNo = $tender->getSapSequentialNo();
+        if (!$seqNo) {
+            return response()->json([
+                'state'   => 'unparseable',
+                'message' => "O valor \"{$raw}\" não contém um número SAP reconhecível. Esperado algo como \"16836/2026\" ou só \"16836\".",
+            ]);
+        }
+
+        try {
+            $opp = $sap->getOpportunityWithStages($seqNo);
+        } catch (\Throwable $e) {
+            Log::warning('sapPreview: getOpportunityWithStages failed', [
+                'tender_id' => $tender->id,
+                'seq_no'    => $seqNo,
+                'error'     => $e->getMessage(),
+            ]);
+            return response()->json([
+                'state'   => 'error',
+                'message' => 'Erro a contactar o SAP Service Layer: ' . $e->getMessage(),
+            ], 502);
+        }
+
+        if (!$opp) {
+            return response()->json([
+                'state'   => 'not_found',
+                'message' => "A oportunidade SAP #{$seqNo} não foi encontrada. Verifica o número ou confirma que não está arquivada.",
+                'seq_no'  => $seqNo,
+            ], 404);
+        }
+
+        // Compact the SAP payload to what the UI actually needs — avoid
+        // shipping the 30+ raw SAP fields to the browser.
+        $lines = $opp['SalesOpportunitiesLines'] ?? [];
+        if (is_array($lines) && count($lines) > 1) {
+            usort($lines, fn($a, $b) => ((int) ($a['LineNum'] ?? 0)) <=> ((int) ($b['LineNum'] ?? 0)));
+        }
+        $lastStage = !empty($lines) ? end($lines) : null;
+
+        return response()->json([
+            'state' => 'ok',
+            'data'  => [
+                'seq_no'               => (int) ($opp['SequentialNo'] ?? $seqNo),
+                'name'                 => (string) ($opp['OpportunityName'] ?? ''),
+                'status'               => (string) ($opp['Status'] ?? ''),
+                'bp_code'              => (string) ($opp['CardCode'] ?? ''),
+                'bp_name'              => (string) ($opp['CardName'] ?? ''),
+                'max_local_total'      => (float)  ($opp['MaxLocalTotal']    ?? 0),
+                'weighted_total'       => (float)  ($opp['WeightedSumLC']    ?? 0),
+                'closing_percentage'   => (float)  ($opp['ClosingPercentage'] ?? 0),
+                'predicted_closing'    => (string) ($opp['PredictedClosingDate'] ?? ''),
+                'start_date'           => (string) ($opp['StartDate'] ?? ''),
+                'current_stage_no'     => (int)    ($opp['CurrentStageNo'] ?? 0),
+                'remarks'              => (string) ($opp['Remarks'] ?? ''),
+                'stages_count'         => is_array($lines) ? count($lines) : 0,
+                'last_stage'           => $lastStage ? [
+                    'line_num'         => (int) ($lastStage['LineNum'] ?? 0),
+                    'stage_key'        => (int) ($lastStage['StageKey'] ?? 0),
+                    'percentage_rate'  => (float) ($lastStage['PercentageRate'] ?? 0),
+                    'start_date'       => substr((string) ($lastStage['StartDate'] ?? ''), 0, 10),
+                    'close_date'       => substr((string) ($lastStage['CloseDate'] ?? ($lastStage['ClosedDate'] ?? '')), 0, 10),
+                    'sales_employee'   => (string) ($lastStage['SalesEmployee'] ?? ''),
+                ] : null,
+            ],
+        ]);
     }
 
     // ── Append-only observation ──────────────────────────────────────────

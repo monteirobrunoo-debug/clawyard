@@ -280,6 +280,35 @@ class Tender extends Model
         return true;
     }
 
+    /**
+     * Extract the SAP B1 SequentialNo (integer DocEntry) from the free-text
+     * `sap_opportunity_number` column so we can call the Service Layer.
+     *
+     * Users type the identifier in whatever format they see in SAP B1 UI —
+     * we've observed at least three conventions in the wild:
+     *   "16836/2026"      — DocNum / fiscal year (H&P Group convention)
+     *   "SAP-2026-0451"   — legacy prefix style (what the placeholder hints)
+     *   "16836"           — bare SequentialNo (power-users who know the API)
+     *
+     * In every case the FIRST run of ≥4 consecutive digits is the identifier
+     * we need (SAP B1 DocEntry starts around 10000 on most installs, so a
+     * 4-digit lower bound avoids accidentally picking "2026" out of
+     * "SAP-2026-…"). Returns null if the column is empty or unparseable.
+     */
+    public function getSapSequentialNo(): ?int
+    {
+        $raw = trim((string) $this->sap_opportunity_number);
+        if ($raw === '') return null;
+
+        // Prefer runs of 4+ digits. If the string is just "12" or "999" that's
+        // almost certainly wrong, and we'd rather return null than make a
+        // bogus Service Layer call.
+        if (preg_match('/\d{4,}/', $raw, $m)) {
+            return (int) $m[0];
+        }
+        return null;
+    }
+
     /** @return list<string> Bullet-point prompts shown in the email for this row. */
     public function digestPrompts(): array
     {
