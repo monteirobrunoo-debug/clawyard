@@ -37,3 +37,15 @@ Schedule::command('tenders:send-digest --slot=evening')
     ->dailyAt('17:00')
     ->withoutOverlapping()
     ->runInBackground();
+
+// ── Individual deadline alert — fires ~24h before each tender's deadline,
+// exactly ONCE per tender lifetime (de-duped via deadline_alert_sent_at).
+// Sent only to the assigned collaborator so we don't duplicate the digest.
+//
+// Hourly grain is fine: the 2h window (23–25h out) absorbs any drift, and
+// once the flag is set the tender is skipped forever.
+Schedule::command('tenders:send-deadline-alerts')
+    ->hourly()
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();

@@ -32,11 +32,19 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center gap-3">
-            <a href="{{ route('tenders.index') }}" class="text-sm text-indigo-600 hover:underline">← Voltar</a>
-            <h2 class="text-xl font-semibold leading-tight text-gray-800 truncate">
-                {{ strtoupper($tender->source) }} · {{ $tender->reference }}
-            </h2>
+        <div class="flex items-center justify-between gap-3 flex-wrap">
+            <div class="flex items-center gap-3 min-w-0">
+                <a href="{{ route('tenders.index') }}" class="text-sm text-indigo-600 hover:underline shrink-0">← Voltar</a>
+                <h2 class="text-xl font-semibold leading-tight text-gray-800 truncate">
+                    {{ strtoupper($tender->source) }} · {{ $tender->reference }}
+                </h2>
+            </div>
+            <button type="button"
+                    onclick="copyTenderInfo()"
+                    title="Copia toda a info deste concurso para a clipboard — pronto para colar num agente ou numa nota externa"
+                    class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                📋 <span id="copy-btn-label">Copiar info completa</span>
+            </button>
         </div>
     </x-slot>
 
@@ -316,4 +324,58 @@
             @endif
         </div>
     </div>
+
+    {{-- ─── "Copy full info" helper ─────────────────────────────────────────
+         Builds a server-side plain-text snapshot so agents (Richar, etc.) or
+         external notes can receive every relevant field in one paste. The
+         payload is JSON-encoded into a data attribute and copied to the
+         clipboard on click. Avoids any client-side templating surprises. --}}
+    @php
+        $payload = collect([
+            'CONCURSO'        => strtoupper($tender->source) . ' · ' . $tender->reference,
+            'TÍTULO'          => $tender->title,
+            'TIPO'            => $tender->type ?: '—',
+            'ORGANIZAÇÃO'     => $tender->purchasing_org ?: '—',
+            'ESTADO'          => $statusLabels[$tender->status] ?? $tender->status,
+            'COLABORADOR'     => $tender->collaborator?->name ?? '—',
+            'EMAIL COLAB.'    => $tender->collaborator?->digest_email ?? '—',
+            'DEADLINE 🇵🇹'    => $tender->deadline_lisbon?->format('d/m/Y H:i') . ' Lisboa' ?: '—',
+            'DEADLINE 🇱🇺'    => $tender->deadline_luxembourg?->format('d/m/Y H:i') . ' Luxembourg' ?: '—',
+            'Nº SAP'          => $tender->sap_opportunity_number ?: '—',
+            'VALOR'           => $tender->offer_value ? number_format((float) $tender->offer_value, 2, ',', '.') . ' ' . ($tender->currency ?: '') : '—',
+            'HORAS GASTAS'    => $tender->time_spent_hours ? (float) $tender->time_spent_hours . 'h' : '—',
+            'RESULTADO'       => $tender->result ?: '—',
+            'URL'             => rtrim(config('app.url'), '/') . '/tenders/' . $tender->id,
+        ])
+        ->map(fn($v, $k) => str_pad($k, 17) . ': ' . $v)
+        ->implode("\n");
+
+        $payload .= "\n\n=== NOTAS / OBSERVAÇÕES ===\n" . ($tender->notes ?: '(sem notas)');
+    @endphp
+
+    <script>
+        // Using textarea-based fallback so non-HTTPS localhost also works.
+        window.copyTenderInfo = async function () {
+            const payload = @json($payload);
+            const label   = document.getElementById('copy-btn-label');
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(payload);
+                } else {
+                    // Legacy fallback for older browsers / insecure contexts.
+                    const ta = document.createElement('textarea');
+                    ta.value = payload;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                }
+                if (label) { label.textContent = '✓ Copiado!'; setTimeout(() => label.textContent = 'Copiar info completa', 2000); }
+            } catch (e) {
+                alert('Não foi possível copiar: ' + e.message);
+            }
+        };
+    </script>
 </x-app-layout>

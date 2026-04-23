@@ -34,6 +34,7 @@ class Tender extends Model
         'offer_value', 'currency', 'time_spent_hours',
         'notes', 'result',
         'raw_metadata', 'last_import_id', 'last_digest_sent_at',
+        'deadline_alert_sent_at',
     ];
 
     protected function casts(): array
@@ -43,6 +44,7 @@ class Tender extends Model
             'source_modified_at'   => 'datetime',
             'assigned_at'          => 'datetime',
             'last_digest_sent_at'  => 'datetime',
+            'deadline_alert_sent_at' => 'datetime',
             'offer_value'          => 'decimal:2',
             'time_spent_hours'     => 'decimal:2',
             'raw_metadata'         => 'array',
