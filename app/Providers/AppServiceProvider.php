@@ -68,10 +68,13 @@ class AppServiceProvider extends ServiceProvider
      */
     private function registerTenderGates(): void
     {
-        Gate::define('tenders.view-all', fn(User $u) => $u->isManager());
-        Gate::define('tenders.import',   fn(User $u) => $u->isManager());
-        Gate::define('tenders.assign',   fn(User $u) => $u->isManager());
-        Gate::define('tenders.delete',   fn(User $u) => $u->isAdmin());
+        Gate::define('tenders.view-all',         fn(User $u) => $u->isManager());
+        Gate::define('tenders.import',           fn(User $u) => $u->isManager());
+        Gate::define('tenders.assign',           fn(User $u) => $u->isManager());
+        Gate::define('tenders.delete',           fn(User $u) => $u->isAdmin());
+        // Manage the TenderCollaborator roster — add names, set emails,
+        // link to User accounts, deactivate. Super-user only.
+        Gate::define('tenders.collaborators',    fn(User $u) => $u->isManager());
 
         // Manager+ can edit anything. Regular users can edit tenders
         // assigned to a collaborator linked to their User account.

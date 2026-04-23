@@ -31,19 +31,27 @@
 
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between gap-3 flex-wrap">
             <h2 class="text-xl font-semibold leading-tight text-gray-800">
                 Concursos
             </h2>
-            @if($canImport)
-                <a href="{{ route('tenders.import.create') }}"
-                   class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-indigo-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-                    </svg>
-                    Importar Excel
-                </a>
-            @endif
+            <div class="flex items-center gap-2">
+                @if($canAssign)
+                    <a href="{{ route('tenders.collaborators.index') }}"
+                       class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                        👥 Colaboradores
+                    </a>
+                @endif
+                @if($canImport)
+                    <a href="{{ route('tenders.import.create') }}"
+                       class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-indigo-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Importar Excel
+                    </a>
+                @endif
+            </div>
         </div>
     </x-slot>
 

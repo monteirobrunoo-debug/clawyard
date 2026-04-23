@@ -10,6 +10,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\SapTableController;
+use App\Http\Controllers\TenderCollaboratorController;
 use App\Http\Controllers\TenderController;
 use App\Http\Controllers\TenderImportController;
 use Illuminate\Support\Facades\Route;
@@ -375,10 +376,18 @@ Route::middleware(['auth'])->group(function () {
 // everything and may import/bulk-assign.
 Route::middleware(['auth'])->group(function () {
     // Import pages are manager+ only; the gate guard is in the controller.
-    // NB: the /tenders/import routes MUST be declared BEFORE /tenders/{tender}
-    // so "import" isn't captured as a tender id by the route model binder.
+    // NB: /tenders/import and /tenders/collaborators MUST be declared BEFORE
+    // /tenders/{tender} so those static segments aren't captured as a tender
+    // id by the route model binder.
     Route::get('/tenders/import',  [TenderImportController::class, 'create'])->name('tenders.import.create');
     Route::post('/tenders/import', [TenderImportController::class, 'store'])->name('tenders.import.store');
+
+    // Collaborators roster CRUD — manager+ only (gate checked in controller).
+    Route::get   ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'index'])->name('tenders.collaborators.index');
+    Route::post  ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'store'])->name('tenders.collaborators.store');
+    Route::get   ('/tenders/collaborators/{collaborator}/edit',  [TenderCollaboratorController::class, 'edit'])->name('tenders.collaborators.edit');
+    Route::patch ('/tenders/collaborators/{collaborator}',       [TenderCollaboratorController::class, 'update'])->name('tenders.collaborators.update');
+    Route::delete('/tenders/collaborators/{collaborator}',       [TenderCollaboratorController::class, 'destroy'])->name('tenders.collaborators.destroy');
 
     // Bulk assign — also manager+ only (enforced in TenderAssignRequest::authorize).
     Route::post('/tenders/assign', [TenderController::class, 'assign'])->name('tenders.assign');
