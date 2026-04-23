@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\Tender;
+use App\Models\User;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -48,6 +51,39 @@ class AppServiceProvider extends ServiceProvider
         // HTTP. We treat this as a fatal config error rather than silently
         // sending keys + prompts over the clear.
         $this->assertNvidiaTransportSecure();
+
+        // Authorisation gates for the Concursos (tenders) dashboard.
+        $this->registerTenderGates();
+    }
+
+    /**
+     * Gates for tender workflow — see TenderController / TenderImportController.
+     *
+     *   tenders.view-all: dashboard shows every tender (else: only own assigns)
+     *   tenders.import:   upload Excel to create/update tender rows
+     *   tenders.assign:   bulk re-assign collaborator
+     *   tenders.delete:   hard/soft delete tenders (admin only)
+     *   tenders.update:   edit fields on a tender (assignee user, or manager+)
+     *   tenders.observe:  add an observation (always-allowed for signed-in users)
+     */
+    private function registerTenderGates(): void
+    {
+        Gate::define('tenders.view-all', fn(User $u) => $u->isManager());
+        Gate::define('tenders.import',   fn(User $u) => $u->isManager());
+        Gate::define('tenders.assign',   fn(User $u) => $u->isManager());
+        Gate::define('tenders.delete',   fn(User $u) => $u->isAdmin());
+
+        // Manager+ can edit anything. Regular users can edit tenders
+        // assigned to a collaborator linked to their User account.
+        Gate::define('tenders.update', function (User $u, Tender $t): bool {
+            if ($u->isManager()) return true;
+            $collab = $t->collaborator;
+            return $collab && $collab->user_id === $u->id;
+        });
+
+        // Adding observations is a low-privilege, append-only action so any
+        // authenticated, active user can drop a note on any tender they see.
+        Gate::define('tenders.observe', fn(User $u) => (bool) $u->is_active);
     }
 
     /**

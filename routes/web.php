@@ -10,6 +10,8 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\AgentActivityController;
 use App\Http\Controllers\SapTableController;
+use App\Http\Controllers\TenderController;
+use App\Http\Controllers\TenderImportController;
 use Illuminate\Support\Facades\Route;
 use App\Services\PatentPdfService;
 use App\Models\Discovery;
@@ -364,6 +366,28 @@ Route::middleware(['auth'])->get('/intel', function () {
 // SAP Documents — interactive table (Richard SAP)
 Route::middleware(['auth'])->group(function () {
     Route::get('/sap/documents', [SapTableController::class, 'index'])->name('sap.documents');
+});
+
+// ─── Concursos (Tenders) — dashboard, detail, import, bulk assign ─────────
+//
+// Gate-checked inside controllers/FormRequests (see AppServiceProvider
+// registerTenderGates). Regular users see their own assigns; manager+ see
+// everything and may import/bulk-assign.
+Route::middleware(['auth'])->group(function () {
+    // Import pages are manager+ only; the gate guard is in the controller.
+    // NB: the /tenders/import routes MUST be declared BEFORE /tenders/{tender}
+    // so "import" isn't captured as a tender id by the route model binder.
+    Route::get('/tenders/import',  [TenderImportController::class, 'create'])->name('tenders.import.create');
+    Route::post('/tenders/import', [TenderImportController::class, 'store'])->name('tenders.import.store');
+
+    // Bulk assign — also manager+ only (enforced in TenderAssignRequest::authorize).
+    Route::post('/tenders/assign', [TenderController::class, 'assign'])->name('tenders.assign');
+
+    // Dashboard + per-tender detail + edit + append-only observation.
+    Route::get('/tenders',                      [TenderController::class, 'index'])->name('tenders.index');
+    Route::get('/tenders/{tender}',             [TenderController::class, 'show'])->name('tenders.show');
+    Route::patch('/tenders/{tender}',           [TenderController::class, 'update'])->name('tenders.update');
+    Route::post('/tenders/{tender}/observe',    [TenderController::class, 'observe'])->name('tenders.observe');
 });
 
 // Schedules page — visible to all authenticated users
