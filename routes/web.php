@@ -295,12 +295,20 @@ Route::get('/stats', function () {
         $days[] = ['day' => $d, 'count' => (int) ($daily[$d]->c ?? 0)];
     }
 
-    // Hour-of-day histogram (all time, UTC from DB)
+    // Hour-of-day histogram (all time, UTC from DB).
+    // Portable across Postgres (prod) and SQLite (local dev): Postgres uses
+    // EXTRACT(HOUR FROM …), SQLite uses strftime("%H", …). The driver check
+    // keeps both environments working without a migration.
+    $driver   = \DB::connection()->getDriverName();
+    $hourExpr = $driver === 'sqlite'
+        ? 'CAST(strftime(\'%H\', messages.created_at) AS INTEGER)'
+        : 'CAST(EXTRACT(HOUR FROM messages.created_at) AS INTEGER)';
+
     $hourly = \App\Models\Message::query()
         ->join('conversations', 'messages.conversation_id', '=', 'conversations.id')
         ->where('conversations.session_id', 'like', $prefix . '%')
         ->where('messages.role', 'user')
-        ->selectRaw('CAST(strftime("%H", messages.created_at) AS INTEGER) as hour, COUNT(*) as c')
+        ->selectRaw("$hourExpr as hour, COUNT(*) as c")
         ->groupBy('hour')
         ->orderBy('hour')
         ->get()
