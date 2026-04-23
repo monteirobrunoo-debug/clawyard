@@ -349,9 +349,12 @@ Route::get('/agents/{key}', function (string $key) {
     $prefix = 'u' . $userId . '_';
 
     // Count conversations scoped to this user AND this agent.
+    // Column is fully qualified because $totalMsgs below joins the
+    // messages table (which also has an "agent" column). Without the
+    // prefix Postgres raises "ambiguous column reference".
     $baseQuery = \App\Models\Conversation::query()
-        ->where('session_id', 'like', $prefix . '%')
-        ->where('agent', $key);
+        ->where('conversations.session_id', 'like', $prefix . '%')
+        ->where('conversations.agent', $key);
 
     $totalConvs = (clone $baseQuery)->whereHas('messages')->count();
     $totalMsgs  = (clone $baseQuery)
