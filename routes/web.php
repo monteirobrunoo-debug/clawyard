@@ -176,6 +176,7 @@ Route::get('/dashboard', function () {
     // Conversations are scoped by session_id prefix "u{userId}_" — same
     // convention used in ConversationController.
     $userId = auth()->id();
+    $user   = auth()->user();
     $recentConversations = \App\Models\Conversation::query()
         ->where('session_id', 'like', 'u' . $userId . '_%')
         ->whereHas('messages')
@@ -184,9 +185,66 @@ Route::get('/dashboard', function () {
         ->limit(5)
         ->get();
 
+    // "Partilhados comigo" — things that were specifically attributed to
+    // this user (not just the global agent catalog). We surface two
+    // kinds on the dashboard so the user lands on everything they
+    // personally own in one place:
+    //
+    //   1) Tender bucket — non-expired concursos assigned to a
+    //      TenderCollaborator linked to this user (same forUser() logic
+    //      used in /tenders). Count only — full list lives on /tenders.
+    //
+    //   2) Agent shares — AgentShare rows where this user's email is
+    //      either the primary client_email or in the additional_emails
+    //      JSON array. Active + non-revoked + non-expired only.
+    $myTenderStats = ['total' => 0, 'overdue' => 0, 'next_deadline' => null];
+    $mySharedAgents = collect();
+    if ($user && $user->email) {
+        $expiredCut = now()->copy()->subDays(\App\Models\Tender::OVERDUE_WINDOW_DAYS);
+        $tendersQuery = \App\Models\Tender::query()
+            ->active()
+            ->forUser($userId)
+            ->where(function ($q) use ($expiredCut) {
+                $q->whereNull('deadline_at')->orWhere('deadline_at', '>=', $expiredCut);
+            });
+        $total = (clone $tendersQuery)->count();
+        if ($total > 0) {
+            $myTenderStats['total'] = $total;
+            $myTenderStats['overdue'] = (clone $tendersQuery)
+                ->whereNotNull('deadline_at')
+                ->where('deadline_at', '<', now())
+                ->count();
+            $myTenderStats['next_deadline'] = (clone $tendersQuery)
+                ->whereNotNull('deadline_at')
+                ->orderBy('deadline_at')
+                ->value('deadline_at');
+        }
+
+        // MySQL JSON_CONTAINS needs the value as a JSON string. SQLite
+        // fallback uses LIKE. We use a portable LIKE on the raw JSON
+        // column since additional_emails is stored as a JSON array of
+        // strings — it's good enough for the dashboard lookup.
+        $emailJsonFragment = '"' . $user->email . '"';
+        $mySharedAgents = \App\Models\AgentShare::query()
+            ->where('is_active', true)
+            ->whereNull('revoked_at')
+            ->where(function ($q) use ($expiredCut) {
+                $q->whereNull('expires_at')->orWhere('expires_at', '>=', now());
+            })
+            ->where(function ($q) use ($user, $emailJsonFragment) {
+                $q->where('client_email', $user->email)
+                  ->orWhere('additional_emails', 'like', '%' . $emailJsonFragment . '%');
+            })
+            ->with('creator:id,name')
+            ->orderByDesc('created_at')
+            ->get();
+    }
+
     return view('dashboard', [
         'agentCount'          => $agentCount,
         'recentConversations' => $recentConversations,
+        'myTenderStats'       => $myTenderStats,
+        'mySharedAgents'      => $mySharedAgents,
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 

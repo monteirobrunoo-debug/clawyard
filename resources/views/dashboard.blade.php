@@ -493,6 +493,89 @@ $agentByKey = [];
 foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 @endphp
 
+@php
+    // "Partilhados comigo" strip — visible only if the user actually owns
+    // something. Hidden entirely for admins with no assignments so the
+    // dashboard stays clean. The agent catalog lookup lets us render the
+    // shared agents with the same name/emoji/colour as the main grid.
+    $hasTenders = !empty($myTenderStats) && ($myTenderStats['total'] ?? 0) > 0;
+    $hasSharedAgents = isset($mySharedAgents) && $mySharedAgents->isNotEmpty();
+    $showMineStrip = $hasTenders || $hasSharedAgents;
+@endphp
+
+@if($showMineStrip)
+<div class="recent-wrap">
+    <div class="recent-header">
+        <span class="recent-title">🎯 Partilhados comigo</span>
+        <span class="recent-view-all" style="pointer-events:none;opacity:0.7;">
+            {{ ($hasTenders ? 1 : 0) + ($hasSharedAgents ? $mySharedAgents->count() : 0) }} atribuído(s)
+        </span>
+    </div>
+    <div class="recent-strip">
+        {{-- Tender bucket card: links to /tenders filtered to mine. --}}
+        @if($hasTenders)
+            @php
+                $deadline = $myTenderStats['next_deadline'] ?? null;
+                $deadlineTxt = $deadline ? \Illuminate\Support\Carbon::parse($deadline)->setTimezone('Europe/Lisbon')->format('d/m H:i') : null;
+                $overdue = $myTenderStats['overdue'] ?? 0;
+            @endphp
+            <a href="{{ route('tenders.index') }}" class="recent-card" style="--card-color: #fbbf24">
+                <div class="recent-avatar" style="background:#1a1200;border-color:#3a2a0a;">📑</div>
+                <div class="recent-body">
+                    <div class="recent-agent-name">Os meus concursos</div>
+                    <div class="recent-meta">
+                        {{ $myTenderStats['total'] }} activo{{ $myTenderStats['total'] === 1 ? '' : 's' }}
+                        @if($overdue > 0) · <span style="color:#f87171">{{ $overdue }} em atraso</span> @endif
+                        @if($deadlineTxt) · próxima {{ $deadlineTxt }} @endif
+                    </div>
+                </div>
+            </a>
+        @endif
+
+        {{-- Shared agent cards. Look up the catalog entry so the name/colour
+             match the main grid below; fall back to raw agent_key if missing. --}}
+        @if($hasSharedAgents)
+            @foreach($mySharedAgents as $share)
+                @php
+                    $meta     = $agentByKey[$share->agent_key] ?? null;
+                    $label    = $share->custom_title ?: ($meta['name'] ?? ucfirst($share->agent_key));
+                    $emoji    = $meta['emoji'] ?? '🤝';
+                    $color    = $meta['color'] ?? '#60a5fa';
+                    $portalUrl = $share->getPortalUrl() ?: '/shares/' . $share->id;
+                    $agentK   = $meta['key'] ?? $share->agent_key;
+                    $imgPath  = null;
+                    if ($agentK) {
+                        foreach (['.png', '.jpg', '.jpeg', '.webp'] as $ext) {
+                            if (file_exists(public_path('images/agents/' . $agentK . $ext))) {
+                                $imgPath = '/images/agents/' . $agentK . $ext;
+                                break;
+                            }
+                        }
+                    }
+                    $creatorName = $share->creator?->name ?? 'alguém';
+                @endphp
+                <a href="{{ $portalUrl }}" class="recent-card" style="--card-color: {{ $color }}" title="Partilhado por {{ $creatorName }}">
+                    <div class="recent-avatar">
+                        @if($imgPath)
+                            <img src="{{ $imgPath }}" alt="{{ $label }}">
+                        @else
+                            {{ $emoji }}
+                        @endif
+                    </div>
+                    <div class="recent-body">
+                        <div class="recent-agent-name">{{ $label }}</div>
+                        <div class="recent-meta">
+                            🔗 partilhado · por {{ $creatorName }}
+                            @if($share->expires_at) · expira {{ $share->expires_at->diffForHumans() }} @endif
+                        </div>
+                    </div>
+                </a>
+            @endforeach
+        @endif
+    </div>
+</div>
+@endif
+
 @if(!empty($recentConversations) && $recentConversations->count() > 0)
 <div class="recent-wrap">
     <div class="recent-header">
