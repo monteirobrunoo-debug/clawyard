@@ -386,6 +386,13 @@ Route::middleware(['auth'])->group(function () {
     // Manager+ only (gate checked in the controller action).
     Route::get('/tenders/overview', [TenderController::class, 'overview'])->name('tenders.overview');
 
+    // Manual nudge — super-user triggers an email reminder to one
+    // collaborator listing their current active (non-expired) tenders.
+    Route::post(
+        '/tenders/overview/remind/{collaborator}',
+        [TenderController::class, 'sendReminder']
+    )->name('tenders.overview.remind');
+
     // Collaborators roster CRUD — manager+ only (gate checked in controller).
     Route::get   ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'index'])->name('tenders.collaborators.index');
     Route::post  ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'store'])->name('tenders.collaborators.store');

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\TenderCollaborator;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
@@ -27,15 +29,24 @@ use Illuminate\Validation\Rule;
  * `assigned_collaborator_id` — flipping `is_active` hides them from the
  * assign dropdown without orphaning history.
  */
-class TenderCollaboratorController extends Controller
+class TenderCollaboratorController extends Controller implements HasMiddleware
 {
-    public function __construct()
+    /**
+     * Laravel 11+ removed the `$this->middleware()` helper from the base
+     * Controller. The replacement is the `HasMiddleware` contract, which
+     * declares middleware statically (still per-controller scoped).
+     *
+     * We use a closure to defer to the `tenders.collaborators` Gate — every
+     * action on this controller is manager+ only.
+     */
+    public static function middleware(): array
     {
-        // Every action on this controller requires manager+ privileges.
-        $this->middleware(function ($request, $next) {
-            if (!Auth::user()?->can('tenders.collaborators')) abort(403);
-            return $next($request);
-        });
+        return [
+            new Middleware(function ($request, $next) {
+                if (!Auth::user()?->can('tenders.collaborators')) abort(403);
+                return $next($request);
+            }),
+        ];
     }
 
     public function index(Request $request)

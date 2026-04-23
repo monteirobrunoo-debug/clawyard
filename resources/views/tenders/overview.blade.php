@@ -46,6 +46,12 @@
     <div class="py-8">
         <div class="mx-auto max-w-7xl sm:px-6 lg:px-8 space-y-8">
 
+            @if(session('status'))
+                <div class="rounded-md bg-yellow-50 border border-yellow-200 p-3 text-sm text-yellow-800">
+                    {{ session('status') }}
+                </div>
+            @endif
+
             {{-- ─── Stats strip ──────────────────────────────────────────────── --}}
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 @foreach([
@@ -63,11 +69,13 @@
 
             {{-- ─── Section A: Concursos por pessoa ──────────────────────────── --}}
             <section class="space-y-4">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between flex-wrap gap-2">
                     <h3 class="text-lg font-semibold text-gray-800">
                         Concursos partilhados por colaborador
                     </h3>
-                    <span class="text-xs text-gray-500">activos = pending / em tratamento / submetido / avaliação</span>
+                    <span class="text-xs text-gray-500">
+                        só activos (≤{{ \App\Models\Tender::OVERDUE_WINDOW_DAYS }}d atraso) — expirados escondidos
+                    </span>
                 </div>
 
                 {{-- Unassigned first (red-flag section) --}}
@@ -120,9 +128,23 @@
                                             <span class="text-xs text-red-600">— sem email</span>
                                         @endif
                                     </div>
-                                    <span class="inline-flex rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 shrink-0">
-                                        {{ $c->tenders->count() }} activos
-                                    </span>
+                                    <div class="flex items-center gap-2 shrink-0">
+                                        <span class="inline-flex rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                                            {{ $c->tenders->count() }} activos
+                                        </span>
+                                        @if($c->digest_email)
+                                            <form method="POST"
+                                                  action="{{ route('tenders.overview.remind', $c) }}"
+                                                  onsubmit="return confirm('Enviar lembrete por email a {{ $c->name }} ({{ $c->digest_email }}) com os {{ $c->tenders->count() }} concurso(s) activo(s)?')">
+                                                @csrf
+                                                <button type="submit"
+                                                        title="Enviar lembrete por email"
+                                                        class="inline-flex items-center gap-1 rounded bg-yellow-50 border border-yellow-200 px-2 py-0.5 text-xs font-medium text-yellow-800 hover:bg-yellow-100">
+                                                    📧 Lembrar
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
                                 </div>
                             </header>
                             <ul class="divide-y divide-gray-100">
@@ -142,12 +164,18 @@
                                                 @endif
                                             </span>
                                         </div>
-                                        <div class="mt-1 text-xs text-gray-500 flex gap-3 flex-wrap">
+                                        <div class="mt-1 text-xs text-gray-500 flex gap-2 flex-wrap items-center">
                                             <span>{{ $statusLabels[$t->status] ?? $t->status }}</span>
                                             @if($t->sap_opportunity_number)
-                                                <span class="font-mono">SAP {{ $t->sap_opportunity_number }}</span>
+                                                <span class="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 font-mono text-emerald-800"
+                                                      title="Nº de oportunidade SAP">
+                                                    💼 SAP {{ $t->sap_opportunity_number }}
+                                                </span>
                                             @else
-                                                <span class="text-yellow-700">sem SAP</span>
+                                                <span class="inline-flex items-center gap-1 rounded border border-yellow-200 bg-yellow-50 px-1.5 py-0.5 text-yellow-800"
+                                                      title="Falta criar oportunidade em SAP">
+                                                    ⚠ sem oportunidade SAP
+                                                </span>
                                             @endif
                                             @if($t->assignedBy)
                                                 <span>atribuído por {{ $t->assignedBy->name }}</span>

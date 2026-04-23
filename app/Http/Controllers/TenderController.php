@@ -96,24 +96,38 @@ class TenderController extends Controller
         $user = Auth::user();
         if (!$user->can('tenders.view-all')) abort(403);
 
-        // Section A — collaborators with their active tender bucket.
-        // Eager-load tenders so the view doesn't N+1 per collaborator.
+        // "Active but not expired" — matches the behaviour the user asked
+        // for: the overview is a live action board, not an archive. A
+        // tender is kept here if it's in an active status AND either has
+        // no deadline, is still in the future, or is overdue by ≤15 days
+        // (the OVERDUE_WINDOW_DAYS window). Anything older than that is
+        // "expired" and belongs to the historical view, not here.
+        $expiredCut = now()->copy()->subDays(Tender::OVERDUE_WINDOW_DAYS);
+        $notExpired = function ($q) use ($expiredCut) {
+            $q->whereNull('deadline_at')->orWhere('deadline_at', '>=', $expiredCut);
+        };
+
+        // Section A — collaborators with their active-and-not-expired
+        // tender bucket. Eager-load tenders so the view doesn't N+1 per
+        // collaborator.
         $collaborators = TenderCollaborator::query()
             ->active()
             ->with([
                 'user:id,name,email,role',
                 'tenders' => fn($q) => $q
                     ->active()
+                    ->where($notExpired)
                     ->with('assignedBy:id,name')
                     ->orderByRaw('deadline_at IS NULL, deadline_at ASC'),
             ])
             ->orderBy('name')
             ->get();
 
-        // Orphan bucket — active tenders with no assignee. These are the
-        // #1 manager action item ("assign someone").
+        // Orphan bucket — active, non-expired tenders with no assignee.
+        // These are the #1 manager action item ("assign someone").
         $unassigned = Tender::query()
             ->active()
+            ->where($notExpired)
             ->whereNull('assigned_collaborator_id')
             ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
             ->get();
@@ -134,6 +148,60 @@ class TenderController extends Controller
             'unassigned'    => $unassigned,
             'agentShares'   => $agentShares,
         ]);
+    }
+
+    /**
+     * Manual "remind this collaborator" button on /tenders/overview.
+     *
+     * The super-user may spot that a person is sitting on a pile of
+     * active tenders and want to nudge them NOW rather than waiting for
+     * the scheduled digest. This endpoint sends a one-shot email listing
+     * that collaborator's currently-active, not-yet-expired tenders
+     * (same bucket the overview page shows).
+     *
+     * Manager-only. No-op (with a warning flash) if the collaborator has
+     * no email to reach, or no active tenders.
+     */
+    public function sendReminder(TenderCollaborator $collaborator)
+    {
+        $user = Auth::user();
+        if (!$user->can('tenders.view-all')) abort(403);
+
+        $email = $collaborator->digest_email; // email field first, else linked user email
+        if (!$email) {
+            return back()->with('status', "⚠ {$collaborator->name} não tem email — não foi enviado nada.");
+        }
+
+        $expiredCut = now()->copy()->subDays(Tender::OVERDUE_WINDOW_DAYS);
+        $tenders = $collaborator->tenders()
+            ->active()
+            ->where(function ($q) use ($expiredCut) {
+                $q->whereNull('deadline_at')->orWhere('deadline_at', '>=', $expiredCut);
+            })
+            ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
+            ->get();
+
+        if ($tenders->isEmpty()) {
+            return back()->with('status', "✓ {$collaborator->name} não tem concursos activos — não foi enviado nada.");
+        }
+
+        try {
+            \Illuminate\Support\Facades\Mail::to($email)->send(
+                new \App\Mail\TenderCollaboratorReminder($collaborator, $tenders, $user)
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Manual tender reminder failed', [
+                'collaborator_id' => $collaborator->id,
+                'email'           => $email,
+                'error'           => $e->getMessage(),
+            ]);
+            return back()->with('status', "✗ Falha ao enviar lembrete para {$collaborator->name}: {$e->getMessage()}");
+        }
+
+        return back()->with(
+            'status',
+            "📧 Lembrete enviado para {$collaborator->name} ({$email}) — {$tenders->count()} concurso" . ($tenders->count() === 1 ? '' : 's') . "."
+        );
     }
 
     // ── Detail view ───────────────────────────────────────────────────────
