@@ -25,6 +25,32 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Back-fill the user_id on any TenderCollaborator that already had
+     * this email, so a newly-provisioned account immediately sees
+     * "Os meus concursos" on the dashboard without a separate "link
+     * user" step. Symmetric with the hook on TenderCollaborator that
+     * links on email change.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (self $u) {
+            if ($u->email) {
+                \App\Models\TenderCollaborator::where('email', $u->email)
+                    ->whereNull('user_id')
+                    ->update(['user_id' => $u->id]);
+            }
+        });
+
+        static::updated(function (self $u) {
+            if ($u->wasChanged('email') && $u->email) {
+                \App\Models\TenderCollaborator::where('email', $u->email)
+                    ->whereNull('user_id')
+                    ->update(['user_id' => $u->id]);
+            }
+        });
+    }
+
     public function isAdmin(): bool     { return $this->role === 'admin'; }
     public function isManager(): bool   { return in_array($this->role, ['admin', 'manager']); }
     public function isGuest(): bool     { return $this->role === 'guest'; }

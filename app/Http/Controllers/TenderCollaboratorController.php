@@ -264,6 +264,12 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
     /**
      * Validate the create/update payload. `$ignoreId` lets update skip
      * the normalized-name uniqueness check against the row being edited.
+     *
+     * user_id is intentionally NOT in the accepted payload — the
+     * TenderCollaborator model links to a User automatically whenever
+     * the email changes (saving hook). Keeping it out of fillable input
+     * means a stray hidden field on an old form can't override the
+     * auto-link with a stale value.
      */
     private function validatePayload(Request $request, ?int $ignoreId = null): array
     {
@@ -275,10 +281,7 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
         return $request->validate([
             'name'      => ['required', 'string', 'max:255'],
             'email'     => ['nullable', 'email', 'max:255'],
-            'user_id'   => ['nullable', 'integer', Rule::exists('users', 'id')],
             'is_active' => ['nullable', 'boolean'],
-        ], [], [
-            'user_id'   => 'User ligado',
         ]) + ['normalized_name' => $normalized];
     }
 }

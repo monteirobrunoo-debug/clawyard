@@ -30,23 +30,21 @@
 
             {{-- ─── What is this page? ───────────────────────────────────── --}}
             <section class="rounded-md bg-blue-50 border border-blue-200 p-4 text-xs text-blue-900 space-y-1.5">
-                <div class="font-semibold text-sm text-blue-900">Como funcionam os colaboradores?</div>
+                <div class="font-semibold text-sm text-blue-900">Como funciona?</div>
                 <div>
                     🔹 A coluna <code>Colaborador</code> dos Excel criam entradas aqui automaticamente.
                     Podes também adicionar manualmente (ex: novo contratado antes do primeiro import).
                 </div>
                 <div>
-                    🔹 <strong>Email</strong> → usado para o digest diário e lembretes de deadline.
-                </div>
-                <div>
-                    🔹 <strong>User ligado</strong> → faz com que esse User veja os concursos
-                    atribuídos a este nome no seu próprio dashboard (<em>"Os meus concursos"</em>) e
-                    receba o digest automaticamente. Sem User ligado, só os managers vêem o bucket.
+                    🔹 <strong>O email é a identidade.</strong> Se a pessoa já tem conta ClawYard com
+                    esse email, fica ligada automaticamente — vê os concursos dela no dashboard
+                    (<em>"Os meus concursos"</em>) e recebe o digest diário. Sem conta, ninguém além
+                    dos managers vê o bucket.
                 </div>
                 <div class="text-blue-800">
-                    🔹 Se o colaborador ainda não tem login no ClawYard, preenche o email e usa
-                    <strong>"Criar conta"</strong> — o sistema cria o User, liga automaticamente e
-                    envia um email para a pessoa escolher a password dela.
+                    🔹 Para criar conta a uma pessoa que ainda não tem login, preenche o email e
+                    clica <strong>"Criar conta"</strong> — criamos o User e enviamos-lhe um email
+                    para escolher a password.
                 </div>
             </section>
 
@@ -85,26 +83,17 @@
                 <h3 class="text-sm font-semibold text-gray-800 mb-3">Adicionar colaborador</h3>
 
                 <form method="POST" action="{{ route('tenders.collaborators.store') }}"
-                      class="grid grid-cols-1 gap-3 sm:grid-cols-5">
+                      class="grid grid-cols-1 gap-3 sm:grid-cols-6">
                     @csrf
                     <input type="text" name="name" required placeholder="Nome"
                            value="{{ old('name') }}"
                            class="sm:col-span-2 rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
 
-                    <input type="email" name="email" placeholder="Email (opcional)"
+                    <input type="email" name="email" placeholder="Email (liga automaticamente à conta)"
                            value="{{ old('email') }}"
-                           class="sm:col-span-2 rounded-md border-gray-300 text-sm shadow-sm">
+                           class="sm:col-span-3 rounded-md border-gray-300 text-sm shadow-sm">
 
-                    <select name="user_id" class="rounded-md border-gray-300 text-sm shadow-sm">
-                        <option value="">— sem User ligado —</option>
-                        @foreach($linkableUsers as $u)
-                            <option value="{{ $u->id }}" @selected((int)old('user_id') === $u->id)>
-                                {{ $u->name }} ({{ $u->email }})
-                            </option>
-                        @endforeach
-                    </select>
-
-                    <label class="flex items-center gap-2 text-sm text-gray-600 sm:col-span-4">
+                    <label class="flex items-center gap-2 text-sm text-gray-600 sm:col-span-5">
                         <input type="checkbox" name="is_active" value="1" checked
                                class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                         Activo (aparece no dropdown de atribuição e recebe lembretes)
@@ -131,7 +120,7 @@
                             <tr class="text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 <th class="px-3 py-2 text-left">Nome</th>
                                 <th class="px-3 py-2 text-left">Email</th>
-                                <th class="px-3 py-2 text-left">User ligado</th>
+                                <th class="px-3 py-2 text-left">Conta</th>
                                 <th class="px-3 py-2 text-left">Concursos</th>
                                 <th class="px-3 py-2 text-left">Estado</th>
                                 <th class="px-3 py-2 text-right">Acções</th>
@@ -157,17 +146,23 @@
                                     </td>
                                     <td class="px-3 py-2 text-gray-700">
                                         @if($c->user)
-                                            <span class="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-xs text-emerald-800">
-                                                ✓ {{ $c->user->name }}
+                                            <span class="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-xs text-emerald-800"
+                                                  title="Conta detectada via email — a pessoa vê os concursos dela">
+                                                ✓ conta activa
                                                 <span class="text-[10px] text-emerald-600">({{ $c->user->role }})</span>
                                             </span>
                                             <div class="text-[11px] text-gray-500 mt-0.5">vê no dashboard + digest</div>
-                                        @else
-                                            <span class="inline-flex items-center gap-1 rounded bg-red-50 border border-red-200 px-2 py-0.5 text-xs text-red-800"
-                                                  title="Sem login ligado — este colaborador não vê os concursos no dashboard">
-                                                ⚠ não ligado
+                                        @elseif($c->email)
+                                            <span class="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs text-amber-800"
+                                                  title="Email preenchido mas ainda não há conta com esse email">
+                                                ⚠ sem conta
                                             </span>
-                                            <div class="text-[11px] text-red-600 mt-0.5">não vê no dashboard</div>
+                                            <div class="text-[11px] text-amber-700 mt-0.5">criar conta →</div>
+                                        @else
+                                            <span class="inline-flex items-center gap-1 rounded bg-gray-100 border border-gray-200 px-2 py-0.5 text-xs text-gray-600"
+                                                  title="Preenche o email para ligar ou criar conta">
+                                                — sem email
+                                            </span>
                                         @endif
                                     </td>
                                     <td class="px-3 py-2 font-mono text-xs text-gray-600">{{ $c->tenders_count }}</td>

@@ -49,31 +49,44 @@
                         </p>
                     </div>
 
+                    {{-- Identity is the email — nothing else to pick.
+                         If a User already exists with this email we show the
+                         current link status as a read-only info chip. If not,
+                         we show the "Criar conta" call-to-action. The manager
+                         never has to open a dropdown. --}}
                     <div>
-                        <label class="block text-sm font-medium text-gray-700">User ligado</label>
-                        <select name="user_id"
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
-                            <option value="">— sem User ligado —</option>
-                            @foreach($linkableUsers as $u)
-                                <option value="{{ $u->id }}"
-                                    @selected((int)old('user_id', $collaborator->user_id) === $u->id)>
-                                    {{ $u->name }} ({{ $u->email }})
-                                </option>
-                            @endforeach
-                        </select>
+                        <div class="rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 space-y-1.5">
+                            <div class="font-semibold text-sm text-blue-900">Como funciona a conta?</div>
+                            <div>
+                                🔹 O <strong>email acima</strong> é a identidade deste colaborador.
+                                Se existir uma conta ClawYard com esse email, a pessoa vê
+                                automaticamente os concursos dela em <em>"Os meus concursos"</em>
+                                no dashboard e recebe o digest diário.
+                            </div>
+                            <div>
+                                🔹 Se ainda não existir conta, usa o botão abaixo — criamos a conta
+                                com esse email e enviamos-lhe o link de activação para escolher
+                                a password.
+                            </div>
+                        </div>
 
-                        {{-- Quick-provision: if this collaborator has an email but no User
-                             linked, offer a one-click action that creates a User with the
-                             same name+email and sends them a password-setup link. The form
-                             is a sibling of the main update form so submitting it here
-                             doesn't save any changes typed above. --}}
-                        @if(!$collaborator->user_id && $collaborator->email)
-                            <div class="mt-2 rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
-                                <div class="font-semibold mb-1">Este colaborador ainda não tem conta?</div>
+                        @if($collaborator->user)
+                            <div class="mt-3 rounded-md bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-900">
+                                <div class="font-semibold mb-0.5">✓ Conta ligada automaticamente</div>
+                                <div>
+                                    <strong>{{ $collaborator->user->name }}</strong>
+                                    ({{ $collaborator->user->email }}) —
+                                    role <code>{{ $collaborator->user->role }}</code>.
+                                    Vê os concursos dele(a) no próprio dashboard.
+                                </div>
+                            </div>
+                        @elseif($collaborator->email)
+                            <div class="mt-3 rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+                                <div class="font-semibold mb-1">⚠ Ainda não existe conta com este email</div>
                                 <div class="mb-2">
-                                    Podemos criar uma conta a partir dos dados acima — o(a)
-                                    <strong>{{ $collaborator->name }}</strong> recebe um email em
-                                    <code>{{ $collaborator->email }}</code> para escolher a password dele(a).
+                                    Posso criar uma agora — o(a) <strong>{{ $collaborator->name }}</strong>
+                                    recebe um email em <code>{{ $collaborator->email }}</code> para
+                                    escolher a password.
                                 </div>
                                 <button type="submit"
                                         form="create-user-form-{{ $collaborator->id }}"
@@ -81,35 +94,17 @@
                                     ➕ Criar conta + enviar link de activação
                                 </button>
                             </div>
-                        @elseif(!$collaborator->user_id && !$collaborator->email)
-                            <div class="mt-2 rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">
-                                💡 Para criar uma conta a partir deste colaborador, preenche primeiro
-                                o campo <strong>Email</strong> acima e guarda. Depois aparece aqui um
-                                botão para provisionar o User automaticamente.
+                        @else
+                            <div class="mt-3 rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">
+                                💡 Preenche o campo <strong>Email</strong> acima e guarda.
+                                Se já houver conta com esse email, ficam ligados; senão,
+                                podes criar a conta num clique depois.
                             </div>
                         @endif
 
-                        <div class="mt-2 rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 space-y-1.5">
-                            <div class="font-semibold uppercase tracking-wide text-[10px] text-blue-700">
-                                O que faz a ligação a um User?
-                            </div>
-                            <div>
-                                🔸 <strong>{{ $collaborator->name }}</strong> passa a ver os concursos
-                                atribuídos a este nome na secção <em>"Os meus concursos"</em> do dashboard
-                                — com login próprio.
-                            </div>
-                            <div>
-                                🔸 Recebe o <strong>digest diário</strong> (2× por dia) apenas com os concursos dele(a).
-                            </div>
-                            <div>
-                                🔸 Recebe o <strong>lembrete 24h antes de cada deadline</strong> (uma vez por concurso).
-                            </div>
-                            <div class="text-blue-800">
-                                🔸 Sem User ligado, ninguém além dos managers vê este bucket —
-                                só tu (super-user) consegues enviar lembretes manuais pelo
-                                <em>/tenders/overview</em>.
-                            </div>
-                        </div>
+                        {{-- Kept as hidden no-op so existing routes/forms don't 404
+                             on missing field. Email drives the link now. --}}
+                        <input type="hidden" name="user_id" value="">
                     </div>
 
                     <div>

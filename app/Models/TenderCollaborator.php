@@ -13,6 +13,13 @@ use Illuminate\Support\Str;
  * sheet. Decoupled from User so we can track assignees who don't (yet)
  * have an account — e.g. "Sala Procurement" or a new hire appearing in
  * the Excel before IT provisions them.
+ *
+ * Identity rule (2026-04 simplification): email IS the identity. When a
+ * User exists with the same email as the collaborator, this model auto-
+ * links them via user_id — the manager doesn't have to pick anyone from
+ * a dropdown. Set the email, get the login. The dropdown UI was confusing
+ * ("já insiro o email, porque tenho de ligar outra vez?") and has been
+ * retired.
  */
 class TenderCollaborator extends Model
 {
@@ -29,6 +36,31 @@ class TenderCollaborator extends Model
         return [
             'is_active' => 'boolean',
         ];
+    }
+
+    /**
+     * Auto-link to a User whenever the email changes. Keeps user_id in
+     * sync with email without requiring the manager to do anything on
+     * the edit form — they put the email in, save, and if a matching
+     * User exists the link is set silently.
+     *
+     * Clearing the email clears user_id too (the dropdown concept is
+     * gone — email drives the link).
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $c) {
+            if (!$c->isDirty('email')) return;
+
+            $email = trim((string) $c->email);
+            if ($email === '') {
+                $c->user_id = null;
+                return;
+            }
+
+            $user = User::where('email', $email)->first();
+            $c->user_id = $user?->id;
+        });
     }
 
     // ── Relations ─────────────────────────────────────────────────────────

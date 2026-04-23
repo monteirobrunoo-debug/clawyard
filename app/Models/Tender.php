@@ -177,8 +177,19 @@ class Tender extends Model
 
     public function scopeForUser(Builder $q, int $userId): Builder
     {
-        // assigned to the collaborator who is linked to this user
-        return $q->whereHas('collaborator', fn($c) => $c->where('user_id', $userId));
+        // Assigned to the collaborator who is either linked by user_id OR
+        // whose email matches the user's email. Email matching is the
+        // fallback so a User who was created after the collaborator (or
+        // whose link wasn't backfilled) still sees their processes
+        // without manual intervention.
+        $email = \App\Models\User::whereKey($userId)->value('email');
+
+        return $q->whereHas('collaborator', function ($c) use ($userId, $email) {
+            $c->where(function ($w) use ($userId, $email) {
+                $w->where('user_id', $userId);
+                if ($email) $w->orWhere('email', $email);
+            });
+        });
     }
 
     /**
