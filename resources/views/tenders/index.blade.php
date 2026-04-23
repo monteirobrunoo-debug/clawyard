@@ -36,6 +36,12 @@
                 Concursos
             </h2>
             <div class="flex items-center gap-2">
+                @if($canViewAll)
+                    <a href="{{ route('tenders.overview') }}"
+                       class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+                        🔎 Partilhados
+                    </a>
+                @endif
                 @if($canAssign)
                     <a href="{{ route('tenders.collaborators.index') }}"
                        class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">

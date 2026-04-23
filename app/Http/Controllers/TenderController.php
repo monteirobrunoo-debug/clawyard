@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\TenderAssignRequest;
 use App\Http\Requests\TenderUpdateRequest;
+use App\Models\AgentShare;
 use App\Models\Tender;
 use App\Models\TenderCollaborator;
 use App\Services\TenderSimilarityService;
@@ -70,6 +71,68 @@ class TenderController extends Controller
             'canAssign'     => $canAssign,
             'canViewAll'    => $canViewAll,
             'stats'         => $this->dashboardStats($canViewAll ? null : $user->id),
+        ]);
+    }
+
+    // ── Super-user overview ──────────────────────────────────────────────
+    /**
+     * Read-only overview page for managers+ to answer two questions in one
+     * glance:
+     *
+     *   "Who is working on which tender right now?"
+     *      → section A, active tenders grouped by assigned collaborator,
+     *        with an "Unassigned" bucket for orphans.
+     *
+     *   "What shared-agent links are currently live?"
+     *      → section B, active AgentShare rows with client email, agent
+     *        key, expiry, access count. Links out to /shares for full
+     *        management (create/revoke).
+     *
+     * Both are intentionally compact — the page is for oversight, not
+     * editing. Write actions live on /tenders and /shares respectively.
+     */
+    public function overview()
+    {
+        $user = Auth::user();
+        if (!$user->can('tenders.view-all')) abort(403);
+
+        // Section A — collaborators with their active tender bucket.
+        // Eager-load tenders so the view doesn't N+1 per collaborator.
+        $collaborators = TenderCollaborator::query()
+            ->active()
+            ->with([
+                'user:id,name,email,role',
+                'tenders' => fn($q) => $q
+                    ->active()
+                    ->with('assignedBy:id,name')
+                    ->orderByRaw('deadline_at IS NULL, deadline_at ASC'),
+            ])
+            ->orderBy('name')
+            ->get();
+
+        // Orphan bucket — active tenders with no assignee. These are the
+        // #1 manager action item ("assign someone").
+        $unassigned = Tender::query()
+            ->active()
+            ->whereNull('assigned_collaborator_id')
+            ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
+            ->get();
+
+        // Section B — live agent shares. We show active + non-revoked +
+        // non-expired so the page is about what's *currently in the wild*,
+        // not historical. Full CRUD stays on /shares.
+        $agentShares = AgentShare::query()
+            ->where('is_active', true)
+            ->whereNull('revoked_at')
+            ->where(fn($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>=', now()))
+            ->with('creator:id,name')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('tenders.overview', [
+            'collaborators' => $collaborators,
+            'unassigned'    => $unassigned,
+            'agentShares'   => $agentShares,
         ]);
     }
 

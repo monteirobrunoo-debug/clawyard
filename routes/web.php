@@ -382,6 +382,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/tenders/import',  [TenderImportController::class, 'create'])->name('tenders.import.create');
     Route::post('/tenders/import', [TenderImportController::class, 'store'])->name('tenders.import.store');
 
+    // Super-user overview — "who has what / which shares are live".
+    // Manager+ only (gate checked in the controller action).
+    Route::get('/tenders/overview', [TenderController::class, 'overview'])->name('tenders.overview');
+
     // Collaborators roster CRUD — manager+ only (gate checked in controller).
     Route::get   ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'index'])->name('tenders.collaborators.index');
     Route::post  ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'store'])->name('tenders.collaborators.store');
