@@ -14,16 +14,27 @@ use Illuminate\Support\Str;
  * number, so they can cross-check exact prior deals ("did we quote this
  * same Cartridge Aircraft Fire Extinguisher last year? at what price?").
  *
- * Algorithm:
+ * Algorithm (v2 — stricter after user reported false positives):
  *   1. Tokenise both titles (lowercase, strip accents, drop stopwords,
  *      drop tokens shorter than 3 chars).
- *   2. Compute Jaccard similarity: |A ∩ B| / |A ∪ B|.
- *   3. Optionally boost candidates by:
- *        +0.10 same type (Service/Supply)
- *        +0.10 same purchasing_org
- *        +0.15 has sap_opportunity_number (prior real deal)
- *   4. Filter out self (id != source id) and soft-deleted rows.
- *   5. Return top N, sorted by score desc.
+ *   2. Require SUBSTANTIVE overlap before scoring at all:
+ *        • at least 2 meaningful tokens in common, OR
+ *        • at least 1 domain-discriminator token (length ≥ 6) in common.
+ *      Rationale: the old version triggered 43% "similarity" between
+ *      "Circuit card … PATRIOT" and "Generator regulator valve" just
+ *      because both contained the generic word "electrical". By
+ *      requiring either plural overlap or one long, specific token, the
+ *      generic-word false positive disappears (patriot / cartridge /
+ *      circuit — the real discriminators — stay).
+ *   3. Compute Jaccard similarity: |A ∩ B| / |A ∪ B|.
+ *   4. Apply bonuses as MULTIPLIERS (not additions), so a weak Jaccard
+ *      can no longer be rescued by "same type + has SAP" pumping the
+ *      score above the threshold:
+ *        ×1.20 same type (Service/Supply)
+ *        ×1.20 same purchasing_org
+ *        ×1.30 has sap_opportunity_number (prior real deal)
+ *   5. Filter out self (id != source id) and soft-deleted rows.
+ *   6. Return top N above threshold (0.25), sorted by score desc.
  *
  * No FTS required — works on any DB. For production scale (>100k rows)
  * we'd swap to a real inverted index; 280 rows run in <10ms.
@@ -31,11 +42,31 @@ use Illuminate\Support\Str;
 class TenderSimilarityService
 {
     private const STOPWORDS = [
+        // PT/EN articles, prepositions, connectors
         'a','ao','aos','as','da','das','de','do','dos','e','em','na','nas','no','nos',
         'o','os','para','por','sem','um','uma','uns','umas',
-        'the','a','an','of','for','and','or','to','with','from','on','in','at','by',
-        'provision','supply','services','service','works','delivery','sale',
+        'the','an','of','for','and','or','to','with','from','on','in','at','by',
+        // Procurement boilerplate (appears in every title, zero discriminator value)
+        'provision','supply','services','service','works','delivery','sale','purchase',
+        'provide','providing','procurement','acquisition',
+        // Generic "and various other …" filler that inflated false positives
+        // (the PATRIOT vs Generator case). These are in >30% of tender titles
+        // and mean nothing by themselves.
+        'other','others','various','misc','miscellaneous','etc',
+        'item','items','part','parts','piece','pieces','unit','units',
+        'any','new','used','general','standard','multiple','several',
+        // "electrical component" / "mechanical component" / "assembly" appear
+        // constantly — keep them for context but demote via stopword so they
+        // don't count as overlap on their own.
+        'component','components','assembly','assemblies',
+        'equipment','equipments','material','materials','kit','kits',
     ];
+
+    /** Threshold a scored candidate must beat to be shown. */
+    private const SCORE_THRESHOLD = 0.25;
+
+    /** Minimum token length for a single overlap to count as "discriminator". */
+    private const DISCRIMINATOR_MIN_LEN = 6;
 
     /**
      * @return Collection<Tender> top $limit similar tenders, scored desc
@@ -47,14 +78,17 @@ class TenderSimilarityService
             return new Collection();
         }
 
-        // Pull a candidate pool. Any tender with at least one token in
-        // common *might* be similar; we filter more carefully in PHP.
-        //
-        // We scope to non-deleted rows and exclude $source itself.
+        // Pull a candidate pool. We only LIKE-match on tokens of length ≥ 4
+        // so noise like "mi" or short acronyms doesn't pull in half the
+        // table; the discriminative terms (patriot, cartridge, circuit…)
+        // are all longer than that anyway.
+        $likeTokens = array_filter($sourceTokens, fn($t) => mb_strlen($t) >= 4);
+        if (empty($likeTokens)) $likeTokens = $sourceTokens; // fallback
+
         $candidates = Tender::query()
             ->where('id', '!=', $source->id)
-            ->where(function ($q) use ($sourceTokens) {
-                foreach ($sourceTokens as $tok) {
+            ->where(function ($q) use ($likeTokens) {
+                foreach ($likeTokens as $tok) {
                     $q->orWhere('title', 'LIKE', '%' . $tok . '%');
                 }
             })
@@ -63,15 +97,38 @@ class TenderSimilarityService
 
         $scored = $candidates->map(function (Tender $c) use ($sourceTokens, $source) {
             $candTokens = $this->tokenise($c->title);
-            $intersect  = array_intersect($sourceTokens, $candTokens);
+            $intersect  = array_values(array_intersect($sourceTokens, $candTokens));
             $union      = array_unique(array_merge($sourceTokens, $candTokens));
             $jaccard    = empty($union) ? 0.0 : count($intersect) / count($union);
 
-            $score = $jaccard;
+            // Overlap gate — reject matches where the intersection is just
+            // one generic word. Either we have multiple tokens in common, or
+            // we have one long "discriminator" token (length ≥ 6 → things
+            // like "patriot", "cartridge", "circuit" carry real signal).
+            $hasDiscriminator = false;
+            foreach ($intersect as $tok) {
+                if (mb_strlen($tok) >= self::DISCRIMINATOR_MIN_LEN) {
+                    $hasDiscriminator = true;
+                    break;
+                }
+            }
+            $hasSubstantialOverlap = count($intersect) >= 2 || $hasDiscriminator;
+            if (!$hasSubstantialOverlap) {
+                return ['tender' => $c, 'score' => 0.0];
+            }
 
-            if ($source->type && $c->type === $source->type)                      $score += 0.10;
-            if ($source->purchasing_org && $c->purchasing_org === $source->purchasing_org) $score += 0.10;
-            if (!empty($c->sap_opportunity_number))                               $score += 0.15;
+            // Bonuses are MULTIPLIERS on top of Jaccard (not flat additions).
+            // Before this change, a weak 0.10 Jaccard could be pumped to
+            // ~0.45 purely by same-type + SAP-exists + same-org bonuses,
+            // producing the PATRIOT-vs-Generator false positive the user
+            // reported. Multiplying instead means bonuses only amplify
+            // matches that already share real vocabulary.
+            $multiplier = 1.0;
+            if ($source->type && $c->type === $source->type)                                $multiplier += 0.20;
+            if ($source->purchasing_org && $c->purchasing_org === $source->purchasing_org) $multiplier += 0.20;
+            if (!empty($c->sap_opportunity_number))                                         $multiplier += 0.30;
+
+            $score = $jaccard * $multiplier;
 
             return [
                 'tender' => $c,
@@ -80,7 +137,7 @@ class TenderSimilarityService
         });
 
         return $scored
-            ->filter(fn($s) => $s['score'] > 0.15)       // drop weak matches
+            ->filter(fn($s) => $s['score'] >= self::SCORE_THRESHOLD)
             ->sortByDesc('score')
             ->take($limit)
             ->map(function ($entry) {
