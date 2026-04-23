@@ -332,6 +332,11 @@ Route::get('/stats', function () {
     ]);
 })->middleware(['auth', 'verified'])->name('stats');
 
+// Agent Activity — live status cards.
+// MUST be registered before the /agents/{key} wildcard below, otherwise
+// Laravel matches "activity" as a {key} param and the page 404s.
+Route::middleware(['auth'])->get('/agents/activity', [AgentActivityController::class, 'index'])->name('agents.activity');
+
 // Agent profile — per-agent landing page with description, stats, starters
 // and recent conversations. Provides a deeper entry point than the dashboard
 // card (which just drops you into /chat). Linked from the card's long-press
@@ -418,9 +423,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/discoveries', [DiscoveryController::class, 'index'])->name('discoveries');
     Route::delete('/discoveries/{discovery}', [DiscoveryController::class, 'destroy'])->name('discoveries.destroy');
 });
-
-// Agent Activity — live status cards
-Route::middleware(['auth'])->get('/agents/activity', [AgentActivityController::class, 'index'])->name('agents.activity');
 
 // PSI Intel Bus viewer — live shared context from all agents
 Route::middleware(['auth'])->get('/intel', function () {
