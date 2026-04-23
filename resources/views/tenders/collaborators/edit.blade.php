@@ -61,9 +61,28 @@
                                 </option>
                             @endforeach
                         </select>
-                        <p class="mt-1 text-xs text-gray-500">
-                            Ligar a um User permite-lhe ver os "seus" concursos no dashboard.
-                        </p>
+
+                        <div class="mt-2 rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 space-y-1.5">
+                            <div class="font-semibold uppercase tracking-wide text-[10px] text-blue-700">
+                                O que faz a ligação a um User?
+                            </div>
+                            <div>
+                                🔸 <strong>{{ $collaborator->name }}</strong> passa a ver os concursos
+                                atribuídos a este nome na secção <em>"Os meus concursos"</em> do dashboard
+                                — com login próprio.
+                            </div>
+                            <div>
+                                🔸 Recebe o <strong>digest diário</strong> (2× por dia) apenas com os concursos dele(a).
+                            </div>
+                            <div>
+                                🔸 Recebe o <strong>lembrete 24h antes de cada deadline</strong> (uma vez por concurso).
+                            </div>
+                            <div class="text-blue-800">
+                                🔸 Sem User ligado, ninguém além dos managers vê este bucket —
+                                só tu (super-user) consegues enviar lembretes manuais pelo
+                                <em>/tenders/overview</em>.
+                            </div>
+                        </div>
                     </div>
 
                     <div>

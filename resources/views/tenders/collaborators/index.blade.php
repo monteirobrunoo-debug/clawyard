@@ -28,6 +28,23 @@
                 </div>
             @endif
 
+            {{-- ─── What is this page? ───────────────────────────────────── --}}
+            <section class="rounded-md bg-blue-50 border border-blue-200 p-4 text-xs text-blue-900 space-y-1.5">
+                <div class="font-semibold text-sm text-blue-900">Como funcionam os colaboradores?</div>
+                <div>
+                    🔹 A coluna <code>Colaborador</code> dos Excel criam entradas aqui automaticamente.
+                    Podes também adicionar manualmente (ex: novo contratado antes do primeiro import).
+                </div>
+                <div>
+                    🔹 <strong>Email</strong> → usado para o digest diário e lembretes de deadline.
+                </div>
+                <div>
+                    🔹 <strong>User ligado</strong> → faz com que esse User veja os concursos
+                    atribuídos a este nome no seu próprio dashboard (<em>"Os meus concursos"</em>) e
+                    receba o digest automaticamente. Sem User ligado, só os managers vêem o bucket.
+                </div>
+            </section>
+
             {{-- ─── Add new ───────────────────────────────────────────────── --}}
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
                 <h3 class="text-sm font-semibold text-gray-800 mb-3">Adicionar colaborador</h3>
@@ -105,10 +122,17 @@
                                     </td>
                                     <td class="px-3 py-2 text-gray-700">
                                         @if($c->user)
-                                            {{ $c->user->name }}
-                                            <span class="text-xs text-gray-400">({{ $c->user->role }})</span>
+                                            <span class="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-xs text-emerald-800">
+                                                ✓ {{ $c->user->name }}
+                                                <span class="text-[10px] text-emerald-600">({{ $c->user->role }})</span>
+                                            </span>
+                                            <div class="text-[11px] text-gray-500 mt-0.5">vê no dashboard + digest</div>
                                         @else
-                                            <span class="text-gray-400">—</span>
+                                            <span class="inline-flex items-center gap-1 rounded bg-red-50 border border-red-200 px-2 py-0.5 text-xs text-red-800"
+                                                  title="Sem login ligado — este colaborador não vê os concursos no dashboard">
+                                                ⚠ não ligado
+                                            </span>
+                                            <div class="text-[11px] text-red-600 mt-0.5">não vê no dashboard</div>
                                         @endif
                                     </td>
                                     <td class="px-3 py-2 font-mono text-xs text-gray-600">{{ $c->tenders_count }}</td>
