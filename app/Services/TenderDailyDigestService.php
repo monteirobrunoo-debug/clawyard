@@ -86,6 +86,10 @@ class TenderDailyDigestService
     /** All active tenders that still need SOMEONE to act. */
     private function actionableForManager(): Collection
     {
+        // Exclude "expired" (overdue by > OVERDUE_WINDOW_DAYS) — they're
+        // abandoned, not actionable, and would just add noise to the email.
+        $expiredCut = now()->copy()->subDays(Tender::OVERDUE_WINDOW_DAYS);
+
         return Tender::query()
             ->active()
             ->with('collaborator')
@@ -95,6 +99,10 @@ class TenderDailyDigestService
                   ->orWhereNull('sap_opportunity_number')
                   ->orWhere('sap_opportunity_number', '');
             })
+            ->where(function ($q) use ($expiredCut) {
+                $q->whereNull('deadline_at')
+                  ->orWhere('deadline_at', '>=', $expiredCut);
+            })
             ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
             ->get();
     }
@@ -102,10 +110,18 @@ class TenderDailyDigestService
     /** Only tenders assigned to a collaborator linked to this user. */
     private function actionableForUser(int $userId): Collection
     {
+        // Same expired-cutoff as the manager view so nobody is nagged about
+        // deadlines that are already months old.
+        $expiredCut = now()->copy()->subDays(Tender::OVERDUE_WINDOW_DAYS);
+
         return Tender::query()
             ->active()
             ->forUser($userId)
             ->with('collaborator')
+            ->where(function ($q) use ($expiredCut) {
+                $q->whereNull('deadline_at')
+                  ->orWhere('deadline_at', '>=', $expiredCut);
+            })
             ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
             ->get();
     }

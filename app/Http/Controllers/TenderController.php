@@ -34,6 +34,8 @@ class TenderController extends Controller
         $canAssign    = $user->can('tenders.assign');
 
         $filters = $this->parseFilters($request);
+        $sort    = $this->validateSort($request->string('sort')->trim()->value() ?: null);
+        $dir     = $request->string('dir')->trim()->value() === 'desc' ? 'desc' : 'asc';
 
         // "All" list — manager+ sees every tender; user sees only their own.
         $allQuery = Tender::query()->with('collaborator');
@@ -41,10 +43,8 @@ class TenderController extends Controller
             $allQuery->forUser($user->id);
         }
         $this->applyFilters($allQuery, $filters);
-        $all = $allQuery
-            ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
-            ->paginate(50)
-            ->withQueryString();
+        $this->applySort($allQuery, $sort, $dir);
+        $all = $allQuery->paginate(50)->withQueryString();
 
         // "Mine" list — always just the logged-in user's own active tenders,
         // regardless of role. For admins this is typically empty (they're
@@ -63,6 +63,8 @@ class TenderController extends Controller
             'all'           => $all,
             'mine'          => $mine,
             'filters'       => $filters,
+            'sort'          => $sort,
+            'dir'           => $dir,
             'collaborators' => $collaborators,
             'canImport'     => $canImport,
             'canAssign'     => $canAssign,
@@ -172,6 +174,59 @@ class TenderController extends Controller
         ];
     }
 
+    /**
+     * Whitelist of column keys the user is allowed to sort by. Anything else
+     * falls back to the default (deadline ascending, nulls last).
+     */
+    private function validateSort(?string $sort): ?string
+    {
+        $allowed = ['source', 'reference', 'title', 'collaborator', 'status', 'sap', 'deadline', 'urgency'];
+        return in_array($sort, $allowed, true) ? $sort : null;
+    }
+
+    /**
+     * Apply ORDER BY based on the user-requested sort key. `urgency` is a
+     * synonym for `deadline` since the bucket is computed from deadline_at.
+     * For `collaborator` we left-join the tender_collaborators table so we
+     * can order by the display name (tenders without an assignee sink).
+     */
+    private function applySort($query, ?string $sort, string $dir): void
+    {
+        // SQLite/MySQL-safe NULL sinking: order by the IS NULL flag first,
+        // then the value in the chosen direction.
+        if (!$sort || $sort === 'deadline' || $sort === 'urgency') {
+            $dirSql = $dir === 'desc' ? 'DESC' : 'ASC';
+            $query->orderByRaw("deadline_at IS NULL, deadline_at {$dirSql}");
+            return;
+        }
+
+        $dirSql = $dir === 'desc' ? 'DESC' : 'ASC';
+
+        switch ($sort) {
+            case 'source':
+                $query->orderBy('source', $dir)->orderBy('reference', 'asc');
+                break;
+            case 'reference':
+                $query->orderBy('reference', $dir);
+                break;
+            case 'title':
+                $query->orderBy('title', $dir);
+                break;
+            case 'status':
+                $query->orderBy('status', $dir);
+                break;
+            case 'sap':
+                // Empties sink via COALESCE + a flag column.
+                $query->orderByRaw("(sap_opportunity_number IS NULL OR sap_opportunity_number = ''), sap_opportunity_number {$dirSql}");
+                break;
+            case 'collaborator':
+                $query->leftJoin('tender_collaborators', 'tenders.assigned_collaborator_id', '=', 'tender_collaborators.id')
+                      ->select('tenders.*')
+                      ->orderByRaw("tender_collaborators.name IS NULL, tender_collaborators.name {$dirSql}");
+                break;
+        }
+    }
+
     private function applyFilters($query, array $f): void
     {
         if ($f['source'])          $query->where('source', $f['source']);
@@ -186,10 +241,18 @@ class TenderController extends Controller
             });
         }
         if ($f['urgency']) {
-            // Translate urgency bucket → deadline_at window
-            $now = now();
+            // Translate urgency bucket → deadline_at window. "overdue" caps at
+            // Tender::OVERDUE_WINDOW_DAYS (anything older is "expired").
+            $now        = now();
+            $overdueCut = $now->copy()->subDays(Tender::OVERDUE_WINDOW_DAYS);
             switch ($f['urgency']) {
-                case 'overdue':  $query->where('deadline_at', '<', $now); break;
+                case 'overdue':
+                    $query->where('deadline_at', '<', $now)
+                          ->where('deadline_at', '>=', $overdueCut);
+                    break;
+                case 'expired':
+                    $query->where('deadline_at', '<', $overdueCut);
+                    break;
                 case 'critical': $query->whereBetween('deadline_at', [$now, $now->copy()->addDays(3)]); break;
                 case 'urgent':   $query->whereBetween('deadline_at', [$now, $now->copy()->addDays(7)]); break;
                 case 'soon':     $query->whereBetween('deadline_at', [$now, $now->copy()->addDays(14)]); break;
@@ -205,8 +268,10 @@ class TenderController extends Controller
 
         return [
             'total'        => (clone $base)->count(),
-            'active'       => (clone $base)->active()->count(),
-            'overdue'      => (clone $base)->active()->where('deadline_at', '<', now())->count(),
+            // "Activos" excludes overdue on purpose — overdue has its own card.
+            'active'       => (clone $base)->activeInProgress()->count(),
+            // Capped at OVERDUE_WINDOW_DAYS — older ones are "expired".
+            'overdue'      => (clone $base)->overdue()->count(),
             'urgent'       => (clone $base)->urgent(7)->count(),
             'needing_sap'  => (clone $base)->needingSapOpportunity()->count(),
         ];

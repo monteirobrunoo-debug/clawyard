@@ -9,6 +9,7 @@
      * in BOTH Europe/Lisbon and Europe/Luxembourg wall-clock (stored UTC).
      */
     $urgencyClasses = [
+        'expired'  => 'bg-gray-200 text-gray-800 border-gray-400 line-through',
         'overdue'  => 'bg-red-100 text-red-800 border-red-300',
         'critical' => 'bg-orange-100 text-orange-800 border-orange-300',
         'urgent'   => 'bg-yellow-100 text-yellow-800 border-yellow-300',
@@ -59,11 +60,11 @@
             {{-- ─── Stat cards ────────────────────────────────────────────── --}}
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
                 @foreach([
-                    ['label' => 'Total',        'value' => $stats['total'],       'color' => 'text-gray-800'],
-                    ['label' => 'Activos',      'value' => $stats['active'],      'color' => 'text-indigo-700'],
-                    ['label' => 'Em atraso',    'value' => $stats['overdue'],     'color' => 'text-red-600'],
-                    ['label' => 'Urgentes ≤7d', 'value' => $stats['urgent'],      'color' => 'text-orange-600'],
-                    ['label' => 'Sem nº SAP',   'value' => $stats['needing_sap'], 'color' => 'text-yellow-700'],
+                    ['label' => 'Total',                  'value' => $stats['total'],       'color' => 'text-gray-800'],
+                    ['label' => 'Activos',                'value' => $stats['active'],      'color' => 'text-indigo-700'],
+                    ['label' => 'Em atraso ≤'.\App\Models\Tender::OVERDUE_WINDOW_DAYS.'d', 'value' => $stats['overdue'], 'color' => 'text-red-600'],
+                    ['label' => 'Urgentes ≤7d',           'value' => $stats['urgent'],      'color' => 'text-orange-600'],
+                    ['label' => 'Sem nº SAP',             'value' => $stats['needing_sap'], 'color' => 'text-yellow-700'],
                 ] as $card)
                     <div class="rounded-lg bg-white p-4 shadow-sm border border-gray-100">
                         <div class="text-xs uppercase tracking-wide text-gray-500">{{ $card['label'] }}</div>
@@ -144,7 +145,8 @@
 
                     <select name="urgency" class="rounded-md border-gray-300 text-sm shadow-sm">
                         <option value="">Qualquer urgência</option>
-                        <option value="overdue"  @selected($filters['urgency'] === 'overdue')>Em atraso</option>
+                        <option value="overdue"  @selected($filters['urgency'] === 'overdue')>Em atraso ≤{{ \App\Models\Tender::OVERDUE_WINDOW_DAYS }}d</option>
+                        <option value="expired"  @selected($filters['urgency'] === 'expired')>Expirados &gt;{{ \App\Models\Tender::OVERDUE_WINDOW_DAYS }}d</option>
                         <option value="critical" @selected($filters['urgency'] === 'critical')>Críticos ≤3d</option>
                         <option value="urgent"   @selected($filters['urgency'] === 'urgent')>Urgentes ≤7d</option>
                         <option value="soon"     @selected($filters['urgency'] === 'soon')>Brevemente ≤14d</option>
@@ -204,6 +206,29 @@
                         @endif
                     </header>
 
+                    @php
+                        /**
+                         * Build a sortable column header.
+                         * Clicking: if currently sorted by this column ASC, next click is DESC;
+                         * otherwise (not sorted or sorted DESC), next click is ASC.
+                         * Pagination is reset to page=1 so we don't land on an empty page.
+                         */
+                        $sortLink = function (string $key, string $label) use ($sort, $dir) {
+                            $isActive = $sort === $key || ($sort === null && $key === 'deadline');
+                            $nextDir  = ($isActive && $dir === 'asc') ? 'desc' : 'asc';
+                            $arrow    = '';
+                            if ($isActive) {
+                                $arrow = $dir === 'asc' ? '▲' : '▼';
+                            }
+                            $url = request()->fullUrlWithQuery([
+                                'sort' => $key,
+                                'dir'  => $nextDir,
+                                'page' => 1,
+                            ]);
+                            return compact('url', 'label', 'arrow', 'isActive');
+                        };
+                    @endphp
+
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
@@ -213,13 +238,28 @@
                                             <input type="checkbox" id="select-all" class="rounded border-gray-300">
                                         </th>
                                     @endif
-                                    <th class="px-3 py-2 text-left">Fonte / Ref</th>
-                                    <th class="px-3 py-2 text-left">Título</th>
-                                    <th class="px-3 py-2 text-left">Colaborador</th>
-                                    <th class="px-3 py-2 text-left">Estado</th>
-                                    <th class="px-3 py-2 text-left">Nº SAP</th>
-                                    <th class="px-3 py-2 text-left">Deadline (PT / LU)</th>
-                                    <th class="px-3 py-2 text-left">Urgência</th>
+                                    @foreach([
+                                        ['source',       'Fonte / Ref'],
+                                        ['title',        'Título'],
+                                        ['collaborator', 'Colaborador'],
+                                        ['status',       'Estado'],
+                                        ['sap',          'Nº SAP'],
+                                        ['deadline',     'Deadline (PT / LU)'],
+                                        ['urgency',      'Urgência'],
+                                    ] as [$key, $label])
+                                        @php $h = $sortLink($key, $label); @endphp
+                                        <th class="px-3 py-2 text-left">
+                                            <a href="{{ $h['url'] }}"
+                                               class="inline-flex items-center gap-1 select-none {{ $h['isActive'] ? 'text-indigo-700' : 'hover:text-gray-700' }}">
+                                                <span>{{ $h['label'] }}</span>
+                                                @if($h['arrow'])
+                                                    <span class="text-indigo-600">{{ $h['arrow'] }}</span>
+                                                @else
+                                                    <span class="text-gray-300">⇅</span>
+                                                @endif
+                                            </a>
+                                        </th>
+                                    @endforeach
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 bg-white">
@@ -264,7 +304,9 @@
                                         </td>
                                         <td class="px-3 py-2 align-top">
                                             <span class="inline-flex rounded border px-2 py-0.5 text-xs font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
-                                                @if($t->urgency_bucket === 'overdue')
+                                                @if($t->urgency_bucket === 'expired')
+                                                    Expirado {{ abs($t->days_to_deadline) }}d
+                                                @elseif($t->urgency_bucket === 'overdue')
                                                     {{ abs($t->days_to_deadline) }}d atraso
                                                 @elseif($t->days_to_deadline !== null)
                                                     {{ $t->days_to_deadline }}d

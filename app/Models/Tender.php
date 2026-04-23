@@ -118,10 +118,54 @@ class Tender extends Model
         return $this->belongsTo(TenderImport::class, 'last_import_id');
     }
 
+    /**
+     * Hard cap for "overdue" — anything past this window is considered
+     * dead/expired rather than actionable. User rule: 15 days.
+     */
+    public const OVERDUE_WINDOW_DAYS = 15;
+
     // ── Scopes ───────────────────────────────────────────────────────────
     public function scopeActive(Builder $q): Builder
     {
         return $q->whereIn('status', self::ACTIVE_STATUSES);
+    }
+
+    /**
+     * "Activos" as the dashboard user reads them: in an active status AND
+     * the deadline hasn't passed yet (or there's no deadline at all).
+     * Overdue tenders are intentionally excluded — they live in their own
+     * bucket for separate triage.
+     */
+    public function scopeActiveInProgress(Builder $q): Builder
+    {
+        return $q->active()->where(function ($w) {
+            $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', now());
+        });
+    }
+
+    /**
+     * Overdue but still rescuable — past deadline by 0..OVERDUE_WINDOW_DAYS.
+     * Older than that is considered expired/abandoned and excluded here.
+     */
+    public function scopeOverdue(Builder $q): Builder
+    {
+        $now    = now();
+        $cutoff = $now->copy()->subDays(self::OVERDUE_WINDOW_DAYS);
+        return $q->active()
+            ->whereNotNull('deadline_at')
+            ->where('deadline_at', '<', $now)
+            ->where('deadline_at', '>=', $cutoff);
+    }
+
+    /**
+     * Expired — overdue by MORE than OVERDUE_WINDOW_DAYS. These are surfaced
+     * in the "Expirado" bucket so someone can bulk-close them.
+     */
+    public function scopeExpired(Builder $q): Builder
+    {
+        return $q->active()
+            ->whereNotNull('deadline_at')
+            ->where('deadline_at', '<', now()->copy()->subDays(self::OVERDUE_WINDOW_DAYS));
     }
 
     public function scopeForCollaborator(Builder $q, int $collaboratorId): Builder
@@ -174,11 +218,14 @@ class Tender extends Model
     public function getUrgencyBucketAttribute(): string
     {
         $d = $this->days_to_deadline;
-        if ($d === null)  return 'unknown';
-        if ($d < 0)       return 'overdue';
-        if ($d <= 3)      return 'critical';
-        if ($d <= 7)      return 'urgent';
-        if ($d <= 14)     return 'soon';
+        if ($d === null)                                return 'unknown';
+        // Overdue caps at OVERDUE_WINDOW_DAYS — anything older is "expired"
+        // (abandoned / needs bulk-close, not actionable).
+        if ($d < -self::OVERDUE_WINDOW_DAYS)            return 'expired';
+        if ($d < 0)                                     return 'overdue';
+        if ($d <= 3)                                    return 'critical';
+        if ($d <= 7)                                    return 'urgent';
+        if ($d <= 14)                                   return 'soon';
         return 'normal';
     }
 
