@@ -268,7 +268,12 @@ class TenderController extends Controller
         $collaboratorId  = $data['collaborator_id'] ?? null;
         $user            = Auth::user();
 
-        $updated = Tender::whereIn('id', $data['tender_ids'])->update([
+        // Normalise the tender_ids payload to ints so we can reliably
+        // compare against $t->id in the view (mixed strings break
+        // in_array strict checks).
+        $ids = array_values(array_map('intval', $data['tender_ids']));
+
+        $updated = Tender::whereIn('id', $ids)->update([
             'assigned_collaborator_id' => $collaboratorId,
             'assigned_at'              => $collaboratorId ? now() : null,
             'assigned_by_user_id'      => $user->id,
@@ -278,9 +283,15 @@ class TenderController extends Controller
             ? TenderCollaborator::find($collaboratorId)?->name ?? 'colaborador'
             : '(sem atribuição)';
 
+        // Pass the just-affected IDs to the view as a one-shot flash so
+        // the rows get a visual pulse/highlight after redirect. User rule:
+        // "quando faco atribuicao do projecto via este dashboard a um user
+        // deve ficar um quadrado com um pisco para saber que foi atribuido".
         return redirect()
             ->route('tenders.index', $request->only(['status', 'source', 'urgency']))
-            ->with('status', "{$updated} concursos atribuídos a {$label}.");
+            ->with('status', "{$updated} concursos atribuídos a {$label}.")
+            ->with('just_assigned', $ids)
+            ->with('just_assigned_label', $label);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -320,12 +331,24 @@ class TenderController extends Controller
      * synonym for `deadline` since the bucket is computed from deadline_at.
      * For `collaborator` we left-join the tender_collaborators table so we
      * can order by the display name (tenders without an assignee sink).
+     *
+     * Default (no explicit sort): newest imports first. User rule:
+     * "os primeiros a aparecer devem ser sempre os últimos" — the row
+     * that just arrived should float to the top so the super-user sees
+     * fresh work without having to dig.
      */
     private function applySort($query, ?string $sort, string $dir): void
     {
-        // SQLite/MySQL-safe NULL sinking: order by the IS NULL flag first,
-        // then the value in the chosen direction.
-        if (!$sort || $sort === 'deadline' || $sort === 'urgency') {
+        // Default view: newest imports first. Secondary sort on id so
+        // rows created in the same second don't flip between reloads.
+        if (!$sort) {
+            $query->orderByDesc('created_at')->orderByDesc('id');
+            return;
+        }
+
+        // SQLite/MySQL/Postgres-safe NULL sinking: order by the IS NULL
+        // flag first, then the value in the chosen direction.
+        if ($sort === 'deadline' || $sort === 'urgency') {
             $dirSql = $dir === 'desc' ? 'DESC' : 'ASC';
             $query->orderByRaw("deadline_at IS NULL, deadline_at {$dirSql}");
             return;

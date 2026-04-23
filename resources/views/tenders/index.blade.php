@@ -17,6 +17,12 @@
         'normal'   => 'bg-gray-100 text-gray-700 border-gray-300',
         'unknown'  => 'bg-gray-50 text-gray-500 border-gray-200',
     ];
+    // One-shot flash after bulk-assign — list of tender IDs that were
+    // just attributed. The view lights up matching rows with a pulse
+    // animation so the user can see at a glance what they changed.
+    $justAssigned      = array_map('intval', session('just_assigned', []));
+    $justAssignedLabel = session('just_assigned_label');
+
     $statusLabels = [
         \App\Models\Tender::STATUS_PENDING       => 'Pendente',
         \App\Models\Tender::STATUS_EM_TRATAMENTO => 'Em Tratamento',
@@ -61,6 +67,40 @@
         </div>
     </x-slot>
 
+    {{-- ─── Just-assigned pulse animation ──────────────────────────────
+         Runs ~5s (4 iterations × 1.2s), then settles into a persistent
+         indigo left-border so the row is still findable on the page after
+         the blink stops. Matches the user's "quadrado com um pisco"
+         request — a visible square marker that pulses.
+    --}}
+    <style>
+        @keyframes just-assigned-pulse {
+            0%, 100% { background-color: rgb(238 242 255); }  /* indigo-50 */
+            50%      { background-color: rgb(199 210 254); }  /* indigo-200 */
+        }
+        tr.just-assigned {
+            animation: just-assigned-pulse 1.2s ease-in-out 4;
+            border-left: 4px solid rgb(79 70 229);            /* indigo-600 */
+            background-color: rgb(238 242 255);               /* indigo-50 after animation */
+        }
+        tr.just-assigned > td:first-child {
+            position: relative;
+        }
+        .just-assigned-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.1rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.65rem;
+            font-weight: 600;
+            color: rgb(55 48 163);                            /* indigo-800 */
+            background: rgb(224 231 255);                     /* indigo-100 */
+            border: 1px solid rgb(165 180 252);               /* indigo-300 */
+            animation: just-assigned-pulse 1.2s ease-in-out 4;
+        }
+    </style>
+
     <div class="py-8">
         <div class="mx-auto max-w-7xl sm:px-6 lg:px-8 space-y-6">
 
@@ -68,6 +108,11 @@
             @if(session('status'))
                 <div class="rounded-md bg-green-50 border border-green-200 p-4 text-sm text-green-800">
                     {{ session('status') }}
+                    @if(count($justAssigned) > 0)
+                        <span class="ml-2 text-xs text-green-700">
+                            — {{ count($justAssigned) }} row(s) marcados abaixo a pisco.
+                        </span>
+                    @endif
                 </div>
             @endif
 
@@ -235,7 +280,10 @@
                          * Pagination is reset to page=1 so we don't land on an empty page.
                          */
                         $sortLink = function (string $key, string $label) use ($sort, $dir) {
-                            $isActive = $sort === $key || ($sort === null && $key === 'deadline');
+                            // Default order is now "newest imports first" (no column
+                            // highlighted) so users see fresh work up top. A column
+                            // only shows the arrow once explicitly clicked.
+                            $isActive = $sort === $key;
                             $nextDir  = ($isActive && $dir === 'asc') ? 'desc' : 'asc';
                             $arrow    = '';
                             if ($isActive) {
@@ -285,7 +333,8 @@
                             </thead>
                             <tbody class="divide-y divide-gray-100 bg-white">
                                 @forelse($all as $t)
-                                    <tr class="hover:bg-gray-50 text-sm">
+                                    @php $wasJustAssigned = in_array($t->id, $justAssigned, true); @endphp
+                                    <tr class="hover:bg-gray-50 text-sm {{ $wasJustAssigned ? 'just-assigned' : '' }}">
                                         @if($canAssign)
                                             <td class="px-3 py-2">
                                                 <input type="checkbox" name="tender_ids[]" value="{{ $t->id }}"
@@ -295,6 +344,13 @@
                                         <td class="px-3 py-2 align-top">
                                             <div class="text-xs font-semibold uppercase text-gray-600">{{ $t->source }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
+                                            @if($wasJustAssigned)
+                                                <div class="mt-1">
+                                                    <span class="just-assigned-chip" title="Atribuído agora mesmo{{ $justAssignedLabel ? ' a ' . $justAssignedLabel : '' }}">
+                                                        ✨ atribuído
+                                                    </span>
+                                                </div>
+                                            @endif
                                         </td>
                                         <td class="px-3 py-2 align-top max-w-md">
                                             <a href="{{ route('tenders.show', $t) }}" class="text-indigo-700 hover:underline font-medium">
