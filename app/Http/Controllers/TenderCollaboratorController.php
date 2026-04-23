@@ -8,6 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -120,6 +124,141 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
         return redirect()
             ->route('tenders.collaborators.index')
             ->with('status', "Colaborador \"{$collaborator->name}\" desactivado (histórico preservado).");
+    }
+
+    /**
+     * Provision a User account from an existing collaborator row.
+     *
+     * Why: the dropdown on the edit page only lists existing Users. If the
+     * collaborator is someone new (e.g. Mónica, Eduardo R.) who has never
+     * logged into the app, there's nothing to link to. This action
+     * bootstraps the User from what the roster already knows (name + email)
+     * and auto-links the collaborator in the same transaction, so the next
+     * time the edit page loads they appear in the dropdown and — more
+     * importantly — they start seeing "Os meus concursos" on /dashboard and
+     * receiving the daily digest.
+     *
+     * We do NOT set a password chosen by the super-user. A random secret is
+     * hashed (so the row is valid) and we immediately trigger Laravel's
+     * built-in password reset flow — the new user clicks the email, picks
+     * their own password. This keeps the manager out of the credential
+     * loop and matches how HR typically onboards.
+     */
+    public function createUser(TenderCollaborator $collaborator)
+    {
+        if ($collaborator->user_id) {
+            return back()->with('status', "\"{$collaborator->name}\" já tem User ligado.");
+        }
+
+        $email = trim((string) $collaborator->email);
+        if ($email === '') {
+            return back()->withErrors([
+                'email' => 'Preenche primeiro o email do colaborador — é esse email que vai ser a conta.',
+            ]);
+        }
+
+        // Belt-and-braces: if a User with this email already exists, reuse it
+        // instead of crashing the unique constraint. This covers cases where
+        // the person was onboarded through /admin/users earlier but never
+        // linked to the roster row.
+        $existing = User::where('email', $email)->first();
+        if ($existing) {
+            $collaborator->user_id = $existing->id;
+            $collaborator->save();
+
+            return redirect()
+                ->route('tenders.collaborators.edit', $collaborator)
+                ->with('status', "\"{$collaborator->name}\" ligado ao User existente {$existing->email}.");
+        }
+
+        $user = User::create([
+            'name'      => $collaborator->name,
+            'email'     => $email,
+            'password'  => Hash::make(Str::random(40)),  // placeholder; user sets real password via reset link
+            'role'      => 'user',
+            'is_active' => true,
+        ]);
+
+        $collaborator->user_id = $user->id;
+        $collaborator->save();
+
+        // Send the password-setup email. We ignore the broker's status here
+        // because the User is already created and linked — even if SMTP
+        // hiccups, the super-user can trigger "forgot password" again from
+        // /admin/users without re-running this action.
+        try {
+            Password::sendResetLink(['email' => $user->email]);
+            $msg = "User criado para \"{$collaborator->name}\" e enviado email de activação para {$user->email}.";
+        } catch (\Throwable $e) {
+            Log::warning('createUser: password reset send failed', [
+                'user_id' => $user->id,
+                'error'   => $e->getMessage(),
+            ]);
+            $msg = "User criado para \"{$collaborator->name}\" mas falhou envio do email — pede-lhe para usar 'Esqueci a password' em {$user->email}.";
+        }
+
+        return redirect()
+            ->route('tenders.collaborators.edit', $collaborator)
+            ->with('status', $msg);
+    }
+
+    /**
+     * Bulk variant of createUser(). Iterates collaborators that have an
+     * email and no linked User, and provisions accounts for each. Idempotent
+     * — running it twice doesn't double-create because we check user_id.
+     */
+    public function createUsersBatch(Request $request)
+    {
+        $eligible = TenderCollaborator::query()
+            ->whereNull('user_id')
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->where('is_active', true)
+            ->get();
+
+        $created  = 0;
+        $linked   = 0;
+        $skipped  = 0;
+
+        foreach ($eligible as $c) {
+            $email = trim((string) $c->email);
+            if ($email === '') { $skipped++; continue; }
+
+            $existing = User::where('email', $email)->first();
+            if ($existing) {
+                $c->user_id = $existing->id;
+                $c->save();
+                $linked++;
+                continue;
+            }
+
+            $user = User::create([
+                'name'      => $c->name,
+                'email'     => $email,
+                'password'  => Hash::make(Str::random(40)),
+                'role'      => 'user',
+                'is_active' => true,
+            ]);
+            $c->user_id = $user->id;
+            $c->save();
+
+            try {
+                Password::sendResetLink(['email' => $user->email]);
+            } catch (\Throwable $e) {
+                Log::warning('createUsersBatch: reset link failed', ['user' => $user->email, 'err' => $e->getMessage()]);
+            }
+            $created++;
+        }
+
+        $parts = [];
+        if ($created > 0) $parts[] = "{$created} User(s) criados + email de activação enviado";
+        if ($linked  > 0) $parts[] = "{$linked} ligados a Users já existentes";
+        if ($skipped > 0) $parts[] = "{$skipped} ignorados (sem email)";
+        if (!$parts)      $parts[] = "nenhum colaborador elegível (todos já ligados ou sem email)";
+
+        return redirect()
+            ->route('tenders.collaborators.index')
+            ->with('status', implode(' · ', $parts));
     }
 
     /**

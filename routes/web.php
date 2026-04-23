@@ -465,11 +465,13 @@ Route::middleware(['auth'])->group(function () {
     )->name('tenders.overview.remind');
 
     // Collaborators roster CRUD — manager+ only (gate checked in controller).
-    Route::get   ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'index'])->name('tenders.collaborators.index');
-    Route::post  ('/tenders/collaborators',                      [TenderCollaboratorController::class, 'store'])->name('tenders.collaborators.store');
-    Route::get   ('/tenders/collaborators/{collaborator}/edit',  [TenderCollaboratorController::class, 'edit'])->name('tenders.collaborators.edit');
-    Route::patch ('/tenders/collaborators/{collaborator}',       [TenderCollaboratorController::class, 'update'])->name('tenders.collaborators.update');
-    Route::delete('/tenders/collaborators/{collaborator}',       [TenderCollaboratorController::class, 'destroy'])->name('tenders.collaborators.destroy');
+    Route::get   ('/tenders/collaborators',                                  [TenderCollaboratorController::class, 'index'])->name('tenders.collaborators.index');
+    Route::post  ('/tenders/collaborators',                                  [TenderCollaboratorController::class, 'store'])->name('tenders.collaborators.store');
+    Route::post  ('/tenders/collaborators/create-users-batch',               [TenderCollaboratorController::class, 'createUsersBatch'])->name('tenders.collaborators.create_users_batch');
+    Route::get   ('/tenders/collaborators/{collaborator}/edit',              [TenderCollaboratorController::class, 'edit'])->name('tenders.collaborators.edit');
+    Route::patch ('/tenders/collaborators/{collaborator}',                   [TenderCollaboratorController::class, 'update'])->name('tenders.collaborators.update');
+    Route::delete('/tenders/collaborators/{collaborator}',                   [TenderCollaboratorController::class, 'destroy'])->name('tenders.collaborators.destroy');
+    Route::post  ('/tenders/collaborators/{collaborator}/create-user',       [TenderCollaboratorController::class, 'createUser'])->name('tenders.collaborators.create_user');
 
     // Bulk assign — also manager+ only (enforced in TenderAssignRequest::authorize).
     Route::post('/tenders/assign', [TenderController::class, 'assign'])->name('tenders.assign');

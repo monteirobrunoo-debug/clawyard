@@ -62,6 +62,33 @@
                             @endforeach
                         </select>
 
+                        {{-- Quick-provision: if this collaborator has an email but no User
+                             linked, offer a one-click action that creates a User with the
+                             same name+email and sends them a password-setup link. The form
+                             is a sibling of the main update form so submitting it here
+                             doesn't save any changes typed above. --}}
+                        @if(!$collaborator->user_id && $collaborator->email)
+                            <div class="mt-2 rounded-md bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+                                <div class="font-semibold mb-1">Este colaborador ainda não tem conta?</div>
+                                <div class="mb-2">
+                                    Podemos criar uma conta a partir dos dados acima — o(a)
+                                    <strong>{{ $collaborator->name }}</strong> recebe um email em
+                                    <code>{{ $collaborator->email }}</code> para escolher a password dele(a).
+                                </div>
+                                <button type="submit"
+                                        form="create-user-form-{{ $collaborator->id }}"
+                                        class="inline-flex items-center gap-1 rounded bg-amber-600 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-500">
+                                    ➕ Criar conta + enviar link de activação
+                                </button>
+                            </div>
+                        @elseif(!$collaborator->user_id && !$collaborator->email)
+                            <div class="mt-2 rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">
+                                💡 Para criar uma conta a partir deste colaborador, preenche primeiro
+                                o campo <strong>Email</strong> acima e guarda. Depois aparece aqui um
+                                botão para provisionar o User automaticamente.
+                            </div>
+                        @endif
+
                         <div class="mt-2 rounded-md bg-blue-50 border border-blue-200 p-3 text-xs text-blue-900 space-y-1.5">
                             <div class="font-semibold uppercase tracking-wide text-[10px] text-blue-700">
                                 O que faz a ligação a um User?
@@ -104,6 +131,19 @@
                     </div>
                 </form>
             </section>
+
+            {{-- Hidden out-of-tree form referenced by the "Criar conta" button
+                 inside the main update form. Kept here (outside the <section>
+                 wrapping the update form) so clicking it POSTs to create-user
+                 instead of the collaborator update endpoint. --}}
+            @if(!$collaborator->user_id && $collaborator->email)
+                <form id="create-user-form-{{ $collaborator->id }}"
+                      method="POST"
+                      action="{{ route('tenders.collaborators.create_user', $collaborator) }}"
+                      onsubmit="return confirm('Criar User para {{ $collaborator->name }} ({{ $collaborator->email }})? Vai ser enviado um email com link de activação.')">
+                    @csrf
+                </form>
+            @endif
 
         </div>
     </div>

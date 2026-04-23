@@ -43,7 +43,42 @@
                     atribuídos a este nome no seu próprio dashboard (<em>"Os meus concursos"</em>) e
                     receba o digest automaticamente. Sem User ligado, só os managers vêem o bucket.
                 </div>
+                <div class="text-blue-800">
+                    🔹 Se o colaborador ainda não tem login no ClawYard, preenche o email e usa
+                    <strong>"Criar conta"</strong> — o sistema cria o User, liga automaticamente e
+                    envia um email para a pessoa escolher a password dela.
+                </div>
             </section>
+
+            {{-- ─── Batch provisioning ──────────────────────────────────── --}}
+            @php
+                $pendingUserCreate = $collaborators
+                    ->filter(fn($c) => !$c->user_id && !empty($c->email) && $c->is_active)
+                    ->count();
+            @endphp
+            @if($pendingUserCreate > 0)
+                <section class="rounded-md bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900 flex items-center justify-between gap-4">
+                    <div>
+                        <div class="font-semibold">
+                            Há {{ $pendingUserCreate }} colaborador(es) com email mas sem conta criada.
+                        </div>
+                        <div class="text-xs text-amber-800 mt-0.5">
+                            Criar todos de uma vez: o sistema gera o User, liga ao colaborador e envia
+                            o link de activação da password para cada email. Acção idempotente (podes
+                            correr várias vezes sem risco).
+                        </div>
+                    </div>
+                    <form method="POST"
+                          action="{{ route('tenders.collaborators.create_users_batch') }}"
+                          onsubmit="return confirm('Criar Users para {{ $pendingUserCreate }} colaborador(es) com email? Vai enviar {{ $pendingUserCreate }} email(s) de activação.')">
+                        @csrf
+                        <button type="submit"
+                                class="whitespace-nowrap rounded-md bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-500">
+                            ➕ Criar Users em falta ({{ $pendingUserCreate }})
+                        </button>
+                    </form>
+                </section>
+            @endif
 
             {{-- ─── Add new ───────────────────────────────────────────────── --}}
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
@@ -146,6 +181,23 @@
                                     <td class="px-3 py-2 text-right">
                                         <a href="{{ route('tenders.collaborators.edit', $c) }}"
                                            class="text-xs text-indigo-700 hover:underline">Editar</a>
+
+                                        {{-- Per-row quick-create: only shown when the collaborator
+                                             has an email but no User yet. Same action as the edit
+                                             page button, so the super-user can onboard directly
+                                             from the roster without a round-trip. --}}
+                                        @if(!$c->user_id && $c->email && $c->is_active)
+                                            <form method="POST"
+                                                  action="{{ route('tenders.collaborators.create_user', $c) }}"
+                                                  class="inline-block ml-3"
+                                                  onsubmit="return confirm('Criar User para {{ $c->name }} ({{ $c->email }}) e enviar email de activação?')">
+                                                @csrf
+                                                <button type="submit" class="text-xs text-amber-700 hover:underline font-medium">
+                                                    ➕ Criar conta
+                                                </button>
+                                            </form>
+                                        @endif
+
                                         @if($c->is_active)
                                             <form method="POST" action="{{ route('tenders.collaborators.destroy', $c) }}"
                                                   class="inline-block ml-3"
