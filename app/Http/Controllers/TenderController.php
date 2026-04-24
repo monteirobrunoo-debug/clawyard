@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\TenderAssignRequest;
 use App\Http\Requests\TenderUpdateRequest;
+use App\Mail\TenderAssignedNotification;
 use App\Models\AgentShare;
 use App\Models\Tender;
 use App\Models\TenderCollaborator;
@@ -13,6 +14,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 
 /**
  * Tender dashboard — list, show, update, bulk assign, observe.
@@ -427,22 +430,146 @@ class TenderController extends Controller
             'assigned_by_user_id'      => $user->id,
         ]);
 
-        $label = $collaboratorId
-            ? TenderCollaborator::find($collaboratorId)?->name ?? 'colaborador'
-            : '(sem atribuição)';
+        $collaborator = $collaboratorId
+            ? TenderCollaborator::with('user')->find($collaboratorId)
+            : null;
+        $label = $collaborator?->name ?? ($collaboratorId ? 'colaborador' : '(sem atribuição)');
+
+        // ── Assignment notification email ──────────────────────────────────
+        //
+        // User flagged: "os users do dashboard com os processos atribuídos
+        // não recebem email para confirmar e entrar". Nothing was being
+        // dispatched on assign — the assignee only found out next time they
+        // logged in, or via the scheduled digest the next morning.
+        //
+        // We send one email per bulk-assign POST (not one per tender), to
+        // the collaborator's digest_email (explicit `email` column wins,
+        // else their linked User's email). Failures are logged but do NOT
+        // roll back the assignment — the local DB is still the source of
+        // truth; the email is a courtesy notification.
+        //
+        // Skipped when:
+        //   - collaborator_id is null (this is an un-assignment, no one to notify)
+        //   - collaborator has no digest_email at all
+        //   - $updated is 0 (nothing actually changed, e.g. re-submit)
+        // Look up the portal URL for this collaborator's email, if any —
+        // used below in the flash so the manager sees exactly where the
+        // assignee will see the tenders ("ficar em memória"). We pick the
+        // most recent active portal_token for any active AgentShare whose
+        // client_email (or additional_emails) matches.
+        $portalUrl = null;
+        if ($collaborator && $collaborator->digest_email) {
+            $portalUrl = $this->findPortalUrlFor($collaborator->digest_email);
+        }
+
+        $emailStatus = null;
+        if ($collaborator && $updated > 0) {
+            $toEmail = $collaborator->digest_email;
+            if (!$toEmail) {
+                $emailStatus = "⚠ {$collaborator->name} não tem email configurado — notificação não enviada.";
+                Log::info('Tender assign: skipped email (no address)', [
+                    'collaborator_id' => $collaborator->id,
+                    'tender_ids'      => $ids,
+                ]);
+            } else {
+                try {
+                    $assignedTenders = Tender::whereIn('id', $ids)->get();
+                    Mail::to($toEmail)->send(
+                        new TenderAssignedNotification($collaborator, $assignedTenders, $user)
+                    );
+                    $emailStatus = "📧 Notificação enviada para {$toEmail}.";
+                } catch (\Throwable $e) {
+                    Log::warning('Tender assign: email dispatch failed', [
+                        'collaborator_id' => $collaborator->id,
+                        'to'              => $toEmail,
+                        'tender_ids'      => $ids,
+                        'error'           => $e->getMessage(),
+                    ]);
+                    $emailStatus = "⚠ Falha ao enviar email para {$toEmail}: {$e->getMessage()}";
+                }
+            }
+        }
 
         // Pass the just-affected IDs to the view as a one-shot flash so
         // the rows get a visual pulse/highlight after redirect. User rule:
         // "quando faco atribuicao do projecto via este dashboard a um user
         // deve ficar um quadrado com um pisco para saber que foi atribuido".
+        //
+        // Preserve the filter/pagination state the user was on so they land
+        // back on the same view. The form ships these as `return_<key>`
+        // hidden inputs (because the page filters are GET params, not part
+        // of the form POST body). Without this, the user was dropped on an
+        // unfiltered /tenders and the just-assigned rows could end up on
+        // page 2+ — which looked like "the pisco never happened".
+        $returnParams = [];
+        foreach (['source', 'status', 'urgency', 'collaborator_id', 'q', 'sort', 'dir', 'page'] as $k) {
+            $v = $request->input("return_{$k}");
+            if ($v !== null && $v !== '') $returnParams[$k] = $v;
+        }
+
+        $flash = "{$updated} concursos atribuídos a {$label}.";
+        if ($emailStatus) $flash .= ' · ' . $emailStatus;
+        if ($portalUrl)   $flash .= " · 📫 Visível no portal: {$portalUrl}";
+
         return redirect()
-            ->route('tenders.index', $request->only(['status', 'source', 'urgency']))
-            ->with('status', "{$updated} concursos atribuídos a {$label}.")
+            ->route('tenders.index', $returnParams)
+            ->with('status', $flash)
             ->with('just_assigned', $ids)
             ->with('just_assigned_label', $label);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    /**
+     * Resolve the AgentShare portal URL that a given email (the
+     * collaborator's digest_email) has access to, if any.
+     *
+     * Used to enrich the bulk-assign flash so the admin knows where the
+     * assignee will actually see the tenders they were just given.
+     * Returns the absolute `/p/{portalToken}` URL of the most-recently-
+     * created active share that includes this email among its authorised
+     * recipients (primary client_email OR additional_emails).
+     *
+     * Returns null when:
+     *   - email is blank / malformed
+     *   - no active shares match
+     *   - the matching share has no portal_token (single-agent share)
+     */
+    private function findPortalUrlFor(string $email): ?string
+    {
+        $email = strtolower(trim($email));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return null;
+
+        try {
+            $candidates = AgentShare::query()
+                ->where('is_active', true)
+                ->whereNull('revoked_at')
+                ->where(fn($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>=', now()))
+                ->whereNotNull('portal_token')
+                ->where(function ($q) use ($email) {
+                    $q->whereRaw('LOWER(client_email) = ?', [$email])
+                      ->orWhere('additional_emails', 'LIKE', '%' . $email . '%');
+                })
+                ->orderByDesc('created_at')
+                ->limit(10)
+                ->get();
+
+            // Double-check additional_emails via the model accessor in case
+            // the LIKE picked up a false positive from a similar substring.
+            foreach ($candidates as $share) {
+                $authorised = array_map('strtolower', $share->authorisedEmails());
+                if (in_array($email, $authorised, true)) {
+                    $base = rtrim(config('app.url') ?: URL::to('/'), '/');
+                    return $base . '/p/' . $share->portal_token;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('findPortalUrlFor failed', ['email' => $email, 'error' => $e->getMessage()]);
+        }
+
+        return null;
+    }
+
     private function enforceVisibility(Tender $tender, $user): void
     {
         if ($user->can('tenders.view-all')) return;

@@ -110,9 +110,55 @@
                     {{ session('status') }}
                     @if(count($justAssigned) > 0)
                         <span class="ml-2 text-xs text-green-700">
-                            — {{ count($justAssigned) }} row(s) marcados abaixo a pisco.
+                            — {{ count($justAssigned) }} linha(s) marcada(s) a pisco.
                         </span>
                     @endif
+                </div>
+            @endif
+
+            {{-- ─── Just-assigned banner ──────────────────────────────────
+                 Even if the rows aren't on the current page (different
+                 filter / pagination), the user sees exactly what they just
+                 changed with a direct link to each. Solves the "atribui mas
+                 não vejo o pisco" complaint — the pulse only fires on rows
+                 rendered on-screen, but the banner proves the write happened
+                 and lets the user jump to each affected tender. --}}
+            @if(count($justAssigned) > 0)
+                @php
+                    $justAssignedTenders = \App\Models\Tender::whereIn('id', $justAssigned)
+                        ->with('collaborator')
+                        ->get()
+                        ->keyBy('id');
+                @endphp
+                <div id="just-assigned-banner"
+                     class="rounded-md bg-indigo-50 border border-indigo-200 p-4 text-sm text-indigo-900">
+                    <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <div class="min-w-0 flex-1">
+                            <div class="font-semibold">
+                                ✨ {{ count($justAssigned) }}
+                                {{ count($justAssigned) === 1 ? 'concurso atribuído' : 'concursos atribuídos' }}
+                                @if($justAssignedLabel)
+                                    a <span class="underline">{{ $justAssignedLabel }}</span>
+                                @endif
+                            </div>
+                            <div class="mt-2 flex flex-wrap gap-2">
+                                @foreach($justAssigned as $jid)
+                                    @php $jt = $justAssignedTenders[$jid] ?? null; @endphp
+                                    @if($jt)
+                                        <a href="{{ route('tenders.show', $jt) }}"
+                                           class="inline-flex items-center gap-1 rounded border border-indigo-300 bg-white px-2 py-1 text-xs font-mono text-indigo-800 hover:bg-indigo-100">
+                                            {{ $jt->reference ?: ('#' . $jt->id) }}
+                                            <span class="text-indigo-500">→</span>
+                                        </a>
+                                    @endif
+                                @endforeach
+                            </div>
+                        </div>
+                        <button type="button" onclick="document.getElementById('just-assigned-banner').remove()"
+                                class="shrink-0 text-xs text-indigo-600 hover:text-indigo-800">
+                            dispensar ✕
+                        </button>
+                    </div>
                 </div>
             @endif
 
@@ -244,6 +290,30 @@
             {{-- ─── All tenders table ─────────────────────────────────────── --}}
             <form method="POST" action="{{ route('tenders.assign') }}" id="bulk-assign-form">
                 @csrf
+                {{-- Preserve the current filter/pagination state across the
+                     redirect that happens after bulk-assign. Without these
+                     hidden inputs, $request->only([...]) in the controller
+                     comes back empty (these are GET params on the page URL,
+                     not part of the form POST body), so the user was landing
+                     on an unfiltered /tenders and not seeing "their" view
+                     anymore — which is why the pulse felt invisible. --}}
+                @php
+                    $preserveFilters = [
+                        'source'          => $filters['source'],
+                        'status'          => $filters['status'],
+                        'urgency'         => $filters['urgency'],
+                        'collaborator_id' => $filters['collaborator_id'],
+                        'q'               => $filters['q'],
+                        'sort'            => $sort,
+                        'dir'             => $dir,
+                        'page'            => request()->integer('page') ?: null,
+                    ];
+                @endphp
+                @foreach($preserveFilters as $pk => $pv)
+                    @if($pv !== null && $pv !== '')
+                        <input type="hidden" name="return_{{ $pk }}" value="{{ $pv }}">
+                    @endif
+                @endforeach
                 <section class="rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden">
                     <header class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
                         <h3 class="text-sm font-semibold text-gray-800">
@@ -415,6 +485,23 @@
                     document.getElementById('select-all')?.addEventListener('change', function (e) {
                         document.querySelectorAll('.row-check').forEach(cb => cb.checked = e.target.checked);
                     });
+                </script>
+            @endif
+
+            {{-- Auto-scroll to first just-assigned row (if rendered on this
+                 page) so the "pisco" is immediately visible without the user
+                 having to scan the table. If the rows aren't on this page
+                 (filtered out / on next page), the banner above is their cue. --}}
+            @if(count($justAssigned) > 0)
+                <script>
+                    (function () {
+                        const firstRow = document.querySelector('tr.just-assigned');
+                        if (firstRow && typeof firstRow.scrollIntoView === 'function') {
+                            setTimeout(() => {
+                                firstRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 200);
+                        }
+                    })();
                 </script>
             @endif
         </div>

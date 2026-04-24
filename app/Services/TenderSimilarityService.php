@@ -60,10 +60,25 @@ class TenderSimilarityService
         // don't count as overlap on their own.
         'component','components','assembly','assemblies',
         'equipment','equipments','material','materials','kit','kits',
+        // Domain-generic adjectives — present in many titles, not discriminative
+        // on their own (the real signal is the noun they modify).
+        'electrical','electronic','electronics','mechanical','hydraulic',
+        'pneumatic','optical','thermal','system','systems','module','modules',
     ];
 
-    /** Threshold a scored candidate must beat to be shown. */
-    private const SCORE_THRESHOLD = 0.25;
+    /**
+     * Threshold a scored candidate must beat to be shown.
+     *
+     * Set to 0.15 to match the user-facing copy on tenders/show.blade.php
+     * ("correspondências >15% de similaridade"). Combined with the overlap
+     * gate (≥2 tokens OR 1 discriminator ≥6 chars) and multiplicative
+     * bonuses, this still rejects the PATRIOT-vs-Generator false positive
+     * (shared only the generic word "electrical", now a stopword) while
+     * letting real matches through — especially single-discriminator
+     * matches like two cartridge tenders from different years that share
+     * just "cartridge" + "extinguisher" but with a SAP history bonus.
+     */
+    private const SCORE_THRESHOLD = 0.15;
 
     /** Minimum token length for a single overlap to count as "discriminator". */
     private const DISCRIMINATOR_MIN_LEN = 6;
