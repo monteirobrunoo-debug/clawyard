@@ -173,7 +173,7 @@
                                             <span class="inline-flex rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-500">Inactivo</span>
                                         @endif
                                     </td>
-                                    <td class="px-3 py-2 text-right">
+                                    <td class="px-3 py-2 text-right whitespace-nowrap">
                                         <a href="{{ route('tenders.collaborators.edit', $c) }}"
                                            class="text-xs text-indigo-700 hover:underline">Editar</a>
 
@@ -194,12 +194,50 @@
                                         @endif
 
                                         @if($c->is_active)
+                                            {{-- ACTIVE row: can desactivate (soft). --}}
                                             <form method="POST" action="{{ route('tenders.collaborators.destroy', $c) }}"
                                                   class="inline-block ml-3"
-                                                  onsubmit="return confirm('Desactivar {{ $c->name }}? O histórico é mantido.')">
+                                                  onsubmit="return confirm('Desactivar {{ $c->name }}? Sai do dashboard e do dropdown de atribuição, mas o histórico é mantido.')">
                                                 @csrf @method('DELETE')
-                                                <button type="submit" class="text-xs text-red-700 hover:underline">Desactivar</button>
+                                                <button type="submit" class="text-xs text-red-700 hover:underline"
+                                                        title="Desactiva — esconde do dashboard mas preserva histórico">
+                                                    Desactivar
+                                                </button>
                                             </form>
+                                        @else
+                                            {{-- INACTIVE row: two actions —
+                                                 1) Reactivar  — bring back into assign dropdown + digest
+                                                 2) Excluir    — hard-delete, only possible when the row
+                                                                 has never been assigned to a tender. The
+                                                                 button is still rendered for rows with
+                                                                 history but disabled, with a tooltip
+                                                                 explaining why (avoids silent nullify). --}}
+                                            <form method="POST" action="{{ route('tenders.collaborators.reactivate', $c) }}"
+                                                  class="inline-block ml-3"
+                                                  onsubmit="return confirm('Reactivar {{ $c->name }}? Volta a aparecer no dropdown de atribuição e no digest.')">
+                                                @csrf
+                                                <button type="submit" class="text-xs text-emerald-700 hover:underline font-medium"
+                                                        title="Reactiva — volta ao dashboard e recebe lembretes">
+                                                    ↻ Reactivar
+                                                </button>
+                                            </form>
+
+                                            @if($c->tenders_count === 0)
+                                                <form method="POST" action="{{ route('tenders.collaborators.force_destroy', $c) }}"
+                                                      class="inline-block ml-3"
+                                                      onsubmit="return confirm('⚠ EXCLUIR PERMANENTEMENTE {{ $c->name }}? Esta acção é irreversível. Nenhum concurso lhe está atribuído, pelo que não há histórico para preservar.')">
+                                                    @csrf @method('DELETE')
+                                                    <button type="submit" class="text-xs text-red-800 hover:underline font-semibold"
+                                                            title="Excluir permanentemente — sem histórico a preservar">
+                                                        ✗ Excluir
+                                                    </button>
+                                                </form>
+                                            @else
+                                                <span class="inline-block ml-3 text-xs text-gray-400 cursor-not-allowed"
+                                                      title="Não se pode excluir — tem {{ $c->tenders_count }} concurso(s) atribuído(s). Histórico seria desligado.">
+                                                    ✗ Excluir
+                                                </span>
+                                            @endif
                                         @endif
                                     </td>
                                 </tr>

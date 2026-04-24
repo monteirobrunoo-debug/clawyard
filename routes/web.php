@@ -471,6 +471,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get   ('/tenders/collaborators/{collaborator}/edit',              [TenderCollaboratorController::class, 'edit'])->name('tenders.collaborators.edit');
     Route::patch ('/tenders/collaborators/{collaborator}',                   [TenderCollaboratorController::class, 'update'])->name('tenders.collaborators.update');
     Route::delete('/tenders/collaborators/{collaborator}',                   [TenderCollaboratorController::class, 'destroy'])->name('tenders.collaborators.destroy');
+    Route::post  ('/tenders/collaborators/{collaborator}/reactivate',        [TenderCollaboratorController::class, 'reactivate'])->name('tenders.collaborators.reactivate');
+    Route::delete('/tenders/collaborators/{collaborator}/force',             [TenderCollaboratorController::class, 'forceDestroy'])->name('tenders.collaborators.force_destroy');
     Route::post  ('/tenders/collaborators/{collaborator}/create-user',       [TenderCollaboratorController::class, 'createUser'])->name('tenders.collaborators.create_user');
 
     // Bulk assign — also manager+ only (enforced in TenderAssignRequest::authorize).

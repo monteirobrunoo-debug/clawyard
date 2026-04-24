@@ -23,15 +23,23 @@ use Illuminate\Validation\Rule;
  * yet, or to fix a typo, or to attach an email + link to a User account.
  *
  * Routes (manager+ only):
- *   GET    /tenders/collaborators               index/list + inline create form
- *   POST   /tenders/collaborators               store new collaborator
- *   GET    /tenders/collaborators/{id}/edit     edit form
- *   PATCH  /tenders/collaborators/{id}          update
- *   DELETE /tenders/collaborators/{id}          soft-deactivate (is_active=false)
+ *   GET    /tenders/collaborators                      index/list + inline create form
+ *   POST   /tenders/collaborators                      store new collaborator
+ *   GET    /tenders/collaborators/{id}/edit            edit form
+ *   PATCH  /tenders/collaborators/{id}                 update
+ *   DELETE /tenders/collaborators/{id}                 soft-deactivate (is_active=false)
+ *   POST   /tenders/collaborators/{id}/reactivate      flip is_active=true again
+ *   DELETE /tenders/collaborators/{id}/force           hard delete — ONLY when tenders_count==0
  *
- * We never hard-delete because tenders may still reference the row via
- * `assigned_collaborator_id` — flipping `is_active` hides them from the
- * assign dropdown without orphaning history.
+ * Deletion policy:
+ *   - Soft (DELETE) is the default: flips `is_active` to false so the row
+ *     disappears from assign dropdowns and digests but history is kept.
+ *   - Hard (force) is only allowed for rows that were never assigned to a
+ *     tender (tenders_count == 0). Typos, duplicates, people added by mistake.
+ *     The tenders FK is `nullOnDelete`, so a hard delete on a row with
+ *     history would silently unassign every tender — which is why we block
+ *     that path at the controller level.
+ *   - Reactivate is a simple flip back to is_active=true. No side effects.
  */
 class TenderCollaboratorController extends Controller implements HasMiddleware
 {
@@ -124,6 +132,78 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
         return redirect()
             ->route('tenders.collaborators.index')
             ->with('status', "Colaborador \"{$collaborator->name}\" desactivado (histórico preservado).");
+    }
+
+    /**
+     * Flip is_active back to true — reverse of destroy().
+     *
+     * Why POST (not PATCH): it's a single-field state change that the UI
+     * fires from a small inline button, mirrors the `destroy` verb-shape
+     * (simple action URL, no payload), and avoids having to expose the full
+     * update form just to toggle one boolean. The gate is the same as every
+     * other action on this controller (manager+ via HasMiddleware).
+     */
+    public function reactivate(TenderCollaborator $collaborator)
+    {
+        if ($collaborator->is_active) {
+            return back()->with('status', "\"{$collaborator->name}\" já está activo.");
+        }
+
+        $collaborator->is_active = true;
+        $collaborator->save();
+
+        Log::info('TenderCollaborator: reactivated', [
+            'collaborator_id' => $collaborator->id,
+            'name'            => $collaborator->name,
+            'by_user_id'      => auth()->id(),
+        ]);
+
+        return redirect()
+            ->route('tenders.collaborators.index')
+            ->with('status', "Colaborador \"{$collaborator->name}\" reactivado.");
+    }
+
+    /**
+     * Hard-delete the collaborator row — ONLY when it was never assigned
+     * to a tender. This is the escape hatch for typos, duplicates and
+     * people who were created by mistake and should disappear entirely.
+     *
+     * Why the guard: the tenders table has a `nullOnDelete` FK on
+     * assigned_collaborator_id. Hard-deleting a row with history would
+     * silently nullify every assignment pointing to it — which destroys
+     * attribution. If the user really wants to remove a row with history,
+     * they should desactivate it (soft) so assignments still show who did
+     * the work.
+     *
+     * We do NOT cascade to the linked User account here — provisioning
+     * and deprovisioning users is /admin/users territory. This action
+     * only removes the roster entry.
+     */
+    public function forceDestroy(TenderCollaborator $collaborator)
+    {
+        $tendersCount = $collaborator->tenders()->count();
+
+        if ($tendersCount > 0) {
+            return back()->withErrors([
+                'tenders' => "\"{$collaborator->name}\" tem {$tendersCount} concurso(s) atribuído(s). "
+                    . "Desactiva em vez de excluir para preservar o histórico.",
+            ]);
+        }
+
+        Log::info('TenderCollaborator: force-deleted', [
+            'collaborator_id' => $collaborator->id,
+            'name'            => $collaborator->name,
+            'email'           => $collaborator->email,
+            'had_user_link'   => (bool) $collaborator->user_id,
+            'by_user_id'      => auth()->id(),
+        ]);
+
+        $name = $collaborator->name;
+        $collaborator->delete();
+
+        return redirect()
+            ->route('tenders.collaborators.index')
+            ->with('status', "Colaborador \"{$name}\" excluído permanentemente.");
     }
 
     /**
