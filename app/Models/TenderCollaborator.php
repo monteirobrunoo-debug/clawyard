@@ -29,13 +29,35 @@ class TenderCollaborator extends Model
         'user_id',
         'email',
         'is_active',
+        'allowed_sources',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active' => 'boolean',
+            'is_active'       => 'boolean',
+            // NULL  → no filter (sees every source)
+            // []    → explicit "blocked from all sources"
+            // array → whitelist
+            'allowed_sources' => 'array',
         ];
+    }
+
+    /**
+     * Can this collaborator see tenders from `$source`?
+     *
+     * Rules:
+     *   - NULL (`allowed_sources` not set) → yes, all sources allowed.
+     *     This is the legacy default so existing users don't lose
+     *     visibility when the column is added.
+     *   - [] (empty array) → no. Admin explicitly blocked everything.
+     *   - Non-empty array → only sources in the list.
+     */
+    public function canSeeSource(string $source): bool
+    {
+        $allowed = $this->allowed_sources;
+        if ($allowed === null) return true;              // legacy / no filter
+        return in_array($source, (array) $allowed, true);
     }
 
     /**

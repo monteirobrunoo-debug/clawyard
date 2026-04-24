@@ -164,6 +164,74 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
     }
 
     /**
+     * Toggle ONE source in the collaborator's allowed_sources whitelist.
+     *
+     * Semantics (mirrors TenderCollaborator::canSeeSource):
+     *   - allowed_sources NULL → starts as "all allowed". First toggle
+     *     materialises the whitelist as `Tender::SOURCES minus [source]`
+     *     (the admin is EXCLUDING that source from an otherwise-full set).
+     *     This matches user intent: "click to turn off NSPA for this user"
+     *     should disable NSPA, not suddenly disable everything else too.
+     *   - allowed_sources is an array:
+     *       • source present → remove it
+     *       • source absent  → add it
+     *
+     * Returns JSON: { ok, allowed_sources, has_source, mode } where `mode`
+     * is 'unrestricted' when allowed_sources is NULL (only possible if the
+     * admin added back every source → we collapse back to NULL instead of
+     * carrying a 9-element whitelist that means the same thing).
+     */
+    public function toggleSource(TenderCollaborator $collaborator, string $source)
+    {
+        $source = strtolower(trim($source));
+        if (!in_array($source, \App\Models\Tender::SOURCES, true)) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Fonte desconhecida: `{$source}`. Aceites: "
+                           . implode(', ', \App\Models\Tender::SOURCES),
+            ], 422);
+        }
+
+        $current = $collaborator->allowed_sources;
+
+        if ($current === null) {
+            // First toggle on a legacy (NULL) row → treat as "full set minus
+            // this one". The admin's first click on NSPA means "block NSPA",
+            // not "block everything except NSPA".
+            $next = array_values(array_diff(\App\Models\Tender::SOURCES, [$source]));
+        } elseif (in_array($source, $current, true)) {
+            $next = array_values(array_filter($current, fn($s) => $s !== $source));
+        } else {
+            $next = array_values(array_unique(array_merge($current, [$source])));
+        }
+
+        // Collapse back to NULL when every source is present — same
+        // meaning, cleaner on disk, and avoids the UI chip row looking
+        // all-green-forever-with-no-way-to-reset.
+        if (!empty($next) && count(array_diff(\App\Models\Tender::SOURCES, $next)) === 0) {
+            $next = null;
+        }
+
+        $collaborator->allowed_sources = $next;
+        $collaborator->save();
+
+        Log::info('TenderCollaborator: allowed_sources toggled', [
+            'collaborator_id' => $collaborator->id,
+            'name'            => $collaborator->name,
+            'source'          => $source,
+            'new_value'       => $next,
+            'by_user_id'      => auth()->id(),
+        ]);
+
+        return response()->json([
+            'ok'              => true,
+            'allowed_sources' => $next,
+            'has_source'      => $next === null || in_array($source, $next, true),
+            'mode'            => $next === null ? 'unrestricted' : (empty($next) ? 'blocked_all' : 'whitelist'),
+        ]);
+    }
+
+    /**
      * Hard-delete the collaborator row — ONLY when it was never assigned
      * to a tender. This is the escape hatch for typos, duplicates and
      * people who were created by mistake and should disappear entirely.

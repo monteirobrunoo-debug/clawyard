@@ -107,6 +107,23 @@
             </section>
 
             {{-- ─── Roster ────────────────────────────────────────────────── --}}
+            @php
+                // Short labels for the per-source toggle chips. Order matters —
+                // this is the order they render left-to-right in every row, so
+                // admin eyes can scan "NSPA" or "ACIN" in the same column
+                // across users. Keys MUST match Tender::SOURCES.
+                $sourceLabels = [
+                    'nspa'    => 'NSPA',
+                    'nato'    => 'NATO',
+                    'sam_gov' => 'SAM',
+                    'ncia'    => 'NCIA',
+                    'acingov' => 'ACIN',
+                    'vortal'  => 'VTL',
+                    'ungm'    => 'UNGM',
+                    'unido'   => 'UNID',
+                    'other'   => 'OUT',
+                ];
+            @endphp
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden">
                 <header class="px-4 py-3 border-b border-gray-100 bg-gray-50">
                     <h3 class="text-sm font-semibold text-gray-800">
@@ -121,7 +138,8 @@
                                 <th class="px-3 py-2 text-left">Nome</th>
                                 <th class="px-3 py-2 text-left">Email</th>
                                 <th class="px-3 py-2 text-left">Conta</th>
-                                <th class="px-3 py-2 text-left">Concursos</th>
+                                <th class="px-3 py-2 text-left" title="Concursos atribuídos">#</th>
+                                <th class="px-3 py-2 text-left" title="Fontes que este utilizador pode ver. Clica para alternar.">Fontes</th>
                                 <th class="px-3 py-2 text-left">Estado</th>
                                 <th class="px-3 py-2 text-right">Acções</th>
                             </tr>
@@ -166,6 +184,40 @@
                                         @endif
                                     </td>
                                     <td class="px-3 py-2 font-mono text-xs text-gray-600">{{ $c->tenders_count }}</td>
+                                    <td class="px-3 py-2">
+                                        @php
+                                            // `allowed_sources === NULL` means "sees everything" —
+                                            // legacy default. We compute `activeSet` such that every
+                                            // chip renders as active when NULL, or only the listed
+                                            // sources otherwise. The JS toggleSource() re-reads the
+                                            // returned `has_source` per chip to swap colours.
+                                            $allowed = $c->allowed_sources;
+                                            $isUnrestricted = $allowed === null;
+                                        @endphp
+                                        <div class="flex flex-wrap gap-1" id="src-row-{{ $c->id }}">
+                                            @foreach($sourceLabels as $sKey => $sLabel)
+                                                @php
+                                                    $on = $isUnrestricted || in_array($sKey, (array)$allowed, true);
+                                                @endphp
+                                                <button type="button"
+                                                        id="src-chip-{{ $c->id }}-{{ $sKey }}"
+                                                        onclick="toggleSource({{ $c->id }}, '{{ $sKey }}', this)"
+                                                        data-on="{{ $on ? '1' : '0' }}"
+                                                        title="{{ $sLabel }} — clica para {{ $on ? 'BLOQUEAR' : 'AUTORIZAR' }} o acesso a esta fonte"
+                                                        class="text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors
+                                                            {{ $on
+                                                                ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                                                                : 'bg-gray-50 border-gray-200 text-gray-400 line-through hover:bg-gray-100' }}">
+                                                    {{ $sLabel }}
+                                                </button>
+                                            @endforeach
+                                        </div>
+                                        @if($isUnrestricted)
+                                            <div class="text-[10px] text-gray-400 mt-1">vê todas as fontes (sem restrição)</div>
+                                        @elseif(empty($allowed))
+                                            <div class="text-[10px] text-red-600 mt-1">⚠ bloqueado de todas as fontes</div>
+                                        @endif
+                                    </td>
                                     <td class="px-3 py-2">
                                         @if($c->is_active)
                                             <span class="inline-flex rounded bg-green-50 px-2 py-0.5 text-xs text-green-700">Activo</span>
@@ -243,7 +295,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="6" class="px-3 py-8 text-center text-sm text-gray-500">
+                                    <td colspan="7" class="px-3 py-8 text-center text-sm text-gray-500">
                                         Nenhum colaborador ainda. Adiciona um acima ou importa um Excel.
                                     </td>
                                 </tr>
@@ -255,4 +307,63 @@
 
         </div>
     </div>
+
+    {{-- ─── Per-source toggle JS ─────────────────────────────────────────
+         Flips one source on/off for a collaborator. Fires a PATCH to
+         /tenders/collaborators/{id}/toggle-source/{source} and updates
+         the chip visuals from the server's response. We do NOT trust the
+         local data-on flag as the source of truth — the backend owns the
+         state (including the "collapse to NULL" collapse when every
+         source is on), so after each click we reconcile the WHOLE row
+         from the server's `allowed_sources` / `mode`. --}}
+    <script>
+    async function toggleSource(collaboratorId, source, btn) {
+        btn.disabled = true;
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+                   || document.querySelector('input[name="_token"]')?.value;
+        try {
+            const r = await fetch(`/tenders/collaborators/${collaboratorId}/toggle-source/${source}`, {
+                method: 'PATCH',
+                headers: {
+                    'X-CSRF-TOKEN': csrf,
+                    'Accept': 'application/json'
+                }
+            });
+            const data = await r.json();
+            if (!data.ok) {
+                alert(data.error || 'Não foi possível alternar esta fonte.');
+                return;
+            }
+
+            // Reconcile every chip in this row from the authoritative
+            // server response. `allowed_sources === null` means "see
+            // everything" (all chips green). An array means "whitelist"
+            // (only those green).
+            const row = document.getElementById(`src-row-${collaboratorId}`);
+            if (!row) return;
+            const allowed = data.allowed_sources;  // null | array
+            const chips   = row.querySelectorAll('button[id^="src-chip-"]');
+            chips.forEach(chip => {
+                const src = chip.id.split('-').pop();
+                const on = allowed === null || (Array.isArray(allowed) && allowed.includes(src));
+                chip.dataset.on = on ? '1' : '0';
+                chip.className = 'text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-colors ' + (
+                    on
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
+                        : 'bg-gray-50 border-gray-200 text-gray-400 line-through hover:bg-gray-100'
+                );
+                chip.title = chip.textContent.trim() + ' — clica para '
+                           + (on ? 'BLOQUEAR' : 'AUTORIZAR') + ' o acesso a esta fonte';
+            });
+            btn.animate(
+                [{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }],
+                { duration: 220, easing: 'ease-out' }
+            );
+        } catch (e) {
+            alert('Erro de rede — tenta de novo.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+    </script>
 </x-app-layout>

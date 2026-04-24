@@ -184,12 +184,51 @@ class Tender extends Model
         // without manual intervention.
         $email = \App\Models\User::whereKey($userId)->value('email');
 
-        return $q->whereHas('collaborator', function ($c) use ($userId, $email) {
-            $c->where(function ($w) use ($userId, $email) {
+        // Resolve every collaborator row that belongs to this user — may
+        // be 0 (new hire, no roster row yet), 1 (most users), or 2+
+        // (rare: same email on two rows by accident / merge).
+        $collaborators = \App\Models\TenderCollaborator::query()
+            ->where(function ($w) use ($userId, $email) {
                 $w->where('user_id', $userId);
                 if ($email) $w->orWhere('email', $email);
-            });
-        });
+            })
+            ->get(['id', 'allowed_sources']);
+
+        if ($collaborators->isEmpty()) {
+            // No roster row → no tenders are theirs. `whereRaw('1=0')`
+            // guarantees an empty result without the query planner
+            // evaluating anything downstream.
+            return $q->whereRaw('1=0');
+        }
+
+        $q->whereIn('assigned_collaborator_id', $collaborators->pluck('id'));
+
+        // Source whitelist (added 2026-04-24). Each collaborator row has an
+        // `allowed_sources` JSON array:
+        //   NULL  → no restriction (see everything)
+        //   []    → blocked from every source
+        //   [...] → only these sources
+        //
+        // Merging across multiple rows for the same user is permissive: if
+        // ANY matching row has `allowed_sources = NULL`, the user sees
+        // every source. Otherwise we UNION the whitelists.
+        $anyUnrestricted = $collaborators->contains(fn($c) => $c->allowed_sources === null);
+        if (!$anyUnrestricted) {
+            $allowed = $collaborators
+                ->flatMap(fn($c) => (array) ($c->allowed_sources ?? []))
+                ->unique()
+                ->values()
+                ->all();
+
+            if (empty($allowed)) {
+                // Explicitly blocked from every source.
+                $q->whereRaw('1=0');
+            } else {
+                $q->whereIn('source', $allowed);
+            }
+        }
+
+        return $q;
     }
 
     /**
