@@ -825,6 +825,35 @@ HTML;
         return response()->json(['ok' => true, 'is_active' => $share->is_active]);
     }
 
+    // ── ADMIN: Toggle SAP access per share ───────────────────────────────────
+    //
+    // User request: "quero ter a possibilidade de pôr um pisco no user para
+    // aceder ao SAP". The field was write-once at create time; this endpoint
+    // flips it post-hoc so admins can grant/revoke SAP reach without having
+    // to delete and recreate the share.
+    //
+    // The enforcement side (line ~1230 in this controller and SapAgent's
+    // config check) reads `allow_sap_access` at request time, so a flip here
+    // takes effect on the next message the client sends — no session reset
+    // needed. Activity is logged through the standard access log so auditors
+    // can see when SAP was enabled/disabled for each share.
+    public function toggleSap(AgentShare $share)
+    {
+        $this->authorize_owner($share);
+        $share->update(['allow_sap_access' => !$share->allow_sap_access]);
+        Log::info('AgentShare: SAP access toggled', [
+            'share_id'         => $share->id,
+            'agent_key'        => $share->agent_key,
+            'client_email'     => $share->client_email,
+            'allow_sap_access' => $share->allow_sap_access,
+            'by_user_id'       => auth()->id(),
+        ]);
+        return response()->json([
+            'ok'               => true,
+            'allow_sap_access' => $share->allow_sap_access,
+        ]);
+    }
+
     // ── ADMIN: Delete ────────────────────────────────────────────────────────
     public function destroy(AgentShare $share)
     {

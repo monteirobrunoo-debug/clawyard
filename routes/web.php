@@ -526,8 +526,9 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     // Sends a SINGLE bundled portal email per recipient after a batch of
     // shares is created with the same portal_token and skip_email=true.
     Route::post('/shares/portal-email',     [AgentShareController::class, 'sendPortalEmail'])->name('shares.portalEmail');
-    Route::patch('/shares/{share}/toggle',  [AgentShareController::class, 'toggle'])->name('shares.toggle');
-    Route::post('/shares/{share}/revoke',   [AgentShareController::class, 'revoke'])->name('shares.revoke');
+    Route::patch('/shares/{share}/toggle',     [AgentShareController::class, 'toggle'])->name('shares.toggle');
+    Route::patch('/shares/{share}/toggle-sap', [AgentShareController::class, 'toggleSap'])->name('shares.toggleSap');
+    Route::post('/shares/{share}/revoke',      [AgentShareController::class, 'revoke'])->name('shares.revoke');
     Route::get('/shares/{share}/log',       [AgentShareController::class, 'accessLog'])->name('shares.log');
     Route::delete('/shares/{share}',        [AgentShareController::class, 'destroy'])->name('shares.destroy');
 });

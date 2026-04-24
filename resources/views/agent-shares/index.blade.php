@@ -217,11 +217,22 @@
                         @if($share->password_hash)
                             <span class="share-tag blue">🔒 Com password</span>
                         @endif
-                        @if($share->allow_sap_access)
-                            <span class="share-tag" style="background:rgba(6,182,212,.12);color:#06b6d4">📊 SAP activo</span>
-                        @else
-                            <span class="share-tag" style="background:rgba(239,68,68,.08);color:#f87171">📊 SAP bloqueado</span>
-                        @endif
+                        {{-- SAP access chip — click to toggle. User rule:
+                             "por um pisco no user para aceder ao SAP".
+                             The field was write-once at create time; now the
+                             admin can flip it per-share from this dashboard
+                             without recreating the link. The ✓/✗ marker makes
+                             the state unambiguous at a glance. --}}
+                        <button type="button"
+                                id="sap-toggle-{{ $share->id }}"
+                                onclick="toggleSap({{ $share->id }}, this)"
+                                class="share-tag sap-toggle"
+                                title="Clica para {{ $share->allow_sap_access ? 'BLOQUEAR' : 'AUTORIZAR' }} o acesso SAP deste utilizador"
+                                style="cursor:pointer;border:none;font:inherit;{{ $share->allow_sap_access
+                                    ? 'background:rgba(6,182,212,.12);color:#06b6d4'
+                                    : 'background:rgba(239,68,68,.08);color:#f87171' }}">
+                            📊 SAP {{ $share->allow_sap_access ? '✓ autorizado' : '✗ bloqueado' }}
+                        </button>
                         @if($share->expires_at)
                             <span class="share-tag">⏱ Expira {{ $share->expires_at->format('d/m/Y') }}</span>
                         @else
@@ -295,6 +306,18 @@
                         <span class="share-tag {{ $valid ? 'green' : 'red' }}">
                             {{ $valid ? ($share->is_active ? '● Activo' : '● Pausado') : '● Expirado' }}
                         </span>
+                        {{-- Per-share SAP access toggle — same semantic as
+                             the button in the single-share layout above. --}}
+                        <button type="button"
+                                id="sap-toggle-{{ $share->id }}"
+                                onclick="toggleSap({{ $share->id }}, this)"
+                                class="share-tag sap-toggle"
+                                title="Clica para {{ $share->allow_sap_access ? 'BLOQUEAR' : 'AUTORIZAR' }} o acesso SAP deste utilizador"
+                                style="cursor:pointer;border:none;font:inherit;margin-left:4px;{{ $share->allow_sap_access
+                                    ? 'background:rgba(6,182,212,.12);color:#06b6d4'
+                                    : 'background:rgba(239,68,68,.08);color:#f87171' }}">
+                            📊 {{ $share->allow_sap_access ? '✓' : '✗' }}
+                        </button>
                     </td>
                     <td style="padding:10px 12px;white-space:nowrap">
                         <span class="share-tag">{{ $share->usage_count }} msgs</span>
@@ -586,6 +609,42 @@ async function toggleShare(id, btn) {
             tag.textContent = data.is_active ? '● Activo' : '● Pausado';
         }
     }
+}
+
+/**
+ * Flip SAP-access for a share. Two layouts render the same button
+ * (single-share card + multi-agent table) — we detect which one by the
+ * text already inside: the long one says "SAP ✓ autorizado" / "SAP ✗ bloqueado",
+ * the compact one says just "📊 ✓" / "📊 ✗". Both update in place with a
+ * short pulse so the admin sees the flip land.
+ */
+async function toggleSap(id, btn) {
+    btn.disabled = true;
+    const r = await fetch(`/admin/shares/${id}/toggle-sap`, {
+        method: 'PATCH',
+        headers: { 'X-CSRF-TOKEN': CSRF }
+    });
+    btn.disabled = false;
+    const data = await r.json();
+    if (!data.ok) {
+        alert('Falha ao alternar acesso SAP. Tenta de novo.');
+        return;
+    }
+    const on = data.allow_sap_access;
+    // Colour swap — identical mapping for both layouts.
+    btn.style.background = on ? 'rgba(6,182,212,.12)' : 'rgba(239,68,68,.08)';
+    btn.style.color      = on ? '#06b6d4'            : '#f87171';
+    // Label swap — detect the compact variant by length.
+    const isCompact = btn.textContent.trim().length <= 5;
+    btn.textContent = isCompact
+        ? ('📊 ' + (on ? '✓' : '✗'))
+        : ('📊 SAP ' + (on ? '✓ autorizado' : '✗ bloqueado'));
+    btn.title = 'Clica para ' + (on ? 'BLOQUEAR' : 'AUTORIZAR') + ' o acesso SAP deste utilizador';
+    // Quick flash so the change is visible even when the label barely moves.
+    btn.animate(
+        [{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }],
+        { duration: 240, easing: 'ease-out' }
+    );
 }
 
 async function deleteShare(id) {
