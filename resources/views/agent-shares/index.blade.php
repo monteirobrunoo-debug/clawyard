@@ -117,6 +117,56 @@
         <div class="page-sub">Cria links para clientes acederem a um agente específico sem conta ClawYard.</div>
     </div>
 
+    {{-- ─── Super-user panel (admin-only) ────────────────────────────────
+         User request (2026-04-24): "quero nomear na partilha de user no
+         dashboard quem pode partilhar os processos ou ser super-user".
+         A `super-user` here means: role=manager — the gate that unlocks
+         every authenticated admin action (create/share, see all tenders,
+         edit collaborators, trigger digests). One click flips it on/off.
+         The panel is only rendered when the viewer is admin — regular
+         users and managers never see it. --}}
+    @if($teamUsers !== null)
+        <div class="team-panel" style="margin-bottom:28px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px 20px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px;">
+                <div>
+                    <div style="font-weight:700;font-size:15px;color:var(--text);">👥 Super-users da equipa</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.5;">
+                        Quem é <strong>Super-user</strong> pode: criar partilhas para clientes, ver todos os concursos e atribuí-los,
+                        gerir o roster de colaboradores. Quem é <strong>User normal</strong> só vê os concursos que lhe foram atribuídos.
+                        Clica no chip para alternar.
+                    </div>
+                </div>
+                <div style="font-size:11px;color:var(--muted);white-space:nowrap;">
+                    {{ $teamUsers->where('role','manager')->count() }} super-user(s) · {{ $teamUsers->where('role','user')->count() }} user(s)
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">
+                @foreach($teamUsers as $tu)
+                    @php $isMgr = $tu->role === 'manager'; @endphp
+                    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg3);">
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ $tu->name }}</div>
+                            <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ $tu->email }}</div>
+                        </div>
+                        <button type="button"
+                                id="promote-chip-{{ $tu->id }}"
+                                onclick="togglePromote({{ $tu->id }}, this)"
+                                title="Clica para {{ $isMgr ? 'despromover a user normal' : 'promover a super-user' }}"
+                                data-is-manager="{{ $isMgr ? '1' : '0' }}"
+                                style="font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px;cursor:pointer;white-space:nowrap;border:1px solid;
+                                    {{ $isMgr
+                                        ? 'background:rgba(118,185,0,.15);color:var(--green);border-color:rgba(118,185,0,.35);'
+                                        : 'background:var(--pill-bg);color:var(--muted);border-color:var(--border);' }}
+                                    transition:all .15s;">
+                            {{ $isMgr ? '★ Super-user' : 'User normal' }}
+                        </button>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <div class="stats">
         <div class="stat">
             <div class="stat-val">{{ $shares->count() }}</div>
@@ -645,6 +695,48 @@ async function toggleSap(id, btn) {
         [{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }],
         { duration: 240, easing: 'ease-out' }
     );
+}
+
+/**
+ * Promote / demote a user between `user` and `manager` role.
+ *
+ * Fires against `/admin/users/{id}/toggle-promote` which is admin-only on
+ * the server side — the panel itself is only rendered for admins, so in
+ * practice the two gates agree. The server returns {ok, role, is_manager,
+ * label}; we just swap the chip colour + label in place.
+ */
+async function togglePromote(userId, btn) {
+    btn.disabled = true;
+    try {
+        const r = await fetch(`/admin/users/${userId}/toggle-promote`, {
+            method: 'PATCH',
+            headers: {
+                'X-CSRF-TOKEN': CSRF,
+                'Accept': 'application/json'
+            }
+        });
+        const data = await r.json();
+        if (!data.ok) {
+            alert(data.error || 'Não foi possível alterar a role.');
+            return;
+        }
+        const isMgr = !!data.is_manager;
+        btn.dataset.isManager = isMgr ? '1' : '0';
+        btn.textContent = isMgr ? '★ Super-user' : 'User normal';
+        btn.title = 'Clica para ' + (isMgr ? 'despromover a user normal' : 'promover a super-user');
+        // Green-highlighted chip for managers, neutral for regular users.
+        btn.style.background   = isMgr ? 'rgba(118,185,0,.15)' : 'var(--pill-bg)';
+        btn.style.color        = isMgr ? 'var(--green)'        : 'var(--muted)';
+        btn.style.borderColor  = isMgr ? 'rgba(118,185,0,.35)' : 'var(--border)';
+        btn.animate(
+            [{ transform: 'scale(1)' }, { transform: 'scale(1.08)' }, { transform: 'scale(1)' }],
+            { duration: 240, easing: 'ease-out' }
+        );
+    } catch (e) {
+        alert('Erro de rede — tenta de novo.');
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 async function deleteShare(id) {

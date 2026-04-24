@@ -541,6 +541,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/users', [AdminController::class, 'createUser'])->name('admin.users.create');
     Route::patch('/users/{user}', [AdminController::class, 'updateUser'])->name('admin.users.update');
     Route::patch('/users/{user}/toggle', [AdminController::class, 'toggleUser'])->name('admin.users.toggle');
+    Route::patch('/users/{user}/toggle-promote', [AdminController::class, 'togglePromote'])->name('admin.users.togglePromote');
     Route::delete('/users/{user}', [AdminController::class, 'deleteUser'])->name('admin.users.delete');
     Route::get('/conversations', [AdminController::class, 'conversations'])->name('admin.conversations');
     Route::get('/conversations/{conversation}', [AdminController::class, 'conversation'])->name('admin.conversation');

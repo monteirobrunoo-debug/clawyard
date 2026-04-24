@@ -215,10 +215,13 @@ class AgentShareAccessService
         $shares     = AgentShare::where('portal_token', $portalToken)->get();
         if ($shares->isEmpty()) return true; // silent — don't leak existence
 
-        // All shares in a portal bundle must share the same client_email;
-        // compare against the first as the canonical authorised address.
-        $expected = strtolower(trim($shares->first()->client_email ?? ''));
-        if (!$expected || !hash_equals($expected, $email)) {
+        // Any authorised email on the first share is accepted — primary
+        // client_email OR any of the additional_emails list. Previously this
+        // block checked only `client_email`, which silently rejected the
+        // secondary recipients that the super-user had explicitly added
+        // (comma-separated) at share creation time, so they never got an
+        // OTP and could never open the portal. User-reported bug, 2026-04-24.
+        if (!$shares->first()->isAuthorisedEmail($email)) {
             foreach ($shares as $s) {
                 $this->log($s, 'otp_requested', 'denied', $email, $sessionId, $request, 'portal email mismatch');
             }

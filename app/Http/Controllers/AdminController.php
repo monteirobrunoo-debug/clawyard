@@ -86,6 +86,62 @@ class AdminController extends Controller
         return back()->with('success', $user->is_active ? 'Utilizador ativado!' : 'Utilizador bloqueado!');
     }
 
+    /**
+     * Fast role flip between `user` ↔ `manager`.
+     *
+     * Rationale: the user wanted a one-click way to designate "super-users"
+     * from the shares dashboard — people who can see every tender, every
+     * share, and can create new shares for clients. Under the hood that IS
+     * the `manager` role (isManager() unlocks tenders.collaborators, the
+     * tender overview, and the shares admin routes). Instead of inventing
+     * a parallel flag we just flip the existing role, so every gate in the
+     * app stays consistent.
+     *
+     * Rules:
+     *   - admin can promote/demote anyone except themselves (can't self-
+     *     demote — would lock the last admin out).
+     *   - `admin` rows are left untouched by this endpoint (admins are
+     *     already above manager — use /admin/users to touch those).
+     *   - `guest` rows are also left untouched; guests are a deliberate
+     *     read-only class, promoting them would be surprising.
+     *
+     * Returns JSON so the shares dashboard can swap the chip colour in-place.
+     */
+    public function togglePromote(User $user)
+    {
+        if ($user->id === auth()->id()) {
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Não podes alterar a tua própria role — pede a outro admin.',
+            ], 422);
+        }
+
+        if (!in_array($user->role, ['user', 'manager'], true)) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Esta acção só se aplica a roles `user` e `manager`. O {$user->email} é `{$user->role}`.",
+            ], 422);
+        }
+
+        $newRole = $user->role === 'manager' ? 'user' : 'manager';
+        $user->update(['role' => $newRole]);
+
+        \Illuminate\Support\Facades\Log::info('Admin: role promoted/demoted', [
+            'target_user_id' => $user->id,
+            'email'          => $user->email,
+            'from_role'      => $user->role === 'manager' ? 'user' : 'manager',
+            'to_role'        => $newRole,
+            'by_user_id'     => auth()->id(),
+        ]);
+
+        return response()->json([
+            'ok'         => true,
+            'role'       => $newRole,
+            'is_manager' => $newRole === 'manager',
+            'label'      => $newRole === 'manager' ? 'Super-user' : 'User normal',
+        ]);
+    }
+
     // Delete user
     public function deleteUser(User $user)
     {

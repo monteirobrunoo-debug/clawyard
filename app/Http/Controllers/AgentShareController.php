@@ -21,9 +21,27 @@ class AgentShareController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        // Super-user panel data (admin-only): roster of every non-admin,
+        // non-guest user so the admin can promote/demote between `user` and
+        // `manager` directly from this page. We exclude admins because they
+        // are above the manager tier (managing admins belongs in
+        // /admin/users), and guests because they are a deliberate read-only
+        // class. `null` when the viewer isn't an admin so the view hides the
+        // panel entirely.
+        $teamUsers = null;
+        if (auth()->user()?->isAdmin()) {
+            $teamUsers = User::query()
+                ->whereIn('role', ['user', 'manager'])
+                ->where('is_active', true)
+                ->orderByDesc('role')   // managers first
+                ->orderBy('name')
+                ->get(['id', 'name', 'email', 'role']);
+        }
+
         return view('agent-shares.index', [
             'shares'    => $shares,
             'agentMeta' => AgentShare::agentMeta(),
+            'teamUsers' => $teamUsers,
         ]);
     }
 
@@ -278,7 +296,13 @@ class AgentShareController extends Controller
             $ownerEmEsc     = htmlspecialchars($ownerEm);
             $urlEsc         = htmlspecialchars($url);
             $expiresEsc     = htmlspecialchars($expires);
-            $clientEmailEsc = htmlspecialchars((string) $share->client_email);
+            // Footer and access-step instructions always show the address
+            // this mail is ACTUALLY being delivered to. When the share has
+            // multiple recipients the primary client_email is not necessarily
+            // the reader's email, so showing it in bold ("Insere o teu email
+            // X") was confusing and sometimes sent people to enter the wrong
+            // address in the OTP form.
+            $clientEmailEsc = htmlspecialchars((string) $recipientEmail);
 
             // ── Agent card (big visual header with name + role) ────────────
             $agentCard = <<<HTMLCARD
