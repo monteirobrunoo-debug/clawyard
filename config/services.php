@@ -71,6 +71,33 @@ return [
         // Default false so existing behaviour is preserved; flip per-env
         // to enforce. See App\Support\PiiRedactor.
         'redact_pii'  => env('ANTHROPIC_REDACT_PII',   false),
+
+        // Split-VM HMAC auth between app tier and proxy tier.
+        // When set, AnthropicKeyTrait::anthropicGuzzleClient() attaches a
+        // signing middleware that proves the request came from an authorised
+        // app VM. Matching key goes into the proxy VM's PY_PROXY_SHARED_KEY
+        // env. See doc/vm-separation.md + llm-proxy/auth.py.
+        //
+        // Empty = loopback topology (app and proxy share a VM). No signing.
+        'proxy_shared_key'      => env('PY_PROXY_SHARED_KEY',       ''),
+        'proxy_shared_key_next' => env('PY_PROXY_SHARED_KEY_NEXT',  ''),
+
+        // When the internal proxy uses a self-signed TLS cert (see
+        // doc/vm-separation.md §7), set this to the absolute path of the
+        // pinned CA bundle on the app VM. Leave empty for public CAs.
+        'proxy_ca_bundle' => env('ANTHROPIC_PROXY_CA_BUNDLE', ''),
+    ],
+
+    // ── Hybrid model routing (see doc/hybrid-model.md) ──────────────────────
+    // When `enabled=true`, ModelRoutingTrait routes high-sensitivity prompts
+    // (per SensitivityClassifier) to a locally-hosted model instead of
+    // Anthropic. Low/medium tiers continue to use the external path. With
+    // `enabled=false` the routing trait is a straight Claude passthrough
+    // and the classifier only emits a log line for offline analysis.
+    'hybrid' => [
+        'enabled'        => env('HYBRID_ROUTING_ENABLED', false),
+        'local_endpoint' => env('HYBRID_LOCAL_ENDPOINT', ''),  // e.g. http://127.0.0.1:11434/v1/chat/completions
+        'local_model'    => env('HYBRID_LOCAL_MODEL', 'llama3.1:8b-instruct-q5_K_M'),
     ],
 
     'patentsview' => [

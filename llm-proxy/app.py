@@ -61,6 +61,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from redactor import scrub_anthropic_body
+from auth import auth_enabled, verify_request
 
 
 # ── Config ─────────────────────────────────────────────────────────────────
@@ -198,8 +199,42 @@ async def _shutdown() -> None:  # pragma: no cover
 
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
-    """Liveness probe for nginx / systemd. Never reaches Anthropic."""
-    return {"status": "ok", "upstream": UPSTREAM_BASE_URL}
+    """Liveness probe for nginx / systemd. Never reaches Anthropic.
+    Does NOT require HMAC — monitoring probes have no shared key."""
+    return {
+        "status": "ok",
+        "upstream": UPSTREAM_BASE_URL,
+        "auth": "hmac" if auth_enabled() else "disabled",
+    }
+
+
+async def _require_signature(request: Request, body: bytes, req_id: str) -> JSONResponse | None:
+    """Return a 401 response if the split-VM HMAC is enabled and the
+    request doesn't carry a valid signature. Returns None on success or
+    when auth is disabled (loopback topology)."""
+    if not auth_enabled():
+        return None
+
+    sig_primary = request.headers.get("x-py-signature")
+    sig_next = request.headers.get("x-py-signature-next")
+    ts = request.headers.get("x-py-timestamp")
+    outcome = verify_request(
+        timestamp_header=ts,
+        signature_headers=[sig_primary or "", sig_next or ""],
+        body=body,
+    )
+    if outcome.ok:
+        return None
+
+    # Log the reason server-side; return a deliberately opaque 401.
+    _jlog(access_log, id=req_id, path=str(request.url.path),
+          auth_reject=outcome.reason,
+          peer=request.client.host if request.client else "unknown")
+    return JSONResponse(
+        {"error": {"type": "authentication_error",
+                   "message": "Invalid or missing proxy signature."}},
+        status_code=401,
+    )
 
 
 def _filter_headers(src: dict[str, str]) -> dict[str, str]:
@@ -260,6 +295,12 @@ async def v1_messages(request: Request) -> Response:
                        "message": f"Body exceeds {PROXY_MAX_BODY_BYTES} bytes"}},
             status_code=413,
         )
+
+    # Split-VM HMAC: only enforced when PY_PROXY_SHARED_KEY is set on the
+    # proxy VM. In the loopback topology this is a no-op.
+    auth_reject = await _require_signature(request, raw, req_id)
+    if auth_reject is not None:
+        return auth_reject
 
     # Parse JSON. Anything non-JSON is a client bug → 400 (we could forward
     # as-is but then redaction is impossible, and Anthropic requires JSON).
@@ -402,4 +443,12 @@ async def passthrough(full_path: str, request: Request) -> Response:
     # strictly needed — but we keep the `if` for clarity.
     if full_path == "v1/messages" and request.method.upper() == "POST":
         return await v1_messages(request)
+
+    # Apply HMAC to the catch-all too so e.g. /v1/models is not a free
+    # oracle to enumerate the proxy from the VPC.
+    body_for_auth = await request.body()
+    auth_reject = await _require_signature(request, body_for_auth, req_id)
+    if auth_reject is not None:
+        return auth_reject
+
     return await _forward_non_json(request, full_path, req_id)

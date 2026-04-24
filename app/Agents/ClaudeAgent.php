@@ -49,17 +49,17 @@ class ClaudeAgent implements AgentInterface
         // (unknown schemes fall back to the canonical api.anthropic.com),
         // so a mistyped .env cannot downgrade the transport.
         // Set ANTHROPIC_CA_BUNDLE to pin a specific CA file.
-        $this->client = new Client([
-            'base_uri'        => self::getAnthropicBaseUri(),
-            'timeout'         => 120,
-            'connect_timeout' => 10,
-            'verify'          => env('ANTHROPIC_CA_BUNDLE', true),
-            'curl'            => [
+        // anthropicGuzzleClient() layers the HMAC signing middleware (for
+        // split-VM topology) on top of a Guzzle client that already honours
+        // getAnthropicBaseUri(). The TLS hardening below is merged in.
+        $this->client = self::anthropicGuzzleClient([
+            'verify'  => env('ANTHROPIC_CA_BUNDLE', true),
+            'curl'    => [
                 CURLOPT_SSLVERSION     => CURL_SSLVERSION_TLSv1_2,
                 CURLOPT_SSL_VERIFYPEER => true,
                 CURLOPT_SSL_VERIFYHOST => 2,
             ],
-            'headers'         => [
+            'headers' => [
                 'User-Agent' => 'ClawYard/1.0 (+https://clawyard.partyard.eu)',
             ],
         ]);

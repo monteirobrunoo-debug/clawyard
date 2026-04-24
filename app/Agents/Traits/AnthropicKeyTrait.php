@@ -3,6 +3,10 @@
 namespace App\Agents\Traits;
 
 use App\Support\PiiRedactor;
+use GuzzleHttp\Client;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use Psr\Http\Message\RequestInterface;
 
 trait AnthropicKeyTrait
 {
@@ -123,5 +127,64 @@ trait AnthropicKeyTrait
             }
         }
         return $this->apiHeaders();
+    }
+
+    /**
+     * Build a Guzzle client pre-configured for the Anthropic proxy, with
+     * the HMAC signing middleware wired in when the split-VM topology is
+     * active (PY_PROXY_SHARED_KEY in .env). In the loopback topology the
+     * middleware is a no-op — same client, zero signing overhead.
+     *
+     * Agents that migrate to the split-VM setup should switch from
+     *     new Client(['base_uri' => self::getAnthropicBaseUri(), ...])
+     * to
+     *     self::anthropicGuzzleClient([...])
+     * to get automatic signing. The contract for `->post('/v1/messages',
+     * ['headers' => ..., 'json' => ...])` is unchanged.
+     */
+    protected static function anthropicGuzzleClient(array $overrides = []): Client
+    {
+        $stack = HandlerStack::create();
+
+        $sharedKey = (string) (getenv('PY_PROXY_SHARED_KEY') ?: config('services.anthropic.proxy_shared_key', ''));
+        $sharedKeyNext = (string) (getenv('PY_PROXY_SHARED_KEY_NEXT') ?: config('services.anthropic.proxy_shared_key_next', ''));
+
+        if ($sharedKey !== '') {
+            // Signing middleware: adds X-PY-Timestamp + X-PY-Signature
+            // (and X-PY-Signature-Next during rotation) keyed on the
+            // request body. See llm-proxy/auth.py for the verifier.
+            $stack->push(Middleware::mapRequest(function (RequestInterface $request) use ($sharedKey, $sharedKeyNext): RequestInterface {
+                $body = (string) $request->getBody();
+                // Rewind the body stream so Guzzle can read it again
+                // after we've hashed it.
+                if ($request->getBody()->isSeekable()) {
+                    $request->getBody()->rewind();
+                }
+                $ts = (string) time();
+                $payload = $ts . "\n" . $body;
+                $sig = hash_hmac('sha256', $payload, $sharedKey);
+                $signed = $request
+                    ->withHeader('X-PY-Timestamp', $ts)
+                    ->withHeader('X-PY-Signature', $sig);
+                if ($sharedKeyNext !== '') {
+                    $sigNext = hash_hmac('sha256', $payload, $sharedKeyNext);
+                    $signed = $signed->withHeader('X-PY-Signature-Next', $sigNext);
+                }
+                return $signed;
+            }), 'partyard.proxy_sign');
+        }
+
+        $defaults = [
+            'base_uri'        => self::getAnthropicBaseUri(),
+            'timeout'         => 120,
+            'connect_timeout' => 10,
+            'handler'         => $stack,
+        ];
+        // Custom TLS bundle for self-signed internal proxy cert.
+        $caBundle = (string) (getenv('ANTHROPIC_PROXY_CA_BUNDLE') ?: config('services.anthropic.proxy_ca_bundle', ''));
+        if ($caBundle !== '' && is_file($caBundle)) {
+            $defaults['verify'] = $caBundle;
+        }
+        return new Client(array_replace($defaults, $overrides));
     }
 }

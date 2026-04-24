@@ -122,11 +122,9 @@ SPECIALTY;
         // give cost estimates when asked — see app/Services/ShippingRateService.
         $this->systemPrompt .= $this->shippingSkillPromptBlock();
 
-        $this->client = new Client([
-            'base_uri'        => self::getAnthropicBaseUri(),
-            'timeout'         => 120,
-            'connect_timeout' => 10,
-        ]);
+        // Use the trait helper so split-VM HMAC signing (when enabled)
+        // and the self-signed CA bundle are applied transparently.
+        $this->client = self::anthropicGuzzleClient();
     }
 
     protected function parseEmailJson(string $text): ?string
