@@ -33,6 +33,22 @@
         \App\Models\Tender::STATUS_GANHO         => 'Ganho',
         \App\Models\Tender::STATUS_PERDIDO       => 'Perdido',
     ];
+
+    // User feedback: "a tabela deveria ter o estado a ver, tem um grande gap
+    // nas linhas em extenso branco". Flat gray chips were invisible in the
+    // whitespace. Each status now has its own colour so the Estado column
+    // reads at a glance instead of disappearing between the title and the
+    // deadline. Ordered by typical pipeline flow: inbox → active → closed.
+    $statusStyles = [
+        \App\Models\Tender::STATUS_PENDING       => 'bg-gray-100 text-gray-800 border-gray-300',
+        \App\Models\Tender::STATUS_EM_TRATAMENTO => 'bg-blue-100 text-blue-800 border-blue-300',
+        \App\Models\Tender::STATUS_SUBMETIDO     => 'bg-indigo-100 text-indigo-800 border-indigo-300',
+        \App\Models\Tender::STATUS_AVALIACAO     => 'bg-amber-100 text-amber-900 border-amber-300',
+        \App\Models\Tender::STATUS_GANHO         => 'bg-emerald-100 text-emerald-800 border-emerald-300',
+        \App\Models\Tender::STATUS_PERDIDO       => 'bg-red-100 text-red-800 border-red-300',
+        \App\Models\Tender::STATUS_CANCELADO     => 'bg-gray-200 text-gray-600 border-gray-300 line-through',
+        \App\Models\Tender::STATUS_NAO_TRATAR    => 'bg-stone-100 text-stone-600 border-stone-300',
+    ];
 @endphp
 
 <x-app-layout>
@@ -315,6 +331,26 @@
                     @endif
                 @endforeach
                 <section class="rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden">
+                    @php
+                        /*
+                         * "Mais recentes" reset-sort URL — drops the sort/dir/page
+                         * query params but keeps whatever filters the user has
+                         * applied (source / status / urgency / etc). User feedback:
+                         * "falta botão para aparecer sempre os últimos". The default
+                         * sort in applySort() is already newest-first, but once a
+                         * column header is clicked the user is stuck on that sort.
+                         * This button gives them an explicit one-click escape.
+                         */
+                        $resetParams = array_filter([
+                            'source'          => $filters['source'],
+                            'status'          => $filters['status'],
+                            'urgency'         => $filters['urgency'],
+                            'collaborator_id' => $filters['collaborator_id'],
+                            'q'               => $filters['q'],
+                        ], fn($v) => $v !== null && $v !== '');
+                        $resetUrl     = route('tenders.index', $resetParams);
+                        $isDefaultSort = !$sort;
+                    @endphp
                     <header class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
                         <h3 class="text-sm font-semibold text-gray-800">
                             @if($canViewAll)
@@ -325,8 +361,20 @@
                             <span class="ml-2 text-xs font-normal text-gray-500">({{ $all->total() }})</span>
                         </h3>
 
-                        @if($canAssign)
-                            <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <a href="{{ $resetUrl }}"
+                               title="Remover ordenação manual e mostrar os concursos mais recentes primeiro"
+                               class="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-semibold shadow-sm
+                                      {{ $isDefaultSort
+                                          ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                                          : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50' }}">
+                                ⏱ Mais recentes
+                                @if($isDefaultSort)
+                                    <span class="text-[10px] text-indigo-500">(activo)</span>
+                                @endif
+                            </a>
+
+                            @if($canAssign)
                                 <select name="collaborator_id" class="rounded-md border-gray-300 text-xs shadow-sm">
                                     <option value="">(sem atribuição)</option>
                                     @foreach($collaborators as $c)
@@ -338,8 +386,8 @@
                                         class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
                                     Atribuir seleccionados
                                 </button>
-                            </div>
-                        @endif
+                            @endif
+                        </div>
                     </header>
 
                     @php
@@ -402,16 +450,24 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 bg-white">
+                                {{-- Row vertical-alignment rule: middle, not top.
+                                     Long titles make the row tall, and with
+                                     align-top every short cell floated up
+                                     leaving a big whitespace strip below
+                                     (user: "tem um grande gap nas linhas em
+                                     extenso branco"). align-middle centres the
+                                     chips so the status is always visible next
+                                     to the title. --}}
                                 @forelse($all as $t)
                                     @php $wasJustAssigned = in_array($t->id, $justAssigned, true); @endphp
-                                    <tr class="hover:bg-gray-50 text-sm {{ $wasJustAssigned ? 'just-assigned' : '' }}">
+                                    <tr class="hover:bg-gray-50 text-sm align-middle {{ $wasJustAssigned ? 'just-assigned' : '' }}">
                                         @if($canAssign)
-                                            <td class="px-3 py-2">
+                                            <td class="px-3 py-2 align-middle">
                                                 <input type="checkbox" name="tender_ids[]" value="{{ $t->id }}"
                                                        class="rounded border-gray-300 row-check">
                                             </td>
                                         @endif
-                                        <td class="px-3 py-2 align-top">
+                                        <td class="px-3 py-2 align-middle whitespace-nowrap">
                                             <div class="text-xs font-semibold uppercase text-gray-600">{{ $t->source }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
                                             @if($wasJustAssigned)
@@ -422,7 +478,7 @@
                                                 </div>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-2 align-top max-w-md">
+                                        <td class="px-3 py-2 align-middle max-w-md">
                                             <a href="{{ route('tenders.show', $t) }}" class="text-indigo-700 hover:underline font-medium">
                                                 {{ \Illuminate\Support\Str::limit($t->title, 90) }}
                                             </a>
@@ -430,18 +486,24 @@
                                                 <div class="text-xs text-gray-500 mt-0.5">{{ $t->type }}</div>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-2 align-top text-gray-700">
+                                        <td class="px-3 py-2 align-middle text-gray-700 whitespace-nowrap">
                                             {{ $t->collaborator?->name ?? '—' }}
                                         </td>
-                                        <td class="px-3 py-2 align-top">
-                                            <span class="inline-flex rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                                        <td class="px-3 py-2 align-middle whitespace-nowrap">
+                                            <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $statusStyles[$t->status] ?? 'bg-gray-100 text-gray-700 border-gray-300' }}">
                                                 {{ $statusLabels[$t->status] ?? $t->status }}
                                             </span>
                                         </td>
-                                        <td class="px-3 py-2 align-top font-mono text-xs">
-                                            {{ $t->sap_opportunity_number ?: '—' }}
+                                        <td class="px-3 py-2 align-middle font-mono text-xs whitespace-nowrap">
+                                            @if($t->sap_opportunity_number)
+                                                <span class="inline-flex items-center rounded bg-green-50 border border-green-200 px-2 py-0.5 text-green-800">
+                                                    ✓ {{ $t->sap_opportunity_number }}
+                                                </span>
+                                            @else
+                                                <span class="text-yellow-700">⚠ sem nº</span>
+                                            @endif
                                         </td>
-                                        <td class="px-3 py-2 align-top text-xs text-gray-600">
+                                        <td class="px-3 py-2 align-middle text-xs text-gray-600 whitespace-nowrap">
                                             @if($t->deadline_at)
                                                 <div>🇵🇹 {{ $t->deadline_lisbon->format('d/m/y H:i') }}</div>
                                                 <div>🇱🇺 {{ $t->deadline_luxembourg->format('d/m/y H:i') }}</div>
@@ -449,7 +511,7 @@
                                                 —
                                             @endif
                                         </td>
-                                        <td class="px-3 py-2 align-top">
+                                        <td class="px-3 py-2 align-middle whitespace-nowrap">
                                             <span class="inline-flex rounded border px-2 py-0.5 text-xs font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
                                                 @if($t->urgency_bucket === 'expired')
                                                     Expirado {{ abs($t->days_to_deadline) }}d

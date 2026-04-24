@@ -309,9 +309,20 @@ class TenderController extends Controller
 
         $raw = (string) $tender->sap_opportunity_number;
         if ($raw === '') {
+            // Diagnostic hint — if the tender reference looks like a SAP
+            // SequentialNo (≥4 consecutive digits), suggest it. User feedback:
+            // "quando se entra existe no sap a oportunidade mas ele não liga".
+            // In most of these cases the SAP number was never typed into the
+            // dedicated field because the user sees it in the `reference`
+            // column already.
+            $suggestion = null;
+            if (preg_match('/\d{4,}/', (string) $tender->reference, $m)) {
+                $suggestion = (int) $m[0];
+            }
             return response()->json([
-                'state'   => 'empty',
-                'message' => 'Preenche o campo "Nº Oportunidade SAP" acima e guarda para ver os dados da oportunidade.',
+                'state'      => 'empty',
+                'message'    => 'Preenche o campo "Nº Oportunidade SAP" acima e guarda para ver os dados da oportunidade.',
+                'suggestion' => $suggestion,
             ]);
         }
 
@@ -320,7 +331,35 @@ class TenderController extends Controller
             return response()->json([
                 'state'   => 'unparseable',
                 'message' => "O valor \"{$raw}\" não contém um número SAP reconhecível. Esperado algo como \"16836/2026\" ou só \"16836\".",
+                'raw'     => $raw,
             ]);
+        }
+
+        // Probe authentication BEFORE fetching the opportunity so we can
+        // distinguish "auth refused by SAP" (→ re-grant credentials) from
+        // "opportunity doesn't exist" (→ check the number). Without this,
+        // both failure modes collapsed into a generic "not found" which is
+        // exactly the ambiguity Monica hit: "existe no sap a oportunidade
+        // mas ele não liga ao sap".
+        try {
+            $ok = $sap->login();
+        } catch (\Throwable $e) {
+            $ok = false;
+        }
+        if (!$ok) {
+            $err = method_exists($sap, 'getLastError') ? $sap->getLastError() : '';
+            Log::warning('sapPreview: SAP login failed', [
+                'tender_id' => $tender->id,
+                'seq_no'    => $seqNo,
+                'error'     => $err,
+            ]);
+            return response()->json([
+                'state'   => 'auth_failed',
+                'message' => 'Login SAP recusado. Verifica SAP_B1_USER / SAP_B1_PASSWORD no servidor, '
+                    . 'ou confirma que a conta do utilizador do Service Layer não foi bloqueada.'
+                    . ($err ? " · Detalhe: {$err}" : ''),
+                'seq_no'  => $seqNo,
+            ], 502);
         }
 
         try {
@@ -334,13 +373,20 @@ class TenderController extends Controller
             return response()->json([
                 'state'   => 'error',
                 'message' => 'Erro a contactar o SAP Service Layer: ' . $e->getMessage(),
+                'seq_no'  => $seqNo,
             ], 502);
         }
 
         if (!$opp) {
+            // At this point login succeeded, so the 404 really is a
+            // missing/archived opportunity, not an auth problem. Surface
+            // the lastError from SapService if any (e.g. permission-scoped
+            // 403 on a specific opportunity).
+            $err = method_exists($sap, 'getLastError') ? $sap->getLastError() : '';
             return response()->json([
                 'state'   => 'not_found',
-                'message' => "A oportunidade SAP #{$seqNo} não foi encontrada. Verifica o número ou confirma que não está arquivada.",
+                'message' => "A oportunidade SAP #{$seqNo} não foi encontrada ou o utilizador do Service Layer não tem permissão para a ler."
+                    . ($err ? " · Detalhe: {$err}" : ''),
                 'seq_no'  => $seqNo,
             ], 404);
         }

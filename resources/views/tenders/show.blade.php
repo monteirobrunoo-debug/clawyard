@@ -244,9 +244,28 @@
                         .then(({ status, body: payload }) => {
                             switch (payload.state) {
                                 case 'ok':          return renderOk(payload.data);
-                                case 'empty':       return renderEmpty(payload.message, 'gray');
+                                case 'empty':
+                                    // If the controller suggested a number parsed
+                                    // from the tender reference, show it as a
+                                    // one-click copy hint — saves Monica the
+                                    // "porquê não liga" confusion when the SAP
+                                    // number is sitting right there in the ref.
+                                    if (payload.suggestion) {
+                                        const s = esc(String(payload.suggestion));
+                                        body.innerHTML = `
+                                            <div class="rounded-md border p-3 text-xs bg-gray-50 border-gray-200 text-gray-700">
+                                                ${esc(payload.message)}
+                                                <div class="mt-2 flex items-center gap-2">
+                                                    <span class="text-gray-500">Sugestão (da referência do concurso):</span>
+                                                    <code class="font-mono bg-white border border-gray-300 rounded px-1.5 py-0.5">${s}</code>
+                                                </div>
+                                            </div>`;
+                                        return;
+                                    }
+                                    return renderEmpty(payload.message, 'gray');
                                 case 'unparseable': return renderEmpty(payload.message, 'amber');
                                 case 'not_found':   return renderEmpty(payload.message, 'amber');
+                                case 'auth_failed': return renderEmpty(payload.message, 'red');
                                 case 'disabled':    return renderEmpty(payload.message, 'gray');
                                 case 'error':       return renderEmpty(payload.message, 'red');
                                 default:            return renderEmpty('Resposta inesperada do servidor.', 'red');
@@ -359,11 +378,29 @@
                         </div>
 
                         <div>
-                            <label class="block text-xs font-medium text-gray-700 mb-1">Notas</label>
+                            <label class="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-2">
+                                <span>Notas</span>
+                                @if($tender->sap_opportunity_number)
+                                    <span class="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-normal text-indigo-700"
+                                          title="Guardar aqui faz PATCH ao campo Remarks da oportunidade SAP #{{ $tender->getSapSequentialNo() ?: '?' }}.">
+                                        🔗 sincroniza com SAP Remarks
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1 rounded bg-yellow-50 border border-yellow-200 px-1.5 py-0.5 text-[10px] font-normal text-yellow-800"
+                                          title="Preenche o campo Nº Oportunidade SAP acima para activar a sincronização de notas.">
+                                        ⚠ sem nº SAP — notas não sincronizam
+                                    </span>
+                                @endif
+                            </label>
                             <textarea name="notes" rows="4"
                                       class="w-full rounded-md border-gray-300 text-sm shadow-sm font-mono">{{ old('notes', $tender->notes) }}</textarea>
                             <p class="mt-1 text-xs text-gray-500">
                                 Para histórico inalterável, use o painel de Observações abaixo.
+                                @if($tender->sap_opportunity_number)
+                                    Ao guardar, o campo <em>Remarks</em> da oportunidade SAP
+                                    <strong>#{{ $tender->getSapSequentialNo() ?: '?' }}</strong>
+                                    é reescrito com o conteúdo das notas.
+                                @endif
                             </p>
                         </div>
 
