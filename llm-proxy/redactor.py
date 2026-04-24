@@ -38,9 +38,16 @@ _EMAIL_RE = re.compile(
     r"([A-Za-z0-9._%+\-]+)@([A-Za-z0-9.\-]+\.[A-Za-z]{2,})"
 )
 
-# International phone: +XX / 00XX followed by 7-14 digits (with separators).
+# International phone: +XX or 00XX followed by country code (1-9 leading)
+# then 7-14 digits (with optional separators).
+#
+# SECURITY: the country code MUST start 1-9, never 0. Otherwise SAP/ERP
+# document numbers with leading zeros (e.g. "0000123456", "00000000000012345")
+# match as "00" + country-code "0" + subscriber, which mangles every SAP
+# export passing through the redactor. The old pattern (\d{1,3} after 00)
+# triggered this on every vendor master dump. Audit caught it.
 _PHONE_RE = re.compile(
-    r"(?:\+|00)\s*(\d{1,3})[\s\-().]*((?:\d[\s\-().]*){7,14})"
+    r"(?:\+|\b00)\s*([1-9]\d{0,2})[\s\-().]*((?:\d[\s\-().]*){7,14})"
 )
 
 # Portuguese Cartão de Cidadão: 8 digits + 1 digit + 2 letters + 1 digit.

@@ -92,6 +92,35 @@ def test_short_numbers_not_phone():
     assert "123 456" in out
 
 
+def test_sap_leading_zero_not_phone():
+    # Regression — SAP vendor/material numbers start with zeros. The old
+    # regex read "00" as a dial-out prefix and everything after as a phone.
+    # Audit surfaced this as a 25% false-positive rate on SAP exports.
+    out = scrub("Vendor 0000123456 Material 000000000000001234 PO 4500789012")
+    assert "0000123456" in out, "SAP vendor number must not be redacted"
+    assert "000000000000001234" in out, "SAP material number must not be redacted"
+    assert "4500789012" in out, "SAP PO must not be redacted"
+    assert "[PHONE_REDACTED]" not in out
+
+
+def test_country_code_must_not_start_with_zero():
+    # "000 0000000" is a string of zeros pretending to be a phone — country
+    # codes are never "0". Must be preserved.
+    out = scrub("Reference: 00 00 00 00 000")
+    assert "[PHONE_REDACTED]" not in out
+
+
+def test_phone_still_works_after_fix():
+    # Ensure the country-code tightening didn't break legitimate phones.
+    out1 = scrub("Call +351 912 345 678 or 00351 912 345 678")
+    assert out1.count("[PHONE_REDACTED]") == 2
+    assert "912 345 678" not in out1
+
+    out2 = scrub("German: +49 89 55512345")
+    assert "[PHONE_REDACTED]" in out2
+    assert "89 55512345" not in out2
+
+
 # ── Secrets ────────────────────────────────────────────────────────────────
 
 def test_secret_kv_redacted():

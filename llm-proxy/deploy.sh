@@ -40,6 +40,8 @@ rsync -az --delete \
     "${SRC_DIR}/redactor.py" \
     "${SRC_DIR}/requirements.txt" \
     "${SRC_DIR}/tests" \
+    "${SRC_DIR}/nginx" \
+    "${SRC_DIR}/supervisor" \
     "${HOST}:${REMOTE_APP}/"
 
 echo "▸ [2/4] (re)building venv + installing requirements"

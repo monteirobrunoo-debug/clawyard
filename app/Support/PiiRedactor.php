@@ -63,8 +63,15 @@ class PiiRedactor
         // mask the rest. Handles +351 900 000 000 / 00351-900-000-000 /
         // (+44) 20 7946 0958 etc. Requires at least 8 digits total so NSN
         // and port-call reference numbers are not caught.
+        //
+        // SECURITY: country code must start 1-9, never 0 — otherwise ERP
+        // document numbers with leading zeros ("0000123456",
+        // "00000000000012345") match as 00 + country-code 0 + subscriber
+        // and every SAP export through the redactor gets mangled. Audited
+        // in llm-proxy/eval/REPORT.md. The `\b00` anchors the 00 prefix to
+        // a word boundary so a `00` mid-digit-run can't trigger.
         $text = preg_replace_callback(
-            '/(?:\+|00)\s*(\d{1,3})[\s\-().]*((?:\d[\s\-().]*){7,14})/',
+            '/(?:\+|\b00)\s*([1-9]\d{0,2})[\s\-().]*((?:\d[\s\-().]*){7,14})/',
             fn($m) => '+' . $m[1] . ' [PHONE_REDACTED]',
             $text
         );
