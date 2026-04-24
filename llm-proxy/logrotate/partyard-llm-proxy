@@ -1,0 +1,13 @@
+/var/log/partyard-llm-proxy/*.jsonl {
+    daily
+    rotate 90
+    missingok
+    notifempty
+    compress
+    delaycompress
+    sharedscripts
+    create 0640 www-data www-data
+    postrotate
+        systemctl reload partyard-llm-proxy.service > /dev/null 2>&1 || true
+    endscript
+}

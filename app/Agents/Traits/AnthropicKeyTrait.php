@@ -56,14 +56,24 @@ trait AnthropicKeyTrait
         }
         $uri = rtrim($uri, '/');
 
-        // SECURITY: never allow plaintext transport. A mis-typed .env value
-        // (http:// instead of https://) would otherwise silently downgrade
-        // every agent's outbound traffic. We auto-upgrade http → https and
-        // reject any other scheme outright.
+        // SECURITY: never allow plaintext transport over a wire. A mis-typed
+        // .env value (http:// instead of https://) would otherwise silently
+        // downgrade every agent's outbound traffic. We auto-upgrade
+        // http → https and reject any other scheme outright.
+        //
+        // EXCEPTION: loopback (127.0.0.1 / ::1 / localhost) is allowed over
+        // plain HTTP because the packets never leave the machine — they go
+        // from PHP-FPM directly into the local FastAPI redactor, which then
+        // re-encrypts the hop to Anthropic. This is how the on-host
+        // redacting proxy is wired in production. Anything non-loopback
+        // stays https-only.
         $scheme = strtolower((string) parse_url($uri, PHP_URL_SCHEME));
-        if ($scheme === 'http') {
+        $host   = strtolower((string) parse_url($uri, PHP_URL_HOST));
+        $isLoopback = in_array($host, ['127.0.0.1', '::1', 'localhost'], true);
+
+        if ($scheme === 'http' && !$isLoopback) {
             $uri = 'https://' . substr($uri, 7);
-        } elseif ($scheme !== 'https') {
+        } elseif ($scheme !== 'https' && $scheme !== 'http') {
             // Unknown scheme (or missing) — refuse and fall back to default
             // so the agent keeps working instead of making garbage requests.
             return 'https://api.anthropic.com';

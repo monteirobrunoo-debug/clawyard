@@ -141,6 +141,37 @@
         .msg-actions button:hover{border-color:var(--agent-color);color:var(--text)}
         .msg-actions .excel-btn:hover{background:#217346;color:#fff;border-color:#217346}
 
+        /* ── Daniel Email card (Outlook / Copy / Edit) ───────────────────
+           Rendered when the Email agent streams an `__EMAIL__` + JSON
+           payload. Theme-aware via CSS vars; accent uses --agent-color so
+           it stays on-brand for Daniel (purple) across light/dark mode. */
+        .email-card{background:var(--bg2);border:1px solid var(--border);border-left:3px solid var(--agent-color);border-radius:12px;overflow:hidden;margin:2px 0;max-width:680px}
+        .email-card-header{background:color-mix(in srgb,var(--agent-color) 10%,var(--bg3));padding:10px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+        .email-card-header .ectl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+        .email-card-header span{font-size:12px;font-weight:700;color:var(--agent-color)}
+        .email-card-header small{font-size:11px;color:var(--muted)}
+        .email-field{padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+        .email-field label{font-size:10px;color:var(--muted);min-width:52px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+        .email-field input{flex:1;background:transparent;border:none;color:var(--text);font-size:13px;outline:none;font-family:inherit}
+        .email-field input:focus{color:var(--agent-color)}
+        .email-body-area{padding:12px 14px;font-size:13px;color:var(--text);line-height:1.65;white-space:pre-wrap;max-height:240px;overflow-y:auto;border-bottom:1px solid var(--border);outline:none}
+        .email-body-area:focus{background:color-mix(in srgb,var(--agent-color) 4%,var(--bg2))}
+        .email-actions{padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:color-mix(in srgb,var(--agent-color) 6%,var(--bg3))}
+        .email-outlook-btn{background:#0078d4;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:.15s}
+        .email-outlook-btn:hover{background:#006cbe}
+        .email-outlook-btn svg{flex-shrink:0}
+        .email-copy-btn{background:transparent;color:var(--muted);border:1px solid var(--border);padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer;transition:.15s}
+        .email-copy-btn:hover{border-color:var(--agent-color);color:var(--text)}
+        .email-edit-btn{background:transparent;color:var(--muted);border:1px solid var(--border);padding:8px 12px;border-radius:8px;font-size:12px;cursor:pointer;transition:.15s}
+        .email-edit-btn:hover{border-color:var(--agent-color);color:var(--text)}
+        .email-status{font-size:11px;margin-left:auto;color:var(--muted)}
+        .email-status.sent{color:#22c55e}
+        .email-status.err{color:#ef4444}
+        @media(max-width:640px){
+            .email-body-area{max-height:180px;font-size:12.5px}
+            .email-field input{font-size:12.5px}
+        }
+
         /* MARKDOWN render */
         @media(max-width:640px){
             .header{padding:0 12px}
@@ -504,7 +535,14 @@ async function sendMessage() {
                     const evt = JSON.parse(raw);
                     if (evt.chunk) {
                         full += evt.chunk;
-                        bubble.innerHTML = renderMarkdown(full);
+                        // While streaming, once we see the __EMAIL__ marker stop
+                        // rendering as markdown — the rest of the stream is JSON
+                        // that will be parsed into a proper email card on final.
+                        if (full.startsWith('__EMAIL__')) {
+                            bubble.innerHTML = '<div style="color:var(--muted);font-size:12px">📧 A preparar email…</div>';
+                        } else {
+                            bubble.innerHTML = renderMarkdown(full);
+                        }
                         scrollBottom();
                     }
                     if (evt.error) {
@@ -515,12 +553,31 @@ async function sendMessage() {
         }
 
         if (full) {
-            history.push({ role: 'assistant', content: full });
-            // Re-render final HTML so pipe-tables become real <table> elements,
-            // then add PDF + (if there is a table) Excel export buttons under
-            // the bubble — parity with the main ClawYard view.
-            bubble.innerHTML = renderMarkdown(full);
-            addMsgActions(bubble);
+            // Daniel Email: if the agent streamed an __EMAIL__ JSON payload,
+            // render a dedicated card with Outlook / Copy / Edit buttons
+            // instead of markdown (parity with the main welcome.blade.php UX).
+            if (full.startsWith('__EMAIL__')) {
+                try {
+                    const emailData = JSON.parse(full.replace('__EMAIL__', ''));
+                    bubble.innerHTML = buildEmailCard(emailData);
+                    // Store a human-readable version in history so subsequent
+                    // turns don't see the raw __EMAIL__ marker (would confuse
+                    // the agent into echoing its own JSON back).
+                    const summary = `Email gerado — Para: ${emailData.to||''} · Assunto: ${emailData.subject||''}`;
+                    history.push({ role: 'assistant', content: summary });
+                } catch (e) {
+                    history.push({ role: 'assistant', content: full });
+                    bubble.innerHTML = renderMarkdown(full.replace('__EMAIL__', ''));
+                    addMsgActions(bubble);
+                }
+            } else {
+                history.push({ role: 'assistant', content: full });
+                // Re-render final HTML so pipe-tables become real <table> elements,
+                // then add PDF + (if there is a table) Excel export buttons under
+                // the bubble — parity with the main ClawYard view.
+                bubble.innerHTML = renderMarkdown(full);
+                addMsgActions(bubble);
+            }
         }
 
     } catch(e) {
@@ -749,6 +806,106 @@ function exportBubbleExcel(bubble) {
     document.body.appendChild(a); a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+// ── Daniel Email card ─────────────────────────────────────────────────────
+// Mirrors welcome.blade.php so external portal clients using the Email agent
+// get the same "compose → open in Outlook" experience. Direct /api/email/send
+// is NOT exposed here (needs internal auth) — the Outlook button uses a
+// mailto: link so the user finishes the send from their own client.
+function buildEmailCard(data) {
+    const id = 'em_' + Date.now();
+    const langMap = { pt:'🇵🇹 PT', es:'🇪🇸 ES', en:'🇬🇧 EN' };
+    const lang = langMap[data.language] || langMap.pt;
+    const tpl  = data.template ? (escapeHtml(data.template) + ' · ') : '';
+    return `
+    <div class="email-card" id="${id}">
+        <div class="email-card-header">
+            <div class="ectl">
+                <span>✉️ Email Draft</span>
+                <small>${tpl}${lang}</small>
+            </div>
+        </div>
+        <div class="email-field">
+            <label>Para</label>
+            <input type="email" id="${id}_to" value="${escapeAttr(data.to||'')}" placeholder="destinatario@empresa.com">
+        </div>
+        <div class="email-field">
+            <label>CC</label>
+            <input type="email" id="${id}_cc" value="${escapeAttr(data.cc||'')}" placeholder="cc@empresa.com">
+        </div>
+        <div class="email-field">
+            <label>Assunto</label>
+            <input type="text" id="${id}_subject" value="${escapeAttr(data.subject||'')}">
+        </div>
+        <div class="email-body-area" id="${id}_body" contenteditable="true">${escapeHtml(data.body||'')}</div>
+        <div class="email-actions">
+            <button type="button" class="email-outlook-btn" onclick="openInOutlook('${id}')" title="Abrir no Outlook / cliente de email">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l10-2.5V6.5L7 4zm2 2.8l6 1.5v7.4l-6 1.5V6.8zM2 7v10l4 1V6L2 7z"/></svg>
+                Outlook
+            </button>
+            <button type="button" class="email-copy-btn" onclick="copyEmail('${id}')">📋 Copiar</button>
+            <button type="button" class="email-edit-btn" onclick="editEmail('${id}')" title="Editar corpo do email">✏️</button>
+            <span class="email-status" id="${id}_status"></span>
+        </div>
+    </div>`;
+}
+
+// Attribute-safe escape — escapeHtml() uses <br> for newlines which would
+// corrupt input values. This variant keeps the value intact for attrs.
+function escapeAttr(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function openInOutlook(id) {
+    const to      = document.getElementById(id+'_to')?.value.trim() || '';
+    const cc      = document.getElementById(id+'_cc')?.value.trim() || '';
+    const subject = document.getElementById(id+'_subject')?.value.trim() || '';
+    const body    = document.getElementById(id+'_body')?.innerText.trim() || '';
+
+    let mailto = 'mailto:' + encodeURIComponent(to);
+    const parts = [];
+    if (cc)      parts.push('cc='      + encodeURIComponent(cc));
+    if (subject) parts.push('subject=' + encodeURIComponent(subject));
+    if (body)    parts.push('body='    + encodeURIComponent(body));
+    if (parts.length) mailto += '?' + parts.join('&');
+
+    // mailto: is the most portable — Outlook desktop, Outlook Web (if set as
+    // default handler), Apple Mail, Gmail all hook this scheme on macOS/Win.
+    window.location.href = mailto;
+
+    const statusEl = document.getElementById(id+'_status');
+    if (statusEl) {
+        statusEl.textContent = '📮 A abrir no cliente de email…';
+        statusEl.className = 'email-status sent';
+        setTimeout(() => { statusEl.textContent = ''; statusEl.className = 'email-status'; }, 3000);
+    }
+}
+
+function copyEmail(id) {
+    const subject = document.getElementById(id+'_subject')?.value || '';
+    const body    = document.getElementById(id+'_body')?.innerText || '';
+    const to      = document.getElementById(id+'_to')?.value || '';
+    const text    = (to ? 'Para: '+to+'\n' : '') + 'Assunto: '+subject+'\n\n'+body;
+    navigator.clipboard.writeText(text);
+    const btn = document.querySelector(`#${id} .email-copy-btn`);
+    if (btn) {
+        const old = btn.textContent;
+        btn.textContent = '✅ Copiado!';
+        setTimeout(() => { btn.textContent = old; }, 2000);
+    }
+}
+
+function editEmail(id) {
+    const bodyEl = document.getElementById(id+'_body');
+    if (!bodyEl) return;
+    bodyEl.focus();
+    const range = document.createRange();
+    range.selectNodeContents(bodyEl);
+    range.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
 }
 
 // ── Day/Night theme toggle ─────────────────────────────────────────────────
