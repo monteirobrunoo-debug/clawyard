@@ -88,6 +88,31 @@ HOP_BY_HOP = {
     "x-forwarded-host",
 }
 
+# Headers to strip from the RESPONSE before relaying to the downstream client.
+# httpx decompresses gzip/deflate transparently, so forwarding the original
+# `Content-Encoding: gzip` header would lie to the downstream client and
+# trigger cURL error 61 ("incorrect header check"). We strip the encoding/
+# length/transfer headers and let Starlette recompute them from the actual
+# bytes we hand it.
+RESPONSE_STRIP = {
+    "content-encoding",
+    "content-length",
+    "transfer-encoding",
+    "connection",
+    "keep-alive",
+}
+
+
+def _filter_response_headers(src: dict[str, str]) -> dict[str, str]:
+    """Like _filter_headers but for responses coming back from upstream —
+    additionally strips encoding/length that no longer match our body."""
+    out: dict[str, str] = {}
+    for k, v in src.items():
+        if k.lower() in RESPONSE_STRIP:
+            continue
+        out[k] = v
+    return out
+
 
 # ── Logging — JSONL, explicit, no prompt text ever ─────────────────────────
 
@@ -215,7 +240,7 @@ async def _forward_non_json(request: Request, path: str, req_id: str) -> Respons
     return Response(
         content=upstream.content,
         status_code=upstream.status_code,
-        headers=_filter_headers(dict(upstream.headers)),
+        headers=_filter_response_headers(dict(upstream.headers)),
         media_type=upstream.headers.get("content-type"),
     )
 
@@ -264,6 +289,12 @@ async def v1_messages(request: Request) -> Response:
     headers = _filter_headers(dict(request.headers))
     headers["content-length"] = str(len(upstream_body))
     headers.setdefault("content-type", "application/json")
+    # Force plain-text upstream responses. Anthropic may gzip SSE streams by
+    # default, but httpx's aiter_raw() would then hand us compressed bytes
+    # that we'd have to re-tag with Content-Encoding (which we'd strip
+    # anyway to avoid decoding mismatches). Asking for `identity` simplifies
+    # both paths and costs a few extra bytes on the wire to localhost.
+    headers["accept-encoding"] = "identity"
 
     if not is_stream:
         # Simple request/response
@@ -285,7 +316,7 @@ async def v1_messages(request: Request) -> Response:
         return Response(
             content=upstream.content,
             status_code=upstream.status_code,
-            headers=_filter_headers(dict(upstream.headers)),
+            headers=_filter_response_headers(dict(upstream.headers)),
             media_type=upstream.headers.get("content-type"),
         )
 
@@ -302,8 +333,10 @@ async def v1_messages(request: Request) -> Response:
             # is awkward; we instead let FastAPI wrap this generator and set
             # status via closure below.
             _sse_pipe.status = upstream.status_code
-            _sse_pipe.headers = _filter_headers(dict(upstream.headers))
-            async for chunk in upstream.aiter_raw():
+            _sse_pipe.headers = _filter_response_headers(dict(upstream.headers))
+            # aiter_bytes() auto-decodes if upstream ever ignores our
+            # Accept-Encoding:identity and sends gzip anyway — safer default.
+            async for chunk in upstream.aiter_bytes():
                 bytes_out += len(chunk)
                 yield chunk
             await upstream.aclose()
