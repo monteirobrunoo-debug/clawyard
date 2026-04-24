@@ -58,6 +58,42 @@
 
         .empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
 
+        /* ── Tenders block ───────────────────────────────────────────────
+           Only rendered when the portal visitor's client_email matches a
+           TenderCollaborator with active tenders. Sits above the agent
+           grid so a collaborator sees "what's on my plate" before they
+           start conversing. Indigo accent (same as the assignment email
+           badge) to visually distinguish from the green agent cards. */
+        .tenders{max-width:1200px;margin:0 auto 20px;padding:0 28px}
+        .tenders-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px 20px 4px;position:relative;overflow:hidden}
+        .tenders-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#4f46e5,#818cf8)}
+        .tenders-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+        .tenders-title{font-size:13px;font-weight:700;letter-spacing:-0.2px;display:flex;align-items:center;gap:8px}
+        .tenders-title .badge-idx{font-size:10px;background:#4f46e5;color:#fff;padding:2px 8px;border-radius:20px;font-weight:700}
+        .tenders-sub{font-size:11px;color:var(--muted)}
+        .tenders-cta{display:inline-block;background:#4f46e5;color:#fff;padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;text-decoration:none;transition:background .15s}
+        .tenders-cta:hover{background:#4338ca}
+        .tenders-cta.disabled{background:transparent;color:var(--muted);border:1px solid var(--border2);cursor:not-allowed}
+        .tenders-list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;padding-right:4px}
+        .tender-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:12px;text-decoration:none;color:var(--text);transition:border-color .15s,background .15s}
+        .tender-row:hover{border-color:#4f46e5;background:color-mix(in srgb,#4f46e5 8%, var(--bg3))}
+        .tender-row.locked{cursor:default}
+        .tender-row.locked:hover{border-color:var(--border);background:var(--bg3)}
+        .tender-ref{font-family:Menlo,Consolas,monospace;font-size:11px;color:var(--muted);flex-shrink:0;min-width:95px}
+        .tender-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .tender-chip{flex-shrink:0;font-size:10px;font-weight:700;padding:3px 7px;border-radius:4px;border:1px solid;white-space:nowrap}
+        .chip-overdue{background:#fee2e2;color:#991b1b;border-color:#fca5a5}
+        .chip-critical{background:#fed7aa;color:#9a3412;border-color:#fdba74}
+        .chip-urgent{background:#fef3c7;color:#92400e;border-color:#fcd34d}
+        .chip-soon{background:#dbeafe;color:#1e40af;border-color:#93c5fd}
+        .chip-normal{background:#f3f4f6;color:#374151;border-color:#d1d5db}
+        .chip-unknown{background:#f9fafb;color:#6b7280;border-color:#e5e7eb}
+        :root[data-theme="dark"] .tender-row{background:#161616}
+        :root[data-theme="dark"] .tender-row:hover{background:#1a1a2e}
+        .tenders-empty{text-align:center;padding:18px;color:var(--muted);font-size:12px;background:var(--bg3);border-radius:10px}
+        .tenders-warn{margin-top:10px;padding:10px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:11px;line-height:1.5}
+        :root[data-theme="dark"] .tenders-warn{background:#2a2418;border-color:#524428;color:#fcd34d}
+
         @media (max-width:640px){
             .header{padding:10px 16px;font-size:13px}
             .hero{padding:28px 16px 16px}
@@ -97,6 +133,74 @@
     @endif
     <p style="margin-top:10px">{{ count($shares) }} assistente{{ count($shares) === 1 ? '' : 's' }} disponíve{{ count($shares) === 1 ? 'l' : 'is' }} para ti. Escolhe um para começar.</p>
 </div>
+
+@isset($tenderCollaborator)
+    @if($tenderCollaborator)
+        @php
+            $appUrl = rtrim(config('app.url', ''), '/');
+        @endphp
+        <div class="tenders">
+            <div class="tenders-card">
+                <div class="tenders-head">
+                    <div>
+                        <div class="tenders-title">
+                            <span class="badge-idx">CONCURSOS</span>
+                            <span>Os teus concursos activos — {{ $tenderCollaborator->name }}</span>
+                        </div>
+                        <div class="tenders-sub">
+                            {{ $tenders->count() }} concurso{{ $tenders->count() === 1 ? '' : 's' }} atribuído{{ $tenders->count() === 1 ? '' : 's' }} · não inclui expirados (&gt;{{ \App\Models\Tender::OVERDUE_WINDOW_DAYS }}d atraso)
+                        </div>
+                    </div>
+                    @if($hasClawyardAccount)
+                        <a href="{{ $appUrl }}/login" class="tenders-cta">Abrir dashboard completo →</a>
+                    @else
+                        <span class="tenders-cta disabled" title="Ainda não tens conta ClawYard — pede ao IT">Sem acesso ao dashboard</span>
+                    @endif
+                </div>
+
+                @if($tenders->isEmpty())
+                    <div class="tenders-empty">Sem concursos activos atribuídos neste momento. ✨</div>
+                @else
+                    <div class="tenders-list">
+                        @foreach($tenders as $t)
+                            @php
+                                $bucket = $t->urgency_bucket ?? 'unknown';
+                                $chipClass = 'chip-' . ($bucket ?: 'unknown');
+                                $days = $t->days_to_deadline;
+                                $rowTag = $hasClawyardAccount ? 'a' : 'div';
+                                $rowHref = $hasClawyardAccount ? ($appUrl . '/tenders/' . $t->id) : null;
+                            @endphp
+                            <{{ $rowTag }}
+                                class="tender-row {{ $hasClawyardAccount ? '' : 'locked' }}"
+                                @if($rowHref) href="{{ $rowHref }}" @endif>
+                                <span class="tender-ref">{{ $t->reference ?: ('#' . $t->id) }}</span>
+                                <span class="tender-title">{{ $t->title }}</span>
+                                <span class="tender-chip {{ $chipClass }}">
+                                    @if($bucket === 'overdue')
+                                        {{ abs($days) }}d atraso
+                                    @elseif($bucket === 'expired')
+                                        expirado
+                                    @elseif($days !== null)
+                                        {{ $days }}d
+                                    @else
+                                        sem deadline
+                                    @endif
+                                </span>
+                            </{{ $rowTag }}>
+                        @endforeach
+                    </div>
+                @endif
+
+                @unless($hasClawyardAccount)
+                    <div class="tenders-warn">
+                        ⚠ Estes concursos estão atribuídos ao teu email mas ainda não tens conta ClawYard associada.
+                        Para poderes actualizar estados, adicionar observações e sincronizar com SAP, pede ao IT para criar a tua conta.
+                    </div>
+                @endunless
+            </div>
+        </div>
+    @endif
+@endisset
 
 <div class="grid">
     @forelse($shares as $share)

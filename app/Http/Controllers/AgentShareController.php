@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AgentShare;
+use App\Models\TenderCollaborator;
+use App\Models\User;
 use App\Agents\AgentManager;
 use App\Services\AgentCatalog;
 use App\Services\AgentShareAccessService;
@@ -80,6 +82,32 @@ class AgentShareController extends Controller
             'created_by'        => auth()->id(),
         ]);
 
+        // ── Bridge share → tender dashboard ────────────────────────────────
+        //
+        // User rule (2026-04): "Tem de ficar em memória quando partilhas os
+        // projectos aos users". Sharing agents with someone's email must
+        // persistently register that email as a TenderCollaborator, so when
+        // the admin later goes to /tenders and bulk-assigns, the same person
+        // is already in the dropdown AND the portal tender-block finds them.
+        //
+        // This runs once per recipient email on the share (primary +
+        // additional). Uses findOrCreateByName semantics: if a collaborator
+        // with that email (or matching user_id via auto-link) already
+        // exists, we just keep it; otherwise create a minimal stub. The
+        // TenderCollaborator `saving` booted hook auto-links user_id when
+        // a matching User row exists.
+        foreach ($share->authorisedEmails() as $recipientEmail) {
+            try {
+                $this->ensureTenderCollaboratorExists($recipientEmail, $share->client_name);
+            } catch (\Throwable $e) {
+                Log::warning('AgentShare store: ensureTenderCollaboratorExists failed', [
+                    'email' => $recipientEmail,
+                    'share_id' => $share->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         // Notify every recipient with the share link. Each recipient gets their
         // own email (separate TO header) so the thread looks personalised.
         //
@@ -106,6 +134,65 @@ class AgentShareController extends Controller
             'emails_sent_count'  => $emailsSent,
             'email_skipped'      => $request->boolean('skip_email', false),
             'recipients'         => $share->authorisedEmails(),
+        ]);
+    }
+
+    /**
+     * Upsert a TenderCollaborator row for a given email so the /tenders
+     * dashboard and the portal tender-block can find them consistently.
+     *
+     * Idempotent and non-destructive:
+     *   - If a collaborator with this exact email already exists → no-op
+     *   - If a User exists with this email and a collaborator linked to
+     *     that user already exists → backfill the `email` column, no new row
+     *   - Otherwise create a new active collaborator row (the `saving`
+     *     hook on TenderCollaborator will auto-link user_id when a matching
+     *     User exists)
+     *
+     * Name defaults: prefers the linked User's name, then the share's
+     * client_name, then the email local-part — whatever we can surface in
+     * the dashboard dropdown without looking like a placeholder.
+     */
+    private function ensureTenderCollaboratorExists(string $email, ?string $clientName): ?TenderCollaborator
+    {
+        $email = strtolower(trim($email));
+        if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) return null;
+
+        // 1) Direct email match — already there, nothing to do.
+        $existing = TenderCollaborator::whereRaw('LOWER(email) = ?', [$email])->first();
+        if ($existing) {
+            // Make sure it's active (admin may have deactivated an old stub).
+            if (!$existing->is_active) {
+                $existing->is_active = true;
+                $existing->save();
+            }
+            return $existing;
+        }
+
+        // 2) Linked-user match — a collaborator may exist tied to the User
+        // whose email this is, but without `email` set yet. Backfill it so
+        // the portal's direct-email lookup works next time.
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
+        if ($user) {
+            $byUser = TenderCollaborator::where('user_id', $user->id)->first();
+            if ($byUser) {
+                $byUser->email = $email;
+                if (!$byUser->is_active) $byUser->is_active = true;
+                $byUser->save();
+                return $byUser;
+            }
+        }
+
+        // 3) No match anywhere → create a fresh stub. The model's `saving`
+        // hook auto-links `user_id` from the email.
+        $displayName = $user?->name
+            ?: ($clientName ?: explode('@', $email)[0]);
+
+        return TenderCollaborator::create([
+            'name'            => $displayName,
+            'normalized_name' => TenderCollaborator::normalize($displayName),
+            'email'           => $email,
+            'is_active'       => true,
         ]);
     }
 
