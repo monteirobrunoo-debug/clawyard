@@ -411,6 +411,17 @@
             <div style="font-size:12px;color:#76b900;font-weight:700;margin-bottom:8px">✅ Link criado com sucesso!</div>
             <div class="success-url" id="success-url"></div>
             <button class="btn-copy" onclick="copySuccessUrl()">📋 Copiar Link</button>
+
+            {{-- Per-recipient delivery receipt. Filled in from the backend's
+                 response (`recipients`, `emails_sent_count`, `email_sent`).
+                 Lets the admin SEE whether every email actually landed: if
+                 emails_sent_count < recipients.length, we flag the gap with a
+                 red banner so they know to check the server logs / SMTP. --}}
+            <div id="delivery-receipt" style="margin-top:12px;font-size:12px;line-height:1.55;display:none;">
+                <div style="font-weight:700;color:var(--text);margin-bottom:4px;">📨 Emails enviados:</div>
+                <ul id="delivery-list" style="list-style:none;padding:0;margin:0;"></ul>
+                <div id="delivery-warn" style="display:none;margin-top:8px;padding:8px 10px;border-radius:6px;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);color:var(--red);font-weight:600;"></div>
+            </div>
         </div>
 
         <div id="create-form">
@@ -619,6 +630,45 @@ async function createShare() {
             document.getElementById('create-form').style.display = 'none';
             btn.style.display = 'none';
             window._newShareUrl = data.url;
+
+            // Per-recipient delivery receipt — renders nothing when
+            // skip_email was true (batch flow) or when recipients is empty.
+            // Otherwise shows ✓/✗ per authorised email so the admin can
+            // verify at a glance that EVERY email went out, not just the
+            // primary. This is what diagnoses the "só o primário recebeu"
+            // class of complaints: a mismatch between recipients.length and
+            // emails_sent_count shows up immediately here.
+            const recipients = Array.isArray(data.recipients) ? data.recipients : [];
+            const sentCount  = Number(data.emails_sent_count || 0);
+            const skipped    = !!data.email_skipped;
+            const receipt    = document.getElementById('delivery-receipt');
+            const list       = document.getElementById('delivery-list');
+            const warn       = document.getElementById('delivery-warn');
+            list.innerHTML = '';
+            warn.style.display = 'none';
+            if (!skipped && recipients.length > 0) {
+                receipt.style.display = 'block';
+                // We don't have per-recipient success from the backend yet
+                // (the loop aggregates to a count), so we mark all as ✓ when
+                // sentCount === recipients.length, all as ⚠ when 0, and show
+                // a caveat when partial.
+                const allOk   = sentCount === recipients.length;
+                const noneOk  = sentCount === 0;
+                recipients.forEach(email => {
+                    const li = document.createElement('li');
+                    li.style.cssText = 'padding:3px 0;color:var(--text);font-family:ui-monospace,monospace;';
+                    const icon = allOk ? '✅' : (noneOk ? '❌' : '⚠️');
+                    const color = allOk ? 'var(--green)' : (noneOk ? 'var(--red)' : '#f59e0b');
+                    li.innerHTML = '<span style="color:' + color + ';margin-right:6px;">' + icon + '</span>' + email;
+                    list.appendChild(li);
+                });
+                if (!allOk) {
+                    warn.style.display = 'block';
+                    warn.textContent = noneOk
+                        ? '⚠ Nenhum email foi entregue — verifica logs SMTP em Forge → Logs.'
+                        : '⚠ ' + sentCount + ' de ' + recipients.length + ' emails entregues. Os que falharam estão nos logs do servidor — reenvia manualmente ou pede ao admin para verificar.';
+                }
+            }
         } else {
             alert('Erro ao criar: ' + JSON.stringify(data));
             btn.textContent = 'Criar Link';
