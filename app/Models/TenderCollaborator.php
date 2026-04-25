@@ -61,27 +61,78 @@ class TenderCollaborator extends Model
     }
 
     /**
-     * Auto-link to a User whenever the email changes. Keeps user_id in
-     * sync with email without requiring the manager to do anything on
-     * the edit form — they put the email in, save, and if a matching
-     * User exists the link is set silently.
+     * Two-stage saving hook:
      *
-     * Clearing the email clears user_id too (the dropdown concept is
-     * gone — email drives the link).
+     *   1) ESTABLISH-ONLY auto-link from email → user_id.
+     *      Setting an email that matches a User auto-fills user_id so
+     *      the manager doesn't have to pick from a dropdown. Crucially
+     *      we no longer DESTROY user_id when:
+     *        • email is cleared (legacy behaviour silently un-linked the
+     *          User; the audit command had to bypass via query builder
+     *          to repair phantom rows — that's the footgun we close here)
+     *        • email is set to a value that matches no User (legacy
+     *          behaviour reset user_id to NULL; now we leave it intact
+     *          so admins can use distribution-list emails / aliases
+     *          without losing the link).
+     *      Net rule: this hook only EVER turns user_id from NULL → id,
+     *      or from id_a → id_b when the new email belongs to a different
+     *      registered User. It never silently nulls a deliberate link.
+     *
+     *   2) ANTI-CORRUPTION INVARIANT.
+     *      After step 1 (and any direct user_id mutation by the caller),
+     *      reject the save if user_id and email contradict each other —
+     *      i.e. email belongs to a registered User whose id ≠ user_id.
+     *      That contradiction is the exact data shape that caused
+     *      catarina.sequeira to inherit monica.pereira's dashboard
+     *      (2026-04-24): a row with email=catarina but user_id=monica.
+     *      The runtime scopeForUser was hardened against it, but this
+     *      invariant prevents it from being written in the first place.
+     *      Bypassable only via DB::table()->update() (which the audit
+     *      command uses on purpose).
      */
     protected static function booted(): void
     {
         static::saving(function (self $c) {
-            if (!$c->isDirty('email')) return;
-
-            $email = trim((string) $c->email);
-            if ($email === '') {
-                $c->user_id = null;
-                return;
+            // Stage 1 — auto-link email → user_id, but only when user_id
+            // is currently NULL. We never silently OVERWRITE an existing
+            // user_id link from an email change — that's the legacy
+            // behaviour that let "edit Mónica's email to Catarina's"
+            // silently retarget the row to Catarina. Now that motion
+            // requires either:
+            //   • clearing user_id explicitly first, then saving (hook
+            //     auto-fills the new user_id from email), or
+            //   • running `tenders:audit-collaborator-emails --reattach`
+            //     (deliberate, logged, human-confirmed).
+            if ($c->isDirty('email') && empty($c->user_id)) {
+                $email = trim((string) $c->email);
+                if ($email !== '') {
+                    $user = User::where('email', $email)->first();
+                    if ($user) {
+                        $c->user_id = $user->id;
+                    }
+                }
+                // Empty email or unmatched email: leave user_id untouched.
             }
 
-            $user = User::where('email', $email)->first();
-            $c->user_id = $user?->id;
+            // Stage 2 — invariant: user_id ↔ email cannot belong to
+            // different Users. Aliases (email points to no User) are
+            // fine — distribution lists, shared inboxes, forwarders.
+            // Only direct contradictions (email belongs to user A,
+            // user_id points to user B) are rejected. This is the
+            // exact corruption shape that caused the catarina-saw-
+            // mónica leak; throwing here means it can never be saved
+            // through the model again.
+            if ($c->user_id && $c->email) {
+                $emailOwner = User::where('email', trim((string) $c->email))->first();
+                if ($emailOwner && (int) $emailOwner->id !== (int) $c->user_id) {
+                    throw new \DomainException(sprintf(
+                        'TenderCollaborator: refusing to save inconsistent link — '
+                        . 'user_id=%d but email=%s belongs to user #%d. '
+                        . 'Clear one of the fields or align them.',
+                        $c->user_id, $c->email, $emailOwner->id
+                    ));
+                }
+            }
         });
     }
 

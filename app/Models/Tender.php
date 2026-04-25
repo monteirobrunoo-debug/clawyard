@@ -213,6 +213,22 @@ class Tender extends Model
                 ->whereNull('user_id')
                 ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($email))])
                 ->get(['id', 'user_id', 'email', 'allowed_sources']);
+
+            // Drift telemetry. Reaching the fallback path means the
+            // saving-hook backfill for email→user_id never fired (user
+            // was created after the collaborator, or the collab row
+            // was raw-inserted). One log line per request lets us spot
+            // accumulating "loose" rows that should be linked properly
+            // via tenders:link-collaborators. Filtered on level=info
+            // so it doesn't pollute warning/error channels.
+            if ($collaborators->isNotEmpty()) {
+                \Illuminate\Support\Facades\Log::info('Tender::scopeForUser fell back to email match', [
+                    'user_id'         => $userId,
+                    'email'           => $email,
+                    'matched_collabs' => $collaborators->pluck('id')->all(),
+                    'hint'            => 'Run `php artisan tenders:link-collaborators` to backfill user_id.',
+                ]);
+            }
         }
 
         if ($collaborators->isEmpty()) {
