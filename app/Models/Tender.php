@@ -177,22 +177,43 @@ class Tender extends Model
 
     public function scopeForUser(Builder $q, int $userId): Builder
     {
-        // Assigned to the collaborator who is either linked by user_id OR
-        // whose email matches the user's email. Email matching is the
-        // fallback so a User who was created after the collaborator (or
-        // whose link wasn't backfilled) still sees their processes
-        // without manual intervention.
+        // Resolve which collaborator rows belong to this user, in strict
+        // priority order:
+        //
+        //   1. Any row with `user_id = $userId` — the authoritative link
+        //      set by the saving-hook on TenderCollaborator (email →
+        //      User). Explicit ownership; we trust it completely.
+        //
+        //   2. If (and only if) step 1 returns NOTHING, fall back to rows
+        //      whose email matches the user's AND which aren't already
+        //      linked to someone else (`user_id IS NULL`). This covers the
+        //      legacy case "User created after the collaborator, link
+        //      never backfilled". Case-insensitive + trimmed so
+        //      "Catarina.Sequeira@…" and "catarina.sequeira@…" don't
+        //      silently miss.
+        //
+        // Why the separation: in the old query we OR-ed the two
+        // conditions in a single WHERE. That meant if ANOTHER user's
+        // collaborator row happened to carry an email that matched the
+        // current user (e.g. a shared Outlook distribution list, or a
+        // data-entry typo), the current user would inherit that other
+        // user's tenders on top of their own. That's exactly the bug
+        // reported 2026-04-24 (catarina.sequeira seeing monica.pereira's
+        // dashboard).
         $email = \App\Models\User::whereKey($userId)->value('email');
 
-        // Resolve every collaborator row that belongs to this user — may
-        // be 0 (new hire, no roster row yet), 1 (most users), or 2+
-        // (rare: same email on two rows by accident / merge).
         $collaborators = \App\Models\TenderCollaborator::query()
-            ->where(function ($w) use ($userId, $email) {
-                $w->where('user_id', $userId);
-                if ($email) $w->orWhere('email', $email);
-            })
-            ->get(['id', 'allowed_sources']);
+            ->where('user_id', $userId)
+            ->get(['id', 'user_id', 'email', 'allowed_sources']);
+
+        if ($collaborators->isEmpty() && $email) {
+            // Only fall back to email matching when there is no explicit
+            // user_id link — and even then, only to rows nobody else owns.
+            $collaborators = \App\Models\TenderCollaborator::query()
+                ->whereNull('user_id')
+                ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($email))])
+                ->get(['id', 'user_id', 'email', 'allowed_sources']);
+        }
 
         if ($collaborators->isEmpty()) {
             // No roster row → no tenders are theirs. `whereRaw('1=0')`
