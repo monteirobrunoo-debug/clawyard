@@ -71,6 +71,30 @@ class SendTenderDeadlineAlertsCommand extends Command
                 continue;
             }
 
+            // Respect the per-collaborator visibility whitelists. A
+            // historical assignment may exist for a tender whose source
+            // (or status) the collaborator is no longer authorised to
+            // see — sending the email would leak via inbox what the
+            // dashboard hides. Stamp `deadline_alert_sent_at` so we
+            // don't re-evaluate this row every hour from now until the
+            // deadline.
+            if ($collab && (!$collab->canSeeSource($t->source) || !$collab->canSeeStatus($t->status))) {
+                $this->line(sprintf(
+                    '  · %s: skipped (collaborator restricted from source=%s status=%s)',
+                    $t->reference, $t->source, $t->status
+                ));
+                Log::info('Deadline alert skipped — visibility restriction', [
+                    'tender_id'       => $t->id,
+                    'collaborator_id' => $collab->id,
+                    'source'          => $t->source,
+                    'status'          => $t->status,
+                ]);
+                $t->deadline_alert_sent_at = now();
+                $t->save();
+                $skipped++;
+                continue;
+            }
+
             $this->line(sprintf(
                 '  %s %s → %s <%s>',
                 $dryRun ? '?' : '✓',
