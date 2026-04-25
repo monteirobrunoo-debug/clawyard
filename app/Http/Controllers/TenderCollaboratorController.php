@@ -232,6 +232,57 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
     }
 
     /**
+     * Same shape as toggleSource but flips a single status in
+     * allowed_statuses. The full enum is sourced from the runtime
+     * union of ACTIVE_STATUSES + TERMINAL_STATUSES on Tender.
+     */
+    public function toggleStatus(TenderCollaborator $collaborator, string $status)
+    {
+        $status   = strtolower(trim($status));
+        $statuses = array_values(array_unique(array_merge(
+            \App\Models\Tender::ACTIVE_STATUSES,
+            \App\Models\Tender::TERMINAL_STATUSES
+        )));
+        if (!in_array($status, $statuses, true)) {
+            return response()->json([
+                'ok'    => false,
+                'error' => "Estado desconhecido: `{$status}`. Aceites: " . implode(', ', $statuses),
+            ], 422);
+        }
+
+        $current = $collaborator->allowed_statuses;
+        if ($current === null) {
+            $next = array_values(array_diff($statuses, [$status]));
+        } elseif (in_array($status, $current, true)) {
+            $next = array_values(array_filter($current, fn($s) => $s !== $status));
+        } else {
+            $next = array_values(array_unique(array_merge($current, [$status])));
+        }
+
+        if (!empty($next) && count(array_diff($statuses, $next)) === 0) {
+            $next = null;
+        }
+
+        $collaborator->allowed_statuses = $next;
+        $collaborator->save();
+
+        Log::info('TenderCollaborator: allowed_statuses toggled', [
+            'collaborator_id' => $collaborator->id,
+            'name'            => $collaborator->name,
+            'status'          => $status,
+            'new_value'       => $next,
+            'by_user_id'      => auth()->id(),
+        ]);
+
+        return response()->json([
+            'ok'               => true,
+            'allowed_statuses' => $next,
+            'has_status'       => $next === null || in_array($status, $next, true),
+            'mode'             => $next === null ? 'unrestricted' : (empty($next) ? 'blocked_all' : 'whitelist'),
+        ]);
+    }
+
+    /**
      * Bulk-apply a source whitelist across every active collaborator row.
      *
      * Use case: a new tender source (e.g. Acingov) just got activated in

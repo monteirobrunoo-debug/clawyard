@@ -233,7 +233,7 @@ class Tender extends Model
 
             $collaborators = \App\Models\TenderCollaborator::query()
                 ->where('user_id', $userId)
-                ->get(['id', 'user_id', 'email', 'allowed_sources']);
+                ->get(['id', 'user_id', 'email', 'allowed_sources', 'allowed_statuses']);
 
             if ($collaborators->isEmpty() && $email) {
                 // Only fall back to email matching when there is no explicit
@@ -241,7 +241,7 @@ class Tender extends Model
                 $collaborators = \App\Models\TenderCollaborator::query()
                     ->whereNull('user_id')
                     ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($email))])
-                    ->get(['id', 'user_id', 'email', 'allowed_sources']);
+                    ->get(['id', 'user_id', 'email', 'allowed_sources', 'allowed_statuses']);
 
                 // Drift telemetry. Reaching the fallback path means the
                 // saving-hook backfill for email→user_id never fired (user
@@ -294,6 +294,24 @@ class Tender extends Model
                 $q->whereRaw('1=0');
             } else {
                 $q->whereIn('source', $allowed);
+            }
+        }
+
+        // Status whitelist (added 2026-04-25). Same NULL/[]/array
+        // semantics as allowed_sources but applied to Tender::status.
+        // Use case: a user only handles tenders in `em_tratamento`
+        // and shouldn't see the triage queue.
+        $anyStatusOpen = $collaborators->contains(fn($c) => $c->allowed_statuses === null);
+        if (!$anyStatusOpen) {
+            $allowedStatuses = $collaborators
+                ->flatMap(fn($c) => (array) ($c->allowed_statuses ?? []))
+                ->unique()
+                ->values()
+                ->all();
+            if (empty($allowedStatuses)) {
+                $q->whereRaw('1=0');
+            } else {
+                $q->whereIn('status', $allowedStatuses);
             }
         }
 

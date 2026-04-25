@@ -30,16 +30,20 @@ class TenderCollaborator extends Model
         'email',
         'is_active',
         'allowed_sources',
+        'allowed_statuses',
     ];
 
     protected function casts(): array
     {
         return [
-            'is_active'       => 'boolean',
+            'is_active'        => 'boolean',
             // NULL  → no filter (sees every source)
             // []    → explicit "blocked from all sources"
             // array → whitelist
-            'allowed_sources' => 'array',
+            'allowed_sources'  => 'array',
+            // Same semantics as allowed_sources but applied to
+            // Tender::status (pending / em_tratamento / submetido / …).
+            'allowed_statuses' => 'array',
         ];
     }
 
@@ -58,6 +62,18 @@ class TenderCollaborator extends Model
         $allowed = $this->allowed_sources;
         if ($allowed === null) return true;              // legacy / no filter
         return in_array($source, (array) $allowed, true);
+    }
+
+    /**
+     * Same shape as canSeeSource, applied to Tender::status. NULL means
+     * "no filter, sees every status" (legacy default), [] means
+     * "blocked from every status", array is a whitelist.
+     */
+    public function canSeeStatus(string $status): bool
+    {
+        $allowed = $this->allowed_statuses;
+        if ($allowed === null) return true;
+        return in_array($status, (array) $allowed, true);
     }
 
     /**
