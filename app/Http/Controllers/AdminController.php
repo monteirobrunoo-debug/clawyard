@@ -38,12 +38,18 @@ class AdminController extends Controller
             'role'     => 'required|in:admin,manager,user,guest',
         ]);
 
-        User::create([
+        $created = User::create([
             'name'      => $request->name,
             'email'     => $request->email,
             'password'  => Hash::make($request->password),
             'role'      => $request->role,
             'is_active' => true,
+        ]);
+
+        \App\Models\UserAdminEvent::recordCreate($created->id, auth()->id(), [
+            'name'  => $created->name,
+            'email' => $created->email,
+            'role'  => $created->role,
         ]);
 
         return back()->with('success', 'Utilizador criado com sucesso!');
@@ -82,6 +88,12 @@ class AdminController extends Controller
         }
 
         $user->update(['is_active' => !$user->is_active]);
+
+        // Append-only audit (separate from laravel.log so retention can
+        // outlive log rotation and so SOC2 auditors can SQL-query history).
+        \App\Models\UserAdminEvent::recordActivation(
+            $user->id, auth()->id(), (bool) $user->is_active
+        );
 
         return back()->with('success', $user->is_active ? 'Utilizador ativado!' : 'Utilizador bloqueado!');
     }
@@ -123,16 +135,21 @@ class AdminController extends Controller
             ], 422);
         }
 
-        $newRole = $user->role === 'manager' ? 'user' : 'manager';
+        $oldRole = $user->role;
+        $newRole = $oldRole === 'manager' ? 'user' : 'manager';
         $user->update(['role' => $newRole]);
 
+        // Two writes: laravel.log (operational tail) AND user_admin_events
+        // (durable, queryable audit). The duplication is deliberate — the
+        // log is for ops humans grepping live, the table is for compliance.
         \Illuminate\Support\Facades\Log::info('Admin: role promoted/demoted', [
             'target_user_id' => $user->id,
             'email'          => $user->email,
-            'from_role'      => $user->role === 'manager' ? 'user' : 'manager',
+            'from_role'      => $oldRole,
             'to_role'        => $newRole,
             'by_user_id'     => auth()->id(),
         ]);
+        \App\Models\UserAdminEvent::recordRoleChange($user->id, auth()->id(), $oldRole, $newRole);
 
         return response()->json([
             'ok'         => true,
@@ -149,7 +166,19 @@ class AdminController extends Controller
             return back()->withErrors(['error' => 'Nao pode apagar a sua propria conta.']);
         }
 
+        // Snapshot identifying fields BEFORE delete — once the row is
+        // gone the FK on user_admin_events keeps the event but the
+        // payload is the only remaining record of who they were.
+        $snapshot = [
+            'name'  => $user->name,
+            'email' => $user->email,
+            'role'  => $user->role,
+        ];
+        $deletedId = $user->id;
+
         $user->delete();
+
+        \App\Models\UserAdminEvent::recordDelete($deletedId, auth()->id(), $snapshot);
 
         return back()->with('success', 'Utilizador removido!');
     }

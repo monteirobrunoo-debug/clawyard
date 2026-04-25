@@ -232,6 +232,104 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
     }
 
     /**
+     * Bulk-apply a source whitelist across every active collaborator row.
+     *
+     * Use case: a new tender source (e.g. Acingov) just got activated in
+     * the import pipeline. By default every existing collaborator has
+     * allowed_sources=NULL, so they immediately see the new source.
+     * Sometimes you want the inverse: lock everyone to NSPA only until
+     * you've curated who gets Acingov. Doing that one-by-one across N
+     * collaborators is painful — this endpoint does it in one call.
+     *
+     * Modes:
+     *   action=set      → replace each row's allowed_sources with the
+     *                     payload (or NULL when payload covers every
+     *                     source — same collapse rule as toggleSource).
+     *   action=add      → union the payload into each row's whitelist.
+     *                     Rows with NULL stay NULL (already see this
+     *                     source).
+     *   action=remove   → diff the payload out of each row's whitelist.
+     *                     Rows with NULL materialise to the full set
+     *                     minus the payload (same first-click rule as
+     *                     toggleSource).
+     *
+     * Returns JSON with the count of rows touched + a per-row breakdown
+     * of new states so the UI can render a confirmation summary.
+     */
+    public function bulkSetSources(\Illuminate\Http\Request $request)
+    {
+        $data = $request->validate([
+            'action'  => ['required', 'in:set,add,remove'],
+            'sources' => ['required', 'array'],
+            'sources.*' => ['string', Rule::in(\App\Models\Tender::SOURCES)],
+        ]);
+
+        $action  = $data['action'];
+        $payload = array_values(array_unique($data['sources']));
+
+        $rows = TenderCollaborator::active()->get();
+        $changes = [];
+
+        foreach ($rows as $row) {
+            $current = $row->allowed_sources;
+
+            switch ($action) {
+                case 'set':
+                    $next = $payload;
+                    break;
+                case 'add':
+                    if ($current === null) {
+                        // Already sees everything — no-op.
+                        $next = null;
+                    } else {
+                        $next = array_values(array_unique(array_merge($current, $payload)));
+                    }
+                    break;
+                case 'remove':
+                    if ($current === null) {
+                        $next = array_values(array_diff(\App\Models\Tender::SOURCES, $payload));
+                    } else {
+                        $next = array_values(array_diff($current, $payload));
+                    }
+                    break;
+            }
+
+            // Same collapse-to-NULL rule as toggleSource for consistency.
+            if (is_array($next) && count(array_diff(\App\Models\Tender::SOURCES, $next)) === 0) {
+                $next = null;
+            }
+
+            // Skip the write if nothing actually changed.
+            if ($current === $next) continue;
+
+            $row->allowed_sources = $next;
+            $row->save();
+
+            $changes[] = [
+                'collaborator_id' => $row->id,
+                'name'            => $row->name,
+                'before'          => $current,
+                'after'           => $next,
+            ];
+        }
+
+        Log::info('TenderCollaborator: bulk allowed_sources', [
+            'action'      => $action,
+            'sources'     => $payload,
+            'touched'     => count($changes),
+            'by_user_id'  => auth()->id(),
+        ]);
+
+        return response()->json([
+            'ok'      => true,
+            'action'  => $action,
+            'sources' => $payload,
+            'touched' => count($changes),
+            'changes' => $changes,
+        ]);
+    }
+
+    /**
      * Hard-delete the collaborator row — ONLY when it was never assigned
      * to a tender. This is the escape hatch for typos, duplicates and
      * people who were created by mistake and should disappear entirely.

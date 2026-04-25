@@ -475,6 +475,8 @@ Route::middleware(['auth'])->group(function () {
     Route::patch ('/tenders/collaborators/{collaborator}/toggle-source/{source}', [TenderCollaboratorController::class, 'toggleSource'])
         ->where('source', '[a-z_]+')
         ->name('tenders.collaborators.toggle_source');
+    Route::post  ('/tenders/collaborators/bulk-sources', [TenderCollaboratorController::class, 'bulkSetSources'])
+        ->name('tenders.collaborators.bulk_sources');
     Route::delete('/tenders/collaborators/{collaborator}/force',             [TenderCollaboratorController::class, 'forceDestroy'])->name('tenders.collaborators.force_destroy');
     Route::post  ('/tenders/collaborators/{collaborator}/create-user',       [TenderCollaboratorController::class, 'createUser'])->name('tenders.collaborators.create_user');
 

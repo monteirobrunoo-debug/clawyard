@@ -106,6 +106,89 @@
                 </form>
             </section>
 
+            {{-- ─── Bulk source-restriction tools (admin escape hatch) ──────
+                 When you activate a new source (e.g. Acingov) and want to
+                 default everyone to NSPA-only until curated, a per-user
+                 toggle through the table is painful. This panel applies
+                 the same chip semantics but to every active row at once. --}}
+            <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
+                <h3 class="text-sm font-semibold text-gray-800 mb-3">Aplicar a TODOS (bulk)</h3>
+                <p class="text-xs text-gray-500 mb-3">
+                    Escolhe uma acção e as fontes — aplica a todos os colaboradores activos.
+                    <strong>Define</strong> substitui, <strong>Adicionar</strong> faz UNION,
+                    <strong>Remover</strong> faz diferença. Linhas inactivas não são tocadas.
+                </p>
+
+                @php
+                    $bulkSourceLabels = [
+                        'nspa' => 'NSPA', 'nato' => 'NATO', 'sam_gov' => 'SAM.gov',
+                        'ncia' => 'NCIA', 'acingov' => 'Acingov', 'vortal' => 'Vortal',
+                        'ungm' => 'UNGM', 'unido' => 'UNIDO', 'other' => 'Outras',
+                    ];
+                @endphp
+                <div class="flex items-center flex-wrap gap-2 text-xs">
+                    @foreach(\App\Models\Tender::SOURCES as $s)
+                        <label class="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 cursor-pointer hover:bg-gray-50">
+                            <input type="checkbox" class="bulk-source-cb h-3 w-3 rounded text-indigo-600 focus:ring-indigo-500" value="{{ $s }}">
+                            <span>{{ $bulkSourceLabels[$s] ?? strtoupper($s) }}</span>
+                        </label>
+                    @endforeach
+                </div>
+
+                <div class="mt-3 flex items-center gap-2">
+                    <button type="button" onclick="bulkSourceAction('set')"
+                            class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-indigo-500">
+                        Definir só estas fontes
+                    </button>
+                    <button type="button" onclick="bulkSourceAction('add')"
+                            class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-emerald-500">
+                        + Adicionar
+                    </button>
+                    <button type="button" onclick="bulkSourceAction('remove')"
+                            class="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-rose-500">
+                        − Remover
+                    </button>
+                    <span id="bulk-source-status" class="ml-2 text-xs text-gray-600"></span>
+                </div>
+            </section>
+
+            <script>
+            // Single-page bulk submit — no full-page reload, refreshes after
+            // success so the chip column reflects the new state.
+            async function bulkSourceAction(action) {
+                const checked = Array.from(document.querySelectorAll('.bulk-source-cb:checked'))
+                                     .map(cb => cb.value);
+                if (checked.length === 0) {
+                    alert('Selecciona pelo menos uma fonte primeiro.');
+                    return;
+                }
+                const verbs = { set: 'DEFINIR só estas fontes para TODOS', add: 'ADICIONAR estas fontes a TODOS', remove: 'REMOVER estas fontes de TODOS' };
+                if (!confirm(`${verbs[action]}: ${checked.join(', ')}\n\nConfirmas?`)) return;
+
+                const status = document.getElementById('bulk-source-status');
+                status.textContent = 'A aplicar…';
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+                          || document.querySelector('input[name="_token"]')?.value;
+
+                try {
+                    const r = await fetch(@json(route('tenders.collaborators.bulk_sources')), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                        body: JSON.stringify({ action, sources: checked }),
+                    });
+                    const data = await r.json();
+                    if (!data.ok) {
+                        status.textContent = '✗ ' + (data.message || 'erro');
+                        return;
+                    }
+                    status.textContent = `✓ Aplicado a ${data.touched} colaborador(es). A recarregar…`;
+                    setTimeout(() => location.reload(), 800);
+                } catch (e) {
+                    status.textContent = '✗ ' + (e.message || 'erro de rede');
+                }
+            }
+            </script>
+
             {{-- ─── Roster ────────────────────────────────────────────────── --}}
             @php
                 // Short labels for the per-source toggle chips. Order matters —
