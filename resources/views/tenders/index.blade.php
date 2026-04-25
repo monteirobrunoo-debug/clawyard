@@ -201,6 +201,51 @@
                 @endforeach
             </div>
 
+            {{-- ─── Source-restriction transparency banner ──────────────────
+                 Shown ONLY to users whose collaborator row has a non-NULL
+                 allowed_sources. Without this they'd see a partial list and
+                 wonder why an expected tender is missing — the banner makes
+                 the filter explicit and points them at the admin to widen
+                 access. Hidden for managers (canViewAll) and for users with
+                 no restriction. --}}
+            @if($restriction)
+                @php
+                    $sourceLabels = [
+                        'nspa' => 'NSPA', 'nato' => 'NATO', 'sam_gov' => 'SAM.gov',
+                        'ncia' => 'NCIA', 'acingov' => 'Acingov', 'vortal' => 'Vortal',
+                        'ungm' => 'UNGM', 'unido' => 'UNIDO', 'other' => 'Outras',
+                    ];
+                @endphp
+                @if($restriction['mode'] === 'whitelist')
+                    <div class="rounded-md border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm flex items-start gap-3">
+                        <span class="text-indigo-600 font-semibold">ℹ</span>
+                        <div class="flex-1">
+                            <div class="text-indigo-900">
+                                Vês apenas concursos das fontes:
+                                @foreach($restriction['sources'] as $s)
+                                    <span class="inline-flex items-center px-2 py-0.5 mx-0.5 rounded-md bg-indigo-100 text-indigo-800 text-xs font-medium border border-indigo-200">{{ $sourceLabels[$s] ?? strtoupper($s) }}</span>
+                                @endforeach
+                            </div>
+                            <div class="text-indigo-700/80 text-xs mt-0.5">
+                                Para acederes a fontes adicionais, contacta um administrador.
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <div class="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm flex items-start gap-3">
+                        <span class="text-amber-700 font-semibold">⚠</span>
+                        <div class="flex-1">
+                            <div class="text-amber-900 font-medium">
+                                Estás bloqueado de todas as fontes — não vês concursos.
+                            </div>
+                            <div class="text-amber-700/80 text-xs mt-0.5">
+                                Contacta um administrador para activar pelo menos uma fonte.
+                            </div>
+                        </div>
+                    </div>
+                @endif
+            @endif
+
             {{-- ─── "Mine" strip ──────────────────────────────────────────── --}}
             @if($mine->count() > 0)
                 <section class="rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden">

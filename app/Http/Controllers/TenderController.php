@@ -66,6 +66,42 @@ class TenderController extends Controller
 
         $collaborators = TenderCollaborator::active()->orderBy('name')->get();
 
+        // ── Source-restriction transparency banner ────────────────────────
+        // If a regular user has been restricted via allowed_sources on
+        // their collaborator row(s), surface it. Without this they'd see
+        // a partial list and assume the system is broken when an
+        // expected tender doesn't appear. Resolution mirrors
+        // Tender::scopeForUser semantics: ANY linked row with NULL means
+        // unrestricted, otherwise UNION the whitelists; explicit empty
+        // means "blocked from all".
+        $restriction = null;
+        if (!$canViewAll) {
+            $rows = TenderCollaborator::query()
+                ->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id)
+                      ->orWhere(function ($qq) use ($user) {
+                          $qq->whereNull('user_id')
+                             ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim((string) $user->email))]);
+                      });
+                })
+                ->get(['allowed_sources']);
+
+            if ($rows->isNotEmpty()) {
+                $unrestricted = $rows->contains(fn($r) => $r->allowed_sources === null);
+                if (!$unrestricted) {
+                    $allowed = $rows
+                        ->flatMap(fn($r) => (array) ($r->allowed_sources ?? []))
+                        ->unique()
+                        ->values()
+                        ->all();
+                    $restriction = [
+                        'mode'    => empty($allowed) ? 'blocked_all' : 'whitelist',
+                        'sources' => $allowed,
+                    ];
+                }
+            }
+        }
+
         return view('tenders.index', [
             'all'           => $all,
             'mine'          => $mine,
@@ -76,6 +112,7 @@ class TenderController extends Controller
             'canImport'     => $canImport,
             'canAssign'     => $canAssign,
             'canViewAll'    => $canViewAll,
+            'restriction'   => $restriction,
             'stats'         => $this->dashboardStats($canViewAll ? null : $user->id),
         ]);
     }

@@ -175,6 +175,27 @@ class Tender extends Model
         return $q->where('assigned_collaborator_id', $collaboratorId);
     }
 
+    /**
+     * Per-request cache for the (userId → collaborator rows) lookup
+     * used by scopeForUser. The /tenders dashboard calls forUser() 3-4
+     * times per render (mine list, all list, stats) — without this each
+     * call re-hits the DB. Lives in static state because the array
+     * cache driver isn't always wired up across all environments and
+     * a simple static array is enough at request scope.
+     *
+     * Cleared between requests by the framework re-instantiating the
+     * model class. Tests can clear explicitly via Tender::flushScopeForUserCache().
+     *
+     * @var array<int, \Illuminate\Support\Collection>
+     */
+    private static array $scopeForUserCache = [];
+
+    /** @internal Test helper. */
+    public static function flushScopeForUserCache(): void
+    {
+        self::$scopeForUserCache = [];
+    }
+
     public function scopeForUser(Builder $q, int $userId): Builder
     {
         // Resolve which collaborator rows belong to this user, in strict
@@ -200,35 +221,46 @@ class Tender extends Model
         // user's tenders on top of their own. That's exactly the bug
         // reported 2026-04-24 (catarina.sequeira seeing monica.pereira's
         // dashboard).
-        $email = \App\Models\User::whereKey($userId)->value('email');
+        // Per-request cache: the dashboard calls forUser() 3-4 times per
+        // render (mine, all, stats). Without this each call re-runs the
+        // resolution + (when the strict path is empty) a second query.
+        // Cache key is the userId — the resolution doesn't depend on
+        // any other state during a single request.
+        if (isset(self::$scopeForUserCache[$userId])) {
+            $collaborators = self::$scopeForUserCache[$userId];
+        } else {
+            $email = \App\Models\User::whereKey($userId)->value('email');
 
-        $collaborators = \App\Models\TenderCollaborator::query()
-            ->where('user_id', $userId)
-            ->get(['id', 'user_id', 'email', 'allowed_sources']);
-
-        if ($collaborators->isEmpty() && $email) {
-            // Only fall back to email matching when there is no explicit
-            // user_id link — and even then, only to rows nobody else owns.
             $collaborators = \App\Models\TenderCollaborator::query()
-                ->whereNull('user_id')
-                ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($email))])
+                ->where('user_id', $userId)
                 ->get(['id', 'user_id', 'email', 'allowed_sources']);
 
-            // Drift telemetry. Reaching the fallback path means the
-            // saving-hook backfill for email→user_id never fired (user
-            // was created after the collaborator, or the collab row
-            // was raw-inserted). One log line per request lets us spot
-            // accumulating "loose" rows that should be linked properly
-            // via tenders:link-collaborators. Filtered on level=info
-            // so it doesn't pollute warning/error channels.
-            if ($collaborators->isNotEmpty()) {
-                \Illuminate\Support\Facades\Log::info('Tender::scopeForUser fell back to email match', [
-                    'user_id'         => $userId,
-                    'email'           => $email,
-                    'matched_collabs' => $collaborators->pluck('id')->all(),
-                    'hint'            => 'Run `php artisan tenders:link-collaborators` to backfill user_id.',
-                ]);
+            if ($collaborators->isEmpty() && $email) {
+                // Only fall back to email matching when there is no explicit
+                // user_id link — and even then, only to rows nobody else owns.
+                $collaborators = \App\Models\TenderCollaborator::query()
+                    ->whereNull('user_id')
+                    ->whereRaw('LOWER(TRIM(email)) = ?', [strtolower(trim($email))])
+                    ->get(['id', 'user_id', 'email', 'allowed_sources']);
+
+                // Drift telemetry. Reaching the fallback path means the
+                // saving-hook backfill for email→user_id never fired (user
+                // was created after the collaborator, or the collab row
+                // was raw-inserted). One log line per request lets us spot
+                // accumulating "loose" rows that should be linked properly
+                // via tenders:link-collaborators. Filtered on level=info
+                // so it doesn't pollute warning/error channels.
+                if ($collaborators->isNotEmpty()) {
+                    \Illuminate\Support\Facades\Log::info('Tender::scopeForUser fell back to email match', [
+                        'user_id'         => $userId,
+                        'email'           => $email,
+                        'matched_collabs' => $collaborators->pluck('id')->all(),
+                        'hint'            => 'Run `php artisan tenders:link-collaborators` to backfill user_id.',
+                    ]);
+                }
             }
+
+            self::$scopeForUserCache[$userId] = $collaborators;
         }
 
         if ($collaborators->isEmpty()) {
