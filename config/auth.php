@@ -96,8 +96,16 @@ return [
         'users' => [
             'provider' => 'users',
             'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            // Token validity (minutes). 60min is fine — humans usually
+            // either click the email immediately or never.
             'expire' => 60,
-            'throttle' => 60,
+            // Seconds between consecutive reset requests for the SAME
+            // email. Default 60s was triggering "Please wait before
+            // retrying" when catarina.sequeira pressed "Resend" twice
+            // in a row to make sure. 15s gives a real user enough room
+            // while keeping abuse mitigation (an attacker would still
+            // need a valid email + the per-IP route throttle on top).
+            'throttle' => 15,
         ],
     ],
 
