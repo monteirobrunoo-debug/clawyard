@@ -39,5 +39,25 @@ class Settings(BaseSettings):
     # Trust proxy headers (DigitalOcean droplet behind Cloudflare).
     trust_forwarded: bool = True
 
+    # Where ingest copies originals to so /doc/{id} can serve them
+    # without depending on the source filesystem still being mounted.
+    library_path: str = "/data/library"
+
+    # Re-ranker (off by default). When on, search fetches 3× max_results
+    # from pgvector and re-ranks down to max_results using Voyage's
+    # voyage-rerank-2.5 model.
+    enable_rerank: bool = False
+    rerank_model: str = "rerank-2.5"
+    rerank_pool_factor: int = 3   # multiplier on max_results for the candidate pool
+    rerank_pool_cap: int = 60     # absolute upper bound on pool size
+
+    # Background watcher. Polls watcher_path every N seconds for new files
+    # and ingests them. Idempotent — re-seeing the same file is a no-op.
+    watcher_enabled: bool = False
+    watcher_path: str = "/data/incoming"
+    watcher_interval_seconds: int = 300
+    watcher_default_domain: str = ""    # apply to every file unless overridden via metadata sidecar
+    watcher_default_year: int = 0       # 0 = leave NULL
+
 
 settings = Settings()

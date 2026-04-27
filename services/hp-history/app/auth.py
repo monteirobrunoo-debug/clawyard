@@ -80,7 +80,7 @@ async def hmac_middleware(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     """Apply HMAC to every authenticated path. /healthz is exempt."""
-    if request.url.path in ("/healthz", "/"):
+    if request.url.path in ("/healthz", "/metrics", "/"):
         return await call_next(request)
 
     body = await request.body()

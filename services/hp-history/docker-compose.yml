@@ -33,7 +33,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    environment:
+    environment: &app_env
       HPH_PG_DSN:                 postgresql://hphistory:hphistory@db:5432/hphistory
       HPH_HMAC_SECRET:            ${HPH_HMAC_SECRET}
       HPH_HMAC_TOLERANCE_SECONDS: 300
@@ -42,8 +42,33 @@ services:
       HPH_EMBEDDING_DIM:          ${HPH_EMBEDDING_DIM:-1024}
       HPH_VOYAGE_API_KEY:         ${HPH_VOYAGE_API_KEY:-}
       HPH_OPENAI_API_KEY:         ${HPH_OPENAI_API_KEY:-}
+      HPH_LIBRARY_PATH:           /data/library
+      HPH_ENABLE_RERANK:          ${HPH_ENABLE_RERANK:-false}
+      HPH_RERANK_MODEL:           ${HPH_RERANK_MODEL:-rerank-2.5}
+      HPH_WATCHER_PATH:           /data/incoming
+      HPH_WATCHER_DEFAULT_DOMAIN: ${HPH_WATCHER_DEFAULT_DOMAIN:-}
+    volumes:
+      - hphistory-data:/data
     ports:
       - "127.0.0.1:8088:8088"
 
+  # Background ingest watcher — same image, different command. Picks
+  # up new files dropped into /data/incoming and ingests them at the
+  # configured interval. Restart policy ensures it survives crashes.
+  watcher:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      <<: *app_env
+      HPH_WATCHER_ENABLED:           "true"
+      HPH_WATCHER_INTERVAL_SECONDS:  ${HPH_WATCHER_INTERVAL_SECONDS:-300}
+    volumes:
+      - hphistory-data:/data
+    command: ["python", "-m", "app.watcher"]
+
 volumes:
   hphistory-pgdata:
+  hphistory-data:    # /data → library + incoming, shared between app + watcher

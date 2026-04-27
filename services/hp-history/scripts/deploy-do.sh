@@ -88,8 +88,20 @@ server {
     listen 80;
     server_name ${DOMAIN};
 
-    # Cap body size (search payloads should be tiny).
-    client_max_body_size 256k;
+    # Cap body size (search payloads are tiny; /doc serves a few MB).
+    client_max_body_size 16m;
+
+    # Prometheus scrape endpoint — restrict to monitoring sources.
+    # Update the allow list when you bring up a Grafana/Prom server.
+    # Default config: localhost only (curl from the droplet itself).
+    location /metrics {
+        allow 127.0.0.1;
+        # allow <prometheus-server-ip>;
+        deny all;
+        proxy_pass         http://127.0.0.1:8088;
+        proxy_http_version 1.1;
+        proxy_set_header   Host \$host;
+    }
 
     location / {
         proxy_pass         http://127.0.0.1:8088;

@@ -53,12 +53,18 @@ async def init_schema() -> None:
             CREATE TABLE IF NOT EXISTS documents (
                 id          UUID PRIMARY KEY,
                 title       TEXT NOT NULL,
-                source      TEXT NOT NULL,
+                source      TEXT NOT NULL,        -- original origin (qnap path, sharepoint url, file://…)
+                local_path  TEXT,                  -- our managed copy under /data/library (set by ingest)
+                mime_type   TEXT,                  -- application/pdf, text/plain, …
                 domain      TEXT,
                 year        INT,
                 metadata    JSONB DEFAULT '{}'::jsonb,
                 created_at  TIMESTAMPTZ DEFAULT NOW()
             );
+            -- Add columns idempotently if upgrading from an older schema.
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS local_path TEXT;
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime_type  TEXT;
+
             CREATE INDEX IF NOT EXISTS documents_domain_year_idx
                 ON documents (domain, year);
             CREATE INDEX IF NOT EXISTS documents_metadata_gin

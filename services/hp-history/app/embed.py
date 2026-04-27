@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Iterable, List
 
+from . import metrics
 from .settings import settings
 
 
@@ -21,6 +22,7 @@ async def embed_documents(texts: List[str]) -> List[List[float]]:
     if not texts:
         return []
 
+    metrics.inc_embedding("document", sum(len(t) for t in texts))
     if settings.embedding_provider == "voyage":
         return await _embed_voyage(texts, input_type="document")
     if settings.embedding_provider == "openai":
@@ -29,6 +31,7 @@ async def embed_documents(texts: List[str]) -> List[List[float]]:
 
 
 async def embed_query(text: str) -> List[float]:
+    metrics.inc_embedding("query", len(text or ""))
     if settings.embedding_provider == "voyage":
         v = await _embed_voyage([text], input_type="query")
         return v[0]

@@ -23,21 +23,45 @@ import asyncio
 import hashlib
 import json
 import logging
+import mimetypes
 import os
 import re
+import shutil
 import uuid
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
 from pypdf import PdfReader
 
+from . import metrics
 from .db import get_pool, init_schema
 from .embed import embed_documents
+from .settings import settings
 
 log = logging.getLogger("hp_history.ingest")
 
 
 SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md"}
+
+
+_MIME_BY_EXT = {
+    ".pdf": "application/pdf",
+    ".txt": "text/plain; charset=utf-8",
+    ".md":  "text/markdown; charset=utf-8",
+}
+
+
+def _copy_into_library(src: Path, doc_id: uuid.UUID) -> tuple[Path, str]:
+    """Copy the original file into the managed library under
+    settings.library_path keyed by document UUID. Returns (path, mime).
+    Idempotent — overwrites if already present so re-ingest stays in sync."""
+    library = Path(settings.library_path)
+    library.mkdir(parents=True, exist_ok=True)
+    ext = src.suffix.lower() or ".bin"
+    dest = library / f"{doc_id}{ext}"
+    shutil.copy2(src, dest)
+    mime = _MIME_BY_EXT.get(ext) or mimetypes.guess_type(str(src))[0] or "application/octet-stream"
+    return dest, mime
 
 
 def _document_uuid(path: Path) -> uuid.UUID:
@@ -115,6 +139,15 @@ async def ingest_folder(
         meta = dict(extra_metadata)
         meta["filename"] = path.name
 
+        # Copy the original into our managed library so /doc/{id} can
+        # serve it even if the source folder is later unmounted.
+        try:
+            local_path_obj, mime = _copy_into_library(path, doc_id)
+            local_path = str(local_path_obj)
+        except Exception as e:
+            log.warning("library-copy failed for %s (will still index): %s", path, e)
+            local_path, mime = None, _MIME_BY_EXT.get(path.suffix.lower())
+
         async with pool.acquire() as conn:
             async with conn.transaction():
                 # Replace strategy: drop existing chunks for the doc, then
@@ -122,16 +155,18 @@ async def ingest_folder(
                 await conn.execute("DELETE FROM chunks WHERE document_id = $1", doc_id)
                 await conn.execute(
                     """
-                    INSERT INTO documents (id, title, source, domain, year, metadata)
-                    VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                    INSERT INTO documents (id, title, source, local_path, mime_type, domain, year, metadata)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
                     ON CONFLICT (id) DO UPDATE SET
                         title = EXCLUDED.title,
                         source = EXCLUDED.source,
+                        local_path = EXCLUDED.local_path,
+                        mime_type = EXCLUDED.mime_type,
                         domain = EXCLUDED.domain,
                         year = EXCLUDED.year,
                         metadata = EXCLUDED.metadata
                     """,
-                    doc_id, title, source, domain, year, json.dumps(meta),
+                    doc_id, title, source, local_path, mime, domain, year, json.dumps(meta),
                 )
                 rows = []
                 for i, (txt, vec) in enumerate(zip(pieces, vectors)):
@@ -149,6 +184,7 @@ async def ingest_folder(
         chunks_in += len(pieces)
         log.info("ingested %d chunks from %s", len(pieces), path.name)
 
+    metrics.inc_ingest("cli", docs_in, chunks_in)
     return docs_in, chunks_in
 
 

@@ -1,5 +1,5 @@
 """Search logic — embed the query, run a pgvector similarity search,
-join back to documents, return shaped hits."""
+join back to documents, optionally re-rank, return shaped hits."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from .db import get_pool
 from .embed import embed_query
+from .rerank import maybe_rerank
 from .settings import settings
 
 
@@ -17,6 +18,13 @@ async def search_chunks(
         return []
     n = max(1, min(int(max_results or settings.max_results_default), settings.max_results_cap))
     filters = filters or {}
+
+    # When rerank is enabled we over-fetch from pgvector so the cross-
+    # encoder has a meaningful candidate pool. With rerank disabled,
+    # `pool` collapses to `n` and the original behaviour is preserved.
+    pool_size = n
+    if settings.enable_rerank:
+        pool_size = min(n * settings.rerank_pool_factor, settings.rerank_pool_cap)
 
     qvec = await embed_query(query)
 
@@ -68,7 +76,7 @@ async def search_chunks(
             JOIN documents d ON d.id = c.document_id
             WHERE {where}
             ORDER BY c.embedding <=> ${len(params)+1}::vector
-            LIMIT {n}
+            LIMIT {pool_size}
             """,
             *params,
             qvec,
@@ -90,4 +98,7 @@ async def search_chunks(
                 "citation_url": f"/doc/{r['doc_id']}",
             }
         )
-    return hits
+
+    # Re-rank step is a no-op when settings.enable_rerank is False or
+    # the rerank API call fails (graceful fallback).
+    return await maybe_rerank(query, hits, top_k=n)
