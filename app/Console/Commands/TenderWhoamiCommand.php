@@ -58,9 +58,14 @@ class TenderWhoamiCommand extends Command
             $this->line('  <fg=yellow>(none)</>');
         } else {
             foreach ($strict as $c) {
-                $this->line(sprintf('  ✓ collab #%d "%s" email=%s allowed_sources=%s',
-                    $c->id, $c->name, $c->email ?: '—',
-                    $c->allowed_sources === null ? 'NULL' : json_encode($c->allowed_sources)
+                $tenderCount = $c->tenders()->count();
+                $this->line(sprintf('  ✓ collab #%d "%s" email=%s tenders=%d',
+                    $c->id, $c->name, $c->email ?: '—', $tenderCount
+                ));
+                $this->line(sprintf('       allowed_sources=%s · allowed_statuses=%s · is_active=%d',
+                    $c->allowed_sources === null ? 'NULL' : json_encode($c->allowed_sources),
+                    $c->allowed_statuses === null ? 'NULL' : json_encode($c->allowed_statuses),
+                    (int) $c->is_active
                 ));
             }
         }
