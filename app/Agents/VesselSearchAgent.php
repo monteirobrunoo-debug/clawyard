@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Models\PartnerWorkshop;
+use App\Services\HpHistoryClient;
 use App\Services\PartnerWorkshopService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -395,7 +396,8 @@ SPECIALTY;
     /**
      * Inject port-workshop partner cards (REPAIR domain) under a
      * `<partner_workshops>` block when the message looks port/repair-
-     * related. Failure is non-fatal: if the lookup blows up the
+     * related, then layer the company-history droplet block when the
+     * user asks for precedents. Both failures are non-fatal — the
      * conversation continues with web-search-only context.
      */
     protected function augmentWithPartners(string|array $message, ?callable $heartbeat = null): string|array
@@ -405,11 +407,25 @@ SPECIALTY;
             $block = $svc->buildContextFor($this->messageText($message), PartnerWorkshop::DOMAIN_REPAIR);
             if ($block) {
                 if ($heartbeat) $heartbeat('a consultar parceiros portuários (repair)');
-                return $this->appendToMessage($message, $block);
+                $message = $this->appendToMessage($message, $block);
             }
         } catch (\Throwable $e) {
             Log::warning('VesselSearchAgent: partner workshop lookup failed — ' . $e->getMessage());
         }
+
+        // hp-history droplet — same pattern as SalesAgent. Surfaces past
+        // shipyard contracts, drydocking precedents, refit timelines, etc.
+        try {
+            $history = new HpHistoryClient();
+            $block   = $history->augmentContextFor($this->messageText($message), PartnerWorkshop::DOMAIN_REPAIR);
+            if ($block) {
+                if ($heartbeat) $heartbeat('a consultar histórico H&P (refits, contratos navais)');
+                $message = $this->appendToMessage($message, $block);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('VesselSearchAgent: hp-history lookup failed — ' . $e->getMessage());
+        }
+
         return $message;
     }
 

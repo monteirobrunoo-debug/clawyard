@@ -1,0 +1,49 @@
+version: "3.9"
+
+# Two services on the hp-history droplet:
+#   db  — Postgres 16 with the pgvector extension preinstalled
+#   app — FastAPI + uvicorn behind the local 127.0.0.1:8088
+#
+# In production we front this with nginx + Let's Encrypt on the droplet
+# itself; nginx terminates TLS for hp-history.partyard.eu and proxies
+# to localhost:8088. The HMAC layer protects the API regardless of
+# whether nginx is involved (defence in depth).
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${HPH_PG_USER:-hphistory}
+      POSTGRES_PASSWORD: ${HPH_PG_PASSWORD:-hphistory}
+      POSTGRES_DB:       ${HPH_PG_DB:-hphistory}
+    volumes:
+      - hphistory-pgdata:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      HPH_PG_DSN:                 postgresql://hphistory:hphistory@db:5432/hphistory
+      HPH_HMAC_SECRET:            ${HPH_HMAC_SECRET}
+      HPH_HMAC_TOLERANCE_SECONDS: 300
+      HPH_EMBEDDING_PROVIDER:     ${HPH_EMBEDDING_PROVIDER:-voyage}
+      HPH_EMBEDDING_MODEL:        ${HPH_EMBEDDING_MODEL:-voyage-3-large}
+      HPH_EMBEDDING_DIM:          ${HPH_EMBEDDING_DIM:-1024}
+      HPH_VOYAGE_API_KEY:         ${HPH_VOYAGE_API_KEY:-}
+      HPH_OPENAI_API_KEY:         ${HPH_OPENAI_API_KEY:-}
+    ports:
+      - "127.0.0.1:8088:8088"
+
+volumes:
+  hphistory-pgdata:

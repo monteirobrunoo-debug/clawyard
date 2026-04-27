@@ -128,6 +128,31 @@ return [
         'tls_verify' => env('SAP_TLS_VERIFY', true),
     ],
 
+    // hp-history — pgvector-backed company memory served from a separate
+    // DigitalOcean droplet (`hp-history.partyard.eu`). Indexes historical
+    // PDFs, emails, proposals and contracts so agents can cite precedents
+    // ("last time we sold MTU spares to PT Navy was 2023, €54k order, see
+    // ref XYZ"). Optional service: when `enabled=false` the agent
+    // augmentation degrades silently and Marco/Vasco continue with their
+    // partner-network + web-search context.
+    'hp_history' => [
+        'enabled'     => env('HP_HISTORY_ENABLED', false),
+        'base_url'    => env('HP_HISTORY_BASE_URL', ''),    // e.g. https://hp-history.partyard.eu
+        // HMAC-SHA256 shared secret used to sign every request. Rotate
+        // on both sides simultaneously; rejection of a request with a
+        // valid-but-stale signature is the canary for rotation drift.
+        'hmac_secret' => env('HP_HISTORY_HMAC_SECRET', ''),
+        'timeout'     => (int) env('HP_HISTORY_TIMEOUT_SECONDS', 8),
+        // Cache TTL in seconds. Same prompt within this window reuses
+        // the previous response — mostly to avoid re-embedding on
+        // back-to-back follow-ups in the same conversation.
+        'cache_ttl'   => (int) env('HP_HISTORY_CACHE_TTL', 300),
+        // Maximum chunks the server may return; defaults match what
+        // the LLM context can comfortably absorb without crowding out
+        // the partner-workshop block.
+        'max_results' => (int) env('HP_HISTORY_MAX_RESULTS', 5),
+    ],
+
     'whatsapp' => [
         'token'        => env('META_WHATSAPP_TOKEN'),
         'phone_id'     => env('META_WHATSAPP_PHONE_ID'),

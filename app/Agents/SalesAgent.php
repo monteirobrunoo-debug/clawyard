@@ -9,6 +9,7 @@ use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Models\PartnerWorkshop;
+use App\Services\HpHistoryClient;
 use App\Services\PartnerWorkshopService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -189,6 +190,22 @@ SPECIALTY;
             }
         } catch (\Throwable $e) {
             Log::warning('SalesAgent: partner workshop lookup failed — ' . $e->getMessage());
+        }
+
+        // Company-history droplet (hp-history). Off by default; when the
+        // user asks for precedents ("last time we sold to X", "histórico
+        // RFQ MTU 2024", etc) we hit the pgvector service for relevant
+        // chunks. Failures are silent — the agent continues with whatever
+        // other context paths produced.
+        try {
+            $history = new HpHistoryClient();
+            $block   = $history->augmentContextFor($this->messageText($message), PartnerWorkshop::DOMAIN_SPARES);
+            if ($block) {
+                if ($heartbeat) $heartbeat('a consultar histórico H&P (RFQs, contratos, propostas)');
+                $message = $this->appendToMessage($message, $block);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('SalesAgent: hp-history lookup failed — ' . $e->getMessage());
         }
 
         $message = $this->augmentWithWebSearch($message, $heartbeat);
