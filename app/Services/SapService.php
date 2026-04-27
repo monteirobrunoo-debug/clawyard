@@ -819,13 +819,38 @@ class SapService
             $payload['ContactPerson'] = (int) $data['ContactPerson'];
         }
 
-        // Predicted Closing Date — explicit date OR today + ClosingDays
+        // Predicted Closing Date — explicit date OR today + ClosingDays.
+        //
+        // SAP B1 rejects past dates with "Date deviates from permissible
+        // range [OOPR.PredDate]". We've seen the LLM produce a date with
+        // last year's calendar (the email it was reading was a year old)
+        // and SAP refuse the whole opportunity create — confusing for the
+        // operator because the JSON looked fine. Defensive snap-forward:
+        // any date in the past is replaced with today + ClosingDays
+        // (default 30) so the create succeeds and the operator can fix
+        // the date in SAP if it really needed to be a different future
+        // value.
+        $todayTs = strtotime('today');
+        $defaultDays = max(1, (int) ($data['ClosingDays'] ?? 30));
+        $finalTs = null;
+
         if (!empty($data['ExpectedClosingDate'])) {
             $ts = strtotime($data['ExpectedClosingDate']);
-            if ($ts) $payload['PredictedClosingDate'] = date('Y-m-d\T00:00:00\Z', $ts);
+            if ($ts && $ts >= $todayTs) {
+                $finalTs = $ts;
+            } else {
+                Log::warning('SapService: ExpectedClosingDate is past, snapping forward', [
+                    'requested'    => $data['ExpectedClosingDate'],
+                    'closing_days' => $defaultDays,
+                ]);
+                $finalTs = strtotime("+{$defaultDays} days");
+            }
         } elseif (!empty($data['ClosingDays'])) {
-            $days = max(1, (int) $data['ClosingDays']);
-            $payload['PredictedClosingDate'] = date('Y-m-d\T00:00:00\Z', strtotime("+{$days} days"));
+            $finalTs = strtotime("+{$defaultDays} days");
+        }
+
+        if ($finalTs) {
+            $payload['PredictedClosingDate'] = date('Y-m-d\T00:00:00\Z', $finalTs);
         }
 
         // Information Source — PartYard custom material categories
@@ -954,13 +979,29 @@ class SapService
      */
     public function updateOpportunity(int $sequentialNo, array $data): bool
     {
+        // Same past-date snap-forward guard as createOpportunity. SAP B1
+        // rejects PredictedClosingDate < today on PATCH too.
+        $predicted = null;
+        if (!empty($data['ExpectedClosingDate'])) {
+            $ts = strtotime($data['ExpectedClosingDate']);
+            $todayTs = strtotime('today');
+            if ($ts && $ts >= $todayTs) {
+                $predicted = date('Y-m-d\T00:00:00\Z', $ts);
+            } else {
+                $days = max(1, (int) ($data['ClosingDays'] ?? 30));
+                Log::warning('SapService: updateOpportunity past date, snapping forward', [
+                    'requested'    => $data['ExpectedClosingDate'],
+                    'closing_days' => $days,
+                ]);
+                $predicted = date('Y-m-d\T00:00:00\Z', strtotime("+{$days} days"));
+            }
+        }
+
         $payload = array_filter([
-            'CurrentStageNo'      => isset($data['StageId']) ? (int) $data['StageId'] : null,
-            'SalesPerson'         => isset($data['SalesPerson']) ? (int) $data['SalesPerson'] : null,
-            'Remarks'             => $data['Remarks'] ?? null,
-            'PredictedClosingDate' => !empty($data['ExpectedClosingDate'])
-                ? date('Y-m-d\T00:00:00\Z', strtotime($data['ExpectedClosingDate']))
-                : null,
+            'CurrentStageNo'       => isset($data['StageId']) ? (int) $data['StageId'] : null,
+            'SalesPerson'          => isset($data['SalesPerson']) ? (int) $data['SalesPerson'] : null,
+            'Remarks'              => $data['Remarks'] ?? null,
+            'PredictedClosingDate' => $predicted,
         ], fn($v) => $v !== null);
 
         $result = $this->patch("SalesOpportunities({$sequentialNo})", $payload);

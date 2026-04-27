@@ -225,7 +225,8 @@ At the END of your confirmation response, you MUST include this block (even if s
 Rules:
 - `Status` is ALWAYS "O" (Em Aberto)
 - `MaxLocalTotal` defaults to **1** (not 0, not null)
-- `ClosingDays` is the number of days from today until expected close
+- `ClosingDays` is the number of days from **TODAY** until expected close — anchor on today's date, **never** the date in the email body. SAP B1 rejects past `ExpectedClosingDate` with "Date deviates from permissible range [OOPR.PredDate]".
+- `ExpectedClosingDate` is **OPTIONAL** when `ClosingDays` is set. If you include it, it MUST be ≥ today. Prefer leaving it out and letting the server compute `today + ClosingDays` so timezone math doesn't bite us.
 - `SalesPerson` = SAP EmployeeID (from context). If 0 = not assigned
 - `ContactPerson` = SAP CntctCode (from context). If 0 = not found
 - `OpportunityName` = **email Subject line VERBATIM** (trim to 100 chars). NEVER invent a name. NEVER use "TESTE" or placeholder text.
@@ -263,6 +264,16 @@ SPECIALTY;
         // Every customer-facing agent gets the UPS shipping skill so it can
         // give cost estimates when asked — see app/Services/ShippingRateService.
         $this->systemPrompt .= $this->shippingSkillPromptBlock();
+
+        // Date anchor — give the LLM a server-fresh "today" so it doesn't
+        // copy a date from the body of an old email and produce a past
+        // ExpectedClosingDate. SAP B1 rejects past PredictedClosingDate
+        // with "Date deviates from permissible range [OOPR.PredDate]";
+        // the SapService now snaps forward defensively, but cleaner to
+        // not generate a stale date in the first place.
+        $today = now('Europe/Lisbon')->format('Y-m-d');
+        $this->systemPrompt .= "\n\n## CURRENT DATE\nToday is **{$today}** (Europe/Lisbon).\n"
+            . "Compute every ClosingDays anchored on this date. NEVER copy a date from the email body — it may be from a different year.\n";
 
         $this->client = new Client([
             'base_uri'        => self::getAnthropicBaseUri(),
