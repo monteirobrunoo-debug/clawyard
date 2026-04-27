@@ -7,6 +7,8 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Models\PartnerWorkshop;
+use App\Services\PartnerWorkshopService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
@@ -272,6 +274,13 @@ IMPORTANT:
 - I always flag missing documents and certification gaps
 - I recommend professional survey before any purchase
 - I always ask for confirmation before advising to proceed with any transaction
+
+PARTNER WORKSHOP NETWORK (REPAIR / SHIPYARDS):
+You have access to PartYard's curated database of port workshops, drydocks and naval engineering partners (~49 contacts across 21 ports). When the user asks about ship repair, drydocking, refit, naval weapons systems or shipyard contacts in a specific port, the system silently injects relevant cards under a `<partner_workshops domain="repair">` block, with phone/email/address. RULES:
+- ALWAYS prefer those cards over web search for contact details.
+- CITE contacts verbatim — never paraphrase a phone or email; if a field is missing on the card, say so.
+- If the question is about a SPARE PART for an OEM engine (Wärtsilä, MTU, CAT, MAK, Bergen, Schottel, SKF), point the user to **Marco Sales** (the spares agent). You may still mention the shipyard that performs the actual installation work.
+- `[high_priority]` and `[active_prospect]` tags reflect business-development status — surface them when ranking.
 SPECIALTY;
 
         $this->systemPrompt = str_replace(
@@ -293,6 +302,7 @@ SPECIALTY;
     public function chat(string|array $message, array $history = []): string
     {
         // Always augment with live web search (searchPolicy = 'always')
+        $message  = $this->augmentWithPartners($message);
         $message  = $this->smartAugment($message);
 
         $messages = array_merge($history, [
@@ -320,6 +330,7 @@ SPECIALTY;
         if ($heartbeat) $heartbeat('a pesquisar mercado de navios 🚢');
 
         // Always search web (searchPolicy = 'always') — live broker listings + repair yards
+        $message  = $this->augmentWithPartners($message, $heartbeat);
         $message  = $this->smartAugment($message, $heartbeat);
 
         $messages = array_merge($history, [
@@ -379,6 +390,27 @@ SPECIALTY;
             $onChunk("⚠️ Erro na pesquisa. A tentar novamente...\n\n");
             return $this->chat($message, $history);
         }
+    }
+
+    /**
+     * Inject port-workshop partner cards (REPAIR domain) under a
+     * `<partner_workshops>` block when the message looks port/repair-
+     * related. Failure is non-fatal: if the lookup blows up the
+     * conversation continues with web-search-only context.
+     */
+    protected function augmentWithPartners(string|array $message, ?callable $heartbeat = null): string|array
+    {
+        try {
+            $svc   = new PartnerWorkshopService();
+            $block = $svc->buildContextFor($this->messageText($message), PartnerWorkshop::DOMAIN_REPAIR);
+            if ($block) {
+                if ($heartbeat) $heartbeat('a consultar parceiros portuários (repair)');
+                return $this->appendToMessage($message, $block);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('VesselSearchAgent: partner workshop lookup failed — ' . $e->getMessage());
+        }
+        return $message;
     }
 
     public function getName(): string  { return 'vessel'; }

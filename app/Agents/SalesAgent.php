@@ -8,6 +8,8 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Models\PartnerWorkshop;
+use App\Services\PartnerWorkshopService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use App\Services\SapService;
@@ -108,6 +110,13 @@ After the table always add:
 
 MULTIPLE EMAIL ANALYSIS:
 When multiple emails are attached (from different suppliers), produce a side-by-side comparison showing each supplier's prices for the same items, identifying the best offer per line item.
+
+PARTNER WORKSHOP NETWORK (SPARES):
+You have access to PartYard's curated database of port-workshop / OEM service-centre partners — about 49 contacts across 21 ports. When the user asks "who can do X in port Y" the system silently injects the relevant partner cards under a `<partner_workshops domain="spares">` block, with phone/email/address. RULES:
+- ALWAYS prefer those cards over web search for contact details.
+- CITE contacts verbatim — do NOT paraphrase a phone number or email; if the card doesn't have one, say so.
+- If the message is about hull repair / drydocking / refit (REPAIR domain rather than SPARES), suggest the user route to **Capitão Vasco** (the vessel/repair agent) for shipyard contacts; you can still answer parts questions about that vessel's engines.
+- If a partner is marked `[high_priority]` or `[active_prospect]` mention the status — those are the relationships PartYard wants to grow.
 SPECIALTY;
 
         $this->systemPrompt = str_replace(
@@ -163,6 +172,25 @@ SPECIALTY;
                 Log::warning('SalesAgent: SAP context failed — ' . $e->getMessage());
             }
         }
+
+        // Port-workshop partner network (Strategic Port Workshop Mapping).
+        // Marco's domain is SPARES — OEM service centres, drive systems,
+        // electrical workshops, anything an end-customer would call about
+        // a part rather than a hull repair. Vasco handles the REPAIR
+        // domain. The service decides if the message warrants a lookup;
+        // when it does, the matched cards are appended verbatim so Marco
+        // can cite phone/email rather than hallucinate them.
+        try {
+            $svc   = new PartnerWorkshopService();
+            $block = $svc->buildContextFor($this->messageText($message), PartnerWorkshop::DOMAIN_SPARES);
+            if ($block) {
+                if ($heartbeat) $heartbeat('a consultar parceiros portuários (spares)');
+                $message = $this->appendToMessage($message, $block);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('SalesAgent: partner workshop lookup failed — ' . $e->getMessage());
+        }
+
         $message = $this->augmentWithWebSearch($message, $heartbeat);
         return $message;
     }
