@@ -566,6 +566,18 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/conversations', [AdminController::class, 'conversations'])->name('admin.conversations');
     Route::get('/conversations/{conversation}', [AdminController::class, 'conversation'])->name('admin.conversation');
     Route::get('/schedules', function () { return view('admin.schedules'); })->name('admin.schedules');
+
+    // Per-user agent access control. Matrix view + cell toggle + preset
+    // bulk-apply. The toggle endpoint is JSON so the matrix can update
+    // a cell in-place without a full reload.
+    Route::get   ('/agent-access',                    [AdminController::class, 'agentAccess'])
+        ->name('admin.agentAccess');
+    Route::patch ('/users/{user}/agents/{agentKey}',  [AdminController::class, 'toggleAgentAccess'])
+        ->where('agentKey', '[a-z_]+')
+        ->name('admin.users.toggleAgent');
+    Route::post  ('/users/{user}/agents/preset/{preset}', [AdminController::class, 'applyAgentPreset'])
+        ->where('preset', '[a-z_]+')
+        ->name('admin.users.agentPreset');
 });
 
 // QNAP File download — serve files from /var/www/qnapbackup (auth required)

@@ -170,6 +170,20 @@ class NvidiaController extends Controller
         $agentName = $request->input('agent', 'auto');
         $message   = $request->input('message');
 
+        // Per-user agent gate. Refuse early with 403 so the SSE never
+        // opens — the front-end renders the JSON error inline. 'auto'
+        // and 'orchestrator' are routing meta-agents that themselves
+        // fan out to the underlying ones, which each enforce the gate
+        // again at dispatch time, so we let them through here.
+        if (!in_array($agentName, ['auto', 'orchestrator'], true)
+            && !auth()->user()->can('agents.use', $agentName)) {
+            return response()->json([
+                'error' => 'agent_forbidden',
+                'message' => "Não tens acesso ao agente \"{$agentName}\". Pede a um administrador para te dar acesso.",
+                'agent' => $agentName,
+            ], 403);
+        }
+
         $userId    = auth()->id();
         $clientSid = $request->input('session_id');
         $sessionId = $clientSid
@@ -541,8 +555,22 @@ class NvidiaController extends Controller
      */
     public function agents(): JsonResponse
     {
+        $user = auth()->user();
+        $all  = $this->agentManager->available();
+
+        // Filter the catalog to what the user is actually allowed to
+        // chat with. Keeps the picker honest — no point showing
+        // 'Marco Sales' if the chat endpoint will 403 it.
+        $filtered = array_values(array_filter($all, function ($a) use ($user) {
+            $key = $a['key'] ?? null;
+            // Routing meta-agents always visible — see chatStream.
+            if (in_array($key, ['auto', 'orchestrator'], true)) return true;
+            if (!$key) return false;
+            return $user->can('agents.use', $key);
+        }));
+
         return response()->json([
-            'agents' => $this->agentManager->available(),
+            'agents' => $filtered,
         ]);
     }
 

@@ -213,4 +213,119 @@ class AdminController extends Controller
 
         return view('admin.stats', compact('stats'));
     }
+
+    // ── Per-user agent access control ────────────────────────────────────
+    /**
+     * Matrix view of every active user × every agent. Cells are
+     * clickable to flip a single permission — the click POSTs to
+     * `toggleAgentAccess` and we re-render with the new state.
+     *
+     * Why a matrix vs N per-user pages: the admin's mental model when
+     * onboarding a new persona is "this person is a vendor like the
+     * other vendor" — fastest to ack across users on a single page,
+     * not click-through-to-each-profile.
+     */
+    public function agentAccess()
+    {
+        $users = User::query()
+            ->where('is_active', true)
+            ->whereIn('role', ['user', 'manager', 'admin'])   // skip 'guest' — explicit minimal-access tier
+            ->orderBy('role')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role', 'allowed_agents']);
+
+        $agents = collect(\App\Services\AgentCatalog::byKey())
+            ->reject(fn($a, $key) => in_array($key, ['auto', 'orchestrator'], true))   // routing meta — always available
+            ->values()
+            ->all();
+
+        return view('admin.agent-access', [
+            'users'   => $users,
+            'agents'  => $agents,
+            'presets' => array_keys(User::AGENT_PRESETS),
+        ]);
+    }
+
+    /**
+     * Toggle one (user, agent) pair. JSON response so the matrix can
+     * patch the cell in-place without a full reload.
+     */
+    public function toggleAgentAccess(Request $request, User $user, string $agentKey)
+    {
+        if ($user->isAdmin()) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Admins têm sempre acesso a todos os agentes.',
+            ], 422);
+        }
+        $catalog = \App\Services\AgentCatalog::byKey();
+        if (!isset($catalog[$agentKey])) {
+            return response()->json(['ok' => false, 'error' => "Agente desconhecido: {$agentKey}"], 422);
+        }
+
+        $current = $user->allowed_agents;
+
+        // First click on a NULL row materialises the whitelist as
+        // "every agent minus this one" — same intent-driven UX as the
+        // tender source toggle. Click=block.
+        if ($current === null) {
+            $allKeys = array_keys($catalog);
+            $allKeys = array_values(array_diff($allKeys, ['auto', 'orchestrator']));
+            $next = array_values(array_diff($allKeys, [$agentKey]));
+        } elseif (in_array($agentKey, $current, true)) {
+            $next = array_values(array_filter($current, fn($k) => $k !== $agentKey));
+        } else {
+            $next = array_values(array_unique(array_merge($current, [$agentKey])));
+        }
+
+        // Collapse to NULL when every non-meta agent is in the list —
+        // cleaner sentinel state than carrying a 30-element array.
+        $allKeys = array_values(array_diff(array_keys($catalog), ['auto', 'orchestrator']));
+        if (!empty($next) && count(array_diff($allKeys, $next)) === 0) {
+            $next = null;
+        }
+
+        $user->allowed_agents = $next;
+        $user->save();
+
+        \App\Models\UserAdminEvent::create([
+            'target_user_id' => $user->id,
+            'actor_user_id'  => auth()->id(),
+            'event_type'     => 'agent_access_toggle',
+            'payload'        => ['agent' => $agentKey, 'now_allowed' => $user->canUseAgent($agentKey)],
+        ]);
+
+        return response()->json([
+            'ok'             => true,
+            'allowed_agents' => $next,
+            'now_allowed'    => $user->canUseAgent($agentKey),
+            'mode'           => $next === null ? 'unrestricted' : (empty($next) ? 'blocked' : 'whitelist'),
+        ]);
+    }
+
+    /**
+     * Apply one of User::AGENT_PRESETS to a user. Idempotent — the
+     * preset replaces whatever was there.
+     */
+    public function applyAgentPreset(Request $request, User $user, string $preset)
+    {
+        if ($user->isAdmin()) {
+            return back()->withErrors(['preset' => 'Admins têm acesso total — preset não aplicável.']);
+        }
+
+        try {
+            $user->applyAgentPreset($preset);
+        } catch (\InvalidArgumentException $e) {
+            return back()->withErrors(['preset' => $e->getMessage()]);
+        }
+
+        \App\Models\UserAdminEvent::create([
+            'target_user_id' => $user->id,
+            'actor_user_id'  => auth()->id(),
+            'event_type'     => 'agent_preset_applied',
+            'payload'        => ['preset' => $preset, 'allowed_agents' => $user->allowed_agents],
+        ]);
+
+        return back()->with('status', "Preset \"{$preset}\" aplicado a \"{$user->name}\".");
+    }
 }

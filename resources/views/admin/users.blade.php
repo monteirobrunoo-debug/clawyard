@@ -169,6 +169,7 @@
     <span class="badge">ADMIN</span>
     <nav class="nav">
         <a href="/admin/users" class="active">👥 Utilizadores</a>
+        <a href="/admin/agent-access">🎭 Agentes × Users</a>
         <a href="/admin/conversations">💬 Conversas</a>
         <a href="/dashboard">🏠 Dashboard</a>
     </nav>

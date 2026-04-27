@@ -54,6 +54,11 @@ class AppServiceProvider extends ServiceProvider
 
         // Authorisation gates for the Concursos (tenders) dashboard.
         $this->registerTenderGates();
+
+        // Per-user agent whitelist (NULL=all / [] = none / array = whitelist).
+        // Applied on /api/chat (chatStream) and /api/agents (filters the
+        // returned list). Admin always passes — see User::canUseAgent.
+        Gate::define('agents.use', fn(User $u, string $agentKey) => $u->canUseAgent($agentKey));
     }
 
     /**
