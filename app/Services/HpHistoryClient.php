@@ -191,6 +191,56 @@ class HpHistoryClient
     }
 
     /**
+     * Stream a document from the hp-history droplet by its UUID.
+     * Returns a tuple of (Psr7 stream, content-type, headers) when the
+     * server returned 200, or null when the document was not found /
+     * not in the managed library / the service is disabled.
+     *
+     * Used by the citation proxy controller (web routes) so the user
+     * can click `/hp-history/doc/{uuid}` from the chat UI without
+     * having to know the HMAC.
+     *
+     * @return array{0: \Psr\Http\Message\StreamInterface, 1: string, 2: array<string,string>}|null
+     */
+    public function fetchDocument(string $docId): ?array
+    {
+        if (!$this->isEnabled()) return null;
+
+        // Accept both bare uuid and the citation_url shape returned by
+        // /search (`/doc/<uuid>`). Strip the prefix if present so
+        // callers can pass either.
+        $docId = ltrim($docId, '/');
+        if (str_starts_with($docId, 'doc/')) {
+            $docId = substr($docId, 4);
+        }
+
+        $path    = "/doc/{$docId}";
+        // GET has no body, but the canonical string still needs a
+        // body hash slot — we hash the empty string.
+        $headers = $this->signHeaders('GET', $path, '');
+
+        try {
+            $res = $this->http->get($path, ['headers' => $headers]);
+        } catch (GuzzleException $e) {
+            \Illuminate\Support\Facades\Log::warning('HpHistory: doc fetch transport error — ' . $e->getMessage());
+            return null;
+        }
+        $status = $res->getStatusCode();
+        if ($status !== 200) {
+            \Illuminate\Support\Facades\Log::info('HpHistory: doc fetch non-200', ['status' => $status, 'doc' => $docId]);
+            return null;
+        }
+        return [
+            $res->getBody(),
+            $res->getHeaderLine('Content-Type') ?: 'application/octet-stream',
+            [
+                'Content-Disposition' => $res->getHeaderLine('Content-Disposition') ?: "inline; filename=\"{$docId}\"",
+                'X-HP-Doc-Source'     => $res->getHeaderLine('X-HP-Doc-Source'),
+            ],
+        ];
+    }
+
+    /**
      * Build the HMAC headers expected by the server. The canonical string
      * is "{ts}.{method}.{path}.{sha256(body)}" — purposely simple so
      * the FastAPI side has nothing exotic to parse. Tolerance is 300s on

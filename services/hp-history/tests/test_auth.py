@@ -108,3 +108,47 @@ async def test_empty_secret_returns_503(monkeypatch):
     with pytest.raises(HTTPException) as e:
         await auth.verify_hmac(req, body)
     assert e.value.status_code == 503
+
+
+# ── Dual-secret rotation window ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_rotation_accepts_request_signed_with_next_secret(monkeypatch):
+    # Server in rotation: knows OLD as primary + NEW as `next`.
+    monkeypatch.setattr(settings, "hmac_secret", "OLD")
+    monkeypatch.setattr(settings, "hmac_secret_next", "NEW")
+
+    # Client has already moved to NEW (step 2 of the rotation flow).
+    body = b'{"query":"foo"}'
+    headers = _sign("POST", "/search", body, secret="NEW")
+    req = _make_request("POST", "/search", headers)
+
+    await auth.verify_hmac(req, body)   # no exception
+
+
+@pytest.mark.asyncio
+async def test_rotation_still_accepts_old_secret(monkeypatch):
+    # In-flight clients still use OLD during the window — must not 401.
+    monkeypatch.setattr(settings, "hmac_secret", "OLD")
+    monkeypatch.setattr(settings, "hmac_secret_next", "NEW")
+
+    body = b'{"query":"foo"}'
+    headers = _sign("POST", "/search", body, secret="OLD")
+    req = _make_request("POST", "/search", headers)
+
+    await auth.verify_hmac(req, body)   # no exception
+
+
+@pytest.mark.asyncio
+async def test_rotation_rejects_unrelated_secret(monkeypatch):
+    # A 3rd-party secret must still be rejected even with rotation on.
+    monkeypatch.setattr(settings, "hmac_secret", "OLD")
+    monkeypatch.setattr(settings, "hmac_secret_next", "NEW")
+
+    body = b'{"query":"foo"}'
+    headers = _sign("POST", "/search", body, secret="STOLEN")
+    req = _make_request("POST", "/search", headers)
+
+    with pytest.raises(HTTPException) as e:
+        await auth.verify_hmac(req, body)
+    assert e.value.status_code == 401

@@ -68,12 +68,30 @@ async def verify_hmac(request: Request, body: bytes) -> None:
         raise HTTPException(status_code=401, detail="unauthorised")
 
     canonical = f"{ts}.{request.method}.{request.url.path}.{body_hash}"
-    expected = hmac.new(
-        settings.hmac_secret.encode(), canonical.encode(), hashlib.sha256
-    ).hexdigest()
-    if not hmac.compare_digest(expected, sig):
+
+    # Try the primary secret first. If a `_next` secret is set (rotation
+    # window), accept that too. ALWAYS evaluate both branches in
+    # constant time so the response timing doesn't reveal which secret
+    # the request used.
+    secrets_to_try = [settings.hmac_secret]
+    if settings.hmac_secret_next:
+        secrets_to_try.append(settings.hmac_secret_next)
+
+    matched_with: str | None = None
+    for sec in secrets_to_try:
+        expected = hmac.new(sec.encode(), canonical.encode(), hashlib.sha256).hexdigest()
+        if hmac.compare_digest(expected, sig):
+            matched_with = "primary" if sec == settings.hmac_secret else "next"
+            # Don't break — we want the loop to traverse both arms in
+            # constant time. The `matched_with` capture above is enough.
+    if matched_with is None:
         log.warning("auth fail — signature mismatch (canonical=%s)", canonical)
         raise HTTPException(status_code=401, detail="unauthorised")
+    if matched_with == "next":
+        # Useful telemetry during a rotation window — confirms clients
+        # have already moved to the new secret. Once this stops firing,
+        # safe to retire the primary.
+        log.info("auth ok — request signed with HPH_HMAC_SECRET_NEXT")
 
 
 async def hmac_middleware(

@@ -1,0 +1,220 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus data source scraping hp-history /metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "title": "hp-history — service health & cost",
+  "uid": "hp-history-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "tags": ["hp-history", "partyard"],
+  "timezone": "Europe/Lisbon",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": { "text": "Prometheus", "value": "${DS_PROMETHEUS}" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Search latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "targets": [
+        {
+          "refId": "P50",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(hph_search_latency_seconds_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "P95",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(hph_search_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "P99",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(hph_search_latency_seconds_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Search request rate by outcome",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(hph_search_requests_total[1m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Hits / request",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 2 } },
+      "options": { "reduceOptions": { "calcs": ["last"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(hph_search_hits_total[5m])) / clamp_min(sum(rate(hph_search_requests_total{outcome=~\"ok|empty\"}[5m])), 1)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Rerank usage (% of search requests)",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 1 } },
+      "options": { "reduceOptions": { "calcs": ["last"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(hph_search_requests_total{rerank=\"on\"}[5m])) / clamp_min(sum(rate(hph_search_requests_total[5m])), 1)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Embedding chars (cost proxy, per minute)",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "none" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (kind) (rate(hph_embedding_chars_total[1m]) * 60)",
+          "legendFormat": "{{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Daily embedding cost estimate (USD)",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 12, "w": 6, "h": 4 },
+      "description": "Estimate using Voyage voyage-3-large at $0.18 / 1M tokens, ~4 chars / token. Tweak the constant if you switch provider.",
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2 } },
+      "options": { "reduceOptions": { "calcs": ["last"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(sum(increase(hph_embedding_chars_total[24h])) / 4) * (0.18 / 1000000)"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Doc downloads by outcome",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 6, "y": 12, "w": 18, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (outcome) (rate(hph_doc_downloads_total[5m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Watcher passes / hour",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 0, "y": 20, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } },
+      "options": { "reduceOptions": { "calcs": ["last"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(hph_watcher_passes_total[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Documents ingested (24h)",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 6, "y": 20, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } },
+      "options": { "reduceOptions": { "calcs": ["last"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (source) (increase(hph_ingest_documents_total[24h]))",
+          "legendFormat": "{{source}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Chunks ingested (24h)",
+      "type": "stat",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 12, "y": 20, "w": 6, "h": 4 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } },
+      "options": { "reduceOptions": { "calcs": ["last"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(hph_ingest_chunks_total[24h]))"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Auth failures / minute",
+      "type": "timeseries",
+      "datasource": "${datasource}",
+      "gridPos": { "x": 18, "y": 20, "w": 6, "h": 4 },
+      "description": "Spikes mean either rotation drift, clock skew, or an attacker probing the HMAC. Cross-reference with the auth.py warning logs.",
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(hph_search_requests_total{outcome=\"error\"}[1m]))"
+        }
+      ]
+    }
+  ]
+}

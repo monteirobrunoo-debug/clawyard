@@ -337,6 +337,15 @@ Route::get('/stats', function () {
 // Laravel matches "activity" as a {key} param and the page 404s.
 Route::middleware(['auth'])->get('/agents/activity', [AgentActivityController::class, 'index'])->name('agents.activity');
 
+// hp-history citation proxy — authenticated download of an archived
+// document by UUID. The Laravel server does the HMAC signing so the
+// browser doesn't need the shared secret. Used by the chat bubble
+// renderer to turn `<hp_history>` citation_urls into clickable links.
+Route::middleware(['auth'])
+    ->get('/hp-history/doc/{docId}', [\App\Http\Controllers\HpHistoryDocController::class, 'show'])
+    ->where('docId', '[A-Fa-f0-9\-]{36}')   // UUID shape
+    ->name('hp_history.doc');
+
 // Agent profile — per-agent landing page with description, stats, starters
 // and recent conversations. Provides a deeper entry point than the dashboard
 // card (which just drops you into /chat). Linked from the card's long-press

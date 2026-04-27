@@ -64,6 +64,11 @@ async def init_schema() -> None:
             -- Add columns idempotently if upgrading from an older schema.
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS local_path TEXT;
             ALTER TABLE documents ADD COLUMN IF NOT EXISTS mime_type  TEXT;
+            -- mtime fingerprint of the source file at ingest time. The
+            -- watcher uses this to skip re-ingesting files whose
+            -- contents haven't changed since last pass; when the source
+            -- file is updated mtime moves forward and we re-embed.
+            ALTER TABLE documents ADD COLUMN IF NOT EXISTS source_mtime BIGINT;
 
             CREATE INDEX IF NOT EXISTS documents_domain_year_idx
                 ON documents (domain, year);

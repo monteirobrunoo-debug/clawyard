@@ -17,6 +17,17 @@ class Settings(BaseSettings):
     # Shared secret with the clawyard Laravel app. Must equal
     # config('services.hp_history.hmac_secret') on the other side.
     hmac_secret: str = ""
+    # Optional second secret accepted during a rotation window. To
+    # rotate without downtime:
+    #   1. Set HPH_HMAC_SECRET_NEXT=<new secret>, redeploy server.
+    #      (Server now accepts both old and new.)
+    #   2. Update Laravel's HP_HISTORY_HMAC_SECRET=<new secret>,
+    #      redeploy clawyard. (Client now signs with new only.)
+    #   3. After 24-48h of clean traffic, clear HPH_HMAC_SECRET_NEXT
+    #      and promote it to HPH_HMAC_SECRET, redeploy server.
+    # The two-window flow means clients in flight during step 2 never
+    # see a 401, and a botched rotation can be reversed at any step.
+    hmac_secret_next: str = ""
     # Allowed clock drift (seconds) for X-HP-Timestamp. Tighten only if
     # the two servers' clocks are well synchronised (NTP is mandatory
     # in any case).

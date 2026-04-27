@@ -36,6 +36,7 @@ services:
     environment: &app_env
       HPH_PG_DSN:                 postgresql://hphistory:hphistory@db:5432/hphistory
       HPH_HMAC_SECRET:            ${HPH_HMAC_SECRET}
+      HPH_HMAC_SECRET_NEXT:       ${HPH_HMAC_SECRET_NEXT:-}
       HPH_HMAC_TOLERANCE_SECONDS: 300
       HPH_EMBEDDING_PROVIDER:     ${HPH_EMBEDDING_PROVIDER:-voyage}
       HPH_EMBEDDING_MODEL:        ${HPH_EMBEDDING_MODEL:-voyage-3-large}

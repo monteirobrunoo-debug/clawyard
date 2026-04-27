@@ -195,6 +195,11 @@
         .bubble pre.code-block { background:#0d0d0d; border:1px solid var(--border2); border-radius:8px; overflow:hidden; margin:8px 0; }
         .bubble pre.code-block .code-lang { display:block; padding:4px 12px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; color:var(--muted); background:#111; border-bottom:1px solid var(--border2); }
         .bubble pre.code-block code { display:block; padding:12px; font-size:12px; line-height:1.6; overflow-x:auto; color:#e5e5e5; background:transparent; border:none; border-radius:0; }
+        /* hp-history citation chip — clickable inline link rendered by
+           markdownToHtml when an agent cites a `/doc/<uuid>` from the
+           archive. Authenticated proxy strips it to a clean download. */
+        .bubble a.hp-cite { display:inline-flex; align-items:center; gap:4px; padding:1px 6px; margin:0 2px; font-size:11px; font-weight:600; color:#bcd; background:#243248; border:1px solid #354a66; border-radius:6px; text-decoration:none; vertical-align:baseline; }
+        .bubble a.hp-cite:hover { background:#34465f; color:#fff; }
 
         /* Tables */
         .bubble .table-wrap { overflow-x:auto; margin:8px 0; }
@@ -2438,6 +2443,18 @@ function renderMarkdown(text) {
         .replace(/^---$/gm, '<hr>')
         .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
         .replace(/(<li>.*<\/li>(\n|$))+/g, m => `<ul>${m}</ul>`);
+
+    // 6.5 hp-history citation links — turn `/doc/<uuid>` references
+    //     coming from <hp_history> blocks into clickable links to our
+    //     authenticated proxy at /hp-history/doc/<uuid>. The proxy
+    //     handles HMAC signing on the server so the browser never sees
+    //     the shared secret. Matches both bare `/doc/<uuid>` mentions
+    //     and the full markdown link `[label](/doc/<uuid>)`.
+    const HP_DOC_RE = /(?:^|[\s(])\/doc\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/gi;
+    html = html.replace(HP_DOC_RE, (match, uuid) => {
+        const lead = match[0] === '/' ? '' : match[0];
+        return `${lead}<a href="/hp-history/doc/${uuid}" target="_blank" rel="noopener" class="hp-cite" title="Abrir documento arquivado (autenticado)">📎 doc</a>`;
+    });
 
     // 7. Newlines to <br>
     html = html.replace(/\n/g, '<br>');

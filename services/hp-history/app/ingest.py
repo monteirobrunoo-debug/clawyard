@@ -148,6 +148,11 @@ async def ingest_folder(
             log.warning("library-copy failed for %s (will still index): %s", path, e)
             local_path, mime = None, _MIME_BY_EXT.get(path.suffix.lower())
 
+        try:
+            current_mtime = int(path.stat().st_mtime)
+        except OSError:
+            current_mtime = None
+
         async with pool.acquire() as conn:
             async with conn.transaction():
                 # Replace strategy: drop existing chunks for the doc, then
@@ -155,8 +160,8 @@ async def ingest_folder(
                 await conn.execute("DELETE FROM chunks WHERE document_id = $1", doc_id)
                 await conn.execute(
                     """
-                    INSERT INTO documents (id, title, source, local_path, mime_type, domain, year, metadata)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                    INSERT INTO documents (id, title, source, local_path, mime_type, domain, year, metadata, source_mtime)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
                     ON CONFLICT (id) DO UPDATE SET
                         title = EXCLUDED.title,
                         source = EXCLUDED.source,
@@ -164,9 +169,10 @@ async def ingest_folder(
                         mime_type = EXCLUDED.mime_type,
                         domain = EXCLUDED.domain,
                         year = EXCLUDED.year,
-                        metadata = EXCLUDED.metadata
+                        metadata = EXCLUDED.metadata,
+                        source_mtime = EXCLUDED.source_mtime
                     """,
-                    doc_id, title, source, local_path, mime, domain, year, json.dumps(meta),
+                    doc_id, title, source, local_path, mime, domain, year, json.dumps(meta), current_mtime,
                 )
                 rows = []
                 for i, (txt, vec) in enumerate(zip(pieces, vectors)):

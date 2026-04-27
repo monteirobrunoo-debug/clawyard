@@ -77,13 +77,37 @@ async def run_once() -> tuple[int, int]:
         log.info("watcher_path %s not a directory — nothing to do", folder)
         return 0, 0
 
+    # Pre-load the (path → mtime) map of all known documents so we can
+    # skip files whose contents haven't changed since last ingest.
+    # Storing mtime on the document row gives us a $0.00 idempotency
+    # check — embedding cost is the dominant factor in this pipeline.
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT source, source_mtime FROM documents")
+        known_mtimes = {r["source"]: r["source_mtime"] for r in rows}
+
     # Walk file-by-file so the per-file sidecar can override defaults.
-    docs_in = chunks_in = 0
+    docs_in = chunks_in = skipped = 0
     for path in sorted(folder.rglob("*")):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_EXTENSIONS:
             continue
         if path.name.endswith(".meta.json"):
             continue
+
+        # Skip-if-unchanged. mtime is integer seconds; we round to int
+        # so float jitter from filesystems doesn't trigger spurious
+        # re-ingests. If the file is brand new, no row exists yet —
+        # known_mtimes.get returns None and we ingest.
+        source_url = "file://" + str(path.resolve())
+        try:
+            current_mtime = int(path.stat().st_mtime)
+        except OSError:
+            current_mtime = None
+        prev_mtime = known_mtimes.get(source_url)
+        if prev_mtime is not None and current_mtime is not None and current_mtime == int(prev_mtime):
+            skipped += 1
+            continue
+
         sidecar = _read_sidecar(path)
 
         domain = sidecar.get("domain") or (settings.watcher_default_domain or None) or None
@@ -92,29 +116,30 @@ async def run_once() -> tuple[int, int]:
             year = settings.watcher_default_year
         meta = {k: v for k, v in sidecar.items() if k not in ("domain", "year")}
 
-        d, c = await ingest_folder(
-            path.parent,                  # ingest_folder rglob's, but this single-file dir is fine
-            domain=domain,
-            year=year,
-            extra_metadata=meta,
-        ) if False else (0, 0)  # we ingest file-by-file below, not folder-by-folder
-
-        # Reuse ingest_folder's logic by calling _ingest_file equivalent —
-        # but for clarity (and to keep the codebase small) we simply call
-        # ingest_folder against a temp directory containing only this
-        # file. That's slow for large trees; instead we directly use the
-        # internal helper at module scope:
-        d, c = await _ingest_single(path, domain=domain, year=year, extra_metadata=meta)
+        d, c = await _ingest_single(
+            path, domain=domain, year=year, extra_metadata=meta,
+            source_mtime=current_mtime,
+        )
         docs_in += d
         chunks_in += c
 
     metrics.inc_watcher_pass()
     metrics.inc_ingest("watcher", docs_in, chunks_in)
-    log.info("watcher pass complete — %d doc(s) / %d chunk(s)", docs_in, chunks_in)
+    log.info(
+        "watcher pass complete — %d doc(s) / %d chunk(s) ingested, %d skipped (unchanged)",
+        docs_in, chunks_in, skipped,
+    )
     return docs_in, chunks_in
 
 
-async def _ingest_single(path: Path, *, domain: str | None, year: int | None, extra_metadata: dict) -> tuple[int, int]:
+async def _ingest_single(
+    path: Path,
+    *,
+    domain: str | None,
+    year: int | None,
+    extra_metadata: dict,
+    source_mtime: int | None = None,
+) -> tuple[int, int]:
     """Bypass ingest_folder's rglob to ingest exactly one file with its
     own metadata. Reuses the same chunk + embed + DB-write internals.
 
@@ -154,8 +179,8 @@ async def _ingest_single(path: Path, *, domain: str | None, year: int | None, ex
             await conn.execute("DELETE FROM chunks WHERE document_id = $1", doc_id)
             await conn.execute(
                 """
-                INSERT INTO documents (id, title, source, local_path, mime_type, domain, year, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                INSERT INTO documents (id, title, source, local_path, mime_type, domain, year, metadata, source_mtime)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
                 ON CONFLICT (id) DO UPDATE SET
                     title = EXCLUDED.title,
                     source = EXCLUDED.source,
@@ -163,9 +188,10 @@ async def _ingest_single(path: Path, *, domain: str | None, year: int | None, ex
                     mime_type = EXCLUDED.mime_type,
                     domain = EXCLUDED.domain,
                     year = EXCLUDED.year,
-                    metadata = EXCLUDED.metadata
+                    metadata = EXCLUDED.metadata,
+                    source_mtime = EXCLUDED.source_mtime
                 """,
-                doc_id, title, source, local_path, mime, domain, year, json.dumps(meta),
+                doc_id, title, source, local_path, mime, domain, year, json.dumps(meta), source_mtime,
             )
             rows = [(uuid_lib.uuid4(), doc_id, i, txt, vec) for i, (txt, vec) in enumerate(zip(pieces, vectors))]
             await conn.executemany(
