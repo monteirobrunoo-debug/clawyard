@@ -250,7 +250,28 @@ Route::get('/dashboard', function () {
 
 // Chat — with optional agent pre-selected
 Route::get('/chat', function () {
-    return view('welcome');
+    // Compute the user's agent-restriction summary so the welcome
+    // template can render a transparency banner ("Vês apenas N
+    // agentes. Outros estão restringidos."). Without it the user
+    // would see a smaller-than-expected picker and assume the system
+    // is broken — exactly the same UX gap the /tenders banner
+    // already addressed.
+    $user = auth()->user();
+    $restriction = null;
+    if ($user && !$user->isAdmin() && $user->allowed_agents !== null) {
+        $allowed = (array) $user->allowed_agents;
+        $catalog = \App\Services\AgentCatalog::byKey();
+        // Total agents user-facing (i.e. excluding meta routers).
+        $total = count(array_diff(array_keys($catalog), ['auto', 'orchestrator']));
+        $restriction = [
+            'mode'     => empty($allowed) ? 'blocked_all' : 'whitelist',
+            'allowed'  => array_values(array_intersect(array_keys($catalog), $allowed)),
+            'total'    => $total,
+            'visible'  => count($allowed),
+            'agents'   => array_intersect_key($catalog, array_flip($allowed)),
+        ];
+    }
+    return view('welcome', ['agentRestriction' => $restriction]);
 })->middleware(['auth'])->name('chat');
 
 // Usage analytics — personal dashboard showing which agents the user

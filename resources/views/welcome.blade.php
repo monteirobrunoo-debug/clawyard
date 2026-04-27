@@ -490,6 +490,48 @@
 </head>
 <body>
 
+@isset($agentRestriction)
+    @php($r = $agentRestriction)
+    {{-- Agent-restriction transparency banner. Rendered only when the
+         user has a non-NULL allowed_agents column AND is not an admin
+         (admin always passes the gate via User::canUseAgent). Two
+         flavours:
+            mode='whitelist' → shows what they CAN see, with a count
+                                 ("vês N de M agentes")
+            mode='blocked_all' → amber warning, picker is empty, agent
+                                  endpoint will refuse everything --}}
+    <div id="agent-restriction-banner"
+         style="
+             padding: 8px 16px; font-size: 12px; line-height: 1.4;
+             border-bottom: 1px solid {{ $r['mode'] === 'blocked_all' ? '#5b3a14' : '#1f2c4a' }};
+             background: {{ $r['mode'] === 'blocked_all' ? '#2a1f10' : '#101a2e' }};
+             color: {{ $r['mode'] === 'blocked_all' ? '#fbbf24' : '#93c5fd' }};
+             display: flex; align-items: center; gap: 10px;
+         ">
+        @if($r['mode'] === 'blocked_all')
+            <span style="font-weight:700;">⚠</span>
+            <span>
+                <strong>Acesso a agentes bloqueado</strong> — não tens
+                qualquer agente autorizado. O picker está vazio. Pede a
+                um administrador para te dar acesso (<code>/admin/agent-access</code>).
+            </span>
+        @else
+            <span>ℹ</span>
+            <span>
+                Vês <strong>{{ $r['visible'] }}</strong> de
+                <strong>{{ $r['total'] }}</strong> agentes — o resto foi
+                restringido pelo administrador.
+                @if(count($r['agents']) <= 6)
+                    Disponíveis:
+                    @foreach($r['agents'] as $a)
+                        <span style="display:inline-block;padding:1px 6px;margin:0 2px;background:#1f2c4a;color:#bcd;border-radius:4px;font-size:11px;">{{ $a['emoji'] ?? '·' }} {{ $a['name'] }}</span>
+                    @endforeach
+                @endif
+            </span>
+        @endif
+    </div>
+@endisset
+
 <!-- ── HEADER ── -->
 <header>
     <a href="/dashboard" class="back-btn" title="Voltar ao dashboard">←</a>
