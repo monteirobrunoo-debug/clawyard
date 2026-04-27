@@ -329,6 +329,28 @@
                                         @endif
 
                                         @if($c->is_active)
+                                            {{-- Merge inline picker. The select is the trigger; submit
+                                                 happens onchange. Lists every OTHER active row so the
+                                                 admin can fuse "Mónica" (this row) into "Monica Pereira"
+                                                 (the survivor row). --}}
+                                            <form method="POST" action="" class="inline-block ml-3"
+                                                  onsubmit="return false"
+                                                  data-from="{{ $c->id }}"
+                                                  data-from-name="{{ $c->name }}"
+                                                  data-from-tenders="{{ $c->tenders_count }}">
+                                                @csrf
+                                                <select onchange="confirmMerge(this)"
+                                                        class="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white text-gray-700 max-w-[140px]"
+                                                        title="Funde esta row noutra (move tenders, regista alias, desactiva esta)">
+                                                    <option value="">⇒ Fundir com…</option>
+                                                    @foreach($collaborators as $other)
+                                                        @if($other->id !== $c->id && $other->is_active)
+                                                            <option value="{{ $other->id }}">{{ \Illuminate\Support\Str::limit($other->name, 22) }}</option>
+                                                        @endif
+                                                    @endforeach
+                                                </select>
+                                            </form>
+
                                             {{-- ACTIVE row: can desactivate (soft). --}}
                                             <form method="POST" action="{{ route('tenders.collaborators.destroy', $c) }}"
                                                   class="inline-block ml-3"
@@ -447,6 +469,42 @@
         } finally {
             btn.disabled = false;
         }
+    }
+
+    // ── Merge two collaborator rows ──────────────────────────────────────
+    // Triggered by the "⇒ Fundir com…" select inside each active row.
+    // Confirms with the operator (showing the count of tenders that
+    // will move) before POSTing to the merge endpoint. Server-side does
+    // the move + alias write + deactivation in a single transaction.
+    function confirmMerge(selectEl) {
+        const intoId   = selectEl.value;
+        if (!intoId) return;
+        const form     = selectEl.closest('form');
+        const fromId   = form.dataset.from;
+        const fromName = form.dataset.fromName;
+        const fromN    = parseInt(form.dataset.fromTenders || '0', 10);
+        const intoName = selectEl.options[selectEl.selectedIndex].text;
+
+        const msg = `Vais fundir "${fromName}" → "${intoName}".\n\n` +
+                    `• ${fromN} tender(s) movem-se para "${intoName}".\n` +
+                    `• "${fromName}" fica desactivado.\n` +
+                    `• "${fromName}" passa a ser alias de "${intoName}" — futuros imports já não criam duplicado.\n\n` +
+                    `Confirmas?`;
+        if (!confirm(msg)) {
+            selectEl.value = '';
+            return;
+        }
+
+        // Build a one-shot form and submit. Reusing the inline form
+        // would require rewriting its action; cleaner to construct.
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content
+                  || document.querySelector('input[name="_token"]')?.value;
+        const out = document.createElement('form');
+        out.method = 'POST';
+        out.action = `/tenders/collaborators/${fromId}/merge/${intoId}`;
+        out.innerHTML = `<input type="hidden" name="_token" value="${csrf}">`;
+        document.body.appendChild(out);
+        out.submit();
     }
     </script>
 </x-app-layout>

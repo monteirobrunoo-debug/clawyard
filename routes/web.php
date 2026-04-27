@@ -481,6 +481,9 @@ Route::middleware(['auth'])->group(function () {
     Route::patch ('/tenders/collaborators/{collaborator}',                   [TenderCollaboratorController::class, 'update'])->name('tenders.collaborators.update');
     Route::delete('/tenders/collaborators/{collaborator}',                   [TenderCollaboratorController::class, 'destroy'])->name('tenders.collaborators.destroy');
     Route::post  ('/tenders/collaborators/{collaborator}/reactivate',        [TenderCollaboratorController::class, 'reactivate'])->name('tenders.collaborators.reactivate');
+    Route::post  ('/tenders/collaborators/{from}/merge/{into}',              [TenderCollaboratorController::class, 'merge'])
+        ->where(['from' => '[0-9]+', 'into' => '[0-9]+'])
+        ->name('tenders.collaborators.merge');
     Route::patch ('/tenders/collaborators/{collaborator}/toggle-source/{source}', [TenderCollaboratorController::class, 'toggleSource'])
         ->where('source', '[a-z_]+')
         ->name('tenders.collaborators.toggle_source');

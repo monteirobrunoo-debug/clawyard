@@ -164,6 +164,86 @@ class TenderCollaboratorController extends Controller implements HasMiddleware
     }
 
     /**
+     * Fuse two collaborator rows that represent the same person.
+     *
+     * Real-world trigger: an Excel re-import wrote the import column
+     * "Mónica" instead of "Mónica Pereira", creating row #20 alongside
+     * the existing #4. 73 tenders bound to the new row, the user lost
+     * her dashboard view. This endpoint moves the work to the original
+     * row, registers "monica" as an alias on #4 so future imports
+     * never re-create the duplicate, and deactivates #20.
+     *
+     * Order matters: `from` is the row to be absorbed (deactivated);
+     * `into` is the survivor.
+     *
+     * Side effects (single transaction):
+     *   1. Tenders with assigned_collaborator_id = from.id  →  into.id
+     *   2. into.aliases gets `from.normalized_name` appended (idempotent)
+     *   3. from.is_active = false (preserve history; admin can hard-
+     *      delete via /force if there's no remaining attachments)
+     *
+     * The endpoint is reversible by hand (move tenders back, drop the
+     * alias, re-activate from). Logged loudly so operators can audit.
+     */
+    public function merge(TenderCollaborator $from, TenderCollaborator $into)
+    {
+        if ($from->id === $into->id) {
+            return back()->withErrors(['merge' => 'Não podes fundir uma row consigo mesma.']);
+        }
+        if (!$from->is_active && !$into->is_active) {
+            return back()->withErrors(['merge' => 'Ambas as rows estão inactivas — reactiva uma primeiro.']);
+        }
+
+        $movedCount = 0;
+        \Illuminate\Support\Facades\DB::transaction(function () use ($from, $into, &$movedCount) {
+            // 1) Move tenders.
+            $movedCount = \App\Models\Tender::query()
+                ->where('assigned_collaborator_id', $from->id)
+                ->update(['assigned_collaborator_id' => $into->id]);
+
+            // 2) Add the absorbed row's normalised name to the survivor's
+            //    aliases. Idempotent — re-merging the same pair (after
+            //    reactivating) doesn't duplicate.
+            $aliases = (array) ($into->aliases ?? []);
+            if ($from->normalized_name !== ''
+                && !in_array($from->normalized_name, $aliases, true)) {
+                $aliases[] = $from->normalized_name;
+            }
+            // Carry across the absorbed row's existing aliases too — if
+            // the operator merges A→B then later C→B, B should know
+            // every variant ever seen.
+            foreach ((array) ($from->aliases ?? []) as $a) {
+                if ($a !== '' && !in_array($a, $aliases, true)) $aliases[] = $a;
+            }
+            $into->aliases = $aliases;
+            $into->save();
+
+            // 3) Deactivate the absorbed row. Tenders are already moved;
+            //    deactivation just hides it from the assign dropdown
+            //    and the digest.
+            $from->is_active = false;
+            $from->save();
+        });
+
+        Log::info('TenderCollaborator: merged', [
+            'from_id'        => $from->id,
+            'from_name'      => $from->name,
+            'into_id'        => $into->id,
+            'into_name'      => $into->name,
+            'tenders_moved'  => $movedCount,
+            'aliases_added'  => $into->fresh()->aliases,
+            'by_user_id'     => auth()->id(),
+        ]);
+
+        return redirect()
+            ->route('tenders.collaborators.index')
+            ->with('status', sprintf(
+                "Fundidos: \"%s\" → \"%s\" — %d tender(s) movido(s), \"%s\" desactivado, alias \"%s\" guardado.",
+                $from->name, $into->name, $movedCount, $from->name, $from->normalized_name
+            ));
+    }
+
+    /**
      * Toggle ONE source in the collaborator's allowed_sources whitelist.
      *
      * Semantics (mirrors TenderCollaborator::canSeeSource):

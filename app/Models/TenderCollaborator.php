@@ -26,6 +26,7 @@ class TenderCollaborator extends Model
     protected $fillable = [
         'name',
         'normalized_name',
+        'aliases',
         'user_id',
         'email',
         'is_active',
@@ -44,6 +45,10 @@ class TenderCollaborator extends Model
             // Same semantics as allowed_sources but applied to
             // Tender::status (pending / em_tratamento / submetido / …).
             'allowed_statuses' => 'array',
+            // List of additional normalised name variants that should
+            // resolve to this row when the import sees them. See
+            // findOrCreateByName + the merge endpoint.
+            'aliases'          => 'array',
         ];
     }
 
@@ -204,10 +209,126 @@ class TenderCollaborator extends Model
         if ($norm === '' || $norm === '-') {
             return null;
         }
-        return self::firstOrCreate(
-            ['normalized_name' => $norm],
-            ['name' => trim((string) $name), 'is_active' => true]
-        );
+
+        // 1. Exact match on normalized_name AMONG ACTIVE rows. Filtering
+        //    by active is critical: if an admin previously merged
+        //    "Monica" → "Monica Pereira" (the absorbed row is now
+        //    inactive but still has normalized_name='monica'), a fresh
+        //    import of "Monica" must NOT resurrect that ghost row — it
+        //    must hit the alias path on the active survivor.
+        if ($exact = self::where('normalized_name', $norm)->where('is_active', true)->first()) {
+            return $exact;
+        }
+
+        // 2. Alias match — caller may have curated a row to also accept
+        //    this short / variant form ("monica" → "Monica Pereira"
+        //    row, populated by the merge endpoint or an admin edit).
+        //    Active-only for the same reason.
+        if ($byAlias = self::findByAlias($norm)) {
+            return $byAlias;
+        }
+
+        // 3. About to create a new row. Check for fuzzy candidates and
+        //    log a warning so we can spot import-time duplicate-creation
+        //    drift (the exact bug shape that caused 65 of Mónica's
+        //    tenders to bind to a new "monica" row instead of the
+        //    existing "monica pereira"). The row is still created — we
+        //    don't block the import — but the warning + admin merge
+        //    tool gives the operator a way to see and fix it.
+        $close = self::findCloseMatches($norm, threshold: 3);
+        if ($close->isNotEmpty()) {
+            \Illuminate\Support\Facades\Log::warning(
+                'TenderCollaborator: creating new row despite fuzzy candidates exist',
+                [
+                    'incoming'   => $name,
+                    'normalized' => $norm,
+                    'candidates' => $close->mapWithKeys(fn($c) => [$c->id => $c->normalized_name])->all(),
+                    'hint'       => 'Use POST /tenders/collaborators/{from}/merge/{into} to fuse if these are the same person.',
+                ],
+            );
+        }
+
+        return self::create([
+            'name'            => trim((string) $name),
+            'normalized_name' => $norm,
+            'is_active'       => true,
+        ]);
+    }
+
+    /**
+     * Look up a collaborator whose `aliases` JSON array contains the
+     * given normalised name. Drivers handled:
+     *
+     *   • Postgres / MySQL — native `whereJsonContains`.
+     *   • SQLite (test env)— LIKE on the JSON-encoded blob, which is
+     *     good enough because `aliases` only stores normalised
+     *     lowercase strings (no quotes inside the value to trip us up).
+     */
+    public static function findByAlias(string $normalized): ?self
+    {
+        if ($normalized === '') return null;
+        $q = self::query()->where('is_active', true);
+        $driver = (new self)->getConnection()->getDriverName();
+        if ($driver === 'sqlite') {
+            return $q->where('aliases', 'like', '%"' . $normalized . '"%')->first();
+        }
+        return $q->whereJsonContains('aliases', $normalized)->first();
+    }
+
+    /**
+     * Return active rows whose normalised name is within `threshold`
+     * Levenshtein distance of `$normalized` (and is NOT equal to it —
+     * exact matches are handled before this is called).
+     *
+     * Pulled in PHP because the table is small (<200 rows in any
+     * realistic deployment) and SQL Levenshtein support is patchy
+     * across drivers.
+     *
+     * @return \Illuminate\Support\Collection<int, self>
+     */
+    public static function findCloseMatches(string $normalized, int $threshold = 3): \Illuminate\Support\Collection
+    {
+        if ($normalized === '') return collect();
+
+        $needleFirstToken = explode(' ', $normalized, 2)[0];
+
+        return self::active()
+            ->get(['id', 'name', 'normalized_name'])
+            ->filter(function (self $c) use ($normalized, $needleFirstToken, $threshold) {
+                if ($c->normalized_name === $normalized) return false;
+                if ($c->normalized_name === '') return false;
+
+                // Three signals — any one of them flags a candidate:
+                //
+                //   (a) Levenshtein distance ≤ threshold — typical typo
+                //       case ("Monica" vs "Monoca").
+                //   (b) Prefix relation — one is a prefix of the other.
+                //       "monica" is a prefix of "monica pereira", which is
+                //       almost always the same person in our data.
+                //   (c) First-token equality — both start with the same
+                //       word, e.g. "Monica" vs "Monica Pinto" both start
+                //       with "monica". Catches the "Excel uses just first
+                //       name" bug shape.
+                //
+                // (a) needs the length-difference guard so we don't run
+                //     levenshtein on wildly different strings.
+                $diff = abs(mb_strlen($c->normalized_name) - mb_strlen($normalized));
+                if ($diff <= $threshold
+                    && levenshtein($c->normalized_name, $normalized) <= $threshold) {
+                    return true;
+                }
+                if ($diff > 0
+                    && (str_starts_with($c->normalized_name, $normalized)
+                        || str_starts_with($normalized, $c->normalized_name))) {
+                    return true;
+                }
+                $cFirst = explode(' ', $c->normalized_name, 2)[0];
+                if ($needleFirstToken !== '' && $cFirst === $needleFirstToken) {
+                    return true;
+                }
+                return false;
+            })
+            ->values();
     }
 
     /**
