@@ -79,20 +79,49 @@
             </div>
         </div>
 
-        {{-- ── Badges ───────────────────────────────────────────────── --}}
+        {{-- ── Badges (C4) — checklist style: earned + locked all visible ── --}}
+        @php
+            $owned    = (array) ($points->badges ?? []);
+            $tiers    = \App\Services\Rewards\BadgeCatalog::byTier();
+            $tierLabels = [
+                'engagement' => '🌱 Engagement',
+                'level'      => '🎖️ Níveis',
+                'sales'      => '💼 Sales loop',
+                'agents'     => '🤖 Agentes',
+                'imports'    => '📥 Imports',
+            ];
+        @endphp
         <div class="bg-white rounded-xl shadow p-4 mb-4">
-            <h3 class="text-sm font-semibold text-gray-800 mb-2">Badges</h3>
-            @if(empty($points->badges))
-                <p class="text-xs text-gray-500 italic">
-                    Ainda sem badges. Algumas vão chegar quando fechares o teu primeiro lead, atingires 7 dias de streak, ou usares 5 agentes diferentes.
-                </p>
-            @else
-                <div class="flex flex-wrap gap-2">
-                    @foreach($points->badges as $key)
-                        <span class="px-2 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold">{{ $key }}</span>
-                    @endforeach
+            <div class="flex items-baseline justify-between mb-3">
+                <h3 class="text-sm font-semibold text-gray-800">Badges</h3>
+                <span class="text-xs text-gray-500">
+                    {{ count($owned) }} / {{ count(\App\Services\Rewards\BadgeCatalog::keys()) }}
+                </span>
+            </div>
+
+            @foreach($tiers as $tier => $badges)
+                <div class="mb-4 last:mb-0">
+                    <div class="text-[11px] uppercase tracking-wider text-gray-500 mb-2">
+                        {{ $tierLabels[$tier] ?? ucfirst($tier) }}
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        @foreach($badges as $key => $meta)
+                            @php $earned = in_array($key, $owned, true); @endphp
+                            <div class="flex items-start gap-2 p-2 rounded-lg border
+                                        {{ $earned ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-100 opacity-60' }}"
+                                 title="{{ $meta['description'] }}">
+                                <div class="text-2xl leading-none {{ $earned ? '' : 'grayscale' }}">{{ $meta['emoji'] }}</div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="text-xs font-semibold {{ $earned ? 'text-amber-900' : 'text-gray-500' }} truncate">
+                                        {{ $meta['label'] }}
+                                    </div>
+                                    <div class="text-[10px] text-gray-500 leading-tight line-clamp-2">{{ $meta['description'] }}</div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
-            @endif
+            @endforeach
         </div>
 
         {{-- ── Recent events table ─────────────────────────────────── --}}

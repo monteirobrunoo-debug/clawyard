@@ -33,6 +33,13 @@ use Illuminate\Support\Facades\Log;
  */
 class RewardRecorder
 {
+    private BadgeEvaluator $badges;
+
+    public function __construct(?BadgeEvaluator $badges = null)
+    {
+        $this->badges = $badges ?? app(BadgeEvaluator::class);
+    }
+
     /**
      * Daily caps: max rewardable events per user per day for noisy
      * event types. Excess events still record but with points=0 so
@@ -94,7 +101,19 @@ class RewardRecorder
 
                 // 2. Bump per-user totals (only when there's a user + non-zero points).
                 if ($userId !== null) {
-                    $this->bumpUserPoints($userId, $effectivePoints);
+                    $row = $this->bumpUserPoints($userId, $effectivePoints);
+
+                    // 2b. Award newly-unlocked badges. Wrapped in try/
+                    // catch implicitly by the outer transaction handler,
+                    // so a badge bug never aborts the recorder write.
+                    $newly = $this->badges->evaluate($row, $event);
+                    if (!empty($newly)) {
+                        $row->badges = array_values(array_unique(array_merge(
+                            (array) ($row->badges ?? []),
+                            $newly,
+                        )));
+                        $row->save();
+                    }
                 }
 
                 // 3. Bump per-agent metrics (only when there's an agent_key).
@@ -167,9 +186,10 @@ class RewardRecorder
 
     /**
      * Bump user_points: add to total, recompute level, refresh
-     * streak. Lazy-creates the row.
+     * streak. Lazy-creates the row. Returns the saved row so the
+     * caller can pass it to the BadgeEvaluator without re-fetching.
      */
-    private function bumpUserPoints(int $userId, int $points): void
+    private function bumpUserPoints(int $userId, int $points): UserPoints
     {
         $row = UserPoints::firstOrCreate(
             ['user_id' => $userId],
@@ -183,6 +203,7 @@ class RewardRecorder
 
         $this->refreshStreak($row);
         $row->save();
+        return $row;
     }
 
     /**
