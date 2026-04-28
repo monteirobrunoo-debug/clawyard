@@ -140,6 +140,24 @@ class TenderImportService
             'summary' => $audit->summary,
         ]);
 
+        // C2 — credit the operator for the import. Only when a real
+        // user is attached (CLI cron jobs without --user pass null).
+        // The recorder swallows its own failures, so a hiccup here
+        // never blocks the import response.
+        if ($userId !== null) {
+            app(\App\Services\Rewards\RewardRecorder::class)->record(
+                eventType: \App\Models\RewardEvent::TYPE_TENDER_IMPORTED,
+                userId:    $userId,
+                subject:   $audit,
+                metadata:  [
+                    'source'       => $source,
+                    'rows_parsed'  => $parsed,
+                    'rows_created' => $created,
+                    'rows_updated' => $updated,
+                ],
+            );
+        }
+
         return $audit->fresh();
     }
 

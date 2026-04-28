@@ -5,6 +5,7 @@ namespace App\Services\AgentSwarm;
 use App\Models\AgentSwarmRun;
 use App\Models\LeadOpportunity;
 use App\Services\HpHistoryClient;
+use App\Services\Rewards\RewardRecorder;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -48,23 +49,26 @@ class AgentSwarmRunner
     /** B2: real LLM dispatcher + prompt composer. */
     private AgentDispatcher $dispatcher;
     private PromptBuilder $prompts;
+    /** C2: per-agent metric writer. Optional — null disables reward recording. */
+    private ?RewardRecorder $rewards;
 
     /**
-     * Both dispatcher + prompts are injected (defaults via container)
-     * so tests can swap a fake dispatcher in. The budget knobs stay
-     * scalar so callers can still override at run time without
-     * touching the container.
+     * All dependencies injected (defaults via container) so tests
+     * can swap fakes in. The budget knobs stay scalar so callers can
+     * still override at run time without touching the container.
      */
     public function __construct(
         ?float $maxCostPerRun = null,
         ?float $maxCostPerDay = null,
         ?AgentDispatcher $dispatcher = null,
         ?PromptBuilder $prompts = null,
+        ?RewardRecorder $rewards = null,
     ) {
         $this->maxCostPerRun = $maxCostPerRun ?? (float) config('services.agent_swarm.max_cost_per_run', 0.10);
         $this->maxCostPerDay = $maxCostPerDay ?? (float) config('services.agent_swarm.max_cost_per_day', 5.00);
         $this->dispatcher    = $dispatcher    ?? app(AgentDispatcher::class);
         $this->prompts       = $prompts       ?? app(PromptBuilder::class);
+        $this->rewards       = $rewards       ?? app(RewardRecorder::class);
     }
 
     /**
@@ -126,6 +130,7 @@ class AgentSwarmRunner
             }
 
             $this->persistLeads($run, $context);
+            $this->awardSwarmAgentMetrics($run);
             $run->markDone();
             return $run;
         } catch (Throwable $e) {
@@ -265,7 +270,45 @@ class AgentSwarmRunner
 
         $step['output'] = $output;
         $run->appendStep($step);
+
+        // Bump agent_metric.signals_processed + tokens/cost on success.
+        // Silently swallow recorder failures so the chain never aborts
+        // because the rewards subsystem hiccupped.
+        $this->rewards?->recordSwarmAgentRun($agentKey, [
+            'cost_usd'   => $step['cost_usd'],
+            'tokens_in'  => $step['tokens_in'],
+            'tokens_out' => $step['tokens_out'],
+            'ms'         => $step['ms'],
+        ], $run);
+
         return $output;
+    }
+
+    /**
+     * After persistLeads, walk the chain_log to find which agents
+     * contributed and credit each one with leads_generated +
+     * running-mean score for every lead this run produced.
+     *
+     * Crediting ALL successful agents (not only the synth) is
+     * deliberate — the synth's output is shaped by every prior
+     * agent's analysis, so attribution should follow.
+     */
+    protected function awardSwarmAgentMetrics(AgentSwarmRun $run): void
+    {
+        $leads = $run->leads()->get(['id', 'score']);
+        if ($leads->isEmpty()) return;
+
+        $agents = collect($run->chain_log ?? [])
+            ->filter(fn($s) => ($s['event'] ?? null) === 'agent_call' && ($s['ok'] ?? false))
+            ->pluck('agent')
+            ->unique()
+            ->filter();
+
+        foreach ($agents as $agentKey) {
+            foreach ($leads as $lead) {
+                $this->rewards?->recordSwarmAgentLead($agentKey, (int) $lead->score, $lead);
+            }
+        }
     }
 
     /**

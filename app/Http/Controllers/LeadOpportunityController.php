@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\LeadOpportunity;
+use App\Models\RewardEvent;
 use App\Models\User;
+use App\Services\Rewards\RewardRecorder;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Routing\Controllers\Middleware;
@@ -121,7 +123,7 @@ class LeadOpportunityController extends Controller implements HasMiddleware
      * triage UI. Single endpoint to keep the UI form simple; only
      * the fields actually present in the payload are touched.
      */
-    public function update(Request $request, LeadOpportunity $lead)
+    public function update(Request $request, LeadOpportunity $lead, RewardRecorder $rewards)
     {
         $data = $request->validate([
             'status'            => ['nullable', Rule::in([
@@ -137,6 +139,7 @@ class LeadOpportunityController extends Controller implements HasMiddleware
             'notes'             => ['nullable', 'string', 'max:5000'],
         ]);
 
+        $oldStatus = $lead->status;
         $lead->fill(array_filter($data, fn($v) => $v !== null));
 
         // Auto-stamp contacted_at when the status flips to contacted.
@@ -145,6 +148,55 @@ class LeadOpportunityController extends Controller implements HasMiddleware
         }
 
         $lead->save();
+
+        // C2 — reward the user for status transitions, and credit the
+        // contributing agents when the deal lands. The recorder swallows
+        // its own failures, so this never blocks the UI response.
+        $newStatus = $lead->status;
+        if ($oldStatus !== $newStatus) {
+            $userId = Auth::id();
+            $eventType = match ($newStatus) {
+                LeadOpportunity::STATUS_CONFIDENT => RewardEvent::TYPE_LEAD_QUALIFIED,
+                LeadOpportunity::STATUS_CONTACTED => RewardEvent::TYPE_LEAD_CONTACTED,
+                LeadOpportunity::STATUS_WON       => RewardEvent::TYPE_LEAD_WON,
+                default                            => null,
+            };
+
+            if ($eventType !== null) {
+                $rewards->record(
+                    eventType: $eventType,
+                    userId:    $userId,
+                    subject:   $lead,
+                    metadata:  ['from' => $oldStatus, 'to' => $newStatus, 'score' => $lead->score],
+                );
+            }
+
+            // When a lead is WON, credit each agent that contributed
+            // to its swarm run with leads_won. We use the chain_log
+            // from the parent run for attribution.
+            if ($newStatus === LeadOpportunity::STATUS_WON) {
+                $run = $lead->swarmRun()->first();
+                if ($run !== null) {
+                    $contributingAgents = collect($run->chain_log ?? [])
+                        ->filter(fn($s) => ($s['event'] ?? null) === 'agent_call' && ($s['ok'] ?? false))
+                        ->pluck('agent')
+                        ->unique()
+                        ->filter();
+
+                    foreach ($contributingAgents as $agentKey) {
+                        $rewards->record(
+                            eventType: RewardEvent::TYPE_LEAD_WON,
+                            agentKey:  $agentKey,
+                            subject:   $lead,
+                            metadata:  ['lead_id' => $lead->id, 'score' => $lead->score],
+                            // Points already counted on the user-scoped event above —
+                            // this call is purely for the agent_metric bump.
+                            points:    0,
+                        );
+                    }
+                }
+            }
+        }
 
         return back()->with('status', "Lead actualizado.");
     }
