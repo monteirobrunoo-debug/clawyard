@@ -530,6 +530,18 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/tenders/{tender}/observe',    [TenderController::class, 'observe'])->name('tenders.observe');
 });
 
+// Lead opportunities — agent-swarm-discovered business signals
+// promoted to a triage board. Manager+ only (gate enforced by the
+// controller's HasMiddleware).
+Route::middleware(['auth'])->group(function () {
+    Route::get   ('/leads',                [\App\Http\Controllers\LeadOpportunityController::class, 'index'])
+        ->name('leads.index');
+    Route::get   ('/leads/{lead}',         [\App\Http\Controllers\LeadOpportunityController::class, 'show'])
+        ->name('leads.show');
+    Route::patch ('/leads/{lead}',         [\App\Http\Controllers\LeadOpportunityController::class, 'update'])
+        ->name('leads.update');
+});
+
 // Schedules page — visible to all authenticated users
 Route::get('/schedules', function () {
     return view('admin.schedules');

@@ -128,6 +128,22 @@ return [
         'tls_verify' => env('SAP_TLS_VERIFY', true),
     ],
 
+    // Agent swarm — autonomous multi-agent chains that produce
+    // LeadOpportunity rows from business signals (tenders, emails,
+    // equipment queries). Budget caps are enforced at runtime by
+    // App\Services\AgentSwarm\AgentSwarmRunner — exceed → graceful
+    // abort, never a surprise charge. See migrations + service.
+    'agent_swarm' => [
+        // Hard cap per chain execution. The default is conservative
+        // ($0.10) — enough for ~5 cheap LLM calls + 1 synthesis. Bump
+        // when signals get richer.
+        'max_cost_per_run' => (float) env('AGENT_SWARM_MAX_COST_PER_RUN', 0.10),
+        // Daily aggregate cap across ALL chain runs. Rolling 24h
+        // window starting at midnight server-local. Exceed → all
+        // subsequent runs abort with reason='daily_budget_exceeded'.
+        'max_cost_per_day' => (float) env('AGENT_SWARM_MAX_COST_PER_DAY', 5.00),
+    ],
+
     // hp-history — pgvector-backed company memory served from a separate
     // DigitalOcean droplet (`hp-history.partyard.eu`). Indexes historical
     // PDFs, emails, proposals and contracts so agents can cite precedents
