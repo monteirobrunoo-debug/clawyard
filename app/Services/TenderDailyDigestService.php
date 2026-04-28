@@ -9,17 +9,28 @@ use Illuminate\Support\Collection;
 /**
  * Computes the per-recipient bucket of tenders for the daily digest email.
  *
- * User-level requirement ("ambos, o super user recebe e o user"):
- *   • Manager+ users receive a digest covering EVERY active tender that
- *     needs attention — this is the "super-user oversees everyone" view.
- *   • Regular users receive only tenders whose assigned collaborator is
- *     linked to their User account — this matches what they see in the
- *     dashboard's "mine" strip.
+ * Policy (revised 2026-04-27 after manager feedback):
  *
- * A tender is "actionable" if any of the following is true:
- *   • status = pending / em_tratamento / submetido / avaliacao (active)
- *   • AND it either has a deadline in the next 14 days, is already
- *     overdue, or still lacks a SAP opportunity number.
+ *   Every active user — manager OR user — receives a digest scoped to
+ *   the tenders ACTUALLY ASSIGNED to a collaborator linked to them.
+ *   The "see everything to delegate" view lives on the /tenders
+ *   dashboard for managers (`tenders.view-all` gate); we deliberately
+ *   do NOT mirror that view in email any more, because:
+ *
+ *     1. Managers were getting daily emails treating them as the
+ *        person responsible for tenders that belong to other people.
+ *     2. They couldn't tell their own from the team's at a glance.
+ *     3. The supervisor view is already one click away in the UI;
+ *        push notifications for it just add noise.
+ *
+ *   Managers + admins additionally receive an "unassigned" section
+ *   listing tenders with no collaborator yet — those are their job to
+ *   triage, and they wouldn't otherwise show up in either the manager's
+ *   forUser bucket or any user's bucket.
+ *
+ * A tender is "actionable" if its status is active (pending /
+ * em_tratamento / submetido / avaliacao). Expired (>15d past deadline)
+ * are excluded from every bucket.
  *
  * Empty buckets are suppressed upstream — we don't send empty emails.
  */
@@ -37,68 +48,59 @@ class TenderDailyDigestService
     {
         $out = [];
 
-        // 1) Super-users (manager+): one digest per manager covering
-        //    all actionable active tenders.
-        $managers = User::query()
-            ->where('is_active', true)
-            ->whereIn('role', ['admin', 'manager'])
-            ->whereNotNull('email')
-            ->get();
-
-        if ($managers->isNotEmpty()) {
-            $managerBucket = $this->actionableForManager();
-            if ($managerBucket->isNotEmpty()) {
-                $grouped = $this->groupByUrgency($managerBucket);
-                foreach ($managers as $m) {
-                    $out[] = [
-                        'user'   => $m,
-                        'role'   => 'manager',
-                        'groups' => $grouped,
-                        'total'  => $managerBucket->count(),
-                    ];
-                }
-            }
-        }
-
-        // 2) Regular users (active, non-manager): one digest per user
-        //    scoped to the collaborators linked to that User.
+        // Single pass: every active user with an email gets a digest
+        // scoped to their own work. No special-casing on role for the
+        // bulk of tenders — the only carve-out is the manager+ orphan
+        // section appended below.
         $users = User::query()
             ->where('is_active', true)
-            ->whereNotIn('role', ['admin', 'manager'])
+            ->whereIn('role', ['admin', 'manager', 'user'])    // skip 'guest'
             ->whereNotNull('email')
             ->get();
 
         foreach ($users as $u) {
             $bucket = $this->actionableForUser($u->id);
-            if ($bucket->isEmpty()) continue;
+
+            // Manager / admin extra: tenders without an assignee. They
+            // don't belong to anyone yet, so they wouldn't surface via
+            // forUser; the supervisor needs to know about them so the
+            // triage queue doesn't fester.
+            $orphans = collect();
+            if (in_array($u->role, ['admin', 'manager'], true)) {
+                $orphans = $this->actionableUnassigned();
+            }
+
+            if ($bucket->isEmpty() && $orphans->isEmpty()) continue;
+
+            $groups = $this->groupByUrgency($bucket);
+            if ($orphans->isNotEmpty()) {
+                // Render orphans as a dedicated section after the
+                // urgency bands. The email template iterates the
+                // groups array in insertion order.
+                $groups['unassigned_for_review'] = $orphans;
+            }
 
             $out[] = [
                 'user'   => $u,
-                'role'   => 'user',
-                'groups' => $this->groupByUrgency($bucket),
-                'total'  => $bucket->count(),
+                'role'   => in_array($u->role, ['admin', 'manager'], true) ? 'manager' : 'user',
+                'groups' => $groups,
+                'total'  => $bucket->count() + $orphans->count(),
             ];
         }
 
         return $out;
     }
 
-    /** All active tenders that still need SOMEONE to act. */
-    private function actionableForManager(): Collection
+    /**
+     * Active tenders that have NO assignee yet. Manager+ digests
+     * include this section so orphans get triaged promptly.
+     */
+    private function actionableUnassigned(): Collection
     {
-        // Exclude "expired" (overdue by > OVERDUE_WINDOW_DAYS) — they're
-        // abandoned, not actionable, and would just add noise to the email.
         $expiredCut = now()->copy()->subDays(Tender::OVERDUE_WINDOW_DAYS);
-
         return Tender::query()
             ->active()
-            ->with('collaborator')
-            ->where(function ($q) {
-                $q->whereNull('deadline_at')
-                  ->orWhere('deadline_at', '<=', now()->addDays(14))
-                  ->orWhereNull('sap_opportunity_number')
-                  ->orWhere('sap_opportunity_number', '');
-            })
+            ->whereNull('assigned_collaborator_id')
             ->where(function ($q) use ($expiredCut) {
                 $q->whereNull('deadline_at')
                   ->orWhere('deadline_at', '>=', $expiredCut);

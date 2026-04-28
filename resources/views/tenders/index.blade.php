@@ -504,7 +504,10 @@
                                      chips so the status is always visible next
                                      to the title. --}}
                                 @forelse($all as $t)
-                                    @php $wasJustAssigned = in_array($t->id, $justAssigned, true); @endphp
+                                    @php
+                                        $wasJustAssigned = in_array($t->id, $justAssigned, true);
+                                        $hasAssignee     = !empty($t->assigned_collaborator_id);
+                                    @endphp
                                     <tr class="hover:bg-gray-50 text-sm align-middle {{ $wasJustAssigned ? 'just-assigned' : '' }}">
                                         @if($canAssign)
                                             <td class="px-3 py-2 align-middle">
@@ -515,10 +518,26 @@
                                         <td class="px-3 py-2 align-middle whitespace-nowrap">
                                             <div class="text-xs font-semibold uppercase text-gray-600">{{ $t->source }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
+                                            {{-- Two flavours of the "atribuído" pill:
+                                                 (a) just-assigned-chip — ✨ + animated, only on the rows
+                                                     that the manager just bulk-assigned in this request
+                                                     (one-shot session flash, fades on next page load).
+                                                 (b) persistent assigned-pill — small green tag that stays
+                                                     for ANY row with assigned_collaborator_id, so the
+                                                     manager can scan the whole table and instantly see
+                                                     which processes have already been delegated. Asked
+                                                     for explicitly 2026-04-27. --}}
                                             @if($wasJustAssigned)
                                                 <div class="mt-1">
                                                     <span class="just-assigned-chip" title="Atribuído agora mesmo{{ $justAssignedLabel ? ' a ' . $justAssignedLabel : '' }}">
                                                         ✨ atribuído
+                                                    </span>
+                                                </div>
+                                            @elseif($hasAssignee)
+                                                <div class="mt-1">
+                                                    <span class="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
+                                                          title="Já atribuído a {{ $t->collaborator?->name ?? 'alguém' }}">
+                                                        ✓ atribuído
                                                     </span>
                                                 </div>
                                             @endif

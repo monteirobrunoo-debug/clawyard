@@ -111,27 +111,32 @@ class TenderDailyDigestSourceFilterTest extends TestCase
         $this->assertNull($forUser, 'Fully-blocked user must not receive a digest at all');
     }
 
-    public function test_manager_digest_is_not_filtered_by_allowed_sources(): void
+    public function test_manager_digest_only_lists_tenders_assigned_to_them(): void
     {
-        // Pin the deliberate decision: managers see EVERYTHING in the
-        // digest, regardless of their own collaborator row's
-        // allowed_sources. They oversee the whole pipeline.
+        // Behaviour change 2026-04-27: managers no longer receive every
+        // active tender in the daily digest. They only get tenders
+        // ACTUALLY ASSIGNED to a collaborator linked to them, plus
+        // unassigned orphans for triage. The "see all to delegate"
+        // view stays in the /tenders dashboard via tenders.view-all.
+        // This test proves a colleague's tender does NOT leak into
+        // the manager's email — exactly the bug Mónica reported.
         $mgr = User::factory()->create([
             'email'     => 'mgr@hp-group.org',
             'role'      => 'manager',
             'is_active' => true,
         ]);
 
+        // The manager has her own collaborator row, no restriction.
         $c = new TenderCollaborator();
         $c->name            = 'Manager';
         $c->normalized_name = TenderCollaborator::normalize('Manager');
         $c->email           = $mgr->email;
         $c->is_active       = true;
-        $c->allowed_sources = ['nspa'];   // restricted as a collaborator
         $c->save();
 
-        // Tenders from multiple sources, none assigned to the manager —
-        // the manager view is "everyone's stuff".
+        // Three tenders assigned to a DIFFERENT person — these used to
+        // appear in the manager's digest under the old "supervisor"
+        // policy. After the fix they must NOT.
         $other = new TenderCollaborator();
         $other->name = 'Outro';
         $other->normalized_name = 'outro';
@@ -145,8 +150,75 @@ class TenderDailyDigestSourceFilterTest extends TestCase
         $recipients = $this->svc->buildRecipients();
         $forMgr     = collect($recipients)->firstWhere('user.id', $mgr->id);
 
-        $this->assertNotNull($forMgr, 'Manager must receive the supervisor digest');
-        $this->assertSame('manager', $forMgr['role']);
-        $this->assertSame(3, $forMgr['total'], 'Manager must see all sources, ignoring own allowed_sources');
+        // No bucket → no email. Manager has 0 assigned + 0 orphans → suppressed.
+        $this->assertNull(
+            $forMgr,
+            'Manager must NOT receive other people\'s tenders in their digest'
+        );
+    }
+
+    public function test_manager_digest_includes_unassigned_orphans_for_triage(): void
+    {
+        $mgr = User::factory()->create([
+            'email'     => 'mgr@hp-group.org',
+            'role'      => 'manager',
+            'is_active' => true,
+        ]);
+
+        // Tender with NO assignee — supervisor needs to know about it.
+        Tender::create([
+            'source'                   => 'nspa',
+            'reference'                => 'REF-ORPHAN-1',
+            'title'                    => 'Sem responsável',
+            'status'                   => Tender::STATUS_PENDING,
+            'deadline_at'              => now()->addDays(7),
+            'assigned_collaborator_id' => null,
+        ]);
+
+        // Tender assigned to someone else — must NOT appear.
+        $other = new TenderCollaborator();
+        $other->name = 'Outro';
+        $other->normalized_name = 'outro';
+        $other->is_active = true;
+        $other->save();
+        $this->tender('nspa', $other->id);
+
+        $recipients = $this->svc->buildRecipients();
+        $forMgr     = collect($recipients)->firstWhere('user.id', $mgr->id);
+
+        $this->assertNotNull($forMgr, 'Manager must receive a digest when orphans need triage');
+        $this->assertSame(1, $forMgr['total'], 'Only the orphan counts, not the colleague\'s assigned tender');
+        $this->assertArrayHasKey('unassigned_for_review', $forMgr['groups']);
+        $this->assertCount(1, $forMgr['groups']['unassigned_for_review']);
+    }
+
+    public function test_user_digest_does_not_include_orphan_section(): void
+    {
+        // Regular users are not supervisors — orphans aren't theirs to
+        // triage. They should never see the unassigned section.
+        $u = User::factory()->create([
+            'email'     => 'usr@hp-group.org',
+            'role'      => 'user',
+            'is_active' => true,
+        ]);
+
+        $c = new TenderCollaborator();
+        $c->name = 'Usr'; $c->normalized_name = 'usr';
+        $c->email = $u->email; $c->is_active = true; $c->save();
+
+        // One assigned tender to user, one orphan.
+        $this->tender('nspa', $c->id);
+        Tender::create([
+            'source' => 'nspa', 'reference' => 'REF-ORPHAN-2', 'title' => 'orphan',
+            'status' => Tender::STATUS_PENDING, 'deadline_at' => now()->addDays(7),
+            'assigned_collaborator_id' => null,
+        ]);
+
+        $recipients = $this->svc->buildRecipients();
+        $forUser    = collect($recipients)->firstWhere('user.id', $u->id);
+
+        $this->assertNotNull($forUser);
+        $this->assertSame(1, $forUser['total'], 'User must see only their own tender, not the orphan');
+        $this->assertArrayNotHasKey('unassigned_for_review', $forUser['groups']);
     }
 }
