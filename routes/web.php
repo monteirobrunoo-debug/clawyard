@@ -406,6 +406,11 @@ Route::get('/agents/{key}', function (string $key) {
         ->limit(10)
         ->get();
 
+    // C3 — agent performance metrics from the swarm + lead pipeline.
+    // NULL if this agent hasn't appeared in any swarm run yet (the
+    // view renders a "no data yet" placeholder card in that case).
+    $metric = \App\Models\AgentMetric::find($key);
+
     return view('agents.profile', [
         'agent'               => $agent,
         'categories'          => \App\Services\AgentCatalog::categories(),
@@ -418,6 +423,7 @@ Route::get('/agents/{key}', function (string $key) {
             'last_used'           => $lastConv ? $lastConv->updated_at->diffForHumans() : null,
         ],
         'recentConversations' => $recentConversations,
+        'metric'              => $metric,
     ]);
 })->middleware(['auth', 'verified'])->name('agents.profile');
 
@@ -540,6 +546,16 @@ Route::middleware(['auth'])->group(function () {
         ->name('leads.show');
     Route::patch ('/leads/{lead}',         [\App\Http\Controllers\LeadOpportunityController::class, 'update'])
         ->name('leads.update');
+});
+
+// Rewards — gamification read paths.
+//   /rewards/me          → personal dashboard (any authenticated user)
+//   /rewards/leaderboard → H&P-wide ranking (manager+; gated in controller)
+Route::middleware(['auth'])->group(function () {
+    Route::get('/rewards/me',          [\App\Http\Controllers\RewardsController::class, 'me'])
+        ->name('rewards.me');
+    Route::get('/rewards/leaderboard', [\App\Http\Controllers\RewardsController::class, 'leaderboard'])
+        ->name('rewards.leaderboard');
 });
 
 // Schedules page — visible to all authenticated users

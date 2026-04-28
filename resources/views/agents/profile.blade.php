@@ -256,6 +256,56 @@
     </div>
 </div>
 
+{{-- ── Swarm performance metrics (C3) ────────────────────────────────────────
+     Shown only when this agent has appeared in at least one swarm chain.
+     Otherwise we render a "no data yet" pill so users understand the panel
+     is gated on swarm participation, not broken. --}}
+<section class="section">
+    <h2 style="margin-bottom:12px;">📊 Swarm performance</h2>
+    @if($metric && $metric->signals_processed > 0)
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Signals processed</div>
+                <div class="stat-value">{{ number_format($metric->signals_processed) }}</div>
+                <div class="stat-sub">chains em que este agente correu</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Leads generated</div>
+                <div class="stat-value">{{ number_format($metric->leads_generated) }}</div>
+                <div class="stat-sub">{{ $metric->leads_won }} fechados como ganhos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Win rate</div>
+                <div class="stat-value">{{ $metric->winRate() === null ? '—' : $metric->winRate() . '%' }}</div>
+                <div class="stat-sub">{{ $metric->leads_won }}/{{ $metric->leads_generated }} leads ganhos</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Avg score</div>
+                <div class="stat-value">{{ number_format($metric->avgScore(), 1) }}</div>
+                <div class="stat-sub">média dos leads onde participou</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">$/lead</div>
+                <div class="stat-value" style="font-size:18px">
+                    {{ $metric->costPerLead() === null ? '—' : '$' . number_format($metric->costPerLead(), 4) }}
+                </div>
+                <div class="stat-sub">${{ number_format((float) $metric->total_cost_usd, 4) }} total</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Trust 👍/👎</div>
+                <div class="stat-value">
+                    {{ $metric->trustPct() === null ? '—' : $metric->trustPct() . '%' }}
+                </div>
+                <div class="stat-sub">{{ $metric->thumbs_up }} 👍 / {{ $metric->thumbs_down }} 👎</div>
+            </div>
+        </div>
+    @else
+        <div style="padding:14px 16px;background:#1a1a1a;border:1px dashed #2a2a2a;border-radius:10px;color:#bcd;font-size:13px;">
+            Este agente ainda não correu em nenhuma chain do swarm. As métricas vão aparecer assim que o cron <code>agents:discover-leads</code> escolher uma chain que inclua este agente, ou quando criares uma manualmente em <code>/leads</code>.
+        </div>
+    @endif
+</section>
+
 <section class="section">
     <h2>💡 Try asking me</h2>
     <div class="starters">

@@ -18,6 +18,11 @@
                     <x-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*')">
                         {{ __('Concursos') }}
                     </x-nav-link>
+                    {{-- C3 — gamification page. Visible to all users (the leaderboard
+                         is gated separately to manager+ inside the controller). --}}
+                    <x-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
+                        🏆 {{ __('Rewards') }}
+                    </x-nav-link>
                 </div>
             </div>
 
