@@ -91,17 +91,14 @@
                         </div>
                     </div>
                     <div class="text-right text-sm">
+                        {{-- Single-timezone deadline. The dual PT/LU readout
+                             was simplified 2026-04-27 — operators only care
+                             about the value as imported from the source. --}}
                         <dl class="space-y-1">
                             <div>
-                                <dt class="inline text-gray-500">🇵🇹 Lisboa:</dt>
+                                <dt class="inline text-gray-500">Deadline:</dt>
                                 <dd class="inline font-medium text-gray-800">
                                     {{ $tender->deadline_lisbon?->format('d/m/Y H:i') ?? '—' }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="inline text-gray-500">🇱🇺 Luxemburgo:</dt>
-                                <dd class="inline font-medium text-gray-800">
-                                    {{ $tender->deadline_luxembourg?->format('d/m/Y H:i') ?? '—' }}
                                 </dd>
                             </div>
                         </dl>
@@ -508,8 +505,7 @@
             'ESTADO'          => $statusLabels[$tender->status] ?? $tender->status,
             'COLABORADOR'     => $tender->collaborator?->name ?? '—',
             'EMAIL COLAB.'    => $tender->collaborator?->digest_email ?? '—',
-            'DEADLINE 🇵🇹'    => $tender->deadline_lisbon?->format('d/m/Y H:i') . ' Lisboa' ?: '—',
-            'DEADLINE 🇱🇺'    => $tender->deadline_luxembourg?->format('d/m/Y H:i') . ' Luxembourg' ?: '—',
+            'DEADLINE'        => $tender->deadline_lisbon?->format('d/m/Y H:i') ?: '—',
             'Nº SAP'          => $tender->sap_opportunity_number ?: '—',
             'VALOR'           => $tender->offer_value ? number_format((float) $tender->offer_value, 2, ',', '.') . ' ' . ($tender->currency ?: '') : '—',
             'HORAS GASTAS'    => $tender->time_spent_hours ? (float) $tender->time_spent_hours . 'h' : '—',

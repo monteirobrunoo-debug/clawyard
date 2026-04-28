@@ -246,7 +246,12 @@
                 @endif
             @endif
 
-            {{-- ─── "Mine" strip ──────────────────────────────────────────── --}}
+            {{-- ─── "Os meus concursos" mini-table ──────────────────────────
+                 Same column structure as the full /tenders table (fonte,
+                 título, colaborador, estado, deadline) so a regular user
+                 sees a consistent layout regardless of role. Asked for
+                 explicitly 2026-04-27 — users were getting a different,
+                 less informative strip than the managers' view. --}}
             @if($mine->count() > 0)
                 <section class="rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden">
                     <header class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
@@ -255,44 +260,64 @@
                             <span class="ml-2 text-xs font-normal text-gray-500">({{ $mine->count() }})</span>
                         </h3>
                     </header>
-                    <ul class="divide-y divide-gray-100">
-                        @foreach($mine as $t)
-                            <li class="px-4 py-3 hover:bg-gray-50">
-                                <a href="{{ route('tenders.show', $t) }}" class="block">
-                                    <div class="flex items-start justify-between gap-3">
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex items-center gap-2 flex-wrap">
-                                                <span class="text-xs font-mono text-gray-500">{{ $t->reference }}</span>
-                                                <span class="inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
-                                                    @if($t->urgency_bucket === 'overdue')
-                                                        Em atraso {{ abs($t->days_to_deadline) }}d
-                                                    @elseif($t->days_to_deadline !== null)
-                                                        {{ $t->days_to_deadline }}d
-                                                    @else
-                                                        —
-                                                    @endif
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-100 text-sm">
+                            <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Fonte</th>
+                                    <th class="px-3 py-2 text-left">Título</th>
+                                    <th class="px-3 py-2 text-left">Colaborador</th>
+                                    <th class="px-3 py-2 text-left">Estado</th>
+                                    <th class="px-3 py-2 text-left">Deadline</th>
+                                    <th class="px-3 py-2 text-right">Prazo</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                @foreach($mine as $t)
+                                    <tr class="hover:bg-gray-50 align-middle">
+                                        <td class="px-3 py-2 whitespace-nowrap">
+                                            <div class="text-xs font-semibold uppercase text-gray-600">{{ $t->source }}</div>
+                                            <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
+                                        </td>
+                                        <td class="px-3 py-2 max-w-md">
+                                            <a href="{{ route('tenders.show', $t) }}" class="text-indigo-700 hover:underline font-medium">
+                                                {{ \Illuminate\Support\Str::limit($t->title, 90) }}
+                                            </a>
+                                            @if(empty($t->sap_opportunity_number))
+                                                <span class="ml-2 inline-flex rounded border border-yellow-300 bg-yellow-50 px-1.5 py-0.5 text-[10px] text-yellow-800">
+                                                    Sem nº SAP
                                                 </span>
-                                                @if(empty($t->sap_opportunity_number))
-                                                    <span class="inline-flex rounded border border-yellow-300 bg-yellow-50 px-2 py-0.5 text-xs text-yellow-800">
-                                                        Sem nº SAP
-                                                    </span>
-                                                @endif
-                                            </div>
-                                            <div class="mt-1 text-sm font-medium text-gray-900 truncate">{{ $t->title }}</div>
-                                        </div>
-                                        <div class="text-right text-xs text-gray-500 shrink-0">
-                                            @if($t->deadline_at)
-                                                <div>🇵🇹 {{ $t->deadline_lisbon->format('d/m H:i') }}</div>
-                                                <div>🇱🇺 {{ $t->deadline_luxembourg->format('d/m H:i') }}</div>
-                                            @else
-                                                <span>sem deadline</span>
                                             @endif
-                                        </div>
-                                    </div>
-                                </a>
-                            </li>
-                        @endforeach
-                    </ul>
+                                        </td>
+                                        <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ $t->collaborator?->name ?? '—' }}</td>
+                                        <td class="px-3 py-2 whitespace-nowrap">
+                                            <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $statusStyles[$t->status] ?? 'bg-gray-100 text-gray-700 border-gray-300' }}">
+                                                {{ $statusLabels[$t->status] ?? $t->status }}
+                                            </span>
+                                        </td>
+                                        <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-600">
+                                            @if($t->deadline_at)
+                                                {{ $t->deadline_lisbon->format('d/m/y H:i') }}
+                                            @else
+                                                <span class="text-gray-400">sem deadline</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-3 py-2 whitespace-nowrap text-right">
+                                            <span class="inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
+                                                @if($t->urgency_bucket === 'overdue')
+                                                    -{{ abs($t->days_to_deadline) }}d
+                                                @elseif($t->days_to_deadline !== null)
+                                                    {{ $t->days_to_deadline }}d
+                                                @else
+                                                    —
+                                                @endif
+                                            </span>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             @endif
 
@@ -569,8 +594,11 @@
                                         </td>
                                         <td class="px-3 py-2 align-middle text-xs text-gray-600 whitespace-nowrap">
                                             @if($t->deadline_at)
-                                                <div>🇵🇹 {{ $t->deadline_lisbon->format('d/m/y H:i') }}</div>
-                                                <div>🇱🇺 {{ $t->deadline_luxembourg->format('d/m/y H:i') }}</div>
+                                                {{-- Single-timezone deadline display. The dual PT/LU
+                                                     readout was simplified 2026-04-27 — operators only
+                                                     care about the value as imported from the source
+                                                     Excel, not a translated wall-clock. --}}
+                                                {{ $t->deadline_lisbon->format('d/m/y H:i') }}
                                             @else
                                                 —
                                             @endif
