@@ -45,10 +45,26 @@ class AgentSwarmRunner
     /** Daily aggregate budget; checked at run start. */
     private float $maxCostPerDay;
 
-    public function __construct(?float $maxCostPerRun = null, ?float $maxCostPerDay = null)
-    {
+    /** B2: real LLM dispatcher + prompt composer. */
+    private AgentDispatcher $dispatcher;
+    private PromptBuilder $prompts;
+
+    /**
+     * Both dispatcher + prompts are injected (defaults via container)
+     * so tests can swap a fake dispatcher in. The budget knobs stay
+     * scalar so callers can still override at run time without
+     * touching the container.
+     */
+    public function __construct(
+        ?float $maxCostPerRun = null,
+        ?float $maxCostPerDay = null,
+        ?AgentDispatcher $dispatcher = null,
+        ?PromptBuilder $prompts = null,
+    ) {
         $this->maxCostPerRun = $maxCostPerRun ?? (float) config('services.agent_swarm.max_cost_per_run', 0.10);
         $this->maxCostPerDay = $maxCostPerDay ?? (float) config('services.agent_swarm.max_cost_per_day', 5.00);
+        $this->dispatcher    = $dispatcher    ?? app(AgentDispatcher::class);
+        $this->prompts       = $prompts       ?? app(PromptBuilder::class);
     }
 
     /**
@@ -167,11 +183,24 @@ class AgentSwarmRunner
     }
 
     /**
-     * STUB — B2 replaces with real AgentManager dispatch.
+     * B2: real Anthropic dispatch via AgentDispatcher.
      *
-     * Returns a deterministic placeholder so tests can assert the
-     * orchestration shape. Records a step in the chain_log with a
-     * tiny synthetic cost so budget tests are meaningful.
+     * Builds the per-agent system + user prompts via PromptBuilder,
+     * fires one Messages call, records token usage + USD cost in the
+     * chain_log step, and returns the agent's output for downstream
+     * phases.
+     *
+     * Failure isolation: if the dispatcher returns ok=false (5xx,
+     * 4xx, transport, JSON decode) we record the error in chain_log
+     * with a synthetic-zero cost and return an empty-output marker
+     * so the next agent + the synthesiser still run with whatever
+     * data IS available. The chain only ABORTS when the per-run
+     * budget cap fires (handled by the caller via run_phase).
+     *
+     * For the synthesis pass we additionally parse the assistant text
+     * into the {leads:[…]} array shape that persistLeads() expects.
+     * If parsing fails we fall back to stubSynthesis() so the run
+     * still produces SOMETHING for the operator to triage.
      */
     protected function callAgent(
         AgentSwarmRun $run,
@@ -180,20 +209,62 @@ class AgentSwarmRunner
         array $context,
         bool $isSynthesis = false,
     ): array {
-        $cost = 0.005; // 0.5¢ stub — realistic order of magnitude
-        $output = $isSynthesis
-            ? $this->stubSynthesis($context)
-            : ['agent' => $agentKey, 'note' => "stub output for {$agentKey}"];
+        $signal = $context['signal'] ?? [];
+        $system = $this->prompts->systemFor($agentKey, $isSynthesis);
+        $user   = $isSynthesis
+            ? $this->prompts->synthesisUserFor($signal, $context)
+            : $this->prompts->userFor($agentKey, $signal, $context);
 
-        $run->appendStep([
-            'event'    => 'agent_call',
-            'phase'    => $phaseLabel,
-            'agent'    => $agentKey,
-            'cost_usd' => $cost,
-            'output'   => $output,
-            'stub'     => true,
-        ]);
+        // Synthesis gets a higher max_tokens so it has room for the
+        // full JSON object even when the chain found multiple leads.
+        $maxTokens = $isSynthesis ? 2500 : 1200;
 
+        $res = $this->dispatcher->dispatch($system, $user, $maxTokens);
+
+        $step = [
+            'event'      => 'agent_call',
+            'phase'      => $phaseLabel,
+            'agent'      => $agentKey,
+            'model'      => $res['model']      ?? null,
+            'tokens_in'  => (int) ($res['tokens_in']  ?? 0),
+            'tokens_out' => (int) ($res['tokens_out'] ?? 0),
+            'cost_usd'   => (float) ($res['cost_usd'] ?? 0.0),
+            'ms'         => (int) ($res['ms'] ?? 0),
+            'ok'         => (bool) ($res['ok'] ?? false),
+        ];
+
+        if (!($res['ok'] ?? false)) {
+            $step['error'] = $res['error'] ?? 'unknown';
+            $output = $isSynthesis
+                ? $this->stubSynthesis($context, fallbackReason: 'dispatch_failed:' . ($res['error'] ?? '?'))
+                : ['agent' => $agentKey, 'error' => $step['error'], 'text' => ''];
+            $step['output'] = $output;
+            $run->appendStep($step);
+            return $output;
+        }
+
+        $text = (string) ($res['text'] ?? '');
+
+        if ($isSynthesis) {
+            $parsed = $this->prompts->parseSynthesis($text);
+            if (!empty($parsed['parse_error'])) {
+                // Couldn't parse the model's JSON — record but keep
+                // the run usable via stub synthesis.
+                $step['parse_error'] = $parsed['parse_error'];
+                $step['raw_text']    = mb_substr($text, 0, 500);
+                $output = $this->stubSynthesis($context, fallbackReason: 'synth_parse_failed:' . $parsed['parse_error']);
+            } else {
+                $output = ['leads' => $parsed['leads']];
+            }
+        } else {
+            $output = [
+                'agent' => $agentKey,
+                'text'  => $text,
+            ];
+        }
+
+        $step['output'] = $output;
+        $run->appendStep($step);
         return $output;
     }
 
@@ -235,24 +306,28 @@ class AgentSwarmRunner
     }
 
     /**
-     * Default synthesiser stub. Produces ONE lead with a
-     * confidence score derived from how many agents contributed —
-     * a chain with 3 agents + history + synthesis caps higher
-     * than a chain with only 1 agent. Replaced in B2 by real LLM
-     * synthesis given the full chain context.
+     * Fallback synthesiser when the LLM dispatch failed or returned
+     * unparseable text. Produces ONE low-score lead so the operator
+     * still sees something in /leads — the run is flagged via
+     * chain_log so they know it was a degraded synthesis.
+     *
+     * The score is intentionally CAPPED at 50 here (vs 85 in the
+     * old stub) — a fallback lead must never look high-conviction.
      */
-    protected function stubSynthesis(array $context): array
+    protected function stubSynthesis(array $context, string $fallbackReason = 'no_llm'): array
     {
         $agentsRan = 0;
         foreach ($context as $k => $_) {
             if ($k !== 'signal' && $k !== '_synthesis') $agentsRan++;
         }
-        $score = min(85, 25 + $agentsRan * 15);
+        $score = min(50, 15 + $agentsRan * 7);
         return [
             'leads' => [[
-                'title'   => 'Lead: ' . ($context['signal']['title'] ?? '(unknown signal)'),
-                'summary' => 'Stub synthesis from ' . $agentsRan . ' agent step(s).',
-                'score'   => $score,
+                'title'    => 'Lead: ' . ($context['signal']['title'] ?? '(unknown signal)'),
+                'summary'  => 'Fallback synthesis (' . $fallbackReason . ') from '
+                              . $agentsRan . ' agent step(s). Manual review needed.',
+                'score'    => $score,
+                'fallback' => true,
             ]],
         ];
     }
