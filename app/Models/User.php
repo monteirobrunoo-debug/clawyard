@@ -141,4 +141,34 @@ class User extends Authenticatable
             default   => $this->role,
         };
     }
+
+    /**
+     * Per-user denormalised reward totals — one row max. Returns null
+     * for users who haven't earned a single event yet (the row is
+     * created lazily by RewardRecorder). Use `pointsRow()` for a
+     * non-null view that auto-creates the row when needed.
+     */
+    public function points(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(\App\Models\UserPoints::class, 'user_id');
+    }
+
+    /**
+     * Auto-create the points row if missing. Useful from the
+     * dashboard read path so a brand-new user sees zeros instead
+     * of a NULL relation.
+     */
+    public function pointsRow(): \App\Models\UserPoints
+    {
+        return \App\Models\UserPoints::firstOrCreate(
+            ['user_id' => $this->id],
+            ['total_points' => 0, 'level' => 0],
+        );
+    }
+
+    /** All reward events ever earned by this user. */
+    public function rewardEvents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(\App\Models\RewardEvent::class, 'user_id');
+    }
 }
