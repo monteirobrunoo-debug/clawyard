@@ -75,6 +75,14 @@ class NvidiaController extends Controller
                 'content' => $message,
             ]);
 
+            // C5 — register chat engagement. Capped at 10/day per user
+            // by the recorder; cap-reached events still record but with
+            // points=0 so the audit log is complete. agentKey is the
+            // RAW value the user sent (auto/orchestrator/specific) so
+            // the AGENT_FRIEND/POLYGLOT badges count distinct user
+            // INTENT, not post-routing dispatch.
+            $this->recordChatEngagement($userId, $agentName, $sessionId);
+
             // Multi-agent orchestration mode
             if ($agentName === 'orchestrator') {
                 $results = $this->agentManager->orchestrate($message, $history);
@@ -330,6 +338,9 @@ class NvidiaController extends Controller
             'role'    => 'user',
             'content' => $message,
         ]);
+
+        // C5 — register chat engagement. See recordChatEngagement().
+        $this->recordChatEngagement($userId, $agentName, $sessionId);
 
         // Resolve agent (orchestrator falls back to non-streaming chat())
         if ($agentName === 'orchestrator') {
@@ -756,6 +767,34 @@ PROMPT;
         $mime    = strtolower(trim((string) $mime));
         $allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
         return in_array($mime, $allowed, true) ? $mime : 'image/jpeg';
+    }
+
+    /**
+     * C5 — fire one TYPE_AGENT_CHAT reward event per user message.
+     *
+     * Capped at 10/day per user by RewardRecorder; events past the cap
+     * still record (with points=0) so the audit log is complete and
+     * the AGENT_FRIEND/POLYGLOT badge counters keep counting distinct
+     * agents (which IS the engagement signal we want).
+     *
+     * The recorder catches its own exceptions, so a hiccup in the
+     * rewards subsystem never breaks the chat path.
+     *
+     * @param int|null $userId   null shouldn't happen — chat endpoints
+     *                           are auth-gated — but if it does, no-op.
+     * @param string   $agentKey raw agent name from the request
+     *                           ('auto', 'orchestrator', or specific)
+     * @param string   $sessionId conversation session for the metadata
+     */
+    protected function recordChatEngagement(?int $userId, string $agentKey, string $sessionId): void
+    {
+        if ($userId === null) return;
+        app(\App\Services\Rewards\RewardRecorder::class)->record(
+            eventType: \App\Models\RewardEvent::TYPE_AGENT_CHAT,
+            userId:    $userId,
+            agentKey:  $agentKey,
+            metadata:  ['session_id' => $sessionId],
+        );
     }
 
     /**

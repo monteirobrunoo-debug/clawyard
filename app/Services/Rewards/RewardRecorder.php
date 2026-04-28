@@ -245,10 +245,26 @@ class RewardRecorder
 
     /**
      * Bump per-agent metrics based on the event type. Lazy-creates
-     * the row on the first event for an agent.
+     * the row on the first RELEVANT event for an agent.
+     *
+     * Why filter event types here: agent_chat events also carry an
+     * agent_key (so the FRIEND/POLYGLOT badges can count distinct
+     * agents the user spoke to), but we don't want chat volume to
+     * pollute the agent_metric table — that table is reserved for
+     * swarm-and-lead performance signals. Without this filter, every
+     * agent the user pinged once would get a near-empty row.
      */
     private function bumpAgentMetric(string $agentKey, string $eventType, array $metadata): void
     {
+        $relevantTypes = [
+            RewardEvent::TYPE_SWARM_RUN,
+            RewardEvent::TYPE_SWARM_LEAD,
+            RewardEvent::TYPE_LEAD_WON,
+            RewardEvent::TYPE_AGENT_THUMBS_UP,
+            RewardEvent::TYPE_AGENT_THUMBS_DOWN,
+        ];
+        if (!in_array($eventType, $relevantTypes, true)) return;
+
         $m = AgentMetric::firstOrCreate(['agent_key' => $agentKey]);
 
         switch ($eventType) {
