@@ -44,6 +44,14 @@ class TenderController extends Controller
         $sort    = $this->validateSort($request->string('sort')->trim()->value() ?: null);
         $dir     = $request->string('dir')->trim()->value() === 'desc' ? 'desc' : 'asc';
 
+        // Page size — defaults to 100 (was 50 before 2026-04-27, the
+        // user asked for "pelo menos 100 na mesma página"). Allow the
+        // operator to bump higher via ?per_page=200 when triaging a
+        // big import; cap at 500 so the table doesn't crash a slow
+        // browser. Falls back to 100 for any garbage value.
+        $perPage = (int) $request->input('per_page', 100);
+        $perPage = max(25, min($perPage, 500));
+
         // "All" list — manager+ sees every tender; user sees only their own.
         $allQuery = Tender::query()->with('collaborator');
         if (!$canViewAll) {
@@ -51,17 +59,19 @@ class TenderController extends Controller
         }
         $this->applyFilters($allQuery, $filters);
         $this->applySort($allQuery, $sort, $dir);
-        $all = $allQuery->paginate(50)->withQueryString();
+        $all = $allQuery->paginate($perPage)->withQueryString();
 
         // "Mine" list — always just the logged-in user's own active tenders,
         // regardless of role. For admins this is typically empty (they're
         // not the assignee); for regular users this is the primary view.
+        // Same per-page cap as the All list so a heavy assigned user
+        // doesn't see a truncated personal view.
         $mine = Tender::query()
             ->forUser($user->id)
             ->active()
             ->with('collaborator')
             ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
-            ->limit(50)
+            ->limit($perPage)
             ->get();
 
         $collaborators = TenderCollaborator::active()->orderBy('name')->get();
