@@ -266,7 +266,19 @@
 </section>
 
 <section class="section">
-    <h2>🕘 Recent conversations</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <h2 style="margin:0;">🕘 Conversas recentes com {{ $agent['name'] }}</h2>
+        {{-- Direct link to the full filtered history. The /conversations
+             page applies the same agent filter when ?agent=key is set,
+             so this is an instant deep-link into the user's archive
+             scoped to this specific agent. Asked for 2026-04-27 —
+             users wanted "ver histórico desta agente" from the profile. --}}
+        <a href="{{ route('conversations', ['agent' => $agent['key']]) }}"
+           style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;color:#bcd;font-size:12px;font-weight:600;text-decoration:none;"
+           title="Ver TODAS as tuas conversas com {{ $agent['name'] }} — com pesquisa por texto">
+            📂 Ver todo o histórico com este agente
+        </a>
+    </div>
     @if($recentConversations->count() > 0)
         <div class="conv-list">
             @foreach($recentConversations as $conv)

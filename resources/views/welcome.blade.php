@@ -572,7 +572,15 @@
         <a href="/discoveries" title="Descobertas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🔬 Descobertas</a>
         <a href="/patents/library" title="Biblioteca de Patentes" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🏛️ Patentes</a>
         <a href="/reports" title="Relatórios" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">📋 Reports</a>
-        <a href="/conversations" title="Histórico de Conversas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">💬 Histórico</a>
+        {{-- Histórico — when an agent is selected, the link auto-filters
+             to that agent. Updated by the JS that switches agents
+             (selectAgent / agent-select onchange). The data-base
+             attribute lets the filter URL be regenerated; we don't
+             hard-code the path so a future change to the route
+             doesn't need to touch JS. --}}
+        <a id="history-link" href="/conversations" data-base="/conversations"
+           title="Histórico de conversas (com o agente seleccionado)"
+           style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">💬 Histórico</a>
         <a href="/briefing" title="Briefing Executivo Diário" style="background:#0d1a00;border:1px solid #1e3300;color:#76b900;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:700;">📊 Briefing</a>
         <a href="/schedules" title="Tarefas Agendadas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🗓️ Schedule</a>
         <a id="manage-shares-btn" href="/shares" title="Gerir links partilhados" style="background:var(--bg3);border:1px solid #1e3a5f;color:#60a5fa;padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;font-weight:600;">⚙️ Shares</a>
@@ -1246,6 +1254,28 @@ document.querySelectorAll('.agent-grid-item').forEach(el => {
 // Restore history on page load
 restoreHistory(initAgent);
 
+// Re-target the "💬 Histórico" header link to filter by the currently
+// selected agent. When the user switches agents, the link auto-updates
+// so clicking it goes straight to /conversations?agent=<key>. For 'auto'
+// or 'orchestrator' (routing meta-agents) we keep the unfiltered link.
+function updateHistoryLink(agent) {
+    const link = document.getElementById('history-link');
+    if (!link) return;
+    const base = link.dataset.base || '/conversations';
+    const meta = (agent === 'auto' || agent === 'orchestrator' || !agent);
+    link.href  = meta ? base : `${base}?agent=${encodeURIComponent(agent)}`;
+    // Tooltip + visible label hint at the filter so the user knows
+    // they're seeing scoped history.
+    if (meta) {
+        link.textContent = '💬 Histórico';
+        link.title = 'Histórico de conversas (todos os agentes)';
+    } else {
+        link.textContent = `💬 Histórico (${agent})`;
+        link.title = `Histórico de conversas com o agente ${agent}`;
+    }
+}
+updateHistoryLink(selectedAgent);
+
 // Update when agent changes
 agentSelect.addEventListener('change', () => {
     const agent = agentSelect.value;
@@ -1255,6 +1285,7 @@ agentSelect.addEventListener('change', () => {
     applyAgentColor(agent);
     updateEmptyState(agent);
     updateShareBtn();
+    updateHistoryLink(agent);
     // PDF button always visible
     document.getElementById('finance-pdf-btn').style.display = 'flex';
     document.querySelectorAll('.agent-grid-item').forEach(el => {
