@@ -200,10 +200,35 @@ class TenderCollaborator extends Model
      * resolve the `Colaborador` cell without creating duplicates across
      * re-imports of the same file.
      *
-     * If the name is blank or the placeholder "-", returns null so the
-     * tender row is kept unassigned.
+     * Resolution order (changed 2026-04-28 to prevent the
+     * "Zé Inácio vs Jose Inacio = 2 rows for one person" bug):
+     *
+     *   1. Exact match on normalized_name (active rows).
+     *   2. Alias match (active rows).
+     *   3. **Fuzzy match — auto-link to the closest candidate** instead
+     *      of creating a duplicate. The previous behaviour was "log a
+     *      warning + create anyway" which kept producing parallel rows
+     *      for every name variant ("Mónica" / "Monica Pereira",
+     *      "Catarina" / "Catarina Sequeira", "Zé Inácio" / "Jose
+     *      Inacio"). The new rule: if findCloseMatches returns ≥1
+     *      candidate, use the BEST one and write the incoming
+     *      variant into its `aliases` array so future imports skip
+     *      the fuzzy step entirely. No new row is created.
+     *   4. Genuinely new name (no fuzzy candidate) — create the row,
+     *      one source of truth from the start.
+     *
+     * Auto-linking on fuzzy is logged at INFO level so an admin can
+     * audit ("did I really mean to fuse 'Zé' into 'Jose Inácio'?").
+     * If the auto-link is wrong, the admin can split via the merge UI
+     * (un-merge isn't built — they'd manually clear the alias and
+     * re-create the second row).
+     *
+     * Pass `$strict = true` to disable creation entirely — useful for
+     * a "manual triage queue" workflow where unmatched names produce
+     * unassigned tenders that the admin reviews. Returns null when
+     * no match found in strict mode.
      */
-    public static function findOrCreateByName(?string $name): ?self
+    public static function findOrCreateByName(?string $name, bool $strict = false): ?self
     {
         $norm = self::normalize($name);
         if ($norm === '' || $norm === '-') {
@@ -228,24 +253,51 @@ class TenderCollaborator extends Model
             return $byAlias;
         }
 
-        // 3. About to create a new row. Check for fuzzy candidates and
-        //    log a warning so we can spot import-time duplicate-creation
-        //    drift (the exact bug shape that caused 65 of Mónica's
-        //    tenders to bind to a new "monica" row instead of the
-        //    existing "monica pereira"). The row is still created — we
-        //    don't block the import — but the warning + admin merge
-        //    tool gives the operator a way to see and fix it.
+        // 3. Fuzzy match — auto-link to closest candidate.
+        //    findCloseMatches returns rows whose normalized_name is
+        //    within Levenshtein 3 OR is a prefix relation OR shares
+        //    the first token. Picks the one with the lowest distance;
+        //    ties broken by alphabetical normalized_name so the
+        //    behaviour is deterministic across re-imports.
         $close = self::findCloseMatches($norm, threshold: 3);
         if ($close->isNotEmpty()) {
-            \Illuminate\Support\Facades\Log::warning(
-                'TenderCollaborator: creating new row despite fuzzy candidates exist',
+            $best = $close->sortBy(fn($c) => [
+                levenshtein($c->normalized_name, $norm),
+                $c->normalized_name,
+            ])->first();
+
+            // Append the incoming variant to the survivor's aliases so
+            // the next import of this same variant hits step 2 (cheap
+            // alias lookup) instead of re-running fuzzy.
+            $aliases = (array) ($best->aliases ?? []);
+            if (!in_array($norm, $aliases, true)) {
+                $aliases[] = $norm;
+                $best->aliases = $aliases;
+                $best->save();
+            }
+
+            \Illuminate\Support\Facades\Log::info(
+                'TenderCollaborator: auto-linked import variant to existing row',
                 [
-                    'incoming'   => $name,
-                    'normalized' => $norm,
-                    'candidates' => $close->mapWithKeys(fn($c) => [$c->id => $c->normalized_name])->all(),
-                    'hint'       => 'Use POST /tenders/collaborators/{from}/merge/{into} to fuse if these are the same person.',
+                    'incoming'    => $name,
+                    'normalized'  => $norm,
+                    'linked_to'   => ['id' => $best->id, 'name' => $best->name, 'normalized' => $best->normalized_name],
+                    'hint'        => 'If this auto-link is wrong, edit the row and remove the alias.',
                 ],
             );
+
+            return $best;
+        }
+
+        // 4. Genuinely new name. Strict mode refuses to create here so
+        //    a triage queue picks it up; default mode creates the row
+        //    so imports keep flowing.
+        if ($strict) {
+            \Illuminate\Support\Facades\Log::warning(
+                'TenderCollaborator: strict mode — name has no match, NOT creating',
+                ['incoming' => $name, 'normalized' => $norm],
+            );
+            return null;
         }
 
         return self::create([

@@ -65,38 +65,79 @@ class TenderCollaboratorAliasesTest extends TestCase
         $this->assertSame('Mónica Pereira', $hit->name);
     }
 
-    public function test_no_alias_match_creates_new_row(): void
+    public function test_close_name_no_alias_now_auto_links_instead_of_creating(): void
     {
-        $this->row('Mónica Pereira');   // no aliases
+        // 2026-04-28: was "creates a 2nd row" — now auto-links because
+        // 'monica' is a prefix of 'monica pereira' (fuzzy match).
+        $existing = $this->row('Mónica Pereira');
 
-        $created = TenderCollaborator::findOrCreateByName('Mónica');
-        $this->assertSame('Mónica', $created->name);
-        $this->assertSame('monica', $created->normalized_name);
-        $this->assertSame(2, TenderCollaborator::count());
+        $resolved = TenderCollaborator::findOrCreateByName('Mónica');
+        $this->assertSame($existing->id, $resolved->id,
+            'Close-name lookup must auto-link, not duplicate');
+        $this->assertSame(1, TenderCollaborator::count());
+        $this->assertContains('monica', $resolved->fresh()->aliases ?? []);
     }
 
-    public function test_creating_new_row_logs_warning_when_fuzzy_candidates_exist(): void
+    public function test_fuzzy_match_auto_links_to_existing_instead_of_creating(): void
     {
-        // "Monica Pereira" exists. Importer brings in just "Monica P." —
-        // close enough to be the same person, but not an exact match.
-        // Behaviour: row is still created (we don't block imports), but
-        // a warning is logged so the operator can audit + run the merge.
-        $this->row('Monica Pereira');
+        // Behaviour change 2026-04-28: "Zé Inácio = Jose Inacio" — a
+        // fuzzy match must REUSE the existing row (and write the
+        // variant into aliases for free) rather than create a parallel
+        // duplicate.
+        $existing = $this->row('Jose Inacio');
 
         Log::spy();
+        $resolved = TenderCollaborator::findOrCreateByName('Zé Inácio');
 
-        TenderCollaborator::findOrCreateByName('Monica P.');
+        $this->assertSame($existing->id, $resolved->id,
+            'Fuzzy match must auto-link to the existing row');
+        $this->assertSame(1, TenderCollaborator::count(),
+            'No new row created');
+        $this->assertContains('ze inacio', $existing->fresh()->aliases ?? [],
+            'The variant must be persisted as an alias for future imports');
 
-        Log::shouldHaveReceived('warning')
+        Log::shouldHaveReceived('info')
             ->once()
             ->with(
-                'TenderCollaborator: creating new row despite fuzzy candidates exist',
+                'TenderCollaborator: auto-linked import variant to existing row',
                 \Mockery::on(function ($ctx) {
                     return is_array($ctx)
-                        && ($ctx['normalized'] ?? null) === 'monica p.'
-                        && !empty($ctx['candidates']);
+                        && ($ctx['normalized'] ?? null) === 'ze inacio'
+                        && ($ctx['linked_to']['name'] ?? null) === 'Jose Inacio';
                 })
             );
+    }
+
+    public function test_strict_mode_refuses_to_create_when_no_match(): void
+    {
+        // strict=true → if no exact, alias, or fuzzy match exists,
+        // return null (the import will leave the tender unassigned).
+        // Useful for the "manual triage queue" workflow.
+        $resolved = TenderCollaborator::findOrCreateByName('Brand New Person', strict: true);
+        $this->assertNull($resolved);
+        $this->assertSame(0, TenderCollaborator::count());
+    }
+
+    public function test_strict_mode_still_uses_fuzzy_match_when_one_exists(): void
+    {
+        // strict=true should NOT block fuzzy matching — the whole
+        // point of strict is "don't create new", not "don't link".
+        $existing = $this->row('Jose Inacio');
+
+        $resolved = TenderCollaborator::findOrCreateByName('Zé Inácio', strict: true);
+        $this->assertSame($existing->id, $resolved->id);
+    }
+
+    public function test_no_fuzzy_candidate_creates_new_in_default_mode(): void
+    {
+        // When a name has NO fuzzy candidate at all, the default mode
+        // creates the row — imports keep flowing for genuinely new
+        // collaborators (e.g. a new H&P hire whose name appears for
+        // the first time).
+        $created = TenderCollaborator::findOrCreateByName('Brand New Person');
+        $this->assertNotNull($created);
+        $this->assertSame('Brand New Person', $created->name);
+        $this->assertSame(1, TenderCollaborator::count());
     }
 
     public function test_creating_brand_new_name_does_not_log_warning(): void

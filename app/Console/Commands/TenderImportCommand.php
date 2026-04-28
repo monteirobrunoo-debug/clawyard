@@ -20,7 +20,8 @@ class TenderImportCommand extends Command
         {source? : Source key (nspa, nato, sam_gov, ...)}
         {file? : Path to the Excel file}
         {--user= : User id to attribute the import to}
-        {--list-sources : Show available importers and exit}';
+        {--list-sources : Show available importers and exit}
+        {--strict : Refuse to create new collaborator rows from name alone — leave unmatched tenders unassigned for triage}';
 
     protected $description = 'Import tenders from an Excel file for a given source';
 
@@ -62,6 +63,7 @@ class TenderImportCommand extends Command
                 filePath: $file,
                 originalName: basename($file),
                 userId: $this->option('user') ? (int) $this->option('user') : null,
+                strictCollaborators: (bool) $this->option('strict'),
             );
         } catch (\Throwable $e) {
             $this->error('Import failed: ' . $e->getMessage());

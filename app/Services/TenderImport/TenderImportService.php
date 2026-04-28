@@ -55,7 +55,8 @@ class TenderImportService
         string $source,
         string $filePath,
         ?string $originalName = null,
-        ?int $userId = null
+        ?int $userId = null,
+        bool $strictCollaborators = false
     ): TenderImport {
         if (!$this->supports($source)) {
             throw new \InvalidArgumentException("No importer registered for source: {$source}");
@@ -87,7 +88,7 @@ class TenderImportService
         // OUTSIDE the transaction (above) so it survives for forensics if
         // the rollback fires.
         DB::transaction(function () use (
-            $importer, $filePath, $audit,
+            $importer, $filePath, $audit, $strictCollaborators,
             &$parsed, &$created, &$updated, &$skipped, &$errors
         ) {
             foreach ($importer->parse($filePath) as $row) {
@@ -95,7 +96,17 @@ class TenderImportService
 
                 $collabId = null;
                 if (!empty($row['collaborator_name'])) {
-                    $collabId = TenderCollaborator::findOrCreateByName($row['collaborator_name'])?->id;
+                    // strict mode (--strict in CLI) refuses to create a
+                    // brand-new collaborator from a name alone — the
+                    // tender is left unassigned and an admin reviews
+                    // the orphan via /tenders/collaborators. Default
+                    // mode auto-links to fuzzy candidates (preventing
+                    // duplicates) and creates only when the name is
+                    // genuinely new.
+                    $collabId = TenderCollaborator::findOrCreateByName(
+                        $row['collaborator_name'],
+                        strict: $strictCollaborators
+                    )?->id;
                 }
 
                 try {
