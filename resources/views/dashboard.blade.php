@@ -579,8 +579,8 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 @if(!empty($recentConversations) && $recentConversations->count() > 0)
 <div class="recent-wrap">
     <div class="recent-header">
-        <span class="recent-title">💬 Continue where you left off</span>
-        <a href="/conversations" class="recent-view-all">View all →</a>
+        <span class="recent-title">💬 Continua onde paraste</span>
+        <a href="/conversations" class="recent-view-all">Ver histórico completo →</a>
     </div>
     <div class="recent-strip">
         @foreach($recentConversations as $conv)
@@ -625,6 +625,21 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                 </div>
             </a>
         @endforeach
+    </div>
+</div>
+@else
+{{-- Discoverability for users who haven't chatted yet (or whose last
+     5 conversations got pruned). Without this they don't realise
+     /conversations exists at all — exactly the 2026-04-27 complaint
+     "users say they don't have history". --}}
+<div class="recent-wrap" style="opacity:.85;">
+    <div class="recent-header">
+        <span class="recent-title">💬 Histórico de conversas</span>
+        <a href="/conversations" class="recent-view-all">Abrir histórico →</a>
+    </div>
+    <div style="padding:18px 22px;font-size:13px;color:#888;">
+        Cada conversa que tens com um agente fica guardada aqui.
+        Pesquisa pelo texto das mensagens ou filtra por agente.
     </div>
 </div>
 @endif

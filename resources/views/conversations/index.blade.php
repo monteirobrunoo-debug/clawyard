@@ -100,11 +100,33 @@
     <h1>💬 Histórico de Conversas</h1>
     <p class="subtitle">Todas as tuas conversas com os agentes — clica para ver ou exportar em PDF</p>
 
+    {{-- Search + filter bar — added 2026-04-27 because users were
+         complaining they "couldn't find their history". The data was
+         always there, scoped to the user via session_id prefix; just
+         hard to navigate when a user has 30+ conversations. --}}
+    <form method="GET" action="" class="search-bar"
+          style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:18px;padding:12px 14px;background:#111;border:1px solid #1e1e1e;border-radius:10px;">
+        <input type="text" name="q" value="{{ $q ?? '' }}"
+               placeholder="🔍 Procurar nas mensagens…"
+               style="flex:1;min-width:240px;padding:8px 12px;background:#0a0a0a;border:1px solid #1e1e1e;border-radius:8px;color:#e5e5e5;font-size:13px;">
+        <select name="agent" style="padding:8px 10px;background:#0a0a0a;border:1px solid #1e1e1e;border-radius:8px;color:#e5e5e5;font-size:13px;">
+            <option value="">Todos os agentes</option>
+            @foreach($userAgents ?? [] as $a)
+                <option value="{{ $a }}" @selected(($agent ?? '') === $a)>{{ ucfirst($a) }}</option>
+            @endforeach
+        </select>
+        <button type="submit" style="padding:8px 18px;background:#76b900;border:0;border-radius:8px;color:#0a0a0a;font-weight:700;cursor:pointer;">Procurar</button>
+        @if(!empty($q) || !empty($agent))
+            <a href="{{ url('/conversations') }}"
+               style="padding:8px 14px;color:#888;text-decoration:none;font-size:12px;">✗ Limpar</a>
+        @endif
+    </form>
+
     @if($conversations->total() > 0)
     <div class="stats-bar">
         <div class="stat">
             <div class="stat-num">{{ $conversations->total() }}</div>
-            <div class="stat-label">Total Conversas</div>
+            <div class="stat-label">{{ (!empty($q) || !empty($agent)) ? 'Conversas encontradas' : 'Total Conversas' }}</div>
         </div>
         <div class="stat">
             <div class="stat-num">{{ $conversations->sum('messages_count') }}</div>
@@ -116,8 +138,23 @@
     @if($conversations->isEmpty())
     <div class="empty">
         <div class="empty-icon">💬</div>
-        <h2>Sem conversas ainda</h2>
-        <p>Começa uma conversa com qualquer agente e ela aparecerá aqui.</p>
+        @if(!empty($q) || !empty($agent))
+            <h2>Sem resultados</h2>
+            <p>
+                Nenhuma conversa
+                @if(!empty($q)) com o texto <strong>"{{ $q }}"</strong>@endif
+                @if(!empty($agent)) com o agente <strong>{{ ucfirst($agent) }}</strong>@endif.
+            </p>
+            <p style="margin-top:12px;">
+                <a href="{{ url('/conversations') }}" style="color:#76b900;">← Limpar filtros e ver tudo</a>
+            </p>
+        @else
+            <h2>Sem conversas ainda</h2>
+            <p>Começa uma conversa com qualquer agente e ela aparecerá aqui.</p>
+            <p style="margin-top:12px;">
+                <a href="/chat" style="color:#76b900;">→ Começar agora</a>
+            </p>
+        @endif
     </div>
     @else
     <div class="conv-list">
