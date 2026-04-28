@@ -22,7 +22,11 @@
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-git@github.com:monteirobrunoo-debug/clawyard.git}"
+# Default to HTTPS so a fresh droplet without an SSH key registered on
+# GitHub still clones successfully. Override with REPO_URL=git@... if
+# the droplet has SSH keys configured AND you want SSH push back from
+# this machine (not needed for hp-history, which only reads).
+REPO_URL="${REPO_URL:-https://github.com/monteirobrunoo-debug/clawyard.git}"
 APP_DIR="/opt/hp-history"
 DOMAIN="${DOMAIN:-hp-history.partyard.eu}"
 EMAIL_FOR_LE="${EMAIL_FOR_LE:-bruno@partyard.eu}"
