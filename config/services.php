@@ -142,6 +142,26 @@ return [
         // window starting at midnight server-local. Exceed → all
         // subsequent runs abort with reason='daily_budget_exceeded'.
         'max_cost_per_day' => (float) env('AGENT_SWARM_MAX_COST_PER_DAY', 5.00),
+
+        // Per-call HTTP timeout for AgentDispatcher → Anthropic.
+        // 60s covers slow synthesis with extended thinking but still
+        // forces the runner to move on if upstream hangs.
+        'dispatch_timeout_seconds' => (int) env('AGENT_SWARM_DISPATCH_TIMEOUT', 60),
+
+        // Per-1M-token rates in USD. Keys are partial model-name
+        // matches (e.g. 'sonnet' matches 'claude-sonnet-4-6-…').
+        // Defaults track Anthropic's published pricing as of 2026-04;
+        // override via AGENT_SWARM_RATES env to a JSON string when
+        // their card changes. AgentDispatcher::matchModel falls back
+        // to tier inference if no key matches.
+        'token_rates' => json_decode(
+            env('AGENT_SWARM_RATES', '{"haiku":{"input":1.0,"output":5.0},"sonnet":{"input":3.0,"output":15.0},"opus":{"input":15.0,"output":75.0}}'),
+            true,
+        ) ?: [
+            'haiku'  => ['input' => 1.0,  'output' => 5.0],
+            'sonnet' => ['input' => 3.0,  'output' => 15.0],
+            'opus'   => ['input' => 15.0, 'output' => 75.0],
+        ],
     ],
 
     // hp-history — pgvector-backed company memory served from a separate
