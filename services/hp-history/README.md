@@ -52,7 +52,18 @@ curl -X POST http://localhost:8088/search ...
 
 ## Deploy on DigitalOcean
 
-See `scripts/deploy-do.sh` for a one-shot droplet bootstrap.
+Two flavours depending on whether you want a separate droplet or
+to share the existing clawyard droplet:
+
+  • `scripts/deploy-do.sh` — fresh, dedicated `hp-history.partyard.eu`
+    droplet. Installs Docker + nginx + certbot + ufw, configures the
+    full stack from scratch.
+  • `scripts/cohost-clawyard.sh` — co-host on the EXISTING clawyard
+    droplet alongside Forge. Skips package installs (Forge already
+    has nginx/certbot/ufw), drops the postgres host port mapping
+    (avoids colliding with Forge's database), adds a sidecar nginx
+    vhost. Use this when you don't want a second droplet for cost
+    or operational reasons.
 
 ## What lives where
 

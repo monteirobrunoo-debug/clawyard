@@ -19,8 +19,11 @@ services:
       POSTGRES_DB:       ${HPH_PG_DB:-hphistory}
     volumes:
       - hphistory-pgdata:/var/lib/postgresql/data
-    ports:
-      - "127.0.0.1:5432:5432"
+    # NO host port mapping. The `app` container talks to `db` over the
+    # internal docker compose network (hostname `db`). Skipping host
+    # exposure avoids colliding with a Forge-managed Postgres on 5432
+    # when this stack co-hosts on the clawyard droplet. To run psql
+    # interactively use: `docker compose exec db psql -U hphistory`.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 10s
