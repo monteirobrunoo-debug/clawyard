@@ -25,8 +25,10 @@ class PartOrder extends Model
 
     protected $fillable = [
         'agent_key',
+        'slot',
         'name',
         'description',
+        'purpose',
         'source_url',
         'source_image_url',
         'cost_usd',
@@ -35,6 +37,7 @@ class PartOrder extends Model
         'search_candidates',
         'committee_log',
         'design_scad',
+        'assembly_notes',
         'stl_path',
         'designed_at',
         'notes',

@@ -62,6 +62,14 @@ class CadGenerationService
             }
 
             $order->design_scad = $scad;
+            // Phase 3 — also generate human-readable assembly notes.
+            // Best-effort: if the call fails, we still keep the SCAD
+            // and note the gap. The note contains how to mount the
+            // part to its slot + what role it plays in the robot.
+            $assembly = $this->generateAssemblyNotes($order);
+            if ($assembly !== null) {
+                $order->assembly_notes = $assembly;
+            }
             $order->save();
 
             // Try to convert to STL. If openscad isn't installed we keep
@@ -118,6 +126,49 @@ class CadGenerationService
             $raw = trim($m[1]);
         }
         return $raw !== '' ? $raw : null;
+    }
+
+    /**
+     * Ask the LLM to write human-readable assembly notes in markdown.
+     * Includes:
+     *   • What the part DOES in the robot (purpose in plain PT-pt)
+     *   • How it physically mounts to its slot (screw size, position,
+     *     orientation, cable routing)
+     *   • Tools needed to assemble (Phillips screwdriver, hex key, etc.)
+     *
+     * Best-effort: returns null on failure, doesn't block the SCAD path.
+     */
+    private function generateAssemblyNotes(\App\Models\PartOrder $order): ?string
+    {
+        $slotMeta = $order->slot
+            ? \App\Services\Robotparts\RobotBlueprint::find($order->slot)
+            : null;
+        $slotBlock = $slotMeta
+            ? "Slot: {$slotMeta['emoji']} {$slotMeta['label']} — {$slotMeta['purpose']}"
+            : 'Slot: (unspecified — generic chassis attachment)';
+
+        $system = "You are a robotics technician writing concise assembly notes "
+                . "in Portuguese (PT-pt) for a hobbyist building a robot. "
+                . "Output MARKDOWN with these exact 3 sections:\n\n"
+                . "## Para que serve\n"
+                . "(1-2 frases sobre a função desta peça no contexto do robot)\n\n"
+                . "## Como montar\n"
+                . "(passos numerados, concretos: tipo de parafusos M3/M4, número de furos, "
+                . "orientação, cabos a ligar a que pinos GPIO/breadboard)\n\n"
+                . "## Ferramentas\n"
+                . "(lista compacta — chave de fendas Phillips PH1, alicate, etc.)\n\n"
+                . "Mantém tudo curto. Sem texto fora destas 3 secções.";
+
+        $user = "Peça: {$order->name}\n"
+              . "Descrição: " . ($order->description ?: '(sem descrição)') . "\n"
+              . "{$slotBlock}\n\n"
+              . "Escreve as instruções de montagem.";
+
+        $res = $this->dispatcher->dispatch($system, $user, maxTokens: 800);
+        if (!($res['ok'] ?? false)) return null;
+
+        $text = trim((string) $res['text']);
+        return $text !== '' ? $text : null;
     }
 
     /**

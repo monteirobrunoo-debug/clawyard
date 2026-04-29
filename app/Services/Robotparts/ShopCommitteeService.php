@@ -59,8 +59,27 @@ class ShopCommitteeService
         $wallet = AgentWallet::forAgent($buyerAgentKey);
         $budget = $budget ?? (float) $wallet->balance_usd;
 
+        // Phase 2 of the robot vision: pick the slot this agent should
+        // fill before kicking off deliberation. Filled-slots logic
+        // (skip slots already 'stl_ready' to make progress toward a
+        // complete robot) lives in RobotBlueprint.
+        $filledSlots = PartOrder::query()
+            ->whereIn('status', [
+                PartOrder::STATUS_PURCHASED,
+                PartOrder::STATUS_DESIGNING,
+                PartOrder::STATUS_STL_READY,
+                PartOrder::STATUS_CNC_QUEUED,
+                PartOrder::STATUS_COMPLETED,
+            ])
+            ->whereNotNull('slot')
+            ->distinct()
+            ->pluck('slot')
+            ->all();
+        $slot = RobotBlueprint::nextSlotFor($buyerAgentKey, $filledSlots);
+
         $order = PartOrder::create([
             'agent_key' => $buyerAgentKey,
+            'slot'      => $slot,
             'name'      => '(deliberating)',
             'status'    => PartOrder::STATUS_COMMITTEE,
             'cost_usd'  => 0,
@@ -71,7 +90,7 @@ class ShopCommitteeService
             $helperKeys = $this->pickHelpers($buyerAgentKey, count: 2);
             $helperReplies = [];
             foreach ($helperKeys as $helperKey) {
-                $reply = $this->askHelper($helperKey, $buyerAgentKey, $budget);
+                $reply = $this->askHelper($helperKey, $buyerAgentKey, $budget, $slot);
                 if ($reply !== null) {
                     $order->appendCommittee($helperKey, 'helper', $reply);
                     $helperReplies[$helperKey] = $reply;
@@ -79,7 +98,7 @@ class ShopCommitteeService
             }
 
             // Buyer decides based on the helper input.
-            $decision = $this->askBuyer($buyerAgentKey, $budget, $helperReplies);
+            $decision = $this->askBuyer($buyerAgentKey, $budget, $helperReplies, $slot);
             if ($decision === null) {
                 $order->status = PartOrder::STATUS_CANCELLED;
                 $order->notes  = 'Committee aborted — buyer dispatch failed.';
@@ -116,6 +135,7 @@ class ShopCommitteeService
 
             $order->name         = mb_substr((string) ($decision['name'] ?? '(unnamed part)'), 0, 255);
             $order->description  = (string) ($decision['description'] ?? '');
+            $order->purpose      = (string) ($decision['purpose'] ?? '');
             $order->search_query = mb_substr((string) ($decision['search_query'] ?? ''), 0, 255);
             $order->cost_usd     = round($estCost, 4);
             $order->status       = PartOrder::STATUS_SEARCHING;
@@ -155,20 +175,35 @@ class ShopCommitteeService
      * text, or null if the dispatcher failed (we then proceed without
      * that helper rather than aborting the committee).
      */
-    private function askHelper(string $helperKey, string $buyerKey, float $budget): ?string
+    private function askHelper(string $helperKey, string $buyerKey, float $budget, ?string $slot): ?string
     {
         $helperMeta = AgentCatalog::find($helperKey);
         $buyerMeta  = AgentCatalog::find($buyerKey);
         if (!$helperMeta || !$buyerMeta) return null;
 
-        $system = "You are {$helperMeta['name']} ({$helperMeta['role']}). "
-                . "Your colleague {$buyerMeta['name']} ({$buyerMeta['role']}) has \${$budget} to spend on a small robot body part. "
-                . "Suggest ONE part you think would fit them well. Reply in 2-3 sentences with: "
-                . "(a) what the part is, (b) why it fits {$buyerMeta['name']}'s persona/role, (c) rough cost estimate. "
-                . "Keep it grounded — small mechanical/electronic parts under \$" . max(2.0, $budget) . ".";
+        // Slot context — guides the helper to suggest parts that fit
+        // the SPECIFIC anatomy slot the buyer must fill, not whatever
+        // their persona randomly thinks of.
+        $slotMeta = $slot ? RobotBlueprint::find($slot) : null;
+        $slotContext = '';
+        if ($slotMeta) {
+            $slotContext = "\n\nROBOT ANATOMY SLOT TO FILL: {$slotMeta['emoji']} {$slotMeta['label']}\n"
+                . "Purpose: {$slotMeta['purpose']}\n"
+                . "Typical parts that fit this slot: {$slotMeta['typical_parts']}\n"
+                . "Your suggestion MUST be for this slot specifically — don't suggest a sensor when the slot is locomotion.";
+        }
 
-        $user = "What small robot body part should {$buyerMeta['name']} buy with their \${$budget}? "
-              . "Stay practical — common DIY robotics components like servos, sensors, brackets, mini-actuators, LED indicators, etc.";
+        $system = "You are {$helperMeta['name']} ({$helperMeta['role']}). "
+                . "Your colleague {$buyerMeta['name']} ({$buyerMeta['role']}) has \${$budget} to spend on a robot body part. "
+                . "Suggest ONE part you think would fit them. Reply in 2-3 sentences with: "
+                . "(a) what the part is, (b) why it fits, (c) rough cost estimate. "
+                . "Keep it under \$" . max(2.0, $budget) . "."
+                . $slotContext;
+
+        $user = "What part should {$buyerMeta['name']} buy with \${$budget}? "
+              . ($slotMeta
+                  ? "Remember: target slot is {$slotMeta['emoji']} {$slotMeta['label']}."
+                  : "Stay practical — common DIY robotics components.");
 
         $res = $this->dispatcher->dispatch($system, $user, maxTokens: 400);
         if (!($res['ok'] ?? false)) {
@@ -186,27 +221,39 @@ class ShopCommitteeService
      * a parsed JSON dict or null on failure (dispatch error or
      * unparseable response).
      */
-    private function askBuyer(string $buyerKey, float $budget, array $helperReplies): ?array
+    private function askBuyer(string $buyerKey, float $budget, array $helperReplies, ?string $slot): ?array
     {
         $buyerMeta = AgentCatalog::find($buyerKey);
         if (!$buyerMeta) return null;
 
         $budgetStr = number_format($budget, 2);
+
+        // Slot context for the buyer — the robot anatomy assignment.
+        $slotMeta = $slot ? RobotBlueprint::find($slot) : null;
+        $slotBlock = '';
+        if ($slotMeta) {
+            $slotBlock = "\n\nROBOT ANATOMY ASSIGNMENT — SLOT TO FILL:\n"
+                . "  {$slotMeta['emoji']} {$slotMeta['label']}\n"
+                . "  Purpose: {$slotMeta['purpose']}\n"
+                . "  Examples that fit this slot: {$slotMeta['typical_parts']}\n\n"
+                . "Your pick MUST be for THIS slot. Don't pick a sensor when the slot is locomotion. "
+                . "Don't pick a battery when the slot is vision. Stay on target.";
+        }
+
         $system = "You are {$buyerMeta['name']} ({$buyerMeta['role']}). "
                 . "You have EXACTLY \${$budgetStr} USD — not a cent more. Your colleagues advised you. "
-                . "Now you must DECIDE.\n\n"
+                . "Now you must DECIDE.{$slotBlock}\n\n"
                 . "HARD BUDGET CONSTRAINT: est_cost_usd MUST be ≤ \${$budgetStr}. "
                 . "If you suggest a part costing more, the purchase fails and your wallet wastes the deliberation. "
-                . "Pick something genuinely affordable — common DIY parts like servos (\$2-5), micro switches (\$1-3), "
-                . "LED indicators (\$0.50-2), small sensors (\$1-4), brackets (\$1-3). "
-                . "AVOID expensive sensors, motors over 100g/kg, or anything industrial-grade.\n\n"
+                . "Pick something genuinely affordable for the slot.\n\n"
                 . "Output STRICT JSON only — no markdown fences, no preamble — matching:\n"
                 . '{ "name": "<short part name>", '
                 . '"description": "<1-2 sentences>", '
-                . '"search_query": "<concrete query for finding this on robotshop / aliexpress / adafruit, e.g. \'mg90s mini servo 9g\'>", '
-                . '"justification": "<why you chose this AND confirm cost fits the $' . $budgetStr . ' budget>", '
+                . '"purpose": "<1 sentence: what this part does in the robot, in PT-pt>", '
+                . '"search_query": "<concrete query for robotshop / aliexpress / adafruit>", '
+                . '"justification": "<why this fits the slot AND fits the $' . $budgetStr . ' budget>", '
                 . '"est_cost_usd": <number, ≤ ' . $budgetStr . '> }' . "\n"
-                . 'If genuinely nothing fits the budget, return est_cost_usd: 0 and the system will skip the purchase.';
+                . 'If genuinely nothing fits the budget for this slot, return est_cost_usd: 0.';
 
         $context = "BUDGET: \${$budget}\n\n";
         foreach ($helperReplies as $helperKey => $reply) {
