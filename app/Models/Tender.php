@@ -35,19 +35,21 @@ class Tender extends Model
         'notes', 'result',
         'raw_metadata', 'last_import_id', 'last_digest_sent_at',
         'deadline_alert_sent_at',
+        'last_sap_sync_at', 'last_sap_status', 'last_sap_remarks_hash',
     ];
 
     protected function casts(): array
     {
         return [
-            'deadline_at'          => 'datetime',
-            'source_modified_at'   => 'datetime',
-            'assigned_at'          => 'datetime',
-            'last_digest_sent_at'  => 'datetime',
+            'deadline_at'            => 'datetime',
+            'source_modified_at'     => 'datetime',
+            'assigned_at'            => 'datetime',
+            'last_digest_sent_at'    => 'datetime',
             'deadline_alert_sent_at' => 'datetime',
-            'offer_value'          => 'decimal:2',
-            'time_spent_hours'     => 'decimal:2',
-            'raw_metadata'         => 'array',
+            'last_sap_sync_at'       => 'datetime',
+            'offer_value'            => 'decimal:2',
+            'time_spent_hours'       => 'decimal:2',
+            'raw_metadata'           => 'array',
         ];
     }
 

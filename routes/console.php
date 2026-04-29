@@ -64,6 +64,18 @@ Schedule::command('agents:shop')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Periodic SAP-to-clawyard sync — every 15 minutes ─────────────────────
+// Pulls Status + Remarks from SAP B1 for every tender with sap_opp linked,
+// keeping the dashboard close to live with SAP. Skips overwriting local
+// notes when the user has unsynced edits (last conflict-resolution wins
+// on the user's side; SAP can be re-pushed via the existing notes-edit
+// flow). Per-run cost: ~5s wall + ~0 USD (no LLM, just SAP B1 OData).
+Schedule::command('tenders:sync-from-sap')
+    ->everyFifteenMinutes()
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Phase B — robot research council, weekly Sunday 04:00 Lisbon ─────────
 // 4 agents convene to research a robot improvement topic. Tavily web
 // search + per-agent findings + lead synthesis with actionable proposals.
