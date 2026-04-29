@@ -84,17 +84,41 @@ class LinkSapOpportunitiesCommand extends Command
             $reference = trim((string) $tender->reference);
             if ($reference === '') continue;
 
-            // Try the verbatim reference first.
+            // STRICT match: SAP OpportunityName MUST contain the FULL
+            // reference verbatim (not digit-only). Two different RFQs
+            // can share year+sequence (e.g. KHY26029 and JCL26029 are
+            // distinct procurement processes), so digit-only fallback
+            // produces false positives. We log digit-only matches as
+            // 'potential' for manual review rather than auto-linking.
             $candidates = $this->searchByName($sap, $reference);
 
-            // Fallback: digits only (handles refs like 'EOT25050+' / 'AGR26002+').
+            // Cleaned reference (strip trailing + or letter suffix marks)
+            // — e.g. 'AGR26002+' becomes 'AGR26002' which usually IS in
+            // the SAP name. Helps catch edge formatting.
+            if (empty($candidates) && preg_match('/^([A-Za-z]+\d+)/', $reference, $m)) {
+                $cleanRef = $m[1];
+                if ($cleanRef !== $reference) {
+                    $candidates = $this->searchByName($sap, $cleanRef);
+                }
+            }
+
+            // Digit-only fallback is informational ONLY — used for the
+            // 'potential' log line below, NOT for auto-linking.
+            $potentialDigits = [];
             if (empty($candidates) && preg_match('/\d{4,}/', $reference, $m)) {
-                $candidates = $this->searchByName($sap, $m[0]);
+                $potentialDigits = $this->searchByName($sap, $m[0]);
             }
 
             if (empty($candidates)) {
                 $stats['unmatched']++;
-                $this->line(sprintf('  ❓ %s — no SAP match', $reference));
+                if (!empty($potentialDigits)) {
+                    // Useful hint: digit pattern matched something. Show
+                    // the operator so they can verify manually.
+                    $hint = collect($potentialDigits)->take(2)->pluck('OpportunityName')->implode(' / ');
+                    $this->line(sprintf('  ❓ %s — no verbatim match (digits-only would link to: %s)', $reference, $hint));
+                } else {
+                    $this->line(sprintf('  ❓ %s — no SAP match', $reference));
+                }
                 continue;
             }
 
