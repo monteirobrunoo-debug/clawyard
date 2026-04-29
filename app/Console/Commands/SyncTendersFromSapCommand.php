@@ -108,7 +108,13 @@ class SyncTendersFromSapCommand extends Command
             if ($changed['any']) {
                 $stats['updated']++;
                 if ($changed['remarks_skipped']) $stats['skipped_remarks']++;
-                $details = collect($changed)->filter()->keys()->implode(', ');
+                // Drop the internal 'any' marker from the user-facing
+                // output — it's just a flag for the caller, not a field.
+                $details = collect($changed)
+                    ->forget('any')
+                    ->filter()
+                    ->keys()
+                    ->implode(', ');
                 $this->line(sprintf('  ✓ #%d %s — %s', $tender->id, $tender->reference, $details));
             } else {
                 $stats['no_change']++;
