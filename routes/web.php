@@ -590,9 +590,11 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('/marketplace',       [\App\Http\Controllers\MarketplaceController::class, 'index'])
         ->name('marketplace.index');
-    Route::get('/robot',             [\App\Http\Controllers\RobotController::class, 'index'])
+    Route::get('/robot',              [\App\Http\Controllers\RobotController::class, 'index'])
         ->name('robot.index');
-    Route::get('/parts/{order}/stl', [\App\Http\Controllers\PartOrderController::class, 'downloadStl'])
+    Route::get('/robot/research',     [\App\Http\Controllers\RobotResearchController::class, 'index'])
+        ->name('robot.research');
+    Route::get('/parts/{order}/stl',  [\App\Http\Controllers\PartOrderController::class, 'downloadStl'])
         ->name('parts.stl');
 });
 

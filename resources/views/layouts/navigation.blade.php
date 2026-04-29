@@ -28,8 +28,11 @@
                     <x-nav-link :href="route('marketplace.index')" :active="request()->routeIs('marketplace.*')">
                         🛒 {{ __('Marketplace') }}
                     </x-nav-link>
-                    <x-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.*')">
+                    <x-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.index')">
                         🤖 {{ __('Robot') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('robot.research')" :active="request()->routeIs('robot.research')">
+                        🔬 {{ __('Council') }}
                     </x-nav-link>
                 </div>
             </div>
@@ -97,8 +100,11 @@
             <x-responsive-nav-link :href="route('marketplace.index')" :active="request()->routeIs('marketplace.*')">
                 🛒 {{ __('Marketplace') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.*')">
+            <x-responsive-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.index')">
                 🤖 {{ __('Robot') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('robot.research')" :active="request()->routeIs('robot.research')">
+                🔬 {{ __('Council') }}
             </x-responsive-nav-link>
         </div>
 

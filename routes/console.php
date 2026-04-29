@@ -64,6 +64,17 @@ Schedule::command('agents:shop')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Phase B — robot research council, weekly Sunday 04:00 Lisbon ─────────
+// 4 agents convene to research a robot improvement topic. Tavily web
+// search + per-agent findings + lead synthesis with actionable proposals.
+// Sunday so by Monday's shop round there's a fresh report informing
+// the committees. ~$0.02 per session in LLM tokens.
+Schedule::command('agents:research-council')
+    ->weeklyOn(0, '04:00')   // Sunday
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Individual deadline alert — fires ~24h before each tender's deadline,
 // exactly ONCE per tender lifetime (de-duped via deadline_alert_sent_at).
 // Sent only to the assigned collaborator so we don't duplicate the digest.

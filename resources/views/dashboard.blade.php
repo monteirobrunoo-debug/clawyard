@@ -412,6 +412,7 @@
         <a href="{{ route('rewards.me') }}" class="nav-link">🏆 Rewards</a>
         <a href="{{ route('marketplace.index') }}" class="nav-link">🛒 Marketplace</a>
         <a href="{{ route('robot.index') }}" class="nav-link">🤖 Robot</a>
+        <a href="{{ route('robot.research') }}" class="nav-link">🔬 Council</a>
         <a href="/intel" class="nav-link">🔗 Intel Bus</a>
         <a href="/agents/activity" class="nav-link">🤖 Activity</a>
         <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
