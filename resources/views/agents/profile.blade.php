@@ -306,6 +306,61 @@
     @endif
 </section>
 
+{{-- ── Agent rewards / earnings (C3+E1) ──────────────────────────────────────
+     Visual representation of the "money" this agent has earned through its
+     work in the swarm. Currently a DERIVED display from agent_metrics —
+     persistent agent wallets ship in the D-MVP (robot parts marketplace).
+
+     Formula (matches the wallet-credit cron coming in D2):
+        $0.50 per lead_won  (the big multiplier — closing matters)
+       +$0.05 per signal_processed (small steady drip for showing up)
+       +$0.10 per thumbs_up (positive feedback signal)
+       –$0.05 per thumbs_down (honest negative signal still counts a bit)
+
+     Tuned so that an agent with 10 leads_generated, 2 leads_won and 50
+     signals_processed earns ~$5.00 — enough to "buy" a small robot part
+     when the marketplace lands. --}}
+<section class="section">
+    <h2 style="margin-bottom:12px;">💰 Rewards do agente</h2>
+    @php
+        $wonBonus       = $metric ? (int) $metric->leads_won           * 0.50 : 0.0;
+        $signalsBonus   = $metric ? (int) $metric->signals_processed   * 0.05 : 0.0;
+        $upBonus        = $metric ? (int) $metric->thumbs_up           * 0.10 : 0.0;
+        $downPenalty    = $metric ? (int) $metric->thumbs_down         * 0.05 : 0.0;
+        $totalEarned    = max(0, $wonBonus + $signalsBonus + $upBonus - $downPenalty);
+    @endphp
+    @if($metric && $metric->signals_processed > 0)
+        <div style="background:linear-gradient(135deg,#1a2a1a 0%,#1a1a2a 100%);border:1px solid #2a3a2a;border-radius:12px;padding:18px;">
+            <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Ganhos derivados</div>
+                    <div style="font-size:36px;font-weight:bold;color:#7c3;">
+                        ${{ number_format($totalEarned, 2) }}
+                    </div>
+                </div>
+                <div style="flex:1;min-width:240px;font-size:12px;color:#bcd;line-height:1.7;">
+                    <div>💼 <strong>${{ number_format($wonBonus, 2) }}</strong> de leads ganhos ({{ $metric->leads_won }} × $0.50)</div>
+                    <div>📡 <strong>${{ number_format($signalsBonus, 2) }}</strong> por chains processadas ({{ $metric->signals_processed }} × $0.05)</div>
+                    @if($metric->thumbs_up > 0)
+                        <div>👍 <strong>+${{ number_format($upBonus, 2) }}</strong> por feedback positivo ({{ $metric->thumbs_up }} × $0.10)</div>
+                    @endif
+                    @if($metric->thumbs_down > 0)
+                        <div style="color:#fa6">👎 <strong>−${{ number_format($downPenalty, 2) }}</strong> por feedback negativo ({{ $metric->thumbs_down }} × $0.05)</div>
+                    @endif
+                </div>
+            </div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px dashed #2a3a2a;font-size:11px;color:#789;">
+                💡 Em breve este saldo vai ser persistido e o agente vai poder gastá-lo a "comprar" peças (robot parts marketplace).
+                Por agora é só visual — derivado em tempo real das métricas do swarm.
+            </div>
+        </div>
+    @else
+        <div style="padding:14px 16px;background:#1a1a1a;border:1px dashed #2a2a2a;border-radius:10px;color:#789;font-size:12px;">
+            Sem ganhos ainda — o agente precisa de correr pelo menos uma chain do swarm para começar a ganhar.
+        </div>
+    @endif
+</section>
+
 <section class="section">
     <h2>💡 Try asking me</h2>
     <div class="starters">

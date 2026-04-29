@@ -503,6 +503,74 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
     $showMineStrip = $hasTenders || $hasSharedAgents;
 @endphp
 
+{{-- E2 — Rewards strip — points + level + streak + last 3 events.
+     Hidden when the user has zero activity (clean dashboard for admins
+     who don't earn via the system). Mirrors the "Partilhados comigo"
+     strip styling to feel native. --}}
+@php
+    $hasRewardActivity = isset($myPoints) && $myPoints
+        && ((int) $myPoints->total_points > 0 || (isset($myRecentRewards) && $myRecentRewards->count() > 0));
+@endphp
+@if($hasRewardActivity)
+<div class="recent-wrap">
+    <div class="recent-header">
+        <span class="recent-title">🏆 Os teus rewards</span>
+        <a href="{{ route('rewards.me') }}" class="recent-view-all">ver todos →</a>
+    </div>
+    <div class="recent-strip" style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;">
+        {{-- Points + level + streak — single hero card --}}
+        <div style="flex:1;min-width:260px;background:linear-gradient(135deg,#1a2a3a 0%,#2a1a3a 100%);border:1px solid #2a3a4a;border-radius:12px;padding:14px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Pontos</div>
+                    <div style="font-size:28px;font-weight:bold;color:#fff;line-height:1;">{{ number_format($myPoints->total_points) }}</div>
+                </div>
+                <div>
+                    <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Nível</div>
+                    <div style="font-size:14px;font-weight:bold;color:#7c3;">{{ $myPoints->level }} · {{ $myPoints->levelName() }}</div>
+                </div>
+                <div>
+                    <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Streak</div>
+                    <div style="font-size:14px;font-weight:bold;color:#f93;">🔥 {{ $myPoints->current_streak_days }}d</div>
+                </div>
+            </div>
+            @if($myPoints->pointsToNextLevel() > 0)
+                @php
+                    $cur  = \App\Models\UserPoints::LEVEL_THRESHOLDS[$myPoints->level] ?? 0;
+                    $next = \App\Models\UserPoints::LEVEL_THRESHOLDS[$myPoints->level + 1] ?? null;
+                    $pct  = $next ? min(100, round((($myPoints->total_points - $cur) / max(1, $next - $cur)) * 100)) : 100;
+                @endphp
+                <div style="margin-top:10px;font-size:10px;color:#9ab;">
+                    faltam <strong>{{ number_format($myPoints->pointsToNextLevel()) }}</strong> para
+                    {{ \App\Models\UserPoints::LEVEL_NAMES[$myPoints->level + 1] ?? '?' }}
+                </div>
+                <div style="margin-top:4px;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">
+                    <div style="height:4px;background:linear-gradient(90deg,#7c3,#3c7);width:{{ $pct }}%;"></div>
+                </div>
+            @endif
+        </div>
+
+        {{-- Last 3 reward events — compact list --}}
+        @if($myRecentRewards && $myRecentRewards->count() > 0)
+        <div style="flex:1.5;min-width:300px;background:#111;border:1px solid #1e1e1e;border-radius:12px;padding:14px 18px;">
+            <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Atividade recente</div>
+            @foreach($myRecentRewards as $ev)
+                <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #1e1e1e;font-size:12px;">
+                    <span style="color:#bcd;">{{ str_replace('_', ' ', $ev->event_type) }}</span>
+                    <span style="display:flex;gap:8px;align-items:center;">
+                        <span style="color:#789;font-size:10px;">{{ $ev->created_at->diffForHumans() }}</span>
+                        <span style="color:{{ $ev->points > 0 ? '#7c3' : '#666' }};font-family:monospace;font-weight:bold;min-width:36px;text-align:right;">
+                            {{ $ev->points > 0 ? '+' : '' }}{{ $ev->points }}
+                        </span>
+                    </span>
+                </div>
+            @endforeach
+        </div>
+        @endif
+    </div>
+</div>
+@endif
+
 @if($showMineStrip)
 <div class="recent-wrap">
     <div class="recent-header">

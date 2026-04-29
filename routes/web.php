@@ -240,11 +240,26 @@ Route::get('/dashboard', function () {
             ->get();
     }
 
+    // E2 — Rewards summary for the dashboard. Lazy-creates the points
+    // row so brand-new users see zeros instead of a NULL relation. The
+    // strip stays hidden when the user has 0 pts AND 0 events (cleaner
+    // dashboard for admins/managers who don't earn through activity).
+    $myPoints = $user ? $user->pointsRow() : null;
+    $myRecentRewards = $user
+        ? \App\Models\RewardEvent::query()
+            ->where('user_id', $user->id)
+            ->orderByDesc('created_at')
+            ->limit(3)
+            ->get()
+        : collect();
+
     return view('dashboard', [
         'agentCount'          => $agentCount,
         'recentConversations' => $recentConversations,
         'myTenderStats'       => $myTenderStats,
         'mySharedAgents'      => $mySharedAgents,
+        'myPoints'            => $myPoints,
+        'myRecentRewards'     => $myRecentRewards,
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
