@@ -586,8 +586,11 @@ Route::middleware(['auth'])->group(function () {
 });
 
 // Robot-parts marketplace (D-MVP) — STL download for parts the agents
-// have designed. Read-only; agents do the writing via cron.
+// have designed + the consolidated /marketplace feed. Read-only;
+// agents do the writing via cron.
 Route::middleware(['auth'])->group(function () {
+    Route::get('/marketplace',       [\App\Http\Controllers\MarketplaceController::class, 'index'])
+        ->name('marketplace.index');
     Route::get('/parts/{order}/stl', [\App\Http\Controllers\PartOrderController::class, 'downloadStl'])
         ->name('parts.stl');
 });

@@ -23,6 +23,11 @@
                     <x-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
                         🏆 {{ __('Rewards') }}
                     </x-nav-link>
+                    {{-- D-MVP — agent marketplace. All users see the parts gallery
+                         and the agent-to-agent deliberation threads. --}}
+                    <x-nav-link :href="route('marketplace.index')" :active="request()->routeIs('marketplace.*')">
+                        🛒 {{ __('Marketplace') }}
+                    </x-nav-link>
                 </div>
             </div>
 
