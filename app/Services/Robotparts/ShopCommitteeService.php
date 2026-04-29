@@ -97,10 +97,27 @@ class ShopCommitteeService
                 return $order;
             }
 
+            $estCost = (float) $decision['est_cost_usd'];
+
+            // Hard budget check — even if the prompt told the LLM, some
+            // models still ignore the constraint and pick expensive parts.
+            // Cancel cleanly here rather than letting PartSearchService
+            // discover the overdraft on debit and producing a confusing
+            // "insufficient balance" trail.
+            if ($estCost > $budget + 0.005) {     // +5 millidollars tolerance for rounding
+                $order->status = PartOrder::STATUS_CANCELLED;
+                $order->notes  = sprintf(
+                    'Buyer over-budget: picked $%.2f but budget is $%.2f. Skipped purchase to keep wallet intact.',
+                    $estCost, $budget,
+                );
+                $order->save();
+                return $order;
+            }
+
             $order->name         = mb_substr((string) ($decision['name'] ?? '(unnamed part)'), 0, 255);
             $order->description  = (string) ($decision['description'] ?? '');
             $order->search_query = mb_substr((string) ($decision['search_query'] ?? ''), 0, 255);
-            $order->cost_usd     = round((float) $decision['est_cost_usd'], 4);
+            $order->cost_usd     = round($estCost, 4);
             $order->status       = PartOrder::STATUS_SEARCHING;
             $order->save();
 
@@ -174,15 +191,22 @@ class ShopCommitteeService
         $buyerMeta = AgentCatalog::find($buyerKey);
         if (!$buyerMeta) return null;
 
+        $budgetStr = number_format($budget, 2);
         $system = "You are {$buyerMeta['name']} ({$buyerMeta['role']}). "
-                . "You have \${$budget} to spend on a small robot body part. Your colleagues advised you. "
-                . "Now you must DECIDE. Output STRICT JSON only — no markdown fences, no preamble — matching:\n"
+                . "You have EXACTLY \${$budgetStr} USD — not a cent more. Your colleagues advised you. "
+                . "Now you must DECIDE.\n\n"
+                . "HARD BUDGET CONSTRAINT: est_cost_usd MUST be ≤ \${$budgetStr}. "
+                . "If you suggest a part costing more, the purchase fails and your wallet wastes the deliberation. "
+                . "Pick something genuinely affordable — common DIY parts like servos (\$2-5), micro switches (\$1-3), "
+                . "LED indicators (\$0.50-2), small sensors (\$1-4), brackets (\$1-3). "
+                . "AVOID expensive sensors, motors over 100g/kg, or anything industrial-grade.\n\n"
+                . "Output STRICT JSON only — no markdown fences, no preamble — matching:\n"
                 . '{ "name": "<short part name>", '
                 . '"description": "<1-2 sentences>", '
                 . '"search_query": "<concrete query for finding this on robotshop / aliexpress / adafruit, e.g. \'mg90s mini servo 9g\'>", '
-                . '"justification": "<why you chose this over the helpers other ideas>", '
-                . '"est_cost_usd": <number, must be <= ' . $budget . '> }' . "\n"
-                . 'If nothing fits the budget, return est_cost_usd: 0 and the system will skip the purchase.';
+                . '"justification": "<why you chose this AND confirm cost fits the $' . $budgetStr . ' budget>", '
+                . '"est_cost_usd": <number, ≤ ' . $budgetStr . '> }' . "\n"
+                . 'If genuinely nothing fits the budget, return est_cost_usd: 0 and the system will skip the purchase.';
 
         $context = "BUDGET: \${$budget}\n\n";
         foreach ($helperReplies as $helperKey => $reply) {
