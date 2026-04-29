@@ -514,6 +514,25 @@ class SapService
      * @param  int       $top         Max records to return
      * @param  string    $status      'O'=Open, 'W'=Won, 'L'=Lost
      */
+    /**
+     * Search SAP B1 SalesOpportunities by OpportunityName containing
+     * a needle string. Used by the auto-linker to match tenders without
+     * sap_opportunity_number to existing SAP opportunities by reference.
+     *
+     * Returns raw opportunity records (top 5 by default). Case-sensitive
+     * — SAP B1's OData layer doesn't honour tolower() in $filter.
+     */
+    public function searchOpportunitiesByName(string $needle, int $top = 5): array
+    {
+        $needle = addslashes($needle);
+        $data = $this->get('SalesOpportunities', [
+            '$select' => 'SequentialNo,CardCode,OpportunityName,PredictedClosingDate,Status,Remarks',
+            '$filter' => "contains(OpportunityName,'{$needle}')",
+            '$top'    => $top,
+        ]);
+        return $data['value'] ?? [];
+    }
+
     public function getSalesOpportunities(
         ?int   $stageId     = null,
         ?int   $salesPerson = null,
