@@ -10,21 +10,21 @@
                     </a>
                 </div>
 
-                <!-- Navigation Links -->
-                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                {{-- Navigation Links — visual uniformity (revisão 2026-04-29):
+                     todos os links têm um emoji prefix de tamanho consistente
+                     para a barra parecer um conjunto, não 4 estilos diferentes.
+                     space-x-6 (em vez de 8) aproxima ligeiramente para caber em
+                     viewports médios sem wrap. --}}
+                <div class="hidden space-x-6 sm:-my-px sm:ms-10 sm:flex">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
+                        🏠 {{ __('Dashboard') }}
                     </x-nav-link>
                     <x-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*')">
-                        {{ __('Concursos') }}
+                        📋 {{ __('Concursos') }}
                     </x-nav-link>
-                    {{-- C3 — gamification page. Visible to all users (the leaderboard
-                         is gated separately to manager+ inside the controller). --}}
                     <x-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
                         🏆 {{ __('Rewards') }}
                     </x-nav-link>
-                    {{-- D-MVP — agent marketplace. All users see the parts gallery
-                         and the agent-to-agent deliberation threads. --}}
                     <x-nav-link :href="route('marketplace.index')" :active="request()->routeIs('marketplace.*')">
                         🛒 {{ __('Marketplace') }}
                     </x-nav-link>
@@ -77,14 +77,22 @@
         </div>
     </div>
 
-    <!-- Responsive Navigation Menu -->
+    {{-- Responsive Navigation Menu — espelha exactamente os links do
+         desktop (incluindo emojis) para que mobile não fique fora dos
+         features novos. --}}
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
+                🏠 {{ __('Dashboard') }}
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*')">
-                {{ __('Concursos') }}
+                📋 {{ __('Concursos') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
+                🏆 {{ __('Rewards') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('marketplace.index')" :active="request()->routeIs('marketplace.*')">
+                🛒 {{ __('Marketplace') }}
             </x-responsive-nav-link>
         </div>
 

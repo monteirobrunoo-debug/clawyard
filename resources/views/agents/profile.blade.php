@@ -342,25 +342,33 @@
 
     @if($recentOrders->isNotEmpty())
         <h3 style="margin-bottom:10px;font-size:14px;color:#bcd;">Galeria de peças</h3>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:12px;">
+        {{-- Cards uniformes — auto-rows: 1fr garante mesma altura, e cada
+             card tem 3 zonas (header, body, footer) com botões sempre na
+             mesma posição em qualquer cartão. --}}
+        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:12px;grid-auto-rows:1fr;">
             @foreach($recentOrders as $order)
-                <div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;">
-                    <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
-                        <div style="font-weight:600;color:#fff;font-size:13px;line-height:1.3;">{{ $order->name }}</div>
+                <div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;display:flex;flex-direction:column;overflow:hidden;">
+                    {{-- HEADER: fixo, com nome + preço sempre no topo --}}
+                    <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;padding:10px 12px 8px;border-bottom:1px solid #1e1e1e;">
+                        <div style="font-weight:600;color:#fff;font-size:13px;line-height:1.3;">{{ \Illuminate\Support\Str::limit($order->name, 50) }}</div>
                         <div style="font-family:monospace;font-size:12px;color:#7c3;white-space:nowrap;">${{ number_format((float) $order->cost_usd, 2) }}</div>
                     </div>
-                    <div style="font-size:11px;color:#9ab;">{{ $order->statusLabel() }}</div>
-                    @if($order->description)
-                        <div style="font-size:11px;color:#789;line-height:1.4;">{{ \Illuminate\Support\Str::limit($order->description, 100) }}</div>
-                    @endif
-                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:6px;font-size:10px;">
+                    {{-- BODY: cresce, ocupa o espaço necessário --}}
+                    <div style="flex:1;padding:8px 12px;display:flex;flex-direction:column;gap:6px;">
+                        <div style="font-size:11px;color:#9ab;">{{ $order->statusLabel() }}</div>
+                        @if($order->description)
+                            <div style="font-size:11px;color:#789;line-height:1.4;">{{ \Illuminate\Support\Str::limit($order->description, 100) }}</div>
+                        @endif
+                    </div>
+                    {{-- FOOTER: fixo na base, mesma altura em TODOS os cards --}}
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 12px;background:#0d0d0d;border-top:1px solid #1e1e1e;font-size:10px;">
                         @if($order->source_url)
                             <a href="{{ $order->source_url }}" target="_blank" rel="noopener noreferrer" style="color:#69f;text-decoration:none;">🔗 fonte</a>
                         @endif
                         @if($order->stl_path)
-                            <a href="{{ $order->stlDownloadUrl() }}" style="color:#7c3;text-decoration:none;font-weight:600;">📦 download .stl</a>
+                            <a href="{{ $order->stlDownloadUrl() }}" style="color:#7c3;text-decoration:none;font-weight:600;">📦 .stl</a>
                         @elseif($order->design_scad)
-                            <span style="color:#f93;" title="OpenSCAD code stored — render later via openscad CLI">.scad pronto</span>
+                            <span style="color:#f93;" title="OpenSCAD code stored">📐 .scad</span>
                         @endif
                         @if(count($order->committee_log ?? []))
                             <span style="color:#789;" title="{{ count($order->committee_log) }} passos de deliberação">🗣️ {{ count($order->committee_log) }}</span>
