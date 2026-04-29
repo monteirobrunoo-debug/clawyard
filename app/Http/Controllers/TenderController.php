@@ -294,25 +294,40 @@ class TenderController extends Controller
         // Any SAP failure is logged but does NOT rollback the local save —
         // the ClawYard record of truth is saved first, SAP sync is a
         // side-effect. Users see the sync status in the flash message.
+        //
+        // 2026-04-29 — Catarina feedback: when the user edits notes on a
+        // tender that has NO sap_opportunity_number yet, the previous
+        // version silently skipped the sync and showed only 'Concurso
+        // actualizado' — leaving the operator wondering whether SAP
+        // got updated. Now we surface the reason explicitly so they
+        // know they need to fill in the SAP opp field first (or that
+        // there's no SAP opp to create yet).
         $sapStatus = null;
         $seqNo     = $tender->getSapSequentialNo();
         $notesChanged = ((string) $tender->notes) !== $before['notes'];
+        $sapConfigured = (bool) config('services.sap.username');
 
-        if ($seqNo && $notesChanged && config('services.sap.username')) {
-            try {
-                $ok = $sap->updateOpportunity($seqNo, [
-                    'Remarks' => (string) $tender->notes,
-                ]);
-                $sapStatus = $ok
-                    ? "✓ Notas sincronizadas com SAP Opp #{$seqNo}"
-                    : "⚠ Falha a sincronizar com SAP Opp #{$seqNo}: " . ($sap->getLastError() ?: 'erro desconhecido');
-            } catch (\Throwable $e) {
-                Log::warning('Tender update → SAP sync failed', [
-                    'tender_id' => $tender->id,
-                    'seq_no'    => $seqNo,
-                    'error'     => $e->getMessage(),
-                ]);
-                $sapStatus = "⚠ Excepção ao sincronizar com SAP Opp #{$seqNo}: {$e->getMessage()}";
+        if ($notesChanged) {
+            if (!$sapConfigured) {
+                $sapStatus = '⚠ Notas só guardadas localmente — SAP não está configurado no servidor.';
+            } elseif (!$seqNo) {
+                $sapStatus = '⚠ Notas só guardadas localmente — este concurso não tem Nº Oportunidade SAP. Preenche o campo "Nº Oportunidade SAP" acima para activar sincronização.';
+            } else {
+                try {
+                    $ok = $sap->updateOpportunity($seqNo, [
+                        'Remarks' => (string) $tender->notes,
+                    ]);
+                    $sapStatus = $ok
+                        ? "✓ Notas sincronizadas com SAP Opp #{$seqNo}"
+                        : "⚠ Falha a sincronizar com SAP Opp #{$seqNo}: " . ($sap->getLastError() ?: 'erro desconhecido');
+                } catch (\Throwable $e) {
+                    Log::warning('Tender update → SAP sync failed', [
+                        'tender_id' => $tender->id,
+                        'seq_no'    => $seqNo,
+                        'error'     => $e->getMessage(),
+                    ]);
+                    $sapStatus = "⚠ Excepção ao sincronizar com SAP Opp #{$seqNo}: {$e->getMessage()}";
+                }
             }
         }
 
