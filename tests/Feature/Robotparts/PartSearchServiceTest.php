@@ -98,9 +98,11 @@ class PartSearchServiceTest extends TestCase
         $this->assertEqualsWithDelta(2.00, (float) AgentWallet::find('sales')->balance_usd, 0.0001);
     }
 
-    public function test_insufficient_balance_at_debit_time_cancels(): void
+    public function test_over_budget_pick_cancels_before_debit(): void
     {
         // Wallet has $1, but buyer picks something costing $5.
+        // The over-budget guard must catch this BEFORE debit so the
+        // wallet stays at $1.00 (not -$4 or 0 from clamp).
         AgentWallet::forAgent('crm')->adjust(1.00);
         $order = $this->order('crm', cost: 5.00);
 
@@ -114,8 +116,10 @@ class PartSearchServiceTest extends TestCase
         $result = $svc->findAndPick($order);
 
         $this->assertSame(PartOrder::STATUS_CANCELLED, $result->status);
-        $this->assertStringContainsString('insufficient balance', $result->notes);
-        $this->assertEqualsWithDelta(1.00, (float) AgentWallet::find('crm')->balance_usd, 0.0001);
+        $this->assertStringContainsString('over-budget', $result->notes,
+            'cancel reason must clearly say over-budget so operators understand');
+        $this->assertEqualsWithDelta(1.00, (float) AgentWallet::find('crm')->balance_usd, 0.0001,
+            'wallet must NOT be debited when buyer picks over-budget');
     }
 
     public function test_dispatch_failure_cancels(): void

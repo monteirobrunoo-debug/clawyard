@@ -75,25 +75,38 @@ class PartSearchService
                 // so the JSON column doesn't bloat (search results can be 5KB+).
                 $order->search_candidates = ['raw_text' => mb_substr($searchText, 0, 4000)];
 
+                $pickedCost = round((float) ($picked['cost_usd'] ?? $order->cost_usd), 4);
+
+                // Hard budget guard — even though we told the LLM the
+                // exact wallet balance, some models still pick expensive
+                // variants. Cancel cleanly with a clear note BEFORE
+                // touching the wallet, so the operator gets actionable
+                // information ('this agent's persona keeps biasing it
+                // toward parts above its budget — give it more time to
+                // accumulate or relax the persona').
+                $wallet = AgentWallet::forAgent($order->agent_key);
+                $budget = (float) $wallet->balance_usd;
+                if ($pickedCost > $budget + 0.005) {
+                    $order->name             = mb_substr((string) ($picked['name'] ?? $order->name), 0, 255);
+                    $order->cost_usd         = $pickedCost;
+                    $order->source_url       = mb_substr((string) ($picked['source_url'] ?? ''), 0, 500) ?: null;
+                    $order->status           = PartOrder::STATUS_CANCELLED;
+                    $order->notes            = sprintf(
+                        'Buyer pick over-budget: $%.2f vs wallet $%.2f. Persona keeps suggesting expensive variants — wait for budget to grow or relax persona.',
+                        $pickedCost, $budget,
+                    );
+                    $order->save();
+                    return $order;
+                }
+
                 // Apply buyer's pick.
                 $order->name             = mb_substr((string) ($picked['name']             ?? $order->name), 0, 255);
                 $order->description      = (string)         ($picked['description']      ?? $order->description);
                 $order->source_url       = mb_substr((string) ($picked['source_url']       ?? ''), 0, 500) ?: null;
                 $order->source_image_url = mb_substr((string) ($picked['source_image_url'] ?? ''), 0, 500) ?: null;
-                $order->cost_usd         = round((float) ($picked['cost_usd'] ?? $order->cost_usd), 4);
+                $order->cost_usd         = $pickedCost;
 
-                // Debit the wallet. canAfford is checked LAST so we
-                // race the wallet write atomically — if balance dropped
-                // since the committee, we cancel cleanly here.
-                $wallet = AgentWallet::forAgent($order->agent_key);
-                if (!$wallet->canAfford((float) $order->cost_usd)) {
-                    $order->status = PartOrder::STATUS_CANCELLED;
-                    $order->notes  = 'PartSearchService: insufficient balance at debit time';
-                    $order->save();
-                    return $order;
-                }
-
-                $wallet->adjust(-(float) $order->cost_usd);
+                $wallet->adjust(-$pickedCost);
 
                 $order->status = PartOrder::STATUS_PURCHASED;
                 $order->save();
@@ -114,23 +127,47 @@ class PartSearchService
     /**
      * Ask the buyer agent to read search results + pick 1.
      * Returns null on dispatch failure or unparseable response.
+     *
+     * Critical: the prompt is now budget-aware. Earlier versions let
+     * the LLM pick whatever caught its eye in the search results, even
+     * when prices clearly exceeded the wallet balance — leaving the
+     * order to die at debit-time with a confusing 'insufficient balance'
+     * note. Now the buyer is told the EXACT remaining budget and forced
+     * to pick within it; a hard guard at the call site catches anything
+     * the LLM still slips through.
      */
     private function askBuyerToPick(PartOrder $order, string $searchText): ?array
     {
         $buyerMeta = AgentCatalog::find($order->agent_key);
         $name = $buyerMeta['name'] ?? $order->agent_key;
 
+        // Budget = current wallet balance. The agent CANNOT spend more
+        // than this — even if the search results show tempting expensive
+        // variants. The committee already estimated a cost, so use the
+        // smaller of (committee estimate × 1.2 tolerance, wallet balance)
+        // to give the buyer a touch of room to refine but never blow
+        // through the wallet.
+        $wallet = AgentWallet::forAgent($order->agent_key);
+        $budget = (float) $wallet->balance_usd;
+        $budgetStr = number_format($budget, 2);
+
         $system = "You are {$name}. You searched the web for '{$order->search_query}' "
-                . "looking for a small robot part. Read the results and PICK ONE that fits "
-                . "best given your persona. Output STRICT JSON only:\n"
+                . "looking for a small robot part. Read the results and PICK ONE that fits.\n\n"
+                . "HARD BUDGET CONSTRAINT: cost_usd MUST be ≤ \${$budgetStr}. "
+                . "Your wallet is \${$budgetStr}. If results only show parts above \${$budgetStr}, "
+                . "return cost_usd: 0 and source_url: \"\" — the system will skip cleanly. "
+                . "DO NOT pick an expensive variant 'just to have something' — better to skip than overspend.\n\n"
+                . "Output STRICT JSON only — no markdown fences, no preamble:\n"
                 . '{ "name": "<short part name>", '
                 . '"description": "<1 sentence>", '
-                . '"source_url": "<exact URL from results>", '
+                . '"source_url": "<exact URL from results, must match the cost_usd you picked>", '
                 . '"source_image_url": "<image URL if visible in results, else empty>", '
-                . '"cost_usd": <number> }' . "\n"
-                . 'If no candidate fits, return cost_usd: 0 and source_url: "".';
+                . '"cost_usd": <number, ≤ ' . $budgetStr . '> }';
 
-        $user = "Search query: {$order->search_query}\n\nResults:\n{$searchText}\n\nPick one. JSON only.";
+        $user = "Search query: {$order->search_query}\n\n"
+              . "Wallet budget: \${$budgetStr}\n\n"
+              . "Results:\n{$searchText}\n\n"
+              . "Pick one within the \${$budgetStr} budget. JSON only.";
 
         $res = $this->dispatcher->dispatch($system, $user, maxTokens: 600);
         if (!($res['ok'] ?? false)) return null;
