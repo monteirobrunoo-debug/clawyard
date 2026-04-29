@@ -17,9 +17,10 @@ Schedule::command('shared-context:prune')->hourly();
 Schedule::command('agentshares:cleanup')->dailyAt('03:20');
 
 // ── Concursos (Tenders) — daily digest, weekdays only ─────────────────────
-// User requirement: "Emails mahã e final de tarder com necessidade de
-// actualização". Morning pushes first thing before work starts; evening
-// nudge catches the ones that didn't move during the day.
+// User requirement: "Emails manhã e final de tarde com necessidade de
+// actualização". Morning slot moved to 09:00 (2026-04-28) so it lands
+// when people are at their desks, not pre-coffee at 07:30. Evening
+// nudge stays at 17:00 to catch the ones that didn't move during the day.
 //
 // `timezone('Europe/Lisbon')` makes the clock walk-clock Lisbon, so
 // daylight-saving transitions don't shift the send time.
@@ -27,7 +28,7 @@ Schedule::command('agentshares:cleanup')->dailyAt('03:20');
 Schedule::command('tenders:send-digest --slot=morning')
     ->weekdays()
     ->timezone('Europe/Lisbon')
-    ->dailyAt('07:30')
+    ->dailyAt('09:00')
     ->withoutOverlapping()
     ->runInBackground();
 
