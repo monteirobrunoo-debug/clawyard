@@ -573,9 +573,14 @@ class SapService
             // payloads without error. Using $filter=SequentialNo eq N
             // hits the collection endpoint and reliably returns the
             // single matching row.
+            //
+            // 2026-04-29 follow-up: $expand=SalesOpportunitiesLines on
+            // top of $filter ALSO breaks this customer's instance —
+            // returns empty value[]. Splitting into a base fetch + a
+            // separate $expand call when callers actually need the
+            // lines (most don't — status + remarks are top-level).
             $data = $this->get('SalesOpportunities', [
                 '$filter' => "SequentialNo eq {$seqNo}",
-                '$expand' => 'SalesOpportunitiesLines',
                 '$top'    => 1,
             ]);
             $rows = $data['value'] ?? [];
