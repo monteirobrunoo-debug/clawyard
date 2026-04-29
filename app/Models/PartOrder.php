@@ -36,6 +36,7 @@ class PartOrder extends Model
         'search_query',
         'search_candidates',
         'committee_log',
+        'validations',
         'design_scad',
         'assembly_notes',
         'stl_path',
@@ -57,7 +58,28 @@ class PartOrder extends Model
             'cost_usd'           => 'decimal:4',
             'search_candidates'  => 'array',
             'committee_log'      => 'array',
+            'validations'        => 'array',
             'designed_at'        => 'datetime',
+        ];
+    }
+
+    /**
+     * Peer-review summary for the UI: count approves vs concerns.
+     */
+    public function validationSummary(): array
+    {
+        $rows = $this->validations ?? [];
+        $approves = 0;
+        $concerns = 0;
+        foreach ($rows as $r) {
+            if (($r['verdict'] ?? '') === 'approve') $approves++;
+            elseif (($r['verdict'] ?? '') === 'concern') $concerns++;
+        }
+        return [
+            'count'    => count($rows),
+            'approves' => $approves,
+            'concerns' => $concerns,
+            'badge'    => $concerns > 0 ? '⚠️' : ($approves > 0 ? '✅' : '⏳'),
         ];
     }
 

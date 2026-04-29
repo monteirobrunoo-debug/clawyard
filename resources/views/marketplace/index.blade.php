@@ -152,9 +152,42 @@
                                 @if(!empty($order->committee_log))
                                     <span class="text-gray-500 whitespace-nowrap" title="{{ count($order->committee_log) }} mensagens na deliberação">🗣️ {{ count($order->committee_log) }}</span>
                                 @endif
+                                @php $vs = $order->validationSummary(); @endphp
+                                @if($vs['count'] > 0)
+                                    <span class="whitespace-nowrap font-semibold {{ $vs['concerns'] > 0 ? 'text-amber-700' : 'text-emerald-700' }}"
+                                          title="{{ $vs['approves'] }} aprova / {{ $vs['concerns'] }} concern">
+                                        {{ $vs['badge'] }} {{ $vs['count'] }}
+                                    </span>
+                                @endif
                                 <span class="text-gray-400 whitespace-nowrap">{{ $order->created_at->diffForHumans() }}</span>
                             </div>
                         </footer>
+
+                        {{-- Validations expansíveis (peer review) --}}
+                        @if(!empty($order->validations))
+                            <details class="bg-emerald-50/30 border-t border-emerald-100">
+                                <summary class="cursor-pointer px-4 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 select-none">
+                                    🔍 Peer review ({{ count($order->validations) }} reviews)
+                                </summary>
+                                <div class="px-4 py-3 space-y-2 bg-white">
+                                    @foreach($order->validations as $v)
+                                        @php
+                                            $rev = $agentCatalog->get($v['agent_key'] ?? '') ?? ['name' => $v['agent_key'] ?? '?', 'emoji' => '🤖'];
+                                            $isApprove = ($v['verdict'] ?? '') === 'approve';
+                                        @endphp
+                                        <div class="flex items-start gap-2 text-xs">
+                                            <span class="text-base shrink-0 mt-0.5">{{ $isApprove ? '✅' : '⚠️' }}</span>
+                                            <div class="flex-1 min-w-0">
+                                                <span class="font-semibold {{ $isApprove ? 'text-emerald-700' : 'text-amber-700' }}">
+                                                    {{ $rev['emoji'] }} {{ $rev['name'] }}
+                                                </span>
+                                                <span class="text-gray-700">{{ $v['note'] ?? '' }}</span>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </details>
+                        @endif
 
                         {{-- DELIBERAÇÃO expansível — fora do flex flow do body para não afectar altura --}}
                         @if(!empty($order->committee_log))

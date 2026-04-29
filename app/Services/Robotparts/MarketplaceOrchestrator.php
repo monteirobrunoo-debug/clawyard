@@ -35,6 +35,7 @@ class MarketplaceOrchestrator
         private ShopCommitteeService $committee,
         private PartSearchService $search,
         private CadGenerationService $cad,
+        private PartValidationService $validation,
     ) {}
 
     /**
@@ -55,6 +56,18 @@ class MarketplaceOrchestrator
         }
         if ($order->status === PartOrder::STATUS_PURCHASED) {
             $order = $this->cad->generate($order);
+        }
+
+        // Phase A — peer-review by 2 other agents on any successfully-
+        // purchased order. Skipped if order cancelled (no point reviewing
+        // a non-purchase). Doesn't gate the order in any way: it just
+        // adds a validation badge for the operator's signal.
+        if (in_array($order->status, [
+            PartOrder::STATUS_PURCHASED,
+            PartOrder::STATUS_DESIGNING,
+            PartOrder::STATUS_STL_READY,
+        ], true)) {
+            $order = $this->validation->review($order);
         }
 
         Log::info('MarketplaceOrchestrator: round complete', [
