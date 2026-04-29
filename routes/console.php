@@ -39,6 +39,31 @@ Schedule::command('tenders:send-digest --slot=evening')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── D-MVP — credit agent wallets daily at 02:30 Lisbon ───────────────────
+// Walks agent_metrics, computes the delta since last run, credits each
+// wallet. Idempotent — re-running the same day is a no-op. Runs at
+// 02:30 (post-midnight, well before the 09:00 morning digest) so the
+// /agents/{key} performance card always shows fresh balance numbers
+// when users open it during the day.
+Schedule::command('agents:credit-wallets')
+    ->dailyAt('02:30')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
+// ── D-MVP — robot-parts shopping round, weekly Monday 03:00 Lisbon ──────
+// Each eligible agent (balance ≥ $2) convenes a 3-agent committee, picks
+// a part, searches the web, generates CAD. Runs Mondays so by mid-week
+// users can open /agents/{key} and see the new acquisitions.
+//
+// Cost per round: ~$0.005 in LLM tokens per participating agent + the
+// part_orders.cost_usd debit (paper money — no real spend yet).
+Schedule::command('agents:shop')
+    ->weeklyOn(1, '03:00')   // Monday
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Individual deadline alert — fires ~24h before each tender's deadline,
 // exactly ONCE per tender lifetime (de-duped via deadline_alert_sent_at).
 // Sent only to the assigned collaborator so we don't duplicate the digest.

@@ -306,6 +306,78 @@
     @endif
 </section>
 
+{{-- ── Wallet + Robot parts marketplace (D6) ─────────────────────────────
+     The PERSISTED wallet (vs the derived display below). Once D2's
+     credit cron has run, this is the source of truth. The parts gallery
+     below shows what the agent has autonomously designed.
+
+     Hidden when the agent has $0 lifetime earnings AND no orders — keeps
+     /agents/{key} clean for agents that haven't been activated yet. --}}
+@if($wallet && ((float) $wallet->lifetime_earned_usd > 0 || $recentOrders->isNotEmpty()))
+<section class="section">
+    <h2 style="margin-bottom:12px;">🛒 Marketplace de robot parts</h2>
+
+    <div style="background:linear-gradient(135deg,#1a2e3a 0%,#2a1a3a 100%);border:1px solid #2a3a4a;border-radius:14px;padding:20px;margin-bottom:18px;">
+        <div style="display:flex;align-items:baseline;gap:24px;flex-wrap:wrap;">
+            <div>
+                <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Saldo actual</div>
+                <div style="font-size:36px;font-weight:bold;color:#7c3;">${{ number_format((float) $wallet->balance_usd, 2) }}</div>
+            </div>
+            <div style="border-left:1px solid #2a3a4a;padding-left:24px;">
+                <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Vida útil ganho</div>
+                <div style="font-size:18px;font-weight:bold;color:#fff;">${{ number_format((float) $wallet->lifetime_earned_usd, 2) }}</div>
+            </div>
+            <div style="border-left:1px solid #2a3a4a;padding-left:24px;">
+                <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Vida útil gasto</div>
+                <div style="font-size:18px;font-weight:bold;color:#f93;">${{ number_format((float) $wallet->lifetime_spent_usd, 2) }}</div>
+            </div>
+            @if($wallet->last_credit_at)
+                <div style="border-left:1px solid #2a3a4a;padding-left:24px;">
+                    <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">Último crédito</div>
+                    <div style="font-size:13px;color:#bcd;">{{ $wallet->last_credit_at->diffForHumans() }}</div>
+                </div>
+            @endif
+        </div>
+    </div>
+
+    @if($recentOrders->isNotEmpty())
+        <h3 style="margin-bottom:10px;font-size:14px;color:#bcd;">Galeria de peças</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:12px;">
+            @foreach($recentOrders as $order)
+                <div style="background:#111;border:1px solid #1e1e1e;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;">
+                    <div style="display:flex;justify-content:space-between;align-items:start;gap:8px;">
+                        <div style="font-weight:600;color:#fff;font-size:13px;line-height:1.3;">{{ $order->name }}</div>
+                        <div style="font-family:monospace;font-size:12px;color:#7c3;white-space:nowrap;">${{ number_format((float) $order->cost_usd, 2) }}</div>
+                    </div>
+                    <div style="font-size:11px;color:#9ab;">{{ $order->statusLabel() }}</div>
+                    @if($order->description)
+                        <div style="font-size:11px;color:#789;line-height:1.4;">{{ \Illuminate\Support\Str::limit($order->description, 100) }}</div>
+                    @endif
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:6px;font-size:10px;">
+                        @if($order->source_url)
+                            <a href="{{ $order->source_url }}" target="_blank" rel="noopener noreferrer" style="color:#69f;text-decoration:none;">🔗 fonte</a>
+                        @endif
+                        @if($order->stl_path)
+                            <a href="{{ $order->stlDownloadUrl() }}" style="color:#7c3;text-decoration:none;font-weight:600;">📦 download .stl</a>
+                        @elseif($order->design_scad)
+                            <span style="color:#f93;" title="OpenSCAD code stored — render later via openscad CLI">.scad pronto</span>
+                        @endif
+                        @if(count($order->committee_log ?? []))
+                            <span style="color:#789;" title="{{ count($order->committee_log) }} passos de deliberação">🗣️ {{ count($order->committee_log) }}</span>
+                        @endif
+                        <span style="color:#555;margin-left:auto;">{{ $order->created_at->diffForHumans() }}</span>
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    @else
+        <div style="padding:14px 16px;background:#1a1a1a;border:1px dashed #2a2a2a;border-radius:10px;color:#789;font-size:12px;">
+            Sem peças ainda. O cron <code>agents:shop</code> corre todas as segundas-feiras às 03:00 Lisbon. Para forçar agora: <code>php artisan agents:shop --only={{ $agent['key'] }}</code> no droplet.
+        </div>
+    @endif
+</section>
+@endif
+
 {{-- ── Agent rewards / earnings (C3+E1) ──────────────────────────────────────
      Visual representation of the "money" this agent has earned through its
      work in the swarm. Currently a DERIVED display from agent_metrics —

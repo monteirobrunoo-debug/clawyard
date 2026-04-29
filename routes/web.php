@@ -426,6 +426,16 @@ Route::get('/agents/{key}', function (string $key) {
     // view renders a "no data yet" placeholder card in that case).
     $metric = \App\Models\AgentMetric::find($key);
 
+    // D6 — wallet + recent part orders for the marketplace section.
+    // Wallet is lazy-created so the panel always renders (with zeros
+    // for agents that haven't earned yet).
+    $wallet = \App\Models\AgentWallet::forAgent($key);
+    $recentOrders = \App\Models\PartOrder::query()
+        ->where('agent_key', $key)
+        ->orderByDesc('created_at')
+        ->limit(12)
+        ->get();
+
     return view('agents.profile', [
         'agent'               => $agent,
         'categories'          => \App\Services\AgentCatalog::categories(),
@@ -439,6 +449,8 @@ Route::get('/agents/{key}', function (string $key) {
         ],
         'recentConversations' => $recentConversations,
         'metric'              => $metric,
+        'wallet'              => $wallet,
+        'recentOrders'        => $recentOrders,
     ]);
 })->middleware(['auth', 'verified'])->name('agents.profile');
 
@@ -571,6 +583,13 @@ Route::middleware(['auth'])->group(function () {
         ->name('rewards.me');
     Route::get('/rewards/leaderboard', [\App\Http\Controllers\RewardsController::class, 'leaderboard'])
         ->name('rewards.leaderboard');
+});
+
+// Robot-parts marketplace (D-MVP) — STL download for parts the agents
+// have designed. Read-only; agents do the writing via cron.
+Route::middleware(['auth'])->group(function () {
+    Route::get('/parts/{order}/stl', [\App\Http\Controllers\PartOrderController::class, 'downloadStl'])
+        ->name('parts.stl');
 });
 
 // Schedules page — visible to all authenticated users
