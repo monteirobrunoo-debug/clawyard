@@ -43,6 +43,112 @@
             </div>
         </div>
 
+        {{-- ── Body diagram SVG ──────────────────────────────────────
+             Cada slot tem uma posição no corpo. Filled = emerald-500,
+             empty = gray-300. Hover mostra o nome da peça (ou owners
+             se vazio). Clique = scroll-to-card lá em baixo. --}}
+        @php
+            $slotByKey = collect($slotRows)->keyBy('key');
+            // Posições (cx, cy) para cada slot na SVG 400×600.
+            $positions = [
+                'brain'           => ['cx' => 200, 'cy' => 100, 'r' => 22, 'shape' => 'circle'],
+                'eyes_left'       => ['cx' => 180, 'cy' => 130, 'r' =>  6, 'slot' => 'eyes'],
+                'eyes_right'      => ['cx' => 220, 'cy' => 130, 'r' =>  6, 'slot' => 'eyes'],
+                'ears_left'       => ['cx' => 156, 'cy' => 138, 'r' =>  5, 'slot' => 'ears'],
+                'ears_right'      => ['cx' => 244, 'cy' => 138, 'r' =>  5, 'slot' => 'ears'],
+                'voice'           => ['cx' => 200, 'cy' => 155, 'r' =>  8, 'shape' => 'circle'],
+                'antenna'         => ['cx' => 200, 'cy' =>  50, 'r' =>  6, 'shape' => 'circle'],
+                'heart'           => ['cx' => 200, 'cy' => 230, 'r' => 16, 'shape' => 'heart'],
+                'compass'         => ['cx' => 170, 'cy' => 270, 'r' =>  9, 'shape' => 'circle'],
+                'ambient_sensors' => ['cx' => 230, 'cy' => 270, 'r' =>  9, 'shape' => 'circle'],
+                'branding'        => ['cx' => 200, 'cy' => 305, 'r' => 11, 'shape' => 'rect', 'w' => 26, 'h' => 14],
+                'security'        => ['cx' => 200, 'cy' => 340, 'r' =>  8, 'shape' => 'circle'],
+                'muscles_left'    => ['cx' => 115, 'cy' => 240, 'r' => 14, 'slot' => 'muscles'],
+                'muscles_right'   => ['cx' => 285, 'cy' => 240, 'r' => 14, 'slot' => 'muscles'],
+                'hands_left'      => ['cx' =>  90, 'cy' => 320, 'r' => 12, 'slot' => 'hands'],
+                'hands_right'     => ['cx' => 310, 'cy' => 320, 'r' => 12, 'slot' => 'hands'],
+                'legs_left'       => ['cx' => 175, 'cy' => 460, 'r' => 18, 'slot' => 'legs'],
+                'legs_right'      => ['cx' => 225, 'cy' => 460, 'r' => 18, 'slot' => 'legs'],
+                'patent_mech'     => ['cx' =>  60, 'cy' => 460, 'r' => 12, 'shape' => 'diamond'],
+                'skin'            => ['cx' => 200, 'cy' => 280, 'r' =>  0, 'shape' => 'outline'],
+            ];
+        @endphp
+        <div class="bg-gradient-to-br from-slate-50 to-indigo-50/30 rounded-xl shadow-sm border border-gray-100 p-4 mb-5">
+            <div class="flex items-baseline justify-between mb-2">
+                <h3 class="text-sm font-semibold text-gray-800">🤖 Body diagram</h3>
+                <span class="text-xs text-gray-500">verde = preenchido · cinzento = vazio · clica para detalhe</span>
+            </div>
+            <div class="flex justify-center">
+                <svg viewBox="0 0 400 540" xmlns="http://www.w3.org/2000/svg" style="max-width:380px;width:100%;height:auto;">
+                    {{-- Skin outline (chassis) --}}
+                    @php $skinFilled = ($slotByKey->get('skin')['filled'] ?? false); @endphp
+                    <g stroke="{{ $skinFilled ? '#10b981' : '#d1d5db' }}" stroke-width="2" fill="none">
+                        {{-- Antenna stalk --}}
+                        <line x1="200" y1="60" x2="200" y2="78" stroke-width="2" />
+                        {{-- Head --}}
+                        <rect x="155" y="78" width="90" height="90" rx="14" stroke-width="2" />
+                        {{-- Body --}}
+                        <rect x="135" y="178" width="130" height="200" rx="16" stroke-width="2" />
+                        {{-- Left arm --}}
+                        <line x1="135" y1="200" x2="100" y2="290" stroke-width="6" stroke-linecap="round" />
+                        {{-- Right arm --}}
+                        <line x1="265" y1="200" x2="300" y2="290" stroke-width="6" stroke-linecap="round" />
+                        {{-- Left leg --}}
+                        <line x1="175" y1="378" x2="175" y2="440" stroke-width="6" stroke-linecap="round" />
+                        {{-- Right leg --}}
+                        <line x1="225" y1="378" x2="225" y2="440" stroke-width="6" stroke-linecap="round" />
+                    </g>
+
+                    {{-- Slots ordenados por z-index (background → foreground) --}}
+                    @foreach($positions as $posKey => $pos)
+                        @php
+                            $slotKey = $pos['slot'] ?? $posKey;
+                            $row = $slotByKey->get($slotKey);
+                            if (!$row) continue;
+                            $filled = $row['filled'];
+                            $fill   = $filled ? '#10b981' : '#e5e7eb';
+                            $stroke = $filled ? '#047857' : '#9ca3af';
+                            $emoji  = $row['meta']['emoji'];
+                            $label  = $row['meta']['label'];
+                            $partName = $row['order']->name ?? '(vazio)';
+                            $cost   = $row['order']?->cost_usd ? '$' . number_format((float) $row['order']->cost_usd, 2) : '';
+                            $shape  = $pos['shape'] ?? 'circle';
+                        @endphp
+                        <g class="cursor-pointer" onclick="document.getElementById('slot-{{ $slotKey }}')?.scrollIntoView({behavior:'smooth',block:'center'})">
+                            <title>{{ $emoji }} {{ $label }} — {{ $filled ? $partName . ' ' . $cost : 'vazio' }}</title>
+                            @if($shape === 'circle')
+                                <circle cx="{{ $pos['cx'] }}" cy="{{ $pos['cy'] }}" r="{{ $pos['r'] }}" fill="{{ $fill }}" stroke="{{ $stroke }}" stroke-width="2" />
+                            @elseif($shape === 'heart')
+                                {{-- Coração simplificado = 2 círculos + triângulo --}}
+                                <path d="M {{ $pos['cx'] }} {{ $pos['cy'] + 14 }} C {{ $pos['cx'] - 18 }} {{ $pos['cy'] - 4 }}, {{ $pos['cx'] - 8 }} {{ $pos['cy'] - 18 }}, {{ $pos['cx'] }} {{ $pos['cy'] - 4 }} C {{ $pos['cx'] + 8 }} {{ $pos['cy'] - 18 }}, {{ $pos['cx'] + 18 }} {{ $pos['cy'] - 4 }}, {{ $pos['cx'] }} {{ $pos['cy'] + 14 }} Z" fill="{{ $fill }}" stroke="{{ $stroke }}" stroke-width="2" />
+                            @elseif($shape === 'rect')
+                                <rect x="{{ $pos['cx'] - $pos['w']/2 }}" y="{{ $pos['cy'] - $pos['h']/2 }}" width="{{ $pos['w'] }}" height="{{ $pos['h'] }}" rx="3" fill="{{ $fill }}" stroke="{{ $stroke }}" stroke-width="2" />
+                            @elseif($shape === 'diamond')
+                                <polygon points="{{ $pos['cx'] }},{{ $pos['cy'] - $pos['r'] }} {{ $pos['cx'] + $pos['r'] }},{{ $pos['cy'] }} {{ $pos['cx'] }},{{ $pos['cy'] + $pos['r'] }} {{ $pos['cx'] - $pos['r'] }},{{ $pos['cy'] }}" fill="{{ $fill }}" stroke="{{ $stroke }}" stroke-width="2" />
+                            @endif
+                            {{-- Emoji label sobre o ponto, só visível para os slots maiores --}}
+                            @if(($pos['r'] ?? 0) >= 12)
+                                <text x="{{ $pos['cx'] }}" y="{{ $pos['cy'] + 4 }}" text-anchor="middle" font-size="13">{{ $emoji }}</text>
+                            @endif
+                        </g>
+                    @endforeach
+
+                    {{-- Wheels base (locomotion) — círculos largos no fundo
+                         se 'legs' estiver filled, indica também que o robot já tem mobilidade --}}
+                    @php $legsFilled = ($slotByKey->get('legs')['filled'] ?? false); @endphp
+                    <circle cx="175" cy="478" r="14" fill="{{ $legsFilled ? '#1f2937' : '#e5e7eb' }}" stroke="{{ $legsFilled ? '#000' : '#9ca3af' }}" stroke-width="2" />
+                    <circle cx="225" cy="478" r="14" fill="{{ $legsFilled ? '#1f2937' : '#e5e7eb' }}" stroke="{{ $legsFilled ? '#000' : '#9ca3af' }}" stroke-width="2" />
+
+                    {{-- Labels textuais opcionais (lateral) --}}
+                    <text x="200" y="510" text-anchor="middle" font-size="10" fill="#6b7280">{{ $filledSlots }} / {{ $totalSlots }} slots</text>
+                </svg>
+            </div>
+            <div class="flex justify-center gap-4 mt-3 text-[11px] text-gray-600">
+                <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-emerald-500 border border-emerald-700"></span> preenchido</span>
+                <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-full bg-gray-200 border border-gray-400"></span> vazio</span>
+            </div>
+        </div>
+
         {{-- ── Missing slots callout (se houver) ────────────────────── --}}
         @if(!empty($missingSlots))
             <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
@@ -76,7 +182,7 @@
                     $filled = $row['filled'];
                 @endphp
 
-                <article class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden
+                <article id="slot-{{ $row['key'] }}" class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden
                                 {{ $filled ? 'border-emerald-200' : 'border-gray-100' }}">
 
                     {{-- HEADER do slot — emoji grande + label + status pill --}}
