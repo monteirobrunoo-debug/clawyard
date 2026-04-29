@@ -22,10 +22,23 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Idempotent: if a previous run partially applied (e.g. PostgreSQL
+        // DDL auto-commits per statement, so the migration could have
+        // added 'slot' then crashed before adding 'purpose' AND before
+        // recording success in the migrations table), re-running here
+        // must not error on the columns that already exist. Production
+        // hit this exact state — column 'slot' already existed from a
+        // half-applied earlier attempt.
         Schema::table('part_orders', function (Blueprint $t) {
-            $t->string('slot', 32)->nullable()->after('agent_key')->index();
-            $t->text('purpose')->nullable()->after('description');
-            $t->text('assembly_notes')->nullable()->after('design_scad');
+            if (!Schema::hasColumn('part_orders', 'slot')) {
+                $t->string('slot', 32)->nullable()->after('agent_key')->index();
+            }
+            if (!Schema::hasColumn('part_orders', 'purpose')) {
+                $t->text('purpose')->nullable()->after('description');
+            }
+            if (!Schema::hasColumn('part_orders', 'assembly_notes')) {
+                $t->text('assembly_notes')->nullable()->after('design_scad');
+            }
         });
     }
 
