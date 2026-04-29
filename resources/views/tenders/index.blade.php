@@ -268,6 +268,7 @@
                                     <th class="px-3 py-2 text-left">Título</th>
                                     <th class="px-3 py-2 text-left">Colaborador</th>
                                     <th class="px-3 py-2 text-left">Estado</th>
+                                    <th class="px-3 py-2 text-left">Nº SAP</th>
                                     <th class="px-3 py-2 text-left">Deadline</th>
                                     <th class="px-3 py-2 text-right">Prazo</th>
                                 </tr>
@@ -283,17 +284,27 @@
                                             <a href="{{ route('tenders.show', $t) }}" class="text-indigo-700 hover:underline font-medium">
                                                 {{ \Illuminate\Support\Str::limit($t->title, 90) }}
                                             </a>
-                                            @if(empty($t->sap_opportunity_number))
-                                                <span class="ml-2 inline-flex rounded border border-yellow-300 bg-yellow-50 px-1.5 py-0.5 text-[10px] text-yellow-800">
-                                                    Sem nº SAP
-                                                </span>
-                                            @endif
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ $t->collaborator?->name ?? '—' }}</td>
                                         <td class="px-3 py-2 whitespace-nowrap">
                                             <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $statusStyles[$t->status] ?? 'bg-gray-100 text-gray-700 border-gray-300' }}">
                                                 {{ $statusLabels[$t->status] ?? $t->status }}
                                             </span>
+                                        </td>
+                                        {{-- Nº SAP — coluna explícita para o user ver de imediato
+                                             quais concursos estão linkados ao SAP. Os utilizadores
+                                             pediram esta coluna depois de não saberem se as suas
+                                             notes iam sincronizar (sem sap_opp = não sincroniza). --}}
+                                        <td class="px-3 py-2 whitespace-nowrap font-mono text-xs">
+                                            @if($t->sap_opportunity_number)
+                                                <span class="inline-flex items-center rounded bg-green-50 border border-green-200 px-2 py-0.5 text-green-800" title="Notas guardadas aqui sincronizam com SAP Opp #{{ $t->getSapSequentialNo() }}">
+                                                    ✓ {{ $t->sap_opportunity_number }}
+                                                </span>
+                                            @else
+                                                <span class="inline-flex items-center rounded bg-yellow-50 border border-yellow-200 px-2 py-0.5 text-yellow-800" title="Sem oportunidade SAP — notas guardam-se só localmente. Preenche o campo no detalhe do concurso para activar sincronização.">
+                                                    ⚠ sem nº
+                                                </span>
+                                            @endif
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-600">
                                             @if($t->deadline_at)
