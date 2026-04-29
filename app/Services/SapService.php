@@ -568,10 +568,18 @@ class SapService
     public function getOpportunityWithStages(int $seqNo): ?array
     {
         try {
-            $data = $this->get("SalesOpportunities({$seqNo})", [
+            // SAP B1 ServiceLayer is fussy about the (key) URL form for
+            // GET — observed in production 2026-04-29 returning empty
+            // payloads without error. Using $filter=SequentialNo eq N
+            // hits the collection endpoint and reliably returns the
+            // single matching row.
+            $data = $this->get('SalesOpportunities', [
+                '$filter' => "SequentialNo eq {$seqNo}",
                 '$expand' => 'SalesOpportunitiesLines',
+                '$top'    => 1,
             ]);
-            return is_array($data) && isset($data['SequentialNo']) ? $data : null;
+            $rows = $data['value'] ?? [];
+            return !empty($rows[0]) && isset($rows[0]['SequentialNo']) ? $rows[0] : null;
         } catch (\Throwable $e) {
             Log::warning("SapService: getOpportunityWithStages({$seqNo}) failed — " . $e->getMessage());
             return null;
