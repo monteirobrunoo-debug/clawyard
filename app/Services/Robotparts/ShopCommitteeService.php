@@ -86,11 +86,15 @@ class ShopCommitteeService
         ]);
 
         try {
-            // Pick 2 helpers + collect their input.
+            // Pick 2 helpers + collect their input. Each helper SEES
+            // the previous helpers' replies (Phase C — multi-round
+            // cooperation), so helper #2 can agree, refine, or push
+            // back on helper #1's suggestion. The buyer then decides
+            // with the full debate visible.
             $helperKeys = $this->pickHelpers($buyerAgentKey, count: 2);
             $helperReplies = [];
             foreach ($helperKeys as $helperKey) {
-                $reply = $this->askHelper($helperKey, $buyerAgentKey, $budget, $slot);
+                $reply = $this->askHelper($helperKey, $buyerAgentKey, $budget, $slot, $helperReplies);
                 if ($reply !== null) {
                     $order->appendCommittee($helperKey, 'helper', $reply);
                     $helperReplies[$helperKey] = $reply;
@@ -175,8 +179,13 @@ class ShopCommitteeService
      * text, or null if the dispatcher failed (we then proceed without
      * that helper rather than aborting the committee).
      */
-    private function askHelper(string $helperKey, string $buyerKey, float $budget, ?string $slot): ?string
-    {
+    private function askHelper(
+        string $helperKey,
+        string $buyerKey,
+        float $budget,
+        ?string $slot,
+        array $previousReplies = [],
+    ): ?string {
         $helperMeta = AgentCatalog::find($helperKey);
         $buyerMeta  = AgentCatalog::find($buyerKey);
         if (!$helperMeta || !$buyerMeta) return null;
@@ -193,16 +202,33 @@ class ShopCommitteeService
                 . "Your suggestion MUST be for this slot specifically — don't suggest a sensor when the slot is locomotion.";
         }
 
+        // Phase C — multi-round cooperation. Helper #N sees what
+        // previous helpers said and can agree, refine, or disagree.
+        $debateContext = '';
+        if (!empty($previousReplies)) {
+            $debateContext = "\n\nPREVIOUS HELPERS HAVE ALREADY SPOKEN. Read what they said, then:\n"
+                . "  • If you agree → add a complementary angle (e.g. cost reasonableness, durability concern)\n"
+                . "  • If you disagree → say so directly + propose your alternative\n"
+                . "  • Don't just repeat the same suggestion — bring something new\n\n"
+                . "WHAT THEY SAID:\n";
+            foreach ($previousReplies as $prevKey => $prevText) {
+                $prevMeta = AgentCatalog::find($prevKey);
+                $prevName = $prevMeta['name'] ?? $prevKey;
+                $debateContext .= "  ── {$prevName}: {$prevText}\n\n";
+            }
+        }
+
         $system = "You are {$helperMeta['name']} ({$helperMeta['role']}). "
                 . "Your colleague {$buyerMeta['name']} ({$buyerMeta['role']}) has \${$budget} to spend on a robot body part. "
-                . "Suggest ONE part you think would fit them. Reply in 2-3 sentences with: "
+                . "Suggest ONE part you think would fit them. Reply in 2-4 sentences with: "
                 . "(a) what the part is, (b) why it fits, (c) rough cost estimate. "
                 . "Keep it under \$" . max(2.0, $budget) . "."
-                . $slotContext;
+                . $slotContext
+                . $debateContext;
 
         $user = "What part should {$buyerMeta['name']} buy with \${$budget}? "
               . ($slotMeta
-                  ? "Remember: target slot is {$slotMeta['emoji']} {$slotMeta['label']}."
+                  ? "Target slot: {$slotMeta['emoji']} {$slotMeta['label']}."
                   : "Stay practical — common DIY robotics components.");
 
         $res = $this->dispatcher->dispatch($system, $user, maxTokens: 400);

@@ -125,6 +125,59 @@ class ShopCommitteeServiceTest extends TestCase
         $this->assertSame('Wheel', $order->name);
     }
 
+    public function test_second_helper_sees_first_helpers_reply(): void
+    {
+        // Phase C — multi-round cooperation: helper 2's prompt must
+        // include helper 1's text so they can react. We capture what
+        // the dispatcher receives and assert helper 1's line shows up
+        // in helper 2's system prompt.
+        $captured = [];
+        $dispatcher = new class($captured) extends \App\Services\AgentSwarm\AgentDispatcher {
+            public array $captured;
+            public function __construct(&$captured) {
+                $this->captured = &$captured;
+            }
+            public function dispatch(
+                string $systemPrompt,
+                string $userMessage,
+                int $maxTokens = 1500,
+                ?string $model = null,
+            ): array {
+                $this->captured[] = $systemPrompt;
+                // Hand-crafted response stream: helper1, helper2, buyer.
+                static $count = 0;
+                $count++;
+                $replies = [
+                    1 => 'I think a 5mm RED LED works great here, dirt cheap (~\$0.30).',
+                    2 => 'Actually a WS2812B addressable RGB LED is much better for branding.',
+                    3 => '{"name":"WS2812B Strip","description":"5050 RGB","search_query":"ws2812b 5050","est_cost_usd":1.50}',
+                ];
+                return [
+                    'ok' => true,
+                    'text' => $replies[$count] ?? '{}',
+                    'model' => 'fake', 'tokens_in' => 100, 'tokens_out' => 50,
+                    'cost_usd' => 0.001, 'ms' => 50, 'error' => null,
+                ];
+            }
+        };
+
+        (new \App\Services\Robotparts\ShopCommitteeService($dispatcher))
+            ->deliberate('briefing', budget: 5.00);
+
+        // 3 dispatches happened (helper1, helper2, buyer).
+        $this->assertCount(3, $dispatcher->captured);
+        // Helper 2's system prompt MUST contain helper 1's text.
+        $this->assertStringContainsString(
+            'I think a 5mm RED LED',
+            $dispatcher->captured[1],
+            'helper 2 must see helper 1 reply for multi-round cooperation'
+        );
+        // Helper 1 sees no previous (debateContext empty).
+        $this->assertStringNotContainsString('PREVIOUS HELPERS HAVE ALREADY', $dispatcher->captured[0]);
+        // Helper 2 has the debate block.
+        $this->assertStringContainsString('PREVIOUS HELPERS HAVE ALREADY', $dispatcher->captured[1]);
+    }
+
     public function test_helpers_picked_exclude_the_buyer(): void
     {
         // Run multiple committees, ensure buyer never appears as helper
