@@ -399,17 +399,26 @@
 <header class="header">
     <a href="/dashboard" style="display:flex;align-items:center;text-decoration:none;"><img src="/images/clawyard-logo.svg" alt="ClawYard" style="height:36px;filter:drop-shadow(0 0 4px rgba(118,185,0,0.3));"></a>
     <span class="badge">© PartYard/Setq.AI Rights reserved 2026</span>
+    {{-- Header navbar — visual uniformity (revisão 2026-04-29):
+         todos os nav-link partilham o mesmo estilo base (cinzento neutro).
+         Apenas DOIS botões se distinguem por boa razão funcional:
+           • .briefing  → green CTA (call-to-action principal do produto)
+           • .admin     → red alerta (acesso restrito, segurança)
+         Tudo o resto era mistura caótica de roxo/azul/amarelo/verde —
+         removido. Adicionado 🏆 Rewards e 🛒 Marketplace que estavam em falta. --}}
     <div class="nav-links">
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
-        <a href="/intel" class="nav-link" style="color:#a855f7;border-color:#3b1a5f;background:#0f0a1e">🔗 Intel Bus</a>
-        <a href="/agents/activity" class="nav-link" style="color:#76b900;border-color:#1e3300;background:#0d1a00">🤖 Activity</a>
+        <a href="{{ route('tenders.index') }}" class="nav-link">📋 Concursos</a>
+        <a href="{{ route('rewards.me') }}" class="nav-link">🏆 Rewards</a>
+        <a href="{{ route('marketplace.index') }}" class="nav-link">🛒 Marketplace</a>
+        <a href="/intel" class="nav-link">🔗 Intel Bus</a>
+        <a href="/agents/activity" class="nav-link">🤖 Activity</a>
         <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
         <a href="/patents/library" class="nav-link">🏛️ Patents</a>
-        <a href="/reports" class="nav-link">📋 Reports</a>
-        <a href="/stats" class="nav-link">📊 Stats</a>
+        <a href="/reports" class="nav-link">📁 Reports</a>
+        <a href="/stats" class="nav-link">📈 Stats</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
-        <a href="/shares" class="nav-link" style="color:#60a5fa;border-color:#1e3a5f;background:#0a1a2e">🔗 Shared Agents</a>
-        <a href="{{ route('tenders.index') }}" class="nav-link" style="color:#fbbf24;border-color:#3a2a0a;background:#1a1200">📑 Concursos</a>
+        <a href="/shares" class="nav-link">👥 Shared</a>
         @if(Auth::user()->isAdmin())
             <a href="/admin/users" class="nav-link admin">⚙️ Admin</a>
         @endif
