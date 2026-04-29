@@ -262,15 +262,54 @@
                     </header>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-100 text-sm">
+                            {{-- Headers clicáveis com toggle ASC/DESC. Default
+                                 'created_at desc' (mais recente primeiro), mas
+                                 o user pode trocar por Título / Estado / Deadline
+                                 / Nº SAP. Setinha indica direcção activa. --}}
+                            @php
+                                $mineSortLink = function (string $key, string $label) use ($mineSort, $mineDir) {
+                                    $isActive = $mineSort === $key;
+                                    $nextDir  = $isActive && $mineDir === 'desc' ? 'asc' : 'desc';
+                                    $arrow    = $isActive ? ($mineDir === 'desc' ? '↓' : '↑') : '';
+                                    $params   = array_merge(request()->query(), [
+                                        'mine_sort' => $key,
+                                        'mine_dir'  => $nextDir,
+                                    ]);
+                                    return [
+                                        'url'      => request()->url() . '?' . http_build_query($params),
+                                        'label'    => $label,
+                                        'isActive' => $isActive,
+                                        'arrow'    => $arrow,
+                                    ];
+                                };
+                            @endphp
                             <thead class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-600">
                                 <tr>
-                                    <th class="px-3 py-2 text-left">Fonte</th>
-                                    <th class="px-3 py-2 text-left">Título</th>
-                                    <th class="px-3 py-2 text-left">Colaborador</th>
-                                    <th class="px-3 py-2 text-left">Estado</th>
-                                    <th class="px-3 py-2 text-left">Nº SAP</th>
-                                    <th class="px-3 py-2 text-left">Deadline</th>
-                                    <th class="px-3 py-2 text-right">Prazo</th>
+                                    @foreach([
+                                        ['source',     'Fonte'],
+                                        ['title',      'Título'],
+                                        ['collaborator', 'Colaborador'],
+                                        ['status',     'Estado'],
+                                        ['sap',        'Nº SAP'],
+                                        ['deadline',   'Deadline'],
+                                        ['created_at', 'Importado'],
+                                    ] as [$key, $label])
+                                        @php $h = $key === 'collaborator' ? null : $mineSortLink($key, $label); @endphp
+                                        <th class="px-3 py-2 text-left">
+                                            @if($h)
+                                                <a href="{{ $h['url'] }}" class="inline-flex items-center gap-1 select-none {{ $h['isActive'] ? 'text-indigo-700' : 'hover:text-gray-700' }}">
+                                                    <span>{{ $h['label'] }}</span>
+                                                    @if($h['arrow'])
+                                                        <span class="text-indigo-600">{{ $h['arrow'] }}</span>
+                                                    @else
+                                                        <span class="text-gray-300">⇅</span>
+                                                    @endif
+                                                </a>
+                                            @else
+                                                {{ $label }}
+                                            @endif
+                                        </th>
+                                    @endforeach
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
@@ -308,20 +347,28 @@
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-600">
                                             @if($t->deadline_at)
-                                                {{ $t->deadline_lisbon->format('d/m/y H:i') }}
+                                                <div>{{ $t->deadline_lisbon->format('d/m/y H:i') }}</div>
+                                                <div class="mt-0.5">
+                                                    <span class="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
+                                                        @if($t->urgency_bucket === 'overdue')
+                                                            -{{ abs($t->days_to_deadline) }}d
+                                                        @elseif($t->days_to_deadline !== null)
+                                                            {{ $t->days_to_deadline }}d
+                                                        @else
+                                                            —
+                                                        @endif
+                                                    </span>
+                                                </div>
                                             @else
                                                 <span class="text-gray-400">sem deadline</span>
                                             @endif
                                         </td>
-                                        <td class="px-3 py-2 whitespace-nowrap text-right">
-                                            <span class="inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
-                                                @if($t->urgency_bucket === 'overdue')
-                                                    -{{ abs($t->days_to_deadline) }}d
-                                                @elseif($t->days_to_deadline !== null)
-                                                    {{ $t->days_to_deadline }}d
-                                                @else
-                                                    —
-                                                @endif
+                                        {{-- 'Importado' = created_at — coluna nova para o user
+                                             saber que tenders chegaram mais recentemente. Default
+                                             ordenação é created_at desc. --}}
+                                        <td class="px-3 py-2 whitespace-nowrap text-xs text-gray-600">
+                                            <span title="Importado em {{ $t->created_at->format('d/m/Y H:i') }}">
+                                                {{ $t->created_at->diffForHumans(null, true) }}
                                             </span>
                                         </td>
                                     </tr>

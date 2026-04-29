@@ -66,13 +66,21 @@ class TenderController extends Controller
         // not the assignee); for regular users this is the primary view.
         // Same per-page cap as the All list so a heavy assigned user
         // doesn't see a truncated personal view.
-        $mine = Tender::query()
+        //
+        // 2026-04-29 — sortable headers + default 'most recent first'.
+        // Independent sort params (mine_sort/mine_dir) so they don't
+        // conflict with the manager-table sort. Defaults: created_at desc
+        // — users open the page and immediately see what they just
+        // imported / what's freshest, not the noisiest deadlines.
+        $mineSort = $request->string('mine_sort')->trim()->value() ?: 'created_at';
+        $mineDir  = strtolower($request->string('mine_dir')->trim()->value()) === 'asc' ? 'asc' : 'desc';
+
+        $mineQuery = Tender::query()
             ->forUser($user->id)
             ->active()
-            ->with('collaborator')
-            ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
-            ->limit($perPage)
-            ->get();
+            ->with('collaborator');
+        $this->applyMineSort($mineQuery, $mineSort, $mineDir);
+        $mine = $mineQuery->limit($perPage)->get();
 
         $collaborators = TenderCollaborator::active()->orderBy('name')->get();
 
@@ -118,6 +126,8 @@ class TenderController extends Controller
             'filters'       => $filters,
             'sort'          => $sort,
             'dir'           => $dir,
+            'mineSort'      => $mineSort,
+            'mineDir'       => $mineDir,
             'collaborators' => $collaborators,
             'canImport'     => $canImport,
             'canAssign'     => $canAssign,
@@ -125,6 +135,42 @@ class TenderController extends Controller
             'restriction'   => $restriction,
             'stats'         => $this->dashboardStats($canViewAll ? null : $user->id),
         ]);
+    }
+
+    /**
+     * Sort logic for the user-specific 'mine' tenders table. Reuses
+     * the same column keys as applySort() but kept separate so
+     * extensions can diverge (e.g. 'imported' as a default that's
+     * meaningful on personal views but not on the manager view).
+     */
+    protected function applyMineSort($query, string $sort, string $dir): void
+    {
+        $dirSql = $dir === 'asc' ? 'asc' : 'desc';
+        switch ($sort) {
+            case 'created_at':
+                $query->orderBy('created_at', $dirSql)->orderByDesc('id');
+                return;
+            case 'deadline':
+                $query->orderByRaw("deadline_at IS NULL, deadline_at {$dirSql}");
+                return;
+            case 'source':
+                $query->orderBy('source', $dirSql)->orderBy('reference', 'asc');
+                return;
+            case 'reference':
+                $query->orderBy('reference', $dirSql);
+                return;
+            case 'title':
+                $query->orderBy('title', $dirSql);
+                return;
+            case 'status':
+                $query->orderBy('status', $dirSql);
+                return;
+            case 'sap':
+                $query->orderByRaw("(sap_opportunity_number IS NULL OR sap_opportunity_number = ''), sap_opportunity_number {$dirSql}");
+                return;
+            default:
+                $query->orderByDesc('created_at')->orderByDesc('id');
+        }
     }
 
     // ── Super-user overview ──────────────────────────────────────────────
