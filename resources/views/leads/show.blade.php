@@ -83,6 +83,172 @@
                 </form>
             </section>
 
+            {{-- ─── Outreach pipeline ──────────────────────────────────────
+                 Cold-email drafter. The cron generates a draft for every
+                 confident lead overnight; the manager reviews + edits +
+                 approves + sends here. State machine in the migration.
+            --}}
+            @php
+                $os         = $lead->outreach_status ?? 'none';
+                $hasDraft   = !empty($lead->outreach_draft_subject) || !empty($lead->outreach_draft_body);
+                $isPending  = $os === \App\Models\LeadOpportunity::OUTREACH_DRAFT_PENDING;
+                $isApproved = $os === \App\Models\LeadOpportunity::OUTREACH_APPROVED;
+                $isSent     = $os === \App\Models\LeadOpportunity::OUTREACH_SENT;
+                $isReject   = $os === \App\Models\LeadOpportunity::OUTREACH_REJECTED;
+
+                $statusBadge = [
+                    'none'           => ['label' => 'Sem draft',        'class' => 'bg-gray-100 text-gray-600'],
+                    'draft_pending'  => ['label' => 'Draft pendente',   'class' => 'bg-amber-100 text-amber-800'],
+                    'approved'       => ['label' => 'Aprovado',         'class' => 'bg-blue-100 text-blue-800'],
+                    'sent'           => ['label' => 'Enviado',          'class' => 'bg-emerald-100 text-emerald-800'],
+                    'rejected'       => ['label' => 'Rejeitado',        'class' => 'bg-red-100 text-red-700'],
+                ][$os] ?? ['label' => $os, 'class' => 'bg-gray-100 text-gray-700'];
+            @endphp
+
+            <section class="rounded-lg bg-white shadow-sm border border-gray-200 p-5">
+                <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                    <h3 class="text-sm font-semibold text-gray-800">📧 Outreach</h3>
+                    <span class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold {{ $statusBadge['class'] }}">
+                        {{ $statusBadge['label'] }}
+                    </span>
+                </div>
+
+                @error('outreach')
+                    <div class="mb-3 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{{ $message }}</div>
+                @enderror
+
+                @if(!$hasDraft && $os === 'none')
+                    <p class="text-xs text-gray-500 mb-3">
+                        @if($lead->status === 'confident')
+                            Ainda não foi gerado um draft para este lead. O cron diário (08:30 Lisboa)
+                            trata destes automaticamente. Podes também forçar agora:
+                        @else
+                            Drafts automáticos só são criados para leads com status <code>confident</code>.
+                            Promove o status na secção de Triagem para activar.
+                        @endif
+                    </p>
+                    @if($lead->status === 'confident')
+                        <form method="POST" action="{{ route('leads.outreach.draft', $lead) }}">
+                            @csrf
+                            <button class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">
+                                Gerar draft agora
+                            </button>
+                        </form>
+                    @endif
+                @else
+                    {{-- Edit form — visible while pending or approved.
+                         Submitting changes after approve kicks back to pending. --}}
+                    @if($isPending || $isApproved)
+                        <form method="POST" action="{{ route('leads.outreach.update', $lead) }}" class="space-y-3">
+                            @csrf @method('PATCH')
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <label class="text-sm">
+                                    <span class="text-xs text-gray-600">Para (email)</span>
+                                    <input type="email" name="outreach_to_email"
+                                           value="{{ old('outreach_to_email', $lead->outreach_to_email) }}"
+                                           placeholder="ex.: compras@cliente.com"
+                                           class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                </label>
+                                <label class="text-sm">
+                                    <span class="text-xs text-gray-600">Para (nome, opcional)</span>
+                                    <input type="text" name="outreach_to_name"
+                                           value="{{ old('outreach_to_name', $lead->outreach_to_name) }}"
+                                           class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                                </label>
+                            </div>
+                            <label class="text-sm block">
+                                <span class="text-xs text-gray-600">Assunto</span>
+                                <input type="text" name="outreach_draft_subject" required
+                                       value="{{ old('outreach_draft_subject', $lead->outreach_draft_subject) }}"
+                                       maxlength="255"
+                                       class="mt-1 block w-full rounded-md border-gray-300 text-sm">
+                            </label>
+                            <label class="text-sm block">
+                                <span class="text-xs text-gray-600">Corpo</span>
+                                <textarea name="outreach_draft_body" rows="10" required maxlength="8000"
+                                          class="mt-1 block w-full rounded-md border-gray-300 text-sm font-mono leading-relaxed">{{ old('outreach_draft_body', $lead->outreach_draft_body) }}</textarea>
+                            </label>
+                            <div class="flex items-center justify-between gap-3 flex-wrap">
+                                <div class="text-[11px] text-gray-500">
+                                    Drafted {{ $lead->outreach_drafted_at?->diffForHumans() }} ·
+                                    Custo do draft: ${{ number_format((float) $lead->outreach_draft_cost_usd, 4) }}
+                                    @if($isApproved && $lead->outreach_approved_by_user_id)
+                                        · Aprovado por <span class="font-medium">{{ $lead->outreach_approved_by_user_id === auth()->id() ? 'ti' : 'manager#' . $lead->outreach_approved_by_user_id }}</span>
+                                        ({{ $lead->outreach_approved_at?->diffForHumans() }})
+                                    @endif
+                                </div>
+                                <button class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                                    Guardar alterações
+                                </button>
+                            </div>
+                        </form>
+
+                        {{-- Action row — separate forms so each button is its own POST. --}}
+                        <div class="mt-4 flex items-center gap-2 flex-wrap border-t border-gray-100 pt-3">
+                            @if($isPending)
+                                <form method="POST" action="{{ route('leads.outreach.approve', $lead) }}">
+                                    @csrf
+                                    <button class="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-500">
+                                        Aprovar
+                                    </button>
+                                </form>
+                            @endif
+
+                            @if($isApproved)
+                                <form method="POST" action="{{ route('leads.outreach.send', $lead) }}"
+                                      onsubmit="return confirm('Enviar o email para {{ $lead->outreach_to_email }}?');">
+                                    @csrf
+                                    <button class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500">
+                                        Enviar agora ✉
+                                    </button>
+                                </form>
+                            @endif
+
+                            <form method="POST" action="{{ route('leads.outreach.draft', $lead) }}">
+                                @csrf
+                                <button class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                                    Regenerar draft
+                                </button>
+                            </form>
+
+                            <details class="ml-auto">
+                                <summary class="cursor-pointer rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50">
+                                    Rejeitar…
+                                </summary>
+                                <form method="POST" action="{{ route('leads.outreach.reject', $lead) }}"
+                                      class="mt-2 flex items-center gap-2">
+                                    @csrf
+                                    <input type="text" name="outreach_reject_reason" maxlength="500"
+                                           placeholder="Motivo (opcional, ajuda a melhorar drafts futuros)"
+                                           class="rounded-md border-gray-300 text-xs w-72">
+                                    <button class="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white">
+                                        Confirmar rejeição
+                                    </button>
+                                </form>
+                            </details>
+                        </div>
+                    @endif
+
+                    {{-- Read-only view for sent / rejected drafts. --}}
+                    @if($isSent || $isReject)
+                        <div class="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-xs space-y-2">
+                            <div class="grid grid-cols-2 gap-x-6 gap-y-1">
+                                <div><span class="text-gray-500">Para:</span> <span class="font-mono">{{ $lead->outreach_to_email ?: '—' }}</span></div>
+                                <div><span class="text-gray-500">Assunto:</span> <span class="font-medium">{{ $lead->outreach_draft_subject }}</span></div>
+                                @if($isSent)
+                                    <div><span class="text-gray-500">Enviado:</span> {{ $lead->outreach_sent_at?->format('d/m/Y H:i') }}</div>
+                                    <div><span class="text-gray-500">Por:</span> manager#{{ $lead->outreach_sent_by_user_id }}</div>
+                                @endif
+                                @if($isReject && $lead->outreach_reject_reason)
+                                    <div class="col-span-2"><span class="text-gray-500">Motivo:</span> <span class="text-red-700">{{ $lead->outreach_reject_reason }}</span></div>
+                                @endif
+                            </div>
+                            <pre class="whitespace-pre-wrap font-sans text-gray-800 mt-2">{{ $lead->outreach_draft_body }}</pre>
+                        </div>
+                    @endif
+                @endif
+            </section>
+
             {{-- Chain log — the audit trail. Every step the swarm took
                  is rendered here verbatim so the admin can sanity-check
                  the AI's reasoning. Critical for trust. --}}

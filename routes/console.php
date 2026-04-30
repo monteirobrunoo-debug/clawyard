@@ -87,6 +87,25 @@ Schedule::command('agents:research-council')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Lead outreach drafter — daily 08:30 Lisbon, weekdays only ────────────
+// Walks confident leads (score>70) without an existing draft and
+// generates a cold-outreach email via Anthropic. The drafts surface
+// in /leads/{id} for the manager to review/edit/approve/send.
+//
+// 08:30 lands BEFORE the tenders digest (09:00) so by the time the
+// manager opens the daily digest, fresh outreach drafts are ready
+// alongside the tender activity. Weekdays-only because nobody approves
+// outreach on Saturday morning.
+//
+// Per-run cost: ~$0.007 per lead in tokens. With our typical 5–20
+// confident leads/week this is well under $1/month.
+Schedule::command('leads:draft-outreach --limit=20')
+    ->weekdays()
+    ->dailyAt('08:30')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Individual deadline alert — fires ~24h before each tender's deadline,
 // exactly ONCE per tender lifetime (de-duped via deadline_alert_sent_at).
 // Sent only to the assigned collaborator so we don't duplicate the digest.

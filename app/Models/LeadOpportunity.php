@@ -28,13 +28,25 @@ class LeadOpportunity extends Model
         'source_signal_type', 'source_signal_id',
         'status', 'assigned_user_id',
         'notes', 'contacted_at',
+        // Outreach pipeline (added 2026-04-30 — see migration
+        // 2026_04_30_000001_add_outreach_columns_to_lead_opportunities)
+        'outreach_status',
+        'outreach_draft_subject', 'outreach_draft_body',
+        'outreach_to_email', 'outreach_to_name',
+        'outreach_drafted_at', 'outreach_approved_at', 'outreach_sent_at',
+        'outreach_approved_by_user_id', 'outreach_sent_by_user_id',
+        'outreach_reject_reason', 'outreach_draft_cost_usd',
     ];
 
     protected function casts(): array
     {
         return [
-            'contacted_at' => 'datetime',
-            'score'        => 'integer',
+            'contacted_at'             => 'datetime',
+            'score'                    => 'integer',
+            'outreach_drafted_at'      => 'datetime',
+            'outreach_approved_at'     => 'datetime',
+            'outreach_sent_at'         => 'datetime',
+            'outreach_draft_cost_usd'  => 'decimal:5',
         ];
     }
 
@@ -51,6 +63,22 @@ class LeadOpportunity extends Model
         self::STATUS_REVIEW,
         self::STATUS_CONFIDENT,
         self::STATUS_CONTACTED,
+    ];
+
+    // ── Outreach state machine ───────────────────────────────────────────
+    // Independent of the lead's own status — see migration for rationale.
+    public const OUTREACH_NONE          = 'none';
+    public const OUTREACH_DRAFT_PENDING = 'draft_pending';
+    public const OUTREACH_APPROVED      = 'approved';
+    public const OUTREACH_SENT          = 'sent';
+    public const OUTREACH_REJECTED      = 'rejected';
+
+    public const OUTREACH_STATUSES = [
+        self::OUTREACH_NONE,
+        self::OUTREACH_DRAFT_PENDING,
+        self::OUTREACH_APPROVED,
+        self::OUTREACH_SENT,
+        self::OUTREACH_REJECTED,
     ];
 
     // ── Relations ────────────────────────────────────────────────────────
@@ -76,6 +104,17 @@ class LeadOpportunity extends Model
     {
         return $q->whereIn('status', [self::STATUS_REVIEW, self::STATUS_CONFIDENT])
                  ->orderByDesc('score');
+    }
+
+    /** Leads eligible for an automated outreach draft.
+     *  Confident only (score > 70) and never drafted — repeat draftings
+     *  would waste tokens and confuse the manager with stale text.
+     *  We also skip leads already in a downstream lead-status. */
+    public function scopeNeedsOutreachDraft(Builder $q): Builder
+    {
+        return $q->where('status', self::STATUS_CONFIDENT)
+                 ->where('outreach_status', self::OUTREACH_NONE)
+                 ->whereNull('outreach_drafted_at');
     }
 
     // ── Status helper ────────────────────────────────────────────────────

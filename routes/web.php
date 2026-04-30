@@ -583,6 +583,20 @@ Route::middleware(['auth'])->group(function () {
         ->name('leads.show');
     Route::patch ('/leads/{lead}',         [\App\Http\Controllers\LeadOpportunityController::class, 'update'])
         ->name('leads.update');
+
+    // Outreach pipeline — see migration 2026_04_30_000001 + controller
+    // for the state machine. POST is used for state transitions
+    // (draft/approve/reject/send) and PATCH for editing the draft text.
+    Route::patch ('/leads/{lead}/outreach',          [\App\Http\Controllers\LeadOpportunityController::class, 'updateOutreach'])
+        ->name('leads.outreach.update');
+    Route::post  ('/leads/{lead}/outreach/draft',    [\App\Http\Controllers\LeadOpportunityController::class, 'draftOutreach'])
+        ->name('leads.outreach.draft');
+    Route::post  ('/leads/{lead}/outreach/approve',  [\App\Http\Controllers\LeadOpportunityController::class, 'approveOutreach'])
+        ->name('leads.outreach.approve');
+    Route::post  ('/leads/{lead}/outreach/reject',   [\App\Http\Controllers\LeadOpportunityController::class, 'rejectOutreach'])
+        ->name('leads.outreach.reject');
+    Route::post  ('/leads/{lead}/outreach/send',     [\App\Http\Controllers\LeadOpportunityController::class, 'sendOutreach'])
+        ->name('leads.outreach.send');
 });
 
 // Rewards — gamification read paths.

@@ -111,6 +111,23 @@
                                         <a href="{{ route('leads.show', $lead) }}" class="font-medium text-indigo-700 hover:underline">
                                             {{ \Illuminate\Support\Str::limit($lead->title, 80) }}
                                         </a>
+                                        @php
+                                            // Compact outreach badge — only render when a draft
+                                            // exists, so untouched leads don't add visual weight.
+                                            $os = $lead->outreach_status ?? 'none';
+                                            $oBadge = match($os) {
+                                                'draft_pending' => ['📝 draft pendente',  'bg-amber-100 text-amber-800'],
+                                                'approved'      => ['✓ pronto a enviar',  'bg-blue-100 text-blue-800'],
+                                                'sent'          => ['✉ enviado',          'bg-emerald-100 text-emerald-800'],
+                                                'rejected'      => ['✗ draft rejeitado',  'bg-red-100 text-red-700'],
+                                                default         => null,
+                                            };
+                                        @endphp
+                                        @if($oBadge)
+                                            <span class="inline-block mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold {{ $oBadge[1] }}">
+                                                {{ $oBadge[0] }}
+                                            </span>
+                                        @endif
                                         <div class="text-xs text-gray-500 mt-0.5">{{ \Illuminate\Support\Str::limit($lead->summary, 100) }}</div>
                                     </td>
                                     <td class="px-3 py-2 text-xs whitespace-nowrap">
