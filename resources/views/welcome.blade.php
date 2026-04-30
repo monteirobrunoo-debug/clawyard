@@ -282,6 +282,21 @@
         .email-roundup-btn.secondary { background:transparent; color:#3aa0ff; border:1px solid rgba(0,120,212,0.4); }
         .email-roundup-btn.secondary:hover { background:rgba(0,120,212,0.1); border-color:#0078d4; }
         .email-roundup-btn .copy-ok { color:#76b900; }
+
+        /* ── EMAIL BATCH (multi-supplier) ──
+           Daniel pode devolver vários emails de uma vez, um por
+           fornecedor. Cada card mantém o estilo .email-card; este
+           bloco só estiliza o WRAPPER que os agrupa visualmente. */
+        .email-batch-header { margin-top:6px; padding:6px 12px; background:#0a1a00; border:1px solid #1a3300; border-left:3px solid var(--green); border-radius:8px; font-size:11px; color:var(--muted); }
+        .email-batch { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+        .email-batch-row { position:relative; }
+        .email-batch-tag { display:inline-flex; align-items:center; gap:6px; padding:3px 10px; background:#0d1a30; border:1px solid #1a2e00; border-radius:8px 8px 0 0; font-size:11px; color:#7ab3f0; font-weight:600; border-bottom:none; }
+        .email-batch-tag .ebt-num { background:rgba(122,179,240,0.18); color:#7ab3f0; padding:1px 6px; border-radius:5px; font-size:10px; }
+        .email-batch-tag .ebt-supplier { color:#cde3f8; }
+        .email-batch-tag .ebt-template { color:var(--muted); font-weight:400; }
+        .email-batch-row .email-card { border-top-left-radius:0; }
+        .email-batch-footer { margin-top:10px; padding:8px 12px; background:rgba(0,120,212,0.05); border:1px dashed rgba(0,120,212,0.3); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .email-batch-hint { font-size:10px; color:var(--muted); }
         /* ── TABLE CARD (Marco Sales) ── */
         .table-card { background:var(--bg); border:1px solid #1a2e00; border-left:3px solid #3b82f6; border-radius:12px; overflow:hidden; margin-top:4px; }
         .table-card-header { background:#0a1220; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1a2e00; }
@@ -1825,6 +1840,87 @@ function addMessage(role, text, agentName = '') {
         return msg;
     }
 
+    // Multi-supplier email batch — Daniel devolveu uma lista de emails,
+    // um por fornecedor, cada um com to/subject/body distintos. Render
+    // como N cards empilhados, cada um com o seu botão "Outlook" (vem
+    // de buildEmailCard). O user revê fornecedor a fornecedor e pode
+    // disparar individualmente, ou usar a barra de "Abrir todos" no
+    // fim do bloco para abrir uma sequência de janelas Outlook.
+    if (role === 'ai' && text.startsWith('__EMAILS__')) {
+        try {
+            const batch = JSON.parse(text.replace('__EMAILS__', ''));
+            const emails = (batch && Array.isArray(batch.emails)) ? batch.emails : [];
+            if (emails.length > 0) {
+                const emailPhoto = AGENT_PHOTOS['email'];
+                const emailAvatar = emailPhoto
+                    ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${emailPhoto}" alt="Daniel Email" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+                    : `<div class="avatar">${AGENT_EMOJIS['email']}</div>`;
+
+                // Header com mini-resumo dos fornecedores ("Wartsila, MAN, …")
+                // para o user perceber o âmbito antes de fazer scroll.
+                const supplierLabels = emails.map(e =>
+                    (e.supplier || e.to || '').toString().trim()
+                ).filter(Boolean);
+                const supplierSummary = supplierLabels.length
+                    ? supplierLabels.slice(0, 4).join(', ') + (supplierLabels.length > 4 ? `, +${supplierLabels.length - 4}` : '')
+                    : '';
+
+                // Cada card é prefixado por um cabeçalho "Para: <Supplier>"
+                // para o user identificar à vista de pássaro qual está a
+                // editar. Os IDs dos campos do card são únicos via Date.now()
+                // dentro de buildEmailCard, por isso múltiplas instâncias
+                // não colidem.
+                const cardsHtml = emails.map((em, i) => `
+                    <div class="email-batch-row">
+                        <div class="email-batch-tag">
+                            <span class="ebt-num">${i + 1}/${emails.length}</span>
+                            <span class="ebt-supplier">${esc(em.supplier || em.to || `Fornecedor ${i+1}`)}</span>
+                            ${em.template ? `<span class="ebt-template">· ${esc(em.template)}</span>` : ''}
+                        </div>
+                        ${buildEmailCard(em)}
+                    </div>
+                `).join('');
+
+                msg.innerHTML = `
+                    ${emailAvatar}
+                    <div class="msg-col" style="max-width:640px">
+                        <div class="msg-meta">
+                            <span class="agent-tag active">📧 Daniel Email</span>
+                            <span>${emails.length} emails — um por fornecedor</span>
+                        </div>
+                        ${supplierSummary ? `<div class="email-batch-header">📋 ${esc(supplierSummary)}</div>` : ''}
+                        <div class="email-batch">
+                            ${cardsHtml}
+                        </div>
+                        <div class="email-batch-footer">
+                            <button type="button" class="email-roundup-btn" data-batch-action="open-all"
+                                    title="Abrir uma janela Outlook por cada fornecedor (em cascata)">
+                                ✉ Abrir todos no Outlook (sequência)
+                            </button>
+                            <span class="email-batch-hint">⚠️ Vai disparar ${emails.length} mailto:'s — o browser pode pedir confirmação para o segundo e seguintes.</span>
+                        </div>
+                    </div>`;
+
+                // Hook do botão "abrir todos em sequência" — itera os
+                // cards e chama openInOutlook() em cada um com pequeno
+                // intervalo para o cliente de email conseguir processar
+                // cada janela antes da seguinte chegar.
+                msg.querySelector('[data-batch-action="open-all"]')?.addEventListener('click', () => {
+                    const cards = msg.querySelectorAll('.email-card');
+                    cards.forEach((card, i) => {
+                        const id = card.id;
+                        if (!id) return;
+                        setTimeout(() => { try { openInOutlook(id); } catch(_) {} }, i * 700);
+                    });
+                });
+
+                chat.appendChild(msg);
+                chat.scrollTop = chat.scrollHeight;
+                return msg;
+            }
+        } catch (e) { /* fall through to default rendering */ }
+    }
+
     const saveBtn = role === 'ai' ? `<button class="save-report-btn" onclick="saveAsReport(this,'${agentName}')" title="Guardar como relatório">💾</button>` : '';
     const pdfBtn  = role === 'ai' ? `<button class="pdf-export-btn" onclick="exportMsgPDF(this)" title="Exportar como PDF">📄 PDF</button>` : '';
     msg.innerHTML = `
@@ -3164,6 +3260,21 @@ async function sendMessage() {
                                 streamMsg.querySelector('.avatar').textContent = AGENT_EMOJIS['email'];
                             } catch (e) {
                                 streamBubble.innerHTML = renderMarkdown(accumulated.replace('__EMAIL__', ''));
+                            }
+                        // ── Daniel Email — multi-supplier batch ────────────
+                        // Quando o pedido foi "um email para cada fornecedor",
+                        // Daniel devolve __EMAILS__[…]. Re-aproveitamos o path
+                        // do addMessage simulando uma chamada — assim o render
+                        // (cards empilhados + botão "Abrir todos no Outlook")
+                        // fica num só sítio.
+                        } else if (accumulated.startsWith('__EMAILS__')) {
+                            try {
+                                const replacement = addMessage('ai', accumulated, AGENT_NAMES['email'] || 'Daniel Email', 'email');
+                                if (replacement && streamMsg !== replacement) {
+                                    streamMsg.remove();
+                                }
+                            } catch (e) {
+                                streamBubble.innerHTML = renderMarkdown(accumulated.replace('__EMAILS__', ''));
                             }
                         } else {
                             // Final render + add save button (strip hidden QuantumAgent JSON block)

@@ -96,7 +96,16 @@ HP-Group — Marine Spare Parts & Engineering
 
 ISO 9001:2015 | AS:9120 | NATO NCAGE P3527
 
-RESPONSE FORMAT — return ONLY valid JSON, no markdown, no extra text:
+RESPONSE FORMAT — return ONLY valid JSON, no markdown, no extra text.
+
+There are TWO valid output shapes — pick based on the user's request:
+
+────────────────────────────────────────────────────────────────────
+SHAPE A — SINGLE EMAIL (default)
+────────────────────────────────────────────────────────────────────
+Use this when the user asks for ONE email to ONE recipient (or one
+group with the same message).
+
 {
   "subject": "Specific professional subject line",
   "to": "recipient@domain.com or empty string",
@@ -107,6 +116,60 @@ RESPONSE FORMAT — return ONLY valid JSON, no markdown, no extra text:
   "language": "en or pt or es",
   "suggestions": ["One concrete tip to improve conversion rate"]
 }
+
+────────────────────────────────────────────────────────────────────
+SHAPE B — MULTIPLE TAILORED EMAILS (one per supplier/recipient)
+────────────────────────────────────────────────────────────────────
+Use this when the user message contains MULTIPLE distinct suppliers
+or recipients and each one deserves a TAILORED draft (different
+salutation, different body fitted to that supplier's brand, different
+specific equipment ask, different language even). Trigger signals:
+
+  • The user lists 2+ supplier names with their emails
+  • The user asks "envia/escreve um email PARA CADA fornecedor"
+  • Another agent (Marco/Sales/MilDef/Acingov) handed you a list of
+    suppliers with emails extracted from a PDF/RFQ
+  • The user wants a quote-request blast where each supplier sees
+    only their own message (NOT a single BCC blast)
+
+Output:
+{
+  "emails": [
+    {
+      "supplier": "Wartsila",
+      "subject": "...",
+      "to": "sales.iberia@wartsila.com",
+      "cc": "",
+      "bcc": "",
+      "body": "Email tailored to Wartsila — mention their product line, certifications, etc.",
+      "template": "Quote Request",
+      "language": "en"
+    },
+    {
+      "supplier": "MAN Energy Solutions",
+      "subject": "...",
+      "to": "iberia@man-es.com",
+      "cc": "",
+      "body": "Email tailored to MAN — different equipment ask, different tone if appropriate.",
+      "template": "Quote Request",
+      "language": "en"
+    }
+  ],
+  "language": "en or pt or es",
+  "suggestions": ["One concrete tip across the batch"]
+}
+
+Rules for SHAPE B:
+  • Each email MUST be genuinely tailored — don't paste-and-replace
+    the supplier name. Reference the specific brand portfolio, product
+    line, or technical specialisation.
+  • If a supplier has no email yet, leave "to" empty — the operator
+    will fill it. NEVER invent emails.
+  • Use the SAME language across all emails in the batch unless the
+    user explicitly mixes (e.g. some Portuguese suppliers, some English).
+  • Each email's body INCLUDES the full PartYard signature.
+  • Maximum 12 emails per batch — refuse politely (still SHAPE A) if
+    the user asks for more, suggesting they split the request.
 SPECIALTY;
 
         $this->systemPrompt = str_replace(
@@ -127,14 +190,66 @@ SPECIALTY;
         $this->client = self::anthropicGuzzleClient();
     }
 
+    /**
+     * Parse Daniel's JSON response into a sentinel-prefixed payload
+     * for the chat UI to render.
+     *
+     * Two shapes supported (see system prompt):
+     *
+     *   SHAPE A (single):  {subject, to, body, ...}
+     *     → emit  __EMAIL__{json}              (legacy, single card)
+     *
+     *   SHAPE B (multi):   {emails:[{supplier, subject, to, body},…], …}
+     *     → emit  __EMAILS__[{...},{...}]       (one card per supplier)
+     *
+     * SHAPE B falls back to SHAPE A automatically when the array is
+     * empty or contains a single email, so the rendering layer never
+     * has to deal with degenerate batches.
+     */
     protected function parseEmailJson(string $text): ?string
     {
-        if (preg_match('/\{[\s\S]*\}/m', $text, $matches)) {
-            $parsed = json_decode($matches[0], true);
-            if ($parsed && isset($parsed['subject'], $parsed['body'])) {
-                return '__EMAIL__' . json_encode($parsed);
-            }
+        if (!preg_match('/\{[\s\S]*\}/m', $text, $matches)) {
+            return null;
         }
+
+        $parsed = json_decode($matches[0], true);
+        if (!is_array($parsed)) return null;
+
+        // SHAPE B — multi-supplier blast. Validate each email has
+        // the minimum (subject + body); skip ones missing them so a
+        // half-baked entry doesn't break the UI render.
+        if (isset($parsed['emails']) && is_array($parsed['emails'])) {
+            $batchLanguage = (string) ($parsed['language'] ?? '');
+            $valid = [];
+            foreach ($parsed['emails'] as $em) {
+                if (!is_array($em)) continue;
+                if (empty($em['subject']) || empty($em['body'])) continue;
+                // Inherit the batch-level language so each card shows the
+                // correct flag emoji even when the model omitted it
+                // per-email (it often does — saves tokens).
+                if (empty($em['language']) && $batchLanguage !== '') {
+                    $em['language'] = $batchLanguage;
+                }
+                $valid[] = $em;
+            }
+
+            if (count($valid) === 0) return null;
+            if (count($valid) === 1) {
+                // Degenerate batch — emit as single card (cleaner UX).
+                return '__EMAIL__' . json_encode($valid[0]);
+            }
+            return '__EMAILS__' . json_encode([
+                'emails'      => $valid,
+                'suggestions' => $parsed['suggestions'] ?? [],
+                'language'    => $batchLanguage,
+            ]);
+        }
+
+        // SHAPE A — single email (legacy).
+        if (isset($parsed['subject'], $parsed['body'])) {
+            return '__EMAIL__' . json_encode($parsed);
+        }
+
         return null;
     }
 
