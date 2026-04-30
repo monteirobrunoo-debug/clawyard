@@ -21,6 +21,26 @@
         </h2>
     </x-slot>
 
+    {{-- Inline CSS para o toggle do <details>:
+         · Esconde "Ver" quando aberto, mostra "Esconder" quando aberto
+           (Tailwind 3.1 não tem variant `group-open:`, daí ser inline)
+         · Roda a setinha 180° quando aberto
+         · Estiliza o botão "Voltar a agrupar" como uma summary alternativa
+           dentro do conteúdo expandido (com `data-action="collapse"` para
+           o JS no fim da página detectar o click). --}}
+    <style>
+        details[open] [data-when="closed"] { display: none; }
+        details:not([open]) [data-when="open"] { display: none; }
+        details[open] [data-rotate-on-open] { transform: rotate(180deg); }
+        [data-rotate-on-open] { transition: transform 150ms ease-out; }
+        /* Esconde a setinha nativa (▶) do <summary> — usamos o nosso ▼
+           personalizado que roda quando aberto. Cobrir os dois browsers:
+           Chromium/Edge usam ::marker, Safari/old WebKit usam ::-webkit-details-marker. */
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        details > summary::marker { content: ""; }
+    </style>
+
     <div class="py-6 max-w-6xl mx-auto px-4">
 
         {{-- ── Stats hero — 5 cards uniformes ───────────────────────── --}}
@@ -96,8 +116,12 @@
                 </p>
             </div>
         @else
-            {{-- Grid de cards uniformes — auto-rows-fr garante mesma altura --}}
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 auto-rows-fr">
+            {{-- Grid de cards. items-start (não auto-rows-fr) para que
+                 quando um card expande a sua deliberação, o card vizinho
+                 NÃO seja esticado com whitespace vazio em baixo.
+                 (Issue 2026-04-30: ao abrir colunas, layout ficava
+                 desformatado.) --}}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
                 @foreach($orders as $order)
                     @php
                         $buyer = $agentCatalog->get($order->agent_key) ?? ['name' => $order->agent_key, 'emoji' => '🤖'];
@@ -166,8 +190,12 @@
                         {{-- Validations expansíveis (peer review) --}}
                         @if(!empty($order->validations))
                             <details class="bg-emerald-50/30 border-t border-emerald-100">
-                                <summary class="cursor-pointer px-4 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 select-none">
-                                    🔍 Peer review ({{ count($order->validations) }} reviews)
+                                <summary class="cursor-pointer flex items-center justify-between gap-2 px-4 py-2 text-[11px] font-semibold text-emerald-800 hover:bg-emerald-50 select-none list-none">
+                                    <span class="flex items-center gap-1.5">
+                                        <span data-when="closed">🔍 Ver peer review ({{ count($order->validations) }} reviews)</span>
+                                        <span data-when="open">🔼 Esconder peer review</span>
+                                    </span>
+                                    <span data-rotate-on-open class="text-emerald-600">▼</span>
                                 </summary>
                                 <div class="px-4 py-3 space-y-2 bg-white">
                                     @foreach($order->validations as $v)
@@ -185,6 +213,15 @@
                                             </div>
                                         </div>
                                     @endforeach
+                                    {{-- Botão de fecho dentro do conteúdo expandido — facilita
+                                         o utilizador encontrar como voltar a agrupar sem
+                                         precisar de scroll-up até à summary. --}}
+                                    <div class="pt-2 mt-1 border-t border-emerald-100 flex justify-end">
+                                        <button type="button" data-action="collapse"
+                                                class="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 hover:underline">
+                                            🔼 Voltar a agrupar peer review
+                                        </button>
+                                    </div>
                                 </div>
                             </details>
                         @endif
@@ -192,8 +229,12 @@
                         {{-- DELIBERAÇÃO expansível — fora do flex flow do body para não afectar altura --}}
                         @if(!empty($order->committee_log))
                             <details class="bg-gray-50/50 border-t border-gray-100">
-                                <summary class="cursor-pointer px-4 py-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 select-none">
-                                    🗣️ Ver deliberação ({{ count($order->committee_log) }} mensagens)
+                                <summary class="cursor-pointer flex items-center justify-between gap-2 px-4 py-2 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 select-none list-none">
+                                    <span class="flex items-center gap-1.5">
+                                        <span data-when="closed">🗣️ Ver deliberação ({{ count($order->committee_log) }} mensagens)</span>
+                                        <span data-when="open">🔼 Esconder deliberação</span>
+                                    </span>
+                                    <span data-rotate-on-open class="text-gray-500">▼</span>
                                 </summary>
                                 <div class="p-4 space-y-3 bg-white">
                                     @foreach($order->committee_log as $msg)
@@ -216,6 +257,15 @@
                                             </div>
                                         </div>
                                     @endforeach
+                                    {{-- Botão "Voltar a agrupar" no fim da conversa para
+                                         o utilizador fechar facilmente após ler — em vez
+                                         de ter de fazer scroll-up até à summary. --}}
+                                    <div class="pt-3 mt-1 border-t border-gray-100 flex justify-end">
+                                        <button type="button" data-action="collapse"
+                                                class="text-[11px] font-semibold text-gray-600 hover:text-gray-900 hover:underline">
+                                            🔼 Voltar a agrupar conversa
+                                        </button>
+                                    </div>
                                 </div>
                             </details>
                         @endif
@@ -231,4 +281,21 @@
             </div>
         @endif
     </div>
+
+    {{-- Handler para os botões "Voltar a agrupar" — fecha o <details>
+         pai e faz scroll suave até ao topo desse <details> para o user
+         ver visualmente que voltou a agrupar (sem ficar perdido no meio
+         da página). Vanilla JS, sem dependências. --}}
+    <script>
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-action="collapse"]');
+            if (!btn) return;
+            const det = btn.closest('details');
+            if (!det) return;
+            det.removeAttribute('open');
+            // Trazer a summary para vista — o card pode ter ficado off-screen
+            // depois de o user ter scrollado dentro de uma deliberação longa.
+            det.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    </script>
 </x-app-layout>
