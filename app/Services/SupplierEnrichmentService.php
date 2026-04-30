@@ -191,12 +191,30 @@ PROMPT;
                 (array) ($decoded['additional_emails'] ?? [])
             ))),
             'phones'            => array_values(array_filter(array_map(
-                fn($p) => trim((string) $p),
+                fn($p) => $this->cleanPhone($p),
                 (array) ($decoded['phones'] ?? [])
             ))),
             'country_code'      => $this->cleanCountry($decoded['country_code'] ?? null),
             'confidence'        => (string) ($decoded['confidence'] ?? 'low'),
         ];
+    }
+
+    /**
+     * Strip phone candidates that came back redacted by the
+     * AnthropicKeyTrait PII pipeline (Spanish phones can match the
+     * NIF pattern, so we get "+34 [NIF_REDACTED]" sometimes). A
+     * partially-redacted number is unusable — just drop it.
+     */
+    private function cleanPhone($p): ?string
+    {
+        $p = trim((string) $p);
+        if ($p === '') return null;
+        if (stripos($p, '_REDACTED]') !== false) return null;
+        if (preg_match('/^[+\d().\s\-]+$/', $p) === 0) return null;
+        // Need at least 7 digits to be plausible.
+        $digits = preg_replace('/\D/', '', $p) ?? '';
+        if (strlen($digits) < 7) return null;
+        return $p;
     }
 
     private function mergeIntoSupplier(Supplier $supplier, array $extraction): array
