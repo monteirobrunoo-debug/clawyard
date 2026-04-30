@@ -57,6 +57,15 @@
                             {{ __('Profile') }}
                         </x-dropdown-link>
 
+                        @if(Auth::user()?->isManager())
+                            {{-- Back-office: only managers feed historical proposals
+                                 into hp-history. Hidden from regular users to
+                                 keep the dropdown lean. --}}
+                            <x-dropdown-link :href="route('hp_history.upload')">
+                                📚 {{ __('hp-history upload') }}
+                            </x-dropdown-link>
+                        @endif
+
                         <!-- Authentication -->
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
@@ -119,6 +128,12 @@
                 <x-responsive-nav-link :href="route('profile.edit')">
                     {{ __('Profile') }}
                 </x-responsive-nav-link>
+
+                @if(Auth::user()?->isManager())
+                    <x-responsive-nav-link :href="route('hp_history.upload')">
+                        📚 {{ __('hp-history upload') }}
+                    </x-responsive-nav-link>
+                @endif
 
                 <!-- Authentication -->
                 <form method="POST" action="{{ route('logout') }}">

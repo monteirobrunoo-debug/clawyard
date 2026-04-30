@@ -241,6 +241,68 @@ class HpHistoryClient
     }
 
     /**
+     * Upload one or more files to hp-history for ingestion. Each file is
+     * base64-encoded into the JSON payload so the existing HMAC middleware
+     * works unchanged (multipart/form-data would force a buffer rewrite
+     * server-side just for this one endpoint).
+     *
+     * Caller-friendly error handling: returns ['ok' => false, 'error' => ...]
+     * on any failure rather than throwing — the upload UI surfaces the
+     * error to the user inline.
+     *
+     * @param array $files  list of [['name' => 'foo.pdf', 'binary' => '<bytes>'], …]
+     * @param string|null $domain  e.g. 'spares', 'marine', 'military'
+     * @param int|null $year       optional year filter for the document
+     * @param array $metadata      free-form metadata stamped on each doc
+     */
+    public function uploadFiles(array $files, ?string $domain = null, ?int $year = null, array $metadata = []): array
+    {
+        if (!$this->isEnabled()) {
+            return ['ok' => false, 'error' => 'hp-history client is disabled (HP_HISTORY_ENABLED=false)'];
+        }
+        if (empty($files)) {
+            return ['ok' => false, 'error' => 'no_files'];
+        }
+        if (count($files) > 10) {
+            return ['ok' => false, 'error' => 'too_many_files (max 10 per request)'];
+        }
+
+        $body = [
+            'files'    => array_map(static fn($f) => [
+                'filename'    => (string) ($f['name'] ?? '(unnamed)'),
+                'content_b64' => base64_encode((string) ($f['binary'] ?? '')),
+            ], $files),
+            'domain'   => $domain,
+            'year'     => $year,
+            'metadata' => $metadata,
+        ];
+        $payload = json_encode($body, JSON_UNESCAPED_UNICODE);
+
+        try {
+            $headers = $this->signHeaders('POST', '/ingest/upload', $payload);
+            $res = $this->http->post('/ingest/upload', [
+                'headers' => array_merge($headers, ['Content-Type' => 'application/json']),
+                'body'    => $payload,
+                // Long timeout — embedding 10 PDFs takes a while.
+                'timeout' => 180,
+            ]);
+            $status = $res->getStatusCode();
+            $raw    = (string) $res->getBody();
+            if ($status >= 200 && $status < 300) {
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded) && ($decoded['ok'] ?? false)) {
+                    return $decoded;
+                }
+                return ['ok' => false, 'error' => $decoded['error'] ?? 'unexpected_response'];
+            }
+            return ['ok' => false, 'error' => "hp-history HTTP {$status}: " . mb_substr($raw, 0, 200)];
+        } catch (\Throwable $e) {
+            Log::warning('HpHistoryClient::uploadFiles failed', ['error' => $e->getMessage()]);
+            return ['ok' => false, 'error' => 'transport: ' . $e->getMessage()];
+        }
+    }
+
+    /**
      * Build the HMAC headers expected by the server. The canonical string
      * is "{ts}.{method}.{path}.{sha256(body)}" — purposely simple so
      * the FastAPI side has nothing exotic to parse. Tolerance is 300s on

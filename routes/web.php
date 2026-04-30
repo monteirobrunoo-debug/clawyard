@@ -382,6 +382,16 @@ Route::middleware(['auth'])
     ->where('docId', '[A-Fa-f0-9\-]{36}')   // UUID shape
     ->name('hp_history.doc');
 
+// hp-history drag-drop upload UI — manager+ only. Browser → Laravel →
+// hp-history; HMAC signing happens server-side so the secret never
+// leaves the droplet. See HpHistoryUploadController for limits.
+Route::middleware(['auth'])->group(function () {
+    Route::get('/hp-history/upload',  [\App\Http\Controllers\HpHistoryUploadController::class, 'index'])
+        ->name('hp_history.upload');
+    Route::post('/hp-history/upload', [\App\Http\Controllers\HpHistoryUploadController::class, 'store'])
+        ->name('hp_history.upload.store');
+});
+
 // Agent profile — per-agent landing page with description, stats, starters
 // and recent conversations. Provides a deeper entry point than the dashboard
 // card (which just drops you into /chat). Linked from the card's long-press
