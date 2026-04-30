@@ -252,13 +252,73 @@
                  sees a consistent layout regardless of role. Asked for
                  explicitly 2026-04-27 — users were getting a different,
                  less informative strip than the managers' view. --}}
-            @if($mine->count() > 0)
+            {{-- Render the mine section whenever the user has at least
+                 one mine tender OR is currently searching (so the search
+                 box doesn't disappear with an empty result set, which
+                 would trap the user). --}}
+            @if($mine->count() > 0 || !empty($mineQ))
                 <section class="rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden">
-                    <header class="px-4 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                    <header class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap bg-gray-50">
                         <h3 class="text-sm font-semibold text-gray-800">
                             Os meus concursos activos
                             <span class="ml-2 text-xs font-normal text-gray-500">({{ $mine->count() }})</span>
                         </h3>
+
+                        {{-- Lupa de pesquisa — filtra a tabela "Os meus
+                             concursos" por título / referência / nº SAP /
+                             fonte. Param `mine_q` independente do `q` da
+                             tabela global. Os mine_sort/mine_dir actuais
+                             são preservados via hidden inputs para que a
+                             pesquisa não quebre a ordenação que o user
+                             escolheu. --}}
+                        <form method="GET" action="{{ route('tenders.index') }}"
+                              class="flex items-center gap-2 w-full sm:w-auto">
+                            @foreach(['mine_sort' => $mineSort, 'mine_dir' => $mineDir] as $hk => $hv)
+                                @if($hv !== null && $hv !== '')
+                                    <input type="hidden" name="{{ $hk }}" value="{{ $hv }}">
+                                @endif
+                            @endforeach
+                            {{-- Preserve the manager-table state too so a
+                                 manager browsing /tenders?status=submetido
+                                 doesn't lose their filter when searching
+                                 the mine box. --}}
+                            @foreach(['source','status','urgency','collaborator_id','q','sort','dir','per_page'] as $k)
+                                @if(!empty(request()->query($k)))
+                                    <input type="hidden" name="{{ $k }}" value="{{ request()->query($k) }}">
+                                @endif
+                            @endforeach
+
+                            <div class="relative">
+                                <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
+                                    {{-- Magnifying-glass icon (Heroicons outline). --}}
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" />
+                                    </svg>
+                                </span>
+                                <input type="search" name="mine_q"
+                                       value="{{ $mineQ }}"
+                                       placeholder="Pesquisar título / ref / nº SAP…"
+                                       class="rounded-md border-gray-300 text-xs shadow-sm pl-7 pr-2 py-1.5 focus:border-indigo-500 focus:ring-indigo-500 w-72">
+                            </div>
+
+                            @if(!empty($mineQ))
+                                {{-- "Limpar" link strips just mine_q,
+                                     keeping every other query param. --}}
+                                @php
+                                    $clearParams = request()->query();
+                                    unset($clearParams['mine_q']);
+                                    $clearUrl = route('tenders.index') . (empty($clearParams) ? '' : '?' . http_build_query($clearParams));
+                                @endphp
+                                <a href="{{ $clearUrl }}" class="text-[11px] text-gray-500 hover:text-gray-700 underline">
+                                    Limpar
+                                </a>
+                            @endif
+
+                            <button type="submit"
+                                    class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
+                                Pesquisar
+                            </button>
+                        </form>
                     </header>
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-100 text-sm">
@@ -313,6 +373,18 @@
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
+                                @if($mine->count() === 0 && !empty($mineQ))
+                                    {{-- Empty result for an active search — give
+                                         the user a clear way out without making
+                                         them rebuild their query manually. --}}
+                                    <tr>
+                                        <td colspan="7" class="px-3 py-6 text-center text-sm text-gray-500">
+                                            Nenhum concurso encontrado para
+                                            <span class="font-semibold text-gray-700">"{{ $mineQ }}"</span>.
+                                            <a href="{{ $clearUrl ?? route('tenders.index') }}" class="ml-1 text-indigo-600 hover:underline">limpar pesquisa</a>
+                                        </td>
+                                    </tr>
+                                @endif
                                 @foreach($mine as $t)
                                     <tr class="hover:bg-gray-50 align-middle">
                                         <td class="px-3 py-2 whitespace-nowrap">
@@ -382,8 +454,18 @@
             {{-- ─── Filters ───────────────────────────────────────────────── --}}
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
                 <form method="GET" action="{{ route('tenders.index') }}" class="grid grid-cols-1 gap-3 sm:grid-cols-6">
-                    <input type="text" name="q" value="{{ $filters['q'] }}" placeholder="Pesquisar título / ref / nº SAP"
-                           class="sm:col-span-2 rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    {{-- Lupa icon prefix for visual parity with the
+                         "Os meus concursos" search box. The input itself
+                         keeps name="q" so existing bookmarks/links work. --}}
+                    <div class="relative sm:col-span-2">
+                        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2 text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z" />
+                            </svg>
+                        </span>
+                        <input type="search" name="q" value="{{ $filters['q'] }}" placeholder="Pesquisar título / ref / nº SAP"
+                               class="w-full rounded-md border-gray-300 text-sm shadow-sm pl-8 focus:border-indigo-500 focus:ring-indigo-500">
+                    </div>
 
                     <select name="source" class="rounded-md border-gray-300 text-sm shadow-sm">
                         <option value="">Todas as fontes</option>

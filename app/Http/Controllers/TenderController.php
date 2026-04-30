@@ -75,10 +75,28 @@ class TenderController extends Controller
         $mineSort = $request->string('mine_sort')->trim()->value() ?: 'created_at';
         $mineDir  = strtolower($request->string('mine_dir')->trim()->value()) === 'asc' ? 'asc' : 'desc';
 
+        // 2026-04-30 — dedicated search box on the personal table.
+        // Independent from the manager-table `q` (different param so a
+        // regular user filtering their own list doesn't accidentally
+        // hide the global table when they have manager rights too).
+        // Searches the same surface as the manager filter: title,
+        // reference, sap_opportunity_number — plus source, since users
+        // sometimes type "NSPA" or "Vortal" expecting it to filter.
+        $mineQ = $request->string('mine_q')->trim()->value() ?: null;
+
         $mineQuery = Tender::query()
             ->forUser($user->id)
             ->active()
             ->with('collaborator');
+        if ($mineQ !== null) {
+            $needle = '%' . $mineQ . '%';
+            $mineQuery->where(function ($w) use ($needle) {
+                $w->where('title', 'LIKE', $needle)
+                  ->orWhere('reference', 'LIKE', $needle)
+                  ->orWhere('sap_opportunity_number', 'LIKE', $needle)
+                  ->orWhere('source', 'LIKE', $needle);
+            });
+        }
         $this->applyMineSort($mineQuery, $mineSort, $mineDir);
         $mine = $mineQuery->limit($perPage)->get();
 
@@ -128,6 +146,7 @@ class TenderController extends Controller
             'dir'           => $dir,
             'mineSort'      => $mineSort,
             'mineDir'       => $mineDir,
+            'mineQ'         => $mineQ,
             'collaborators' => $collaborators,
             'canImport'     => $canImport,
             'canAssign'     => $canAssign,
