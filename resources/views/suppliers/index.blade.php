@@ -47,6 +47,17 @@
                 @endforeach
             </div>
 
+            @if($canEdit)
+                <div class="rounded-lg bg-blue-50/40 border border-blue-100 px-4 py-3 text-xs text-gray-700 flex items-start gap-3 flex-wrap">
+                    <div class="flex-1 min-w-[260px]">
+                        <span class="font-semibold text-gray-800">🌐 Auto-preenchimento da web</span> —
+                        cron diário às 02:50 (Lisboa) corre <code>suppliers:enrich</code> e enriquece 50
+                        fornecedores por noite via Tavily + Claude (website, email, telefone).
+                        Para forçar um fornecedor específico, abre a ficha e clica "Procurar agora".
+                    </div>
+                </div>
+            @endif
+
             {{-- Filters card --}}
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
                 <form method="GET" action="{{ route('suppliers.index') }}" class="grid grid-cols-1 gap-3 sm:grid-cols-6">

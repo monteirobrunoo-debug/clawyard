@@ -25,6 +25,67 @@
             @endif
             @error('name')<div class="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">{{ $message }}</div>@enderror
 
+            {{-- Web enrichment — Tavily + Claude → fill website / emails / phones --}}
+            @if($canEdit)
+                <section class="rounded-lg bg-blue-50/40 border border-blue-100 p-4">
+                    <div class="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                            <h3 class="text-sm font-semibold text-gray-800">🌐 Procurar contactos na web</h3>
+                            <p class="text-xs text-gray-600 mt-0.5">
+                                Pesquisa Tavily + extracção Claude. Não sobrescreve email/website existentes — só
+                                preenche campos vazios e acumula contactos extra. Custo ≈ $0.006.
+                                @if($supplier->enriched_at)
+                                    Última: {{ $supplier->enriched_at->diffForHumans() }} (tentativas: {{ $supplier->enrich_attempts }}).
+                                @else
+                                    Nunca foi tentado.
+                                @endif
+                            </p>
+                        </div>
+                        <button type="button" id="enrich-btn"
+                                data-url="{{ route('suppliers.enrich', $supplier) }}"
+                                class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500">
+                            🔎 Procurar agora
+                        </button>
+                    </div>
+                    <div id="enrich-result" class="mt-3 hidden text-xs"></div>
+                </section>
+
+                <script>
+                (function () {
+                    const btn = document.getElementById('enrich-btn');
+                    const out = document.getElementById('enrich-result');
+                    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                    btn.addEventListener('click', async () => {
+                        btn.disabled = true;
+                        btn.textContent = '⏳ A pesquisar…';
+                        out.classList.remove('hidden');
+                        out.innerHTML = '<div class="text-gray-600">A consultar Tavily + Claude (10–20s)…</div>';
+                        try {
+                            const res = await fetch(btn.dataset.url, {
+                                method: 'POST',
+                                headers: {'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'Accept':'application/json'},
+                                credentials: 'same-origin',
+                            });
+                            const data = await res.json();
+                            if (!data.ok) {
+                                out.innerHTML = '<div class="text-amber-700">Falhou: ' + (data.reason || 'unknown') + '</div>';
+                            } else if ((data.updated || []).length === 0) {
+                                out.innerHTML = '<div class="text-gray-600">A pesquisa correu mas não encontrou nada novo. Tentativa #' + data.supplier.enrich_attempts + '.</div>';
+                            } else {
+                                out.innerHTML = '<div class="text-emerald-700 font-medium">✓ Campos actualizados: ' + data.updated.join(", ") + '. A recarregar…</div>';
+                                setTimeout(() => location.reload(), 900);
+                            }
+                        } catch (e) {
+                            out.innerHTML = '<div class="text-red-700">Erro: ' + e.message + '</div>';
+                        } finally {
+                            btn.disabled = false;
+                            btn.textContent = '🔎 Procurar agora';
+                        }
+                    });
+                })();
+                </script>
+            @endif
+
             <section class="rounded-lg bg-white shadow-sm border border-gray-200 p-5 space-y-4">
                 <form method="POST" action="{{ route('suppliers.update', $supplier) }}" class="space-y-4">
                     @csrf @method('PATCH')

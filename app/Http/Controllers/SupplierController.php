@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Supplier;
 use App\Services\SupplierCategories;
+use App\Services\SupplierEnrichmentService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -125,6 +127,40 @@ class SupplierController extends Controller
 
         return redirect()->route('suppliers.show', $supplier)
             ->with('status', 'Fornecedor actualizado.');
+    }
+
+    /**
+     * POST /suppliers/{supplier}/enrich — searches the web via Tavily,
+     * extracts contact info via Claude, merges into the supplier row.
+     * Manager-gated. Returns the updated row + the diff of fields filled.
+     */
+    public function enrich(Supplier $supplier, SupplierEnrichmentService $svc): JsonResponse
+    {
+        $this->authorizeManager();
+
+        $res = $svc->enrichOne($supplier);
+
+        // Reload to get fresh values after the merge.
+        $supplier->refresh();
+
+        return response()->json([
+            'ok'             => $res['ok'],
+            'reason'         => $res['reason']         ?? null,
+            'updated'        => $res['updated']        ?? [],
+            'raw_query'      => $res['raw_query']      ?? null,
+            'raw_extraction' => $res['raw_extraction'] ?? null,
+            'supplier' => [
+                'id'               => $supplier->id,
+                'name'             => $supplier->name,
+                'website'          => $supplier->website,
+                'primary_email'    => $supplier->primary_email,
+                'additional_emails'=> $supplier->additional_emails ?? [],
+                'phones'           => $supplier->phones ?? [],
+                'country_code'     => $supplier->country_code,
+                'enriched_at'      => $supplier->enriched_at?->toIso8601String(),
+                'enrich_attempts'  => $supplier->enrich_attempts,
+            ],
+        ]);
     }
 
     /**

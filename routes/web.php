@@ -398,6 +398,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('suppliers.show');
     Route::patch ('/suppliers/{supplier}',     [\App\Http\Controllers\SupplierController::class, 'update'])
         ->name('suppliers.update');
+    Route::post  ('/suppliers/{supplier}/enrich', [\App\Http\Controllers\SupplierController::class, 'enrich'])
+        ->name('suppliers.enrich');
 });
 
 // hp-history drag-drop upload UI — manager+ only. Browser → Laravel →

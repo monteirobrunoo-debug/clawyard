@@ -28,6 +28,7 @@ class Supplier extends Model
         'source', 'source_meta',
         'total_outreach', 'total_replies', 'avg_reply_hours',
         'last_contacted_at', 'last_replied_at',
+        'enriched_at', 'enrich_attempts',
         'notes',
     ];
 
@@ -43,6 +44,7 @@ class Supplier extends Model
             'iqf_score'          => 'decimal:2',
             'last_contacted_at'  => 'datetime',
             'last_replied_at'    => 'datetime',
+            'enriched_at'        => 'datetime',
         ];
     }
 
@@ -73,6 +75,32 @@ class Supplier extends Model
             return $q->whereRaw('categories @> ?', [json_encode([$code])]);
         }
         return $q->where('categories', 'LIKE', '%"' . $code . '"%');
+    }
+
+    /**
+     * Suppliers in line for web enrichment.
+     *
+     * Priority:
+     *   1. Never enriched (enriched_at IS NULL) AND no email yet
+     *   2. Never enriched AND no website yet
+     *   3. Enriched > 30 days ago AND still missing email
+     *
+     * Skips:
+     *   • blacklisted (we don't waste tokens on rows we won't contact)
+     *   • enrich_attempts ≥ 3 with no success (chronic miss — usually
+     *     Asian small fabricators where the web has no English presence)
+     */
+    public function scopeNeedsEnrichment(Builder $q): Builder
+    {
+        return $q->where('status', '!=', self::STATUS_BLACKLIST)
+                 ->where('enrich_attempts', '<', 3)
+                 ->where(function ($w) {
+                     $w->whereNull('enriched_at')
+                       ->orWhere(function ($ww) {
+                           $ww->whereNull('primary_email')
+                              ->where('enriched_at', '<=', now()->subDays(30));
+                       });
+                 });
     }
 
     /** Free-text search across name, legal_name and primary_email. */

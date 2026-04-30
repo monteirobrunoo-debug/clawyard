@@ -87,6 +87,22 @@ Schedule::command('agents:research-council')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Supplier directory enrichment — daily 02:50 Lisbon ───────────────────
+// Walks suppliers needing web contact info (no email yet, or missing
+// website, or stale > 30 days) and runs Tavily + Claude to fill in
+// website / primary_email / additional_emails / phones. 50 per run so
+// the 805-row directory enriches in ~16 days without spiking quota,
+// and so any one daily run is bounded at ≈$0.30.
+//
+// Skips blacklisted + chronic misses (≥3 attempts with no email).
+// 02:50 sits BEFORE the 09:00 tenders digest so by morning the
+// directory already has the freshest contacts populated.
+Schedule::command('suppliers:enrich --limit=50')
+    ->dailyAt('02:50')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Lead outreach drafter — daily 08:30 Lisbon, weekdays only ────────────
 // Walks confident leads (score>70) without an existing draft and
 // generates a cold-outreach email via Anthropic. The drafts surface
