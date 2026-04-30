@@ -87,6 +87,18 @@ Schedule::command('agents:research-council')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Supplier email finder — daily 03:30 Lisbon ───────────────────────────
+// After the general enrichment fills websites, this scrapes each
+// supplier's contact pages for emails, then falls back to MX-verified
+// candidates (sales@, info@, contact@, …). 30 per night so the slow
+// HTTP probing doesn't pile up; suppliers attempted in last 30d skip
+// to save cycles. Zero LLM cost, zero Tavily cost — just outbound HTTP.
+Schedule::command('suppliers:find-emails --limit=30')
+    ->dailyAt('03:30')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Supplier directory enrichment — daily 02:50 Lisbon ───────────────────
 // Walks suppliers needing web contact info (no email yet, or missing
 // website, or stale > 30 days) and runs Tavily + Claude to fill in

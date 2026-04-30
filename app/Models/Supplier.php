@@ -78,6 +78,20 @@ class Supplier extends Model
     }
 
     /**
+     * Match by representative-brand sub-code (e.g. "16.1" for Cummins).
+     * Same containment logic as inCategory but on subcategories.
+     * SupplierCategories::BRANDS_16 maps human-readable names back.
+     */
+    public function scopeByBrand(Builder $q, string $code): Builder
+    {
+        $driver = $q->getConnection()->getDriverName();
+        if ($driver === 'pgsql') {
+            return $q->whereRaw('subcategories @> ?', [json_encode([$code])]);
+        }
+        return $q->where('subcategories', 'LIKE', '%"' . $code . '"%');
+    }
+
+    /**
      * Suppliers in line for web enrichment.
      *
      * Priority:

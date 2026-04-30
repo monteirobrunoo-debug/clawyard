@@ -41,47 +41,70 @@
                                 @endif
                             </p>
                         </div>
-                        <button type="button" id="enrich-btn"
-                                data-url="{{ route('suppliers.enrich', $supplier) }}"
-                                class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500">
-                            🔎 Procurar agora
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="enrich-btn"
+                                    data-url="{{ route('suppliers.enrich', $supplier) }}"
+                                    class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500">
+                                🔎 Procurar agora
+                            </button>
+                            @if($supplier->website && empty($supplier->primary_email))
+                                <button type="button" id="find-emails-btn"
+                                        data-url="{{ route('suppliers.findEmails', $supplier) }}"
+                                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-500"
+                                        title="Faz scrape do website e probe por MX para encontrar email">
+                                    ✉ Encontrar email
+                                </button>
+                            @endif
+                        </div>
                     </div>
                     <div id="enrich-result" class="mt-3 hidden text-xs"></div>
                 </section>
 
                 <script>
                 (function () {
-                    const btn = document.getElementById('enrich-btn');
-                    const out = document.getElementById('enrich-result');
                     const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
-                    btn.addEventListener('click', async () => {
+                    const out  = document.getElementById('enrich-result');
+
+                    function go(btn, label, url, formatter) {
                         btn.disabled = true;
-                        btn.textContent = '⏳ A pesquisar…';
+                        const orig = btn.textContent;
+                        btn.textContent = '⏳ ' + label + '…';
                         out.classList.remove('hidden');
-                        out.innerHTML = '<div class="text-gray-600">A consultar Tavily + Claude (10–20s)…</div>';
-                        try {
-                            const res = await fetch(btn.dataset.url, {
-                                method: 'POST',
-                                headers: {'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'Accept':'application/json'},
-                                credentials: 'same-origin',
-                            });
-                            const data = await res.json();
-                            if (!data.ok) {
-                                out.innerHTML = '<div class="text-amber-700">Falhou: ' + (data.reason || 'unknown') + '</div>';
-                            } else if ((data.updated || []).length === 0) {
-                                out.innerHTML = '<div class="text-gray-600">A pesquisa correu mas não encontrou nada novo. Tentativa #' + data.supplier.enrich_attempts + '.</div>';
-                            } else {
-                                out.innerHTML = '<div class="text-emerald-700 font-medium">✓ Campos actualizados: ' + data.updated.join(", ") + '. A recarregar…</div>';
-                                setTimeout(() => location.reload(), 900);
-                            }
-                        } catch (e) {
-                            out.innerHTML = '<div class="text-red-700">Erro: ' + e.message + '</div>';
-                        } finally {
-                            btn.disabled = false;
-                            btn.textContent = '🔎 Procurar agora';
+                        out.innerHTML = '<div class="text-gray-600">A trabalhar (10–30s)…</div>';
+                        return fetch(url, {
+                            method: 'POST',
+                            headers: {'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'Accept':'application/json'},
+                            credentials: 'same-origin',
+                        })
+                        .then(r => r.json())
+                        .then(data => formatter(data))
+                        .catch(e => out.innerHTML = '<div class="text-red-700">Erro: ' + e.message + '</div>')
+                        .finally(() => { btn.disabled = false; btn.textContent = orig; });
+                    }
+
+                    const enrich = document.getElementById('enrich-btn');
+                    enrich?.addEventListener('click', () => go(enrich, 'A pesquisar', enrich.dataset.url, (data) => {
+                        if (!data.ok) {
+                            out.innerHTML = '<div class="text-amber-700">Falhou: ' + (data.reason || 'unknown') + '</div>';
+                        } else if ((data.updated || []).length === 0) {
+                            out.innerHTML = '<div class="text-gray-600">A pesquisa correu mas não encontrou nada novo. Tentativa #' + data.supplier.enrich_attempts + '.</div>';
+                        } else {
+                            out.innerHTML = '<div class="text-emerald-700 font-medium">✓ Campos actualizados: ' + data.updated.join(", ") + '. A recarregar…</div>';
+                            setTimeout(() => location.reload(), 900);
                         }
-                    });
+                    }));
+
+                    const finder = document.getElementById('find-emails-btn');
+                    finder?.addEventListener('click', () => go(finder, 'A scrapear', finder.dataset.url, (data) => {
+                        if (!data.ok) {
+                            const reason = data.reason || 'no_emails_found';
+                            out.innerHTML = '<div class="text-amber-700">Não encontrei emails — ' + reason + '. O scraping passou pelos contact pages e o probe MX não confirmou nenhum candidato.</div>';
+                        } else {
+                            const sources = (data.sources || []).join(', ');
+                            out.innerHTML = '<div class="text-emerald-700 font-medium">✓ Encontrei: ' + (data.found || []).join(', ') + ' (via ' + sources + '). A recarregar…</div>';
+                            setTimeout(() => location.reload(), 1100);
+                        }
+                    }));
                 })();
                 </script>
             @endif

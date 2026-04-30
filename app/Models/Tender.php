@@ -36,6 +36,7 @@ class Tender extends Model
         'raw_metadata', 'last_import_id', 'last_digest_sent_at',
         'deadline_alert_sent_at',
         'last_sap_sync_at', 'last_sap_status', 'last_sap_remarks_hash',
+        'prelim_analysis', 'prelim_analysed_at',
     ];
 
     protected function casts(): array
@@ -51,6 +52,8 @@ class Tender extends Model
             'time_spent_hours'       => 'decimal:2',
             'raw_metadata'           => 'array',
             'is_confidential'        => 'boolean',
+            'prelim_analysis'        => 'array',
+            'prelim_analysed_at'     => 'datetime',
         ];
     }
 
@@ -464,5 +467,30 @@ class Tender extends Model
         }
 
         return $prompts;
+    }
+
+    /**
+     * Tender boot hook: when a new row lands (typical: import), queue
+     * AnalyseTenderJob so by the time the operator opens the detail
+     * page the supplier suggester is pre-warmed.
+     *
+     * Confidential tenders are short-circuited inside the job itself
+     * (defence in depth — even if the flag is set after creation, the
+     * job won't run if the tender is_confidential when it executes).
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Tender $tender) {
+            try {
+                \App\Jobs\AnalyseTenderJob::dispatch($tender->id);
+            } catch (\Throwable $e) {
+                // Queue not available (e.g. migration replay context).
+                // Pre-analysis is best-effort — never block creation.
+                \Illuminate\Support\Facades\Log::info('AnalyseTenderJob dispatch skipped', [
+                    'tender_id' => $tender->id,
+                    'reason'    => $e->getMessage(),
+                ]);
+            }
+        });
     }
 }

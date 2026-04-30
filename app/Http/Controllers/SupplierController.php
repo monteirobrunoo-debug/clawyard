@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Supplier;
 use App\Services\SupplierCategories;
+use App\Services\SupplierEmailFinderService;
 use App\Services\SupplierEnrichmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class SupplierController extends Controller
         $filters = [
             'q'         => trim((string) $request->input('q', '')),
             'category'  => (string) $request->string('category')->trim()->value(),
+            'brand'     => (string) $request->string('brand')->trim()->value(),
             'status'    => (string) $request->string('status')->trim()->value(),
             'min_iqf'   => $request->filled('min_iqf') ? (float) $request->input('min_iqf') : null,
             'source'    => (string) $request->string('source')->trim()->value(),
@@ -37,6 +39,7 @@ class SupplierController extends Controller
         $query = Supplier::query();
         if ($filters['q'] !== '')        $query->search($filters['q']);
         if ($filters['category'] !== '') $query->inCategory($filters['category']);
+        if ($filters['brand'] !== '')    $query->byBrand($filters['brand']);
         if ($filters['status'] !== '')   $query->where('status', $filters['status']);
         if ($filters['min_iqf'] !== null) $query->where('iqf_score', '>=', $filters['min_iqf']);
         if ($filters['source'] !== '')   $query->where('source', $filters['source']);
@@ -70,6 +73,7 @@ class SupplierController extends Controller
             'dir'        => $dir,
             'counts'     => $counts,
             'categories' => SupplierCategories::options(),
+            'brands'     => SupplierCategories::brandOptions(),
             'canEdit'    => Auth::user()?->isManager() ?? false,
         ]);
     }
@@ -118,6 +122,33 @@ class SupplierController extends Controller
         $supplier->status = Supplier::STATUS_BLACKLIST;
         $supplier->save();
         return back()->with('status', "✗ {$supplier->name} marcado como blacklisted (não voltará a sugerir).");
+    }
+
+    /**
+     * POST /suppliers/bulk — atomic bulk promote/reject from the review queue.
+     * Accepts supplier_ids[] + action (promote|reject). Rate-capped at 200
+     * rows per call so a runaway click doesn't toggle the whole directory
+     * by accident.
+     */
+    public function bulk(Request $request)
+    {
+        $this->authorizeManager();
+
+        $data = $request->validate([
+            'action'         => ['required', Rule::in(['promote', 'reject'])],
+            'supplier_ids'   => ['required', 'array', 'min:1', 'max:200'],
+            'supplier_ids.*' => ['integer', 'exists:suppliers,id'],
+        ]);
+
+        $newStatus = $data['action'] === 'promote'
+            ? Supplier::STATUS_APPROVED
+            : Supplier::STATUS_BLACKLIST;
+
+        $affected = Supplier::whereIn('id', $data['supplier_ids'])
+            ->update(['status' => $newStatus, 'updated_at' => now()]);
+
+        $verb = $data['action'] === 'promote' ? '✓ Promovidos' : '✗ Rejeitados';
+        return back()->with('status', "{$verb} {$affected} fornecedor(es).");
     }
 
     public function create()
@@ -197,6 +228,27 @@ class SupplierController extends Controller
                 'enriched_at'      => $supplier->enriched_at?->toIso8601String(),
                 'enrich_attempts'  => $supplier->enrich_attempts,
             ],
+        ]);
+    }
+
+    /**
+     * POST /suppliers/{supplier}/find-emails — one-click email finder
+     * for the detail page. Targets ONE supplier; faster than waiting
+     * for the cron (which only does 30/night).
+     */
+    public function findEmails(Supplier $supplier, SupplierEmailFinderService $svc): JsonResponse
+    {
+        $this->authorizeManager();
+        $res = $svc->findFor($supplier);
+        $supplier->refresh();
+
+        return response()->json([
+            'ok'                => $res['ok'],
+            'found'             => $res['found'] ?? [],
+            'sources'           => $res['from'] ?? [],
+            'reason'            => $res['reason'] ?? null,
+            'primary_email'     => $supplier->primary_email,
+            'additional_emails' => $supplier->additional_emails ?? [],
         ]);
     }
 

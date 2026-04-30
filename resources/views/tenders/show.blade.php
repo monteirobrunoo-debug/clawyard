@@ -163,6 +163,36 @@
                     </div>
                 </section>
             @else
+            {{-- Pre-warmed analysis (AnalyseTenderJob fired on import) — quando
+                 existe, a "Procurar fornecedores" do painel em baixo torna-se
+                 instantânea (lê do prelim_analysis em vez de fazer Tavily de novo).
+                 Mostramos aqui um sumário compacto + botão para usar directamente. --}}
+            @if($tender->prelim_analysed_at && !empty($tender->prelim_analysis))
+                @php
+                    $pa = $tender->prelim_analysis;
+                    $topIds = (array) ($pa['top_supplier_ids'] ?? []);
+                    $cats = (array) ($pa['categories'] ?? []);
+                    $webHits = count((array) ($pa['web_results'] ?? []));
+                @endphp
+                <section class="rounded-lg bg-emerald-50/40 border border-emerald-200 p-4 text-sm">
+                    <div class="flex items-start gap-3">
+                        <span class="text-2xl">⚡</span>
+                        <div class="flex-1">
+                            <div class="font-semibold text-emerald-800">Pré-análise pronta</div>
+                            <div class="text-xs text-emerald-700 mt-0.5">
+                                Computada {{ $tender->prelim_analysed_at->diffForHumans() }} ·
+                                <strong>{{ count($topIds) }}</strong> fornecedores H&amp;P sugeridos ·
+                                <strong>{{ $webHits }}</strong> resultados web ·
+                                Categorias: <code class="bg-white border border-emerald-200 rounded px-1">{{ implode(', ', $cats) ?: 'nenhuma' }}</code>
+                            </div>
+                            <p class="text-[11px] text-emerald-600 mt-1">
+                                Clica "🔎 Procurar fornecedores" abaixo para ver o detalhe e gerar drafts.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+            @endif
+
             <section id="supplier-suggester" class="rounded-lg bg-white shadow-sm border border-gray-100 p-6">
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                     <div>

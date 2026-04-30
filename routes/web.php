@@ -400,6 +400,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('suppliers.update');
     Route::post  ('/suppliers/{supplier}/enrich', [\App\Http\Controllers\SupplierController::class, 'enrich'])
         ->name('suppliers.enrich');
+    Route::post  ('/suppliers/{supplier}/find-emails', [\App\Http\Controllers\SupplierController::class, 'findEmails'])
+        ->name('suppliers.findEmails');
     // Manager review queue for auto-extracted candidates.
     Route::get   ('/suppliers-review',         [\App\Http\Controllers\SupplierController::class, 'review'])
         ->name('suppliers.review');
@@ -407,6 +409,8 @@ Route::middleware(['auth'])->group(function () {
         ->name('suppliers.promote');
     Route::post  ('/suppliers/{supplier}/reject',  [\App\Http\Controllers\SupplierController::class, 'reject'])
         ->name('suppliers.reject');
+    Route::post  ('/suppliers-bulk',               [\App\Http\Controllers\SupplierController::class, 'bulk'])
+        ->name('suppliers.bulk');
 });
 
 // hp-history drag-drop upload UI — manager+ only. Browser → Laravel →

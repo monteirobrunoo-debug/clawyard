@@ -87,6 +87,13 @@
                         @endforeach
                     </select>
 
+                    <select name="brand" class="rounded-md border-gray-300 text-sm shadow-sm">
+                        <option value="">Todas as marcas</option>
+                        @foreach($brands as $code => $name)
+                            <option value="{{ $code }}" @selected($filters['brand'] === $code)>{{ $name }}</option>
+                        @endforeach
+                    </select>
+
                     <select name="status" class="rounded-md border-gray-300 text-sm shadow-sm">
                         <option value="">Qualquer estado</option>
                         <option value="approved"    @selected($filters['status'] === 'approved')>Aprovado</option>
