@@ -586,6 +586,11 @@ Route::middleware(['auth'])->group(function () {
     // Registered BEFORE the /{tender} wildcard so "sap-preview" isn't swallowed
     // as a slug — same trap that bit /agents/activity earlier.
     Route::get('/tenders/{tender}/sap-preview', [TenderController::class, 'sapPreview'])->name('tenders.sap_preview');
+    // Suggester — H&P approved suppliers matched by category + Tavily web hits.
+    Route::post('/tenders/{tender}/suggest-suppliers', [\App\Http\Controllers\TenderSupplierController::class, 'suggest'])
+        ->name('tenders.suggest_suppliers');
+    Route::post('/tenders/{tender}/draft-supplier-emails', [\App\Http\Controllers\TenderSupplierController::class, 'draft'])
+        ->name('tenders.draft_supplier_emails');
     Route::get('/tenders/{tender}',             [TenderController::class, 'show'])->name('tenders.show');
     Route::patch('/tenders/{tender}',           [TenderController::class, 'update'])->name('tenders.update');
     Route::post('/tenders/{tender}/observe',    [TenderController::class, 'observe'])->name('tenders.observe');

@@ -125,6 +125,367 @@
                 </dl>
             </section>
 
+            {{-- ─── Sugerir fornecedores + drafts ──────────────────────────
+                 Click → AJAX → mostra lista de fornecedores aprovados (H&P)
+                 que fazem match na categoria do concurso + sugestões web
+                 (Tavily). User selecciona com checkbox quais quer contactar
+                 e clica "Gerar drafts" → Daniel devolve 1 email por
+                 fornecedor (formato SHAPE B), renderizados inline com botão
+                 Outlook em cada um.
+            --}}
+            <section id="supplier-suggester" class="rounded-lg bg-white shadow-sm border border-gray-100 p-6">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-800">🤖 Sugerir fornecedores e drafts</h2>
+                        <p class="mt-1 text-xs text-gray-500">
+                            H&amp;P aprovados (Excel 2026) + sugestões da web — Daniel escreve 1 email tailored por fornecedor.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-xs text-gray-600 inline-flex items-center gap-1">
+                            <input type="checkbox" id="ss-include-web" checked class="rounded border-gray-300">
+                            incluir web
+                        </label>
+                        <button type="button" id="ss-search-btn"
+                                class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500">
+                            🔎 Procurar fornecedores
+                        </button>
+                    </div>
+                </div>
+
+                <div id="ss-results" class="mt-4 hidden"></div>
+
+                <template id="ss-loading-tpl">
+                    <div class="text-xs text-gray-500 py-4">A procurar fornecedores…</div>
+                </template>
+            </section>
+
+            <script>
+            (function () {
+                const btn      = document.getElementById('ss-search-btn');
+                const incWeb   = document.getElementById('ss-include-web');
+                const results  = document.getElementById('ss-results');
+                const tenderId = {{ $tender->id }};
+                const csrf     = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+                function esc(s) {
+                    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                }
+
+                btn.addEventListener('click', async () => {
+                    btn.disabled = true;
+                    btn.textContent = '⏳ A procurar…';
+                    results.classList.remove('hidden');
+                    results.innerHTML = '<div class="text-xs text-gray-500 py-4">A procurar fornecedores na base de dados H&P + web…</div>';
+
+                    try {
+                        const res = await fetch(`/tenders/${tenderId}/suggest-suppliers`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrf,
+                                'Accept': 'application/json',
+                            },
+                            body: JSON.stringify({ include_web: incWeb.checked }),
+                            credentials: 'same-origin',
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const data = await res.json();
+                        renderSuggestions(data);
+                    } catch (e) {
+                        results.innerHTML = `<div class="text-sm text-red-700 py-3">Erro: ${esc(e.message)}</div>`;
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = '🔎 Procurar fornecedores';
+                    }
+                });
+
+                function renderSuggestions(data) {
+                    const cats = (data.categories || []).join(', ');
+                    const local = data.local || [];
+                    const web   = data.web   || [];
+
+                    let html = `
+                        <div class="rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600 mb-3">
+                            🏷️ Categorias inferidas: <span class="font-mono text-gray-800">${esc(cats || 'nenhuma')}</span>
+                            · ${local.length} fornecedor(es) H&amp;P · ${web.length} sugestão(ões) web
+                        </div>
+                    `;
+
+                    // Local approved
+                    if (local.length === 0) {
+                        html += `
+                            <div class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 mb-3">
+                                Nenhum fornecedor H&amp;P aprovado faz match nas categorias inferidas.
+                                Podes adicionar manualmente em <a href="/suppliers/create" class="underline">/suppliers/create</a>.
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <form id="ss-draft-form" class="space-y-2">
+                                <h3 class="text-sm font-semibold text-gray-800">Fornecedores H&amp;P (aprovados)</h3>
+                                <div class="border border-gray-200 rounded-md divide-y divide-gray-100 bg-white">
+                        `;
+                        local.forEach((s, idx) => {
+                            const iqfBadge = s.iqf_score !== null
+                                ? `<span class="inline-block rounded ${s.iqf_score >= 2.75 ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'} px-1.5 py-0.5 text-[10px] font-bold">IQF ${s.iqf_score}</span>`
+                                : '';
+                            const emailBadge = s.has_email
+                                ? `<span class="text-blue-700 font-mono text-[11px]">${esc(s.primary_email)}</span>`
+                                : `<span class="text-amber-700 text-[11px] italic">⚠ sem email — preencher antes de enviar</span>`;
+                            const cats = (s.categories || []).slice(0,4).map(c =>
+                                `<span class="inline-block rounded bg-gray-100 text-gray-700 px-1.5 py-0.5 text-[10px] font-mono">${esc(c)}</span>`
+                            ).join(' ');
+                            html += `
+                                <label class="flex items-start gap-3 px-3 py-2 hover:bg-indigo-50 cursor-pointer">
+                                    <input type="checkbox" name="supplier_ids[]" value="${s.id}" ${s.has_email ? 'checked' : ''}
+                                           class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <a href="${s.detail_url}" target="_blank" class="text-sm font-medium text-indigo-700 hover:underline">${esc(s.name)}</a>
+                                            ${iqfBadge}
+                                            ${cats}
+                                        </div>
+                                        <div class="mt-0.5 flex items-center gap-3 flex-wrap text-[11px]">
+                                            ${emailBadge}
+                                            ${s.last_contacted ? `<span class="text-gray-500">último contacto: ${esc(s.last_contacted)}</span>` : ''}
+                                            ${s.brands && s.brands.length ? `<span class="text-gray-500">marcas: ${esc(s.brands.slice(0,3).join(', '))}</span>` : ''}
+                                        </div>
+                                    </div>
+                                </label>
+                            `;
+                        });
+                        html += `
+                                </div>
+                                <div class="flex items-center gap-3 flex-wrap pt-2">
+                                    <select id="ss-language" class="rounded-md border-gray-300 text-xs">
+                                        <option value="pt" selected>Português (pt)</option>
+                                        <option value="en">English (en)</option>
+                                        <option value="es">Español (es)</option>
+                                    </select>
+                                    <input type="text" id="ss-note" placeholder="Notas extra para o Daniel (opcional)…"
+                                           class="flex-1 min-w-[200px] rounded-md border-gray-300 text-xs">
+                                    <button type="submit" id="ss-draft-btn"
+                                            class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-500">
+                                        ✉ Gerar drafts (Daniel Email)
+                                    </button>
+                                </div>
+                            </form>
+                        `;
+                    }
+
+                    // Web suggestions (advisory only — not selectable)
+                    if (web.length > 0) {
+                        html += `
+                            <div class="mt-4 pt-3 border-t border-gray-100">
+                                <h3 class="text-sm font-semibold text-gray-800 mb-2">💡 Sugestões da web (não aprovados — investigar)</h3>
+                                <div class="space-y-2">
+                        `;
+                        web.forEach(w => {
+                            html += `
+                                <div class="rounded-md border border-gray-200 bg-amber-50/30 px-3 py-2 text-xs">
+                                    <a href="${esc(w.url)}" target="_blank" rel="noopener" class="font-semibold text-amber-800 hover:underline">${esc(w.title)}</a>
+                                    <div class="text-gray-600 mt-0.5">${esc(w.snippet || '')}</div>
+                                    <div class="font-mono text-[10px] text-gray-400 mt-0.5 truncate">${esc(w.url)}</div>
+                                </div>
+                            `;
+                        });
+                        html += `
+                                </div>
+                                <p class="mt-2 text-[11px] text-gray-500">
+                                    Para promover um destes a fornecedor aprovado, abre <a href="/suppliers/create" class="underline">/suppliers/create</a>.
+                                </p>
+                            </div>
+                        `;
+                    } else if (data.web_available === false) {
+                        html += `
+                            <div class="mt-4 text-[11px] text-gray-500">
+                                💡 Pesquisa web indisponível (TAVILY_API_KEY não configurado).
+                            </div>
+                        `;
+                    }
+
+                    // Container for the generated drafts
+                    html += `<div id="ss-drafts" class="mt-5"></div>`;
+
+                    results.innerHTML = html;
+
+                    const draftForm = document.getElementById('ss-draft-form');
+                    if (draftForm) draftForm.addEventListener('submit', onDraftSubmit);
+                }
+
+                async function onDraftSubmit(e) {
+                    e.preventDefault();
+                    const form = e.currentTarget;
+                    const ids = Array.from(form.querySelectorAll('input[name="supplier_ids[]"]:checked')).map(i => parseInt(i.value, 10));
+                    if (ids.length === 0) {
+                        alert('Selecciona pelo menos um fornecedor.');
+                        return;
+                    }
+                    if (ids.length > 12) {
+                        alert('Máximo 12 fornecedores por batch — desselecciona alguns.');
+                        return;
+                    }
+
+                    const draftBtn = document.getElementById('ss-draft-btn');
+                    const dropbox  = document.getElementById('ss-drafts');
+                    draftBtn.disabled = true;
+                    draftBtn.textContent = '⏳ Daniel a escrever…';
+                    dropbox.innerHTML = '<div class="text-xs text-gray-500 py-4">Daniel está a escrever os emails. Pode demorar 20-30s…</div>';
+
+                    try {
+                        const res = await fetch(`/tenders/${tenderId}/draft-supplier-emails`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': csrf,
+                                'Accept': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                supplier_ids: ids,
+                                language: document.getElementById('ss-language').value,
+                                note:     document.getElementById('ss-note').value.trim(),
+                            }),
+                            credentials: 'same-origin',
+                        });
+                        if (!res.ok) {
+                            const err = await res.text();
+                            throw new Error(`HTTP ${res.status}: ${err.slice(0,200)}`);
+                        }
+                        const data = await res.json();
+                        renderDrafts(dropbox, data);
+                    } catch (e) {
+                        dropbox.innerHTML = `<div class="text-sm text-red-700 py-3">Erro a gerar drafts: ${esc(e.message)}</div>`;
+                    } finally {
+                        draftBtn.disabled = false;
+                        draftBtn.textContent = '✉ Gerar drafts (Daniel Email)';
+                    }
+                }
+
+                function renderDrafts(box, data) {
+                    if (data.shape === 'fallback') {
+                        box.innerHTML = `
+                            <div class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+                                Daniel devolveu texto livre em vez de drafts estruturados. Conteúdo:
+                                <pre class="mt-2 whitespace-pre-wrap font-mono text-[11px] text-gray-700">${esc(data.text || '')}</pre>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    const emails = data.emails || [];
+                    if (emails.length === 0) {
+                        box.innerHTML = `<div class="text-sm text-amber-700">Daniel não devolveu emails utilizáveis — tenta de novo.</div>`;
+                        return;
+                    }
+
+                    let html = `
+                        <h3 class="text-sm font-semibold text-gray-800 mb-2">📧 ${emails.length} draft(s) gerado(s) — revê e edita antes de enviar</h3>
+                        <div class="space-y-3">
+                    `;
+                    emails.forEach((em, i) => {
+                        const id = `ts_em_${tenderId}_${i}_${Date.now()}`;
+                        html += `
+                            <div class="rounded-md border border-gray-200 bg-white">
+                                <div class="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                                    <span class="text-xs font-semibold text-gray-700">${i+1}/${emails.length} · ${esc(em.supplier || em.to || 'fornecedor')}</span>
+                                    ${em.template ? `<span class="text-[10px] text-gray-500">${esc(em.template)}</span>` : ''}
+                                </div>
+                                <div class="px-3 py-2 space-y-2" id="${id}_card">
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <label class="text-gray-500 w-16">Para</label>
+                                        <input type="email" id="${id}_to" value="${esc(em.to || '')}"
+                                               class="flex-1 rounded-md border-gray-300 text-xs font-mono">
+                                    </div>
+                                    <div class="flex items-center gap-2 text-xs">
+                                        <label class="text-gray-500 w-16">Assunto</label>
+                                        <input type="text" id="${id}_subject" value="${esc(em.subject || '')}"
+                                               class="flex-1 rounded-md border-gray-300 text-xs">
+                                    </div>
+                                    <textarea id="${id}_body" rows="8"
+                                              class="w-full rounded-md border-gray-300 text-xs font-mono leading-relaxed">${esc(em.body || '')}</textarea>
+                                    <input type="hidden" id="${id}_cc" value="${esc(em.cc || '')}">
+                                    <div class="flex items-center gap-2 pt-1">
+                                        <button type="button" data-card-id="${id}" data-action="outlook"
+                                                class="rounded-md bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-500">
+                                            ✉ Abrir no Outlook
+                                        </button>
+                                        <button type="button" data-card-id="${id}" data-action="copy"
+                                                class="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                                            📋 Copiar
+                                        </button>
+                                        <span class="text-[11px] text-gray-500" id="${id}_status"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += `
+                        </div>
+                        <div class="mt-3 flex items-center gap-3 flex-wrap rounded-md border border-dashed border-blue-300 bg-blue-50/30 px-3 py-2">
+                            <button type="button" id="ss-open-all"
+                                    class="rounded-md bg-blue-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-blue-500">
+                                ✉ Abrir TODOS no Outlook (sequência)
+                            </button>
+                            <span class="text-[11px] text-gray-500">⚠️ ${emails.length} mailto: serão disparados — o browser pode pedir confirmação para o segundo em diante.</span>
+                        </div>
+                    `;
+
+                    box.innerHTML = html;
+
+                    // Hook up the per-card buttons.
+                    box.querySelectorAll('[data-card-id]').forEach(b => {
+                        b.addEventListener('click', () => {
+                            const id = b.dataset.cardId;
+                            const action = b.dataset.action;
+                            if (action === 'outlook') openInOutlookLocal(id);
+                            else if (action === 'copy') copyEmailLocal(id);
+                        });
+                    });
+                    document.getElementById('ss-open-all')?.addEventListener('click', () => {
+                        box.querySelectorAll('[data-card-id][data-action="outlook"]').forEach((b, i) => {
+                            setTimeout(() => b.click(), i * 700);
+                        });
+                    });
+                }
+
+                function openInOutlookLocal(id) {
+                    const to      = document.getElementById(id+'_to')?.value.trim() || '';
+                    const cc      = document.getElementById(id+'_cc')?.value.trim() || '';
+                    const subject = document.getElementById(id+'_subject')?.value.trim() || '';
+                    const body    = document.getElementById(id+'_body')?.value.trim() || '';
+
+                    let mailto = 'mailto:' + encodeURIComponent(to);
+                    const parts = [];
+                    if (cc)      parts.push('cc='      + encodeURIComponent(cc));
+                    if (subject) parts.push('subject=' + encodeURIComponent(subject));
+                    if (body)    parts.push('body='    + encodeURIComponent(body));
+                    if (parts.length) mailto += '?' + parts.join('&');
+                    window.location.href = mailto;
+
+                    const st = document.getElementById(id+'_status');
+                    if (st) {
+                        st.textContent = '📮 A abrir no cliente de email…';
+                        setTimeout(() => { st.textContent = ''; }, 3000);
+                    }
+                }
+
+                function copyEmailLocal(id) {
+                    const subject = document.getElementById(id+'_subject')?.value || '';
+                    const body    = document.getElementById(id+'_body')?.value || '';
+                    const to      = document.getElementById(id+'_to')?.value || '';
+                    const text    = (to ? 'Para: '+to+'\n' : '') + 'Assunto: '+subject+'\n\n'+body;
+                    navigator.clipboard.writeText(text).then(() => {
+                        const st = document.getElementById(id+'_status');
+                        if (st) {
+                            st.textContent = '✅ Copiado!';
+                            setTimeout(() => { st.textContent = ''; }, 1800);
+                        }
+                    });
+                }
+            })();
+            </script>
+
             {{-- ─── SAP B1 Opportunity card ───────────────────────────────
                  Phase 1 of the SAP integration: when the tender has a SAP
                  opportunity number, fetch live data from the Service Layer
