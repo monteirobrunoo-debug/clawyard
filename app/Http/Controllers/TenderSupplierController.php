@@ -32,6 +32,21 @@ class TenderSupplierController extends Controller
     {
         $this->authorizeTender($tender);
 
+        // Confidential tenders block ALL external augmentation —
+        // no Tavily, no Claude. Only the local supplier match runs.
+        // See migration 2026_04_30_000004 for the rationale.
+        if ($tender->is_confidential) {
+            $bundle = $svc->suggest($tender, localLimit: 12, includeWeb: false);
+            return response()->json([
+                'categories'    => $bundle['categories'],
+                'web_query'     => null,
+                'web_available' => false,
+                'confidential'  => true,
+                'local'         => $bundle['local']->map(fn(Supplier $s) => $this->shapeSupplier($s))->values()->all(),
+                'web'           => [],
+            ]);
+        }
+
         $includeWeb = $request->boolean('include_web', true);
 
         $bundle = $svc->suggest($tender, localLimit: 12, includeWeb: $includeWeb);
@@ -40,27 +55,48 @@ class TenderSupplierController extends Controller
             'categories'    => $bundle['categories'],
             'web_query'     => $bundle['query'],
             'web_available' => $bundle['web_available'],
-            'local'         => $bundle['local']->map(fn(Supplier $s) => [
-                'id'             => $s->id,
-                'name'           => $s->name,
-                'slug'           => $s->slug,
-                'primary_email'  => $s->primary_email,
-                'iqf_score'      => $s->iqf_score !== null ? (float) $s->iqf_score : null,
-                'status'         => $s->status,
-                'categories'     => $s->categories ?? [],
-                'subcategories'  => $s->subcategories ?? [],
-                'brands'         => $s->brands ?? [],
-                'has_email'      => !empty($s->primary_email),
-                'last_contacted' => $s->last_contacted_at?->diffForHumans(),
-                'detail_url'     => route('suppliers.show', $s),
-            ])->values()->all(),
+            'confidential'  => false,
+            'local'         => $bundle['local']->map(fn(Supplier $s) => $this->shapeSupplier($s))->values()->all(),
             'web' => $bundle['web'],
         ]);
+    }
+
+    /**
+     * Shape one Supplier as a JSON row for the AJAX panel.
+     * Pulled out so confidential + non-confidential paths render
+     * identical structure.
+     */
+    private function shapeSupplier(Supplier $s): array
+    {
+        return [
+            'id'             => $s->id,
+            'name'           => $s->name,
+            'slug'           => $s->slug,
+            'primary_email'  => $s->primary_email,
+            'iqf_score'      => $s->iqf_score !== null ? (float) $s->iqf_score : null,
+            'status'         => $s->status,
+            'categories'     => $s->categories ?? [],
+            'subcategories'  => $s->subcategories ?? [],
+            'brands'         => $s->brands ?? [],
+            'has_email'      => !empty($s->primary_email),
+            'last_contacted' => $s->last_contacted_at?->diffForHumans(),
+            'detail_url'     => route('suppliers.show', $s),
+        ];
     }
 
     public function draft(Request $request, Tender $tender, EmailAgent $daniel): JsonResponse
     {
         $this->authorizeTender($tender);
+
+        // Confidential tenders cannot dispatch Daniel — he'd send the
+        // tender title + supplier list to Claude. Tell the operator to
+        // toggle off the flag if they really want LLM drafts.
+        if ($tender->is_confidential) {
+            return response()->json([
+                'error'  => 'tender_confidential',
+                'detail' => 'Este concurso está marcado como confidencial — drafts via LLM estão desligados. Desmarca a flag em "Confidencial" para usar o Daniel.',
+            ], 403);
+        }
 
         $data = $request->validate([
             'supplier_ids'   => ['required', 'array', 'min:1', 'max:12'],

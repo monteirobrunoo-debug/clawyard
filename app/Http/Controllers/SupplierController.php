@@ -83,6 +83,43 @@ class SupplierController extends Controller
         ]);
     }
 
+    /**
+     * /suppliers/review — manager queue for auto-extracted candidates.
+     * Lists only pending rows from agent_extraction (or excel rows
+     * downgraded to pending). Promote → status=approved; Reject →
+     * status=blacklisted (kept for forensics, won't surface again).
+     */
+    public function review(Request $request)
+    {
+        $this->authorizeManager();
+
+        $pending = Supplier::query()
+            ->where('status', Supplier::STATUS_PENDING)
+            ->orderByDesc('created_at')
+            ->paginate(50)
+            ->withQueryString();
+
+        return view('suppliers.review', [
+            'pending' => $pending,
+        ]);
+    }
+
+    public function promote(Supplier $supplier)
+    {
+        $this->authorizeManager();
+        $supplier->status = Supplier::STATUS_APPROVED;
+        $supplier->save();
+        return back()->with('status', "✓ {$supplier->name} promovido para aprovado.");
+    }
+
+    public function reject(Supplier $supplier)
+    {
+        $this->authorizeManager();
+        $supplier->status = Supplier::STATUS_BLACKLIST;
+        $supplier->save();
+        return back()->with('status', "✗ {$supplier->name} marcado como blacklisted (não voltará a sugerir).");
+    }
+
     public function create()
     {
         $this->authorizeManager();

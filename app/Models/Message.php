@@ -63,6 +63,19 @@ class Message extends Model
         static::created(function (Message $message) {
             if ($message->role !== 'assistant') return;
 
+            // Honour confidential-mode: when the user has toggled the
+            // session flag (via /chat/confidential), assistant messages
+            // are NOT scanned for supplier emails. Prevents leaking
+            // contacts mentioned in a NATO/classified RFQ context into
+            // the persistent suppliers directory.
+            try {
+                if (session('confidential_mode', false)) return;
+            } catch (\Throwable) {
+                // session() can throw outside a request — e.g. queue
+                // worker. In that case fall through; queue jobs don't
+                // create assistant messages anyway.
+            }
+
             $content = (string) $message->content;
             if ($content === '' || !str_contains($content, '@')) return;
 

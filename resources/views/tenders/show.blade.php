@@ -74,6 +74,12 @@
                             <span class="inline-flex rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
                                 {{ $statusLabels[$tender->status] ?? $tender->status }}
                             </span>
+                            @if($tender->is_confidential)
+                                <span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-700 border border-red-200"
+                                      title="LLM e pesquisa web bloqueados para este concurso">
+                                    🔒 Confidencial
+                                </span>
+                            @endif
                             @if($tender->type)
                                 <span class="inline-flex rounded border border-gray-200 px-2.5 py-1 text-xs text-gray-600">
                                     {{ $tender->type }}
@@ -132,7 +138,31 @@
                  e clica "Gerar drafts" → Daniel devolve 1 email por
                  fornecedor (formato SHAPE B), renderizados inline com botão
                  Outlook em cada um.
+
+                 Confidential mode: o painel inteiro fica oculto e mostra
+                 apenas um aviso explicando porquê. Os endpoints AJAX
+                 também rejeitam (defesa em profundidade — cliente JS
+                 manipulado não consegue contornar).
             --}}
+            @if($tender->is_confidential)
+                <section class="rounded-lg bg-red-50 border border-red-200 p-4">
+                    <div class="flex items-start gap-3">
+                        <span class="text-2xl">🔒</span>
+                        <div>
+                            <h3 class="text-sm font-semibold text-red-800">Concurso confidencial — AI bloqueada</h3>
+                            <p class="text-xs text-red-700 mt-1">
+                                Este concurso está marcado como confidencial. O painel "Sugerir fornecedores e drafts"
+                                (Claude + Tavily) está desligado para evitar que o título / descrição saiam para serviços
+                                externos. Continua a poder consultar a tabela local de fornecedores aprovados em
+                                <a href="{{ route('suppliers.index') }}" class="underline">/suppliers</a> e usar o SAP normalmente.
+                            </p>
+                            <p class="text-xs text-red-600 mt-1">
+                                Para reactivar: desmarca a flag "Concurso confidencial" no formulário em baixo.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+            @else
             <section id="supplier-suggester" class="rounded-lg bg-white shadow-sm border border-gray-100 p-6">
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                     <div>
@@ -485,6 +515,7 @@
                 }
             })();
             </script>
+            @endif {{-- /is_confidential --}}
 
             {{-- ─── SAP B1 Opportunity card ───────────────────────────────
                  Phase 1 of the SAP integration: when the tender has a SAP
@@ -676,6 +707,26 @@
                                        placeholder="ex.: SAP-2026-0451"
                                        class="w-full rounded-md border-gray-300 text-sm shadow-sm font-mono">
                             </div>
+                        </div>
+
+                        {{-- Modo confidencial — bloqueia LLM + web search
+                             para este concurso. Ver migração
+                             2026_04_30_000004 para detalhes. --}}
+                        <div class="rounded-md border {{ $tender->is_confidential ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50' }} px-3 py-2">
+                            <label class="flex items-start gap-3 cursor-pointer">
+                                <input type="checkbox" name="is_confidential" value="1"
+                                       @checked(old('is_confidential', $tender->is_confidential))
+                                       class="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500">
+                                <div>
+                                    <span class="text-sm font-semibold text-gray-800">🔒 Concurso confidencial</span>
+                                    <p class="text-xs text-gray-600 mt-0.5">
+                                        Quando marcado: <strong>nenhum agente LLM</strong> (Claude / NVIDIA) é chamado para este concurso,
+                                        <strong>pesquisa web (Tavily) desligada</strong>, e o painel "🤖 Sugerir fornecedores e drafts" fica oculto.
+                                        Apenas a tabela local de fornecedores aprovados (H&P) e o SAP continuam acessíveis.
+                                        Usar para RFQs NATO / classificados onde o conteúdo não pode sair para serviços externos.
+                                    </p>
+                                </div>
+                            </label>
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

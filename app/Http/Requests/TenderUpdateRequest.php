@@ -44,6 +44,23 @@ class TenderUpdateRequest extends FormRequest
             'notes'                  => ['nullable', 'string', 'max:65535'],
             'result'                 => ['nullable', 'string', 'max:64'],
             'deadline_at'            => ['nullable', 'date'],
+            // Confidential flag — when true, blocks LLM/web augmentation
+            // for this tender. See migration 2026_04_30_000004.
+            'is_confidential'        => ['nullable', 'boolean'],
         ];
+    }
+
+    /**
+     * HTML <input type="checkbox"> sends the value only when checked,
+     * so an unchecked box arrives as a missing key. Normalise to false
+     * before the validator/fill pass so the model gets the correct value.
+     */
+    protected function prepareForValidation(): void
+    {
+        if (!$this->has('is_confidential')) {
+            $this->merge(['is_confidential' => false]);
+        } else {
+            $this->merge(['is_confidential' => $this->boolean('is_confidential')]);
+        }
     }
 }

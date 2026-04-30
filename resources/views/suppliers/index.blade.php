@@ -14,10 +14,18 @@
                 <span class="ml-2 text-xs font-normal text-gray-500">{{ number_format($counts['total']) }} no directório</span>
             </h2>
             @if($canEdit)
-                <a href="{{ route('suppliers.create') }}"
-                   class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500">
-                    + Novo fornecedor
-                </a>
+                <div class="flex items-center gap-2">
+                    @if($counts['pending'] > 0)
+                        <a href="{{ route('suppliers.review') }}"
+                           class="rounded-md bg-amber-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-500">
+                            📋 Rever pending ({{ $counts['pending'] }})
+                        </a>
+                    @endif
+                    <a href="{{ route('suppliers.create') }}"
+                       class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500">
+                        + Novo fornecedor
+                    </a>
+                </div>
             @endif
         </div>
     </x-slot>

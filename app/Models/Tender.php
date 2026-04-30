@@ -27,7 +27,7 @@ class Tender extends Model
 
     protected $fillable = [
         'source', 'reference', 'title', 'type', 'purchasing_org',
-        'status', 'priority',
+        'status', 'priority', 'is_confidential',
         'assigned_collaborator_id', 'assigned_at', 'assigned_by_user_id',
         'deadline_at', 'source_modified_at',
         'sap_opportunity_number',
@@ -50,6 +50,7 @@ class Tender extends Model
             'offer_value'            => 'decimal:2',
             'time_spent_hours'       => 'decimal:2',
             'raw_metadata'           => 'array',
+            'is_confidential'        => 'boolean',
         ];
     }
 
