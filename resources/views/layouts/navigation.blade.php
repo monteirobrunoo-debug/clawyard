@@ -28,6 +28,9 @@
                     <x-nav-link :href="route('marketplace.index')" :active="request()->routeIs('marketplace.*')">
                         🛒 {{ __('Marketplace') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
+                        🏭 {{ __('Fornecedores') }}
+                    </x-nav-link>
                     <x-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.index')">
                         🤖 {{ __('Robot') }}
                     </x-nav-link>
@@ -108,6 +111,9 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('marketplace.index')" :active="request()->routeIs('marketplace.*')">
                 🛒 {{ __('Marketplace') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
+                🏭 {{ __('Fornecedores') }}
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.index')">
                 🤖 {{ __('Robot') }}

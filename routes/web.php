@@ -382,6 +382,24 @@ Route::middleware(['auth'])
     ->where('docId', '[A-Fa-f0-9\-]{36}')   // UUID shape
     ->name('hp_history.doc');
 
+// Suppliers directory — H&P approved supplier list + auto-extracted
+// candidates from agent messages. Read for any auth user; write
+// (create/update/blacklist) gated on isManager() inside the controller.
+Route::middleware(['auth'])->group(function () {
+    Route::get   ('/suppliers',                [\App\Http\Controllers\SupplierController::class, 'index'])
+        ->name('suppliers.index');
+    Route::get   ('/suppliers/create',         [\App\Http\Controllers\SupplierController::class, 'create'])
+        ->name('suppliers.create');
+    Route::post  ('/suppliers',                [\App\Http\Controllers\SupplierController::class, 'store'])
+        ->name('suppliers.store');
+    Route::get   ('/suppliers/suggest',        [\App\Http\Controllers\SupplierController::class, 'suggest'])
+        ->name('suppliers.suggest');
+    Route::get   ('/suppliers/{supplier}',     [\App\Http\Controllers\SupplierController::class, 'show'])
+        ->name('suppliers.show');
+    Route::patch ('/suppliers/{supplier}',     [\App\Http\Controllers\SupplierController::class, 'update'])
+        ->name('suppliers.update');
+});
+
 // hp-history drag-drop upload UI — manager+ only. Browser → Laravel →
 // hp-history; HMAC signing happens server-side so the secret never
 // leaves the droplet. See HpHistoryUploadController for limits.

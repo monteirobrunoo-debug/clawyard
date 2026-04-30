@@ -42,4 +42,41 @@ class Message extends Model
     {
         return $this->belongsTo(Conversation::class);
     }
+
+    /**
+     * Side-effect hook: when an assistant message lands in the DB,
+     * scan its content for supplier names + email addresses and upsert
+     * them into the persistent supplier directory. This is how the
+     * `suppliers` table grows from agent extractions over time.
+     *
+     * Only runs for assistant role + non-empty content + at least one
+     * email mention. Wrapped in try/catch so a parse hiccup never
+     * breaks the chat path (the user's response must arrive even if
+     * we can't extract suppliers).
+     *
+     * Lives here (not in an Observer file) so the rule is co-located
+     * with the model — easier to audit "what side effects does saving
+     * a message trigger?".
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Message $message) {
+            if ($message->role !== 'assistant') return;
+
+            $content = (string) $message->content;
+            if ($content === '' || !str_contains($content, '@')) return;
+
+            try {
+                app(\App\Services\SupplierAutoExtractor::class)
+                    ->extractFrom($content, [
+                        'agent'           => (string) $message->agent,
+                        'message_id'      => $message->id,
+                        'conversation_id' => $message->conversation_id,
+                    ]);
+            } catch (\Throwable $e) {
+                // Logged inside the extractor — swallow here so the
+                // chat path never sees the failure.
+            }
+        });
+    }
 }
