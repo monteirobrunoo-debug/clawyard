@@ -262,6 +262,26 @@
         .email-status { font-size:11px; margin-left:auto; }
         .email-status.sent { color:var(--green); }
         .email-status.err { color:#ff4444; }
+
+        /* ── INLINE EMAIL MENTIONS (auto-detected na resposta dum agente) ──
+           Quando o agente lista fornecedores/contactos, cada email vira um
+           link clicável que abre o Outlook (mailto:). Visualmente é um
+           "chip" Outlook-blue para sinalizar que é accionável. */
+        .email-mention { display:inline-flex; align-items:center; gap:4px; padding:1px 6px; margin:0 1px; border-radius:5px; background:rgba(0,120,212,0.10); color:#3aa0ff; border:1px solid rgba(0,120,212,0.25); font-size:12px; text-decoration:none; transition:all .15s; }
+        .email-mention:hover { background:#0078d4; color:#fff; border-color:#0078d4; }
+        .email-mention .em-icn { font-size:10px; opacity:.7; }
+
+        /* Toolbar agregadora — aparece debaixo da bubble quando o agente
+           devolve ≥ 1 emails. Botão central "Outlook (todos)" + chip
+           a contar os emails detectados. */
+        .email-roundup { margin-top:8px; padding:8px 12px; border:1px dashed rgba(0,120,212,0.4); border-radius:10px; background:rgba(0,120,212,0.04); display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; }
+        .email-roundup .er-label { color:var(--muted); }
+        .email-roundup .er-count { background:rgba(0,120,212,0.15); color:#3aa0ff; padding:2px 8px; border-radius:10px; font-weight:700; font-size:11px; }
+        .email-roundup-btn { background:#0078d4; color:#fff; border:none; padding:6px 12px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:5px; transition:.15s; }
+        .email-roundup-btn:hover { background:#006cbe; }
+        .email-roundup-btn.secondary { background:transparent; color:#3aa0ff; border:1px solid rgba(0,120,212,0.4); }
+        .email-roundup-btn.secondary:hover { background:rgba(0,120,212,0.1); border-color:#0078d4; }
+        .email-roundup-btn .copy-ok { color:#76b900; }
         /* ── TABLE CARD (Marco Sales) ── */
         .table-card { background:var(--bg); border:1px solid #1a2e00; border-left:3px solid #3b82f6; border-radius:12px; overflow:hidden; margin-top:4px; }
         .table-card-header { background:#0a1220; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1a2e00; }
@@ -1819,8 +1839,90 @@ function addMessage(role, text, agentName = '') {
         </div>`;
 
     chat.appendChild(msg);
+
+    // ── Auto-Outlook roundup: se a resposta do agente menciona ≥1
+    // email, adicionamos uma toolbar com botão "Carregar TODOS no
+    // Outlook" para o user disparar uma única composição em vez de
+    // ter de clicar email a email. Activado apenas em mensagens AI.
+    if (role === 'ai') attachOutlookRoundup(msg, agentName);
+
     chat.scrollTop = chat.scrollHeight;
     return msg;
+}
+
+// Constrói o toolbar agregador de emails detectados na bubble e
+// liga-o ao Outlook via mailto:. Idempotente — repetir a chamada
+// numa mesma <msg> não duplica o toolbar (verificação por classe).
+function attachOutlookRoundup(msgEl, agentName) {
+    if (!msgEl) return;
+    const col = msgEl.querySelector('.msg-col');
+    if (!col || col.querySelector('.email-roundup')) return;
+
+    const bubble = col.querySelector('.bubble');
+    if (!bubble) return;
+
+    // Recolhe emails únicos preservando a ordem de aparecimento.
+    const seen = new Set();
+    const ordered = [];
+    bubble.querySelectorAll('a.email-mention[data-email]').forEach(a => {
+        const e = (a.dataset.email || '').trim().toLowerCase();
+        if (e && !seen.has(e)) { seen.add(e); ordered.push(e); }
+    });
+    if (ordered.length === 0) return;
+
+    // Sugere subject a partir da última pergunta do user (fallback
+    // para "Pedido de informação"). Mantém pequeno (≤80 chars).
+    let subject = 'Pedido de informação';
+    try {
+        const userMsgs = document.querySelectorAll('.message.user .bubble');
+        if (userMsgs.length) {
+            const last = (userMsgs[userMsgs.length - 1].textContent || '').trim();
+            if (last) subject = last.length > 80 ? last.slice(0, 77) + '…' : last;
+        }
+    } catch (_) {}
+
+    const agentLabel = (window.AGENT_NAMES && AGENT_NAMES[agentName]) || 'um agente';
+    const bar = document.createElement('div');
+    bar.className = 'email-roundup';
+    bar.innerHTML = `
+        <span class="er-label">📧 ${ordered.length === 1 ? 'Email detectado' : 'Emails detectados'} pela ${agentLabel}:</span>
+        <span class="er-count">${ordered.length}</span>
+        <button type="button" class="email-roundup-btn" data-mode="bcc"
+                title="Abrir Outlook com todos os endereços em BCC (uma só mensagem)">
+            ✉ Carregar TODOS no Outlook
+        </button>
+        <button type="button" class="email-roundup-btn secondary" data-mode="copy"
+                title="Copiar a lista de emails para o clipboard">
+            📋 Copiar lista
+        </button>
+    `;
+    col.appendChild(bar);
+
+    // Bulk Outlook — usa BCC para que o user possa rever os
+    // destinatários no Outlook antes de enviar (privacidade entre
+    // fornecedores: BCC evita que cada um veja a lista dos outros).
+    bar.querySelector('[data-mode="bcc"]').addEventListener('click', () => {
+        const bodyTxt = (bubble.innerText || '').trim().slice(0, 1500);
+        const params = [];
+        params.push('bcc=' + encodeURIComponent(ordered.join(',')));
+        params.push('subject=' + encodeURIComponent(subject));
+        if (bodyTxt) params.push('body=' + encodeURIComponent(bodyTxt));
+        // To: deixa-se em branco — a equipa preenche o destinatário
+        // primário (geralmente eles próprios) ou apaga se preferirem.
+        window.location.href = 'mailto:?' + params.join('&');
+    });
+
+    bar.querySelector('[data-mode="copy"]').addEventListener('click', (e) => {
+        const btn = e.currentTarget;
+        navigator.clipboard.writeText(ordered.join('; ')).then(() => {
+            const old = btn.innerHTML;
+            btn.innerHTML = '<span class="copy-ok">✅ Copiado!</span>';
+            setTimeout(() => { btn.innerHTML = old; }, 1800);
+        }).catch(() => {
+            btn.innerHTML = '⚠️ falha';
+            setTimeout(() => { btn.innerHTML = '📋 Copiar lista'; }, 1800);
+        });
+    });
 }
 
 function addTyping(agentName = '') {
@@ -2517,6 +2619,24 @@ function renderMarkdown(text) {
         .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
         .replace(/(<li>.*<\/li>(\n|$))+/g, m => `<ul>${m}</ul>`);
 
+    // 6.4 email mentions — quando o agente extrai uma lista de
+    //     fornecedores/contactos do PDF, cada endereço de email vira
+    //     um chip clicável que abre o Outlook (via mailto:). Detectamos
+    //     APÓS o esc() para não interferir com tags HTML, e ANTES da
+    //     conversão de \n em <br> para o regex não tropeçar em quebras.
+    //     Excluímos endereços já dentro de href= (ex.: hp-history
+    //     citations) e também os que aparecem dentro de <code>/<pre>
+    //     (substituídos pelos placeholders \x00CB / \x00IC nesta fase).
+    const EMAIL_RE = /([a-zA-Z0-9._+\-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+)/g;
+    html = html.replace(EMAIL_RE, (match, addr) => {
+        // Se já estiver dentro de href= (link prévio), deixa como está.
+        // Verificação simples: olhar para os 8 chars antes do match
+        // numa segunda passagem é caro — em vez disso confiamos que
+        // não geramos mailto: links em mais nenhum lado deste
+        // pipeline antes deste ponto.
+        return `<a href="mailto:${addr}" class="email-mention" data-email="${addr}" title="Abrir no Outlook / cliente de email"><span class="em-icn">✉</span>${addr}</a>`;
+    });
+
     // 6.5 hp-history citation links — turn `/doc/<uuid>` references
     //     coming from <hp_history> blocks into clickable links to our
     //     authenticated proxy at /hp-history/doc/<uuid>. The proxy
@@ -3058,6 +3178,12 @@ async function sendMessage() {
                             saveBtn.textContent = '💾';
                             saveBtn.onclick   = function() { saveAsReport(this, agentKey); };
                             meta.appendChild(saveBtn);
+                            // Anexar toolbar "Outlook (todos)" se a resposta
+                            // contém emails extraídos pelo agente. (Path
+                            // streamado — o path "addMessage" também o faz
+                            // mas só corre quando uma mensagem chega já
+                            // completa.)
+                            attachOutlookRoundup(streamMsg, agentKey);
                         }
                         chat.scrollTop = chat.scrollHeight;
                     }
