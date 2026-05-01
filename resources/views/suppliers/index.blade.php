@@ -39,20 +39,14 @@
                 </div>
             @endif
 
-            {{-- Header chips: aggregate counters. --}}
+            {{-- Header chips: aggregate counters as animated ring charts. --}}
+            @php $supTotal = max(1, (int) $counts['total']); @endphp
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                @foreach([
-                    ['label' => 'Total',          'value' => number_format($counts['total']),     'tone' => 'bg-gray-50 text-gray-700 border-gray-200'],
-                    ['label' => 'Aprovados',      'value' => number_format($counts['approved']),  'tone' => 'bg-emerald-50 text-emerald-800 border-emerald-200'],
-                    ['label' => 'Pendentes',      'value' => number_format($counts['pending']),   'tone' => 'bg-amber-50 text-amber-800 border-amber-200'],
-                    ['label' => 'Blacklisted',    'value' => number_format($counts['blacklist']), 'tone' => 'bg-red-50 text-red-700 border-red-200'],
-                    ['label' => 'Com email',      'value' => number_format($counts['with_email']),'tone' => 'bg-blue-50 text-blue-800 border-blue-200'],
-                ] as $c)
-                    <div class="rounded-lg border px-3 py-2 {{ $c['tone'] }}">
-                        <div class="text-[10px] uppercase tracking-wider opacity-70">{{ $c['label'] }}</div>
-                        <div class="text-lg font-bold">{{ $c['value'] }}</div>
-                    </div>
-                @endforeach
+                @include('partials.ring-chart', ['label' => 'Total',         'value' => $counts['total'],     'total' => $counts['total'],   'tone' => 'gray',     'subline' => 'Directório H&P'])
+                @include('partials.ring-chart', ['label' => 'Aprovados',     'value' => $counts['approved'],  'total' => $supTotal,           'tone' => 'emerald',  'subline' => round(100 * $counts['approved']  / $supTotal) . '% do directório'])
+                @include('partials.ring-chart', ['label' => 'Pendentes',     'value' => $counts['pending'],   'total' => $supTotal,           'tone' => 'amber',    'subline' => $counts['pending'] > 0 ? 'Rever fila' : 'Fila vazia'])
+                @include('partials.ring-chart', ['label' => 'Blacklisted',   'value' => $counts['blacklist'], 'total' => $supTotal,           'tone' => 'red',      'subline' => 'Excluídos'])
+                @include('partials.ring-chart', ['label' => 'Com email',     'value' => $counts['with_email'],'total' => $supTotal,           'tone' => 'blue',     'subline' => round(100 * $counts['with_email'] / $supTotal) . '% contactáveis'])
             </div>
 
             @if($canEdit)

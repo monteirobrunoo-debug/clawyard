@@ -75,33 +75,184 @@
         }
 
         /* ── HEADER ── */
+        /* ─────────────────────────────────────────────────────────
+           COMMAND-RAIL HEADER (futurista upgrade #1, 2026-05-01)
+           — Glass backdrop blur over the page background
+           — Gradient-border buttons that pulse on hover
+           — Scroll-aware: shrinks to 48px when window scrollY > 80
+           — Live-status pulse on the user chip
+           ───────────────────────────────────────────────────────── */
         .header {
             display: flex; align-items: center; gap: 12px;
-            padding: 14px 32px; border-bottom: 1px solid var(--border); background: var(--bg2);
+            padding: 14px 32px;
+            border-bottom: 1px solid color-mix(in srgb, var(--green) 12%, var(--border));
+            background: color-mix(in srgb, var(--bg2) 70%, transparent);
+            backdrop-filter: blur(14px) saturate(160%);
+            -webkit-backdrop-filter: blur(14px) saturate(160%);
             position: sticky; top: 0; z-index: 100;
+            transition: padding 0.18s ease, backdrop-filter 0.2s, background 0.2s;
         }
-        .logo { font-size: 20px; font-weight: 800; color: var(--green); letter-spacing: -0.5px; }
-        .badge { font-size: 10px; background: var(--green); color: #000; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+        .header.is-scrolled {
+            padding: 8px 32px;
+            background: color-mix(in srgb, var(--bg2) 85%, transparent);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+        }
+        .header.is-scrolled .logo { font-size: 17px; }
+        .header.is-scrolled .hero-counter-chip { display: none; }
+
+        .logo {
+            font-size: 20px; font-weight: 800;
+            background: linear-gradient(120deg, var(--green) 0%, #b3ff4a 50%, var(--green) 100%);
+            background-size: 200% 100%; -webkit-background-clip: text;
+            background-clip: text; color: transparent;
+            letter-spacing: -0.5px;
+            animation: logo-shimmer 6s linear infinite;
+            transition: font-size 0.18s;
+        }
+        @keyframes logo-shimmer {
+            0%   { background-position: 0% 50%; }
+            100% { background-position: 200% 50%; }
+        }
+
+        .badge {
+            font-size: 10px; background: var(--green); color: #000;
+            padding: 2px 8px; border-radius: 20px; font-weight: 700;
+            box-shadow: 0 0 10px color-mix(in srgb, var(--green) 50%, transparent);
+        }
         .nav-links { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+        /* Gradient-border command button. Uses the double-background
+           trick (padding-box + border-box) so border can be a gradient. */
         .nav-link {
-            font-size: 12px; color: var(--muted); text-decoration: none;
-            border: 1px solid var(--border2); padding: 5px 12px; border-radius: 8px;
-            transition: all 0.15s; display: flex; align-items: center; gap: 5px;
+            position: relative;
+            font-size: 12px; color: var(--muted2); text-decoration: none;
+            padding: 6px 13px; border-radius: 10px;
+            transition: color 0.15s, transform 0.15s;
+            display: flex; align-items: center; gap: 5px;
+            background:
+                linear-gradient(var(--bg2), var(--bg2)) padding-box,
+                linear-gradient(135deg, color-mix(in srgb, var(--green) 18%, transparent), transparent 50%, color-mix(in srgb, var(--green) 8%, transparent)) border-box;
+            border: 1px solid transparent;
         }
-        .nav-link:hover { color: var(--text); border-color: var(--muted); }
-        .nav-link.admin { color: #ef4444; border-color: #fca5a5; }
-        :root[data-theme="dark"] .nav-link.admin,
-        :root:not([data-theme]) .nav-link.admin { color: #ff6666; border-color: #ff4444; }
-        .nav-link.admin:hover { background: color-mix(in srgb, #ef4444 10%, transparent); }
-        .nav-link.briefing { color: var(--green); border-color: color-mix(in srgb, var(--green) 30%, transparent); background: color-mix(in srgb, var(--green) 6%, transparent); font-weight: 700; }
-        .nav-link.briefing:hover { background: color-mix(in srgb, var(--green) 14%, transparent); }
-        .user-name { font-size: 13px; color: var(--muted2); font-weight: 500; }
+        .nav-link:hover {
+            color: var(--text-strong);
+            transform: translateY(-1px);
+            background:
+                linear-gradient(var(--bg2), var(--bg2)) padding-box,
+                linear-gradient(135deg, var(--green), #4dd0ff, var(--green)) border-box;
+            background-size: 100% 100%, 200% 200%;
+            animation: nav-border-shift 2.4s linear infinite;
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 14%, transparent),
+                        0 6px 18px color-mix(in srgb, var(--green) 18%, transparent);
+        }
+        @keyframes nav-border-shift {
+            0%   { background-position: 0% 0%, 0% 50%; }
+            100% { background-position: 0% 0%, 200% 50%; }
+        }
+
+        .nav-link.admin {
+            background:
+                linear-gradient(var(--bg2), var(--bg2)) padding-box,
+                linear-gradient(135deg, #ff4444, transparent 60%) border-box;
+            color: #ff7070;
+        }
+        .nav-link.admin:hover {
+            background:
+                linear-gradient(var(--bg2), var(--bg2)) padding-box,
+                linear-gradient(135deg, #ff6666, #ff9900, #ff6666) border-box;
+            color: #ff9090;
+        }
+        .nav-link.briefing {
+            color: var(--green); font-weight: 700;
+            background:
+                linear-gradient(color-mix(in srgb, var(--green) 8%, var(--bg2)), color-mix(in srgb, var(--green) 8%, var(--bg2))) padding-box,
+                linear-gradient(135deg, var(--green), color-mix(in srgb, var(--green) 30%, transparent)) border-box;
+        }
+
+        /* User identity chip — circular avatar + live dot.
+           Replaces the plain ".user-name" span with a richer block. */
+        .user-chip {
+            display: flex; align-items: center; gap: 8px;
+            padding: 4px 10px 4px 4px; border-radius: 999px;
+            background:
+                linear-gradient(var(--bg2), var(--bg2)) padding-box,
+                linear-gradient(135deg, color-mix(in srgb, var(--green) 25%, transparent), transparent) border-box;
+            border: 1px solid transparent;
+        }
+        .user-chip-avatar {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--green), #4dd0ff);
+            display: flex; align-items: center; justify-content: center;
+            color: #000; font-weight: 800; font-size: 11px;
+            flex-shrink: 0;
+        }
+        .user-chip-name { font-size: 12px; color: var(--text); font-weight: 600; }
+        .user-chip-live {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: pulse-dot 2s ease-in-out infinite;
+            margin-left: 2px;
+        }
+        .user-name { font-size: 13px; color: var(--muted2); font-weight: 500; }   /* legacy fallback */
+
         .logout-form { display: inline; }
         .logout-btn {
-            font-size: 12px; color: var(--muted); background: none; border: 1px solid var(--border2);
+            font-size: 12px; color: var(--muted); background: transparent;
+            border: 1px solid var(--border2);
             padding: 5px 12px; border-radius: 8px; cursor: pointer; transition: all 0.15s;
         }
-        .logout-btn:hover { color: var(--text); border-color: var(--muted); }
+        .logout-btn:hover { color: var(--text); border-color: var(--green); }
+
+        /* ─────────────────────────────────────────────────────────
+           LIVE TICKER (futurista upgrade #4)
+           — Sits between the header and the hero
+           — Auto-refreshes every 30s from /api/activity-feed
+           — Seamless infinite-scroll loop using a duplicated track
+           ───────────────────────────────────────────────────────── */
+        .ticker-rail {
+            display: flex; align-items: center; gap: 12px;
+            padding: 7px 16px;
+            background: color-mix(in srgb, var(--green) 5%, var(--bg2));
+            border-bottom: 1px solid color-mix(in srgb, var(--green) 14%, var(--border));
+            overflow: hidden; position: relative;
+            font-size: 12px;
+        }
+        .ticker-rail::before, .ticker-rail::after {
+            content: ''; position: absolute; top: 0; bottom: 0; width: 60px; z-index: 2;
+            pointer-events: none;
+        }
+        .ticker-rail::before { left: 0;  background: linear-gradient(90deg, var(--bg), transparent); }
+        .ticker-rail::after  { right: 0; background: linear-gradient(270deg, var(--bg), transparent); }
+        .ticker-label {
+            color: var(--green); font-weight: 700; letter-spacing: 0.6px;
+            text-transform: uppercase; font-size: 10px;
+            display: inline-flex; align-items: center; gap: 6px;
+            white-space: nowrap; flex-shrink: 0; z-index: 3;
+        }
+        .ticker-label .live-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--green); box-shadow: 0 0 6px var(--green);
+            animation: pulse-dot 1.6s ease-in-out infinite;
+        }
+        .ticker-track-wrap { flex: 1; overflow: hidden; position: relative; }
+        .ticker-track {
+            display: inline-flex; gap: 28px; white-space: nowrap;
+            animation: ticker-scroll 60s linear infinite;
+            will-change: transform;
+        }
+        .ticker-rail:hover .ticker-track { animation-play-state: paused; }
+        @keyframes ticker-scroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .ticker-item {
+            color: var(--text); text-decoration: none;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .ticker-item:hover { color: var(--green); }
+        .ticker-item .ti-ago { color: var(--muted); font-size: 10px; }
+        .ticker-item .ti-sep { color: var(--muted); }
 
         /* ── THEME TOGGLE ── */
         .theme-toggle {
@@ -116,12 +267,93 @@
         :root[data-theme="dark"] .theme-icon-light,
         :root:not([data-theme]) .theme-icon-light { display: inline; }
 
-        /* ── HERO ── */
-        .hero { text-align: center; padding: 52px 32px 28px; }
-        .hero-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 14px; }
-        .hero h1 { font-size: 38px; font-weight: 800; color: var(--text-strong); margin-bottom: 10px; letter-spacing: -1px; }
-        .hero h1 span { color: var(--green); }
-        .hero p { font-size: 14px; color: var(--muted); max-width: 480px; margin: 0 auto; line-height: 1.6; }
+        /* ─────────────────────────────────────────────────────────
+           HERO with depth (futurista upgrade #2)
+           — Aurora blobs floating behind the title (mix-blend screen)
+           — H1 .accent shimmers green→cyan every 8s
+           — Counter chip pinned top-right of the section
+           ───────────────────────────────────────────────────────── */
+        .hero {
+            text-align: center; padding: 56px 32px 32px;
+            position: relative; overflow: hidden; isolation: isolate;
+        }
+        .hero::before, .hero::after {
+            content: ''; position: absolute; pointer-events: none;
+            border-radius: 50%; filter: blur(60px);
+            opacity: 0.55; z-index: -1;
+            mix-blend-mode: screen;
+        }
+        :root[data-theme="light"] .hero::before,
+        :root[data-theme="light"] .hero::after {
+            mix-blend-mode: multiply; opacity: 0.18;
+        }
+        .hero::before {
+            width: 380px; height: 380px;
+            background: radial-gradient(circle, var(--green), transparent 70%);
+            top: -120px; left: 12%;
+            animation: aurora-1 22s ease-in-out infinite;
+        }
+        .hero::after {
+            width: 320px; height: 320px;
+            background: radial-gradient(circle, #4dd0ff, transparent 70%);
+            top: -60px; right: 12%;
+            animation: aurora-2 28s ease-in-out infinite;
+        }
+        @keyframes aurora-1 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50%      { transform: translate(40px, 30px) scale(1.15); }
+        }
+        @keyframes aurora-2 {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50%      { transform: translate(-30px, 50px) scale(0.9); }
+        }
+
+        .hero-label {
+            font-size: 11px; color: var(--muted); text-transform: uppercase;
+            letter-spacing: 2.5px; margin-bottom: 14px;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .hero-label::before, .hero-label::after {
+            content: ''; width: 22px; height: 1px;
+            background: linear-gradient(90deg, transparent, var(--muted));
+        }
+        .hero-label::after { background: linear-gradient(90deg, var(--muted), transparent); }
+
+        .hero h1 {
+            font-size: 40px; font-weight: 800; color: var(--text-strong);
+            margin-bottom: 10px; letter-spacing: -1.2px;
+        }
+        .hero h1 .accent {
+            background: linear-gradient(120deg, var(--green) 0%, #4dd0ff 30%, var(--green) 60%, #b3ff4a 100%);
+            background-size: 280% 100%; -webkit-background-clip: text;
+            background-clip: text; color: transparent;
+            animation: hero-shimmer 8s linear infinite;
+        }
+        @keyframes hero-shimmer {
+            0%   { background-position: 0% 50%; }
+            100% { background-position: 280% 50%; }
+        }
+        .hero p { font-size: 14px; color: var(--muted2); max-width: 480px; margin: 0 auto; line-height: 1.6; }
+
+        /* Floating counter chip — "27 agentes" / "live" indicator. */
+        .hero-counter-chip {
+            position: absolute; top: 18px; right: 24px;
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 14px; border-radius: 999px;
+            font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+            text-transform: uppercase; color: var(--green);
+            background: color-mix(in srgb, var(--green) 8%, var(--bg2));
+            border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+            box-shadow: 0 0 16px color-mix(in srgb, var(--green) 18%, transparent);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .hero-counter-chip .live-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: pulse-dot 1.8s ease-in-out infinite;
+        }
 
         /* ── SEARCH BAR ── */
         .search-wrap {
@@ -241,25 +473,61 @@
             gap: 16px;
         }
 
-        /* ── CARD ── */
+        /* ─────────────────────────────────────────────────────────
+           HOLOGRAPHIC AGENT CARDS (futurista upgrade #3)
+           — Cursor-tracked highlight: a soft radial gradient follows
+             the mouse via two CSS vars (--mx, --my) updated by JS
+           — 3D tilt: ±5° rotateX/rotateY following cursor (also via JS)
+           — Top accent bar widens + glows on hover
+           — Active-status dot is a multi-layer ring pulse
+           ───────────────────────────────────────────────────────── */
         .agent-card {
             background: var(--bg2); border: 1px solid var(--border); border-radius: 18px;
             padding: 28px 20px 22px; text-align: center; cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background 0.2s;
+            transition: transform 0.18s ease-out, box-shadow 0.2s, border-color 0.2s, background 0.2s;
             text-decoration: none; display: block; position: relative; overflow: hidden;
+            transform-style: preserve-3d;
+            /* Cursor coords default to centre so non-JS users see no glitch. */
+            --mx: 50%; --my: 50%;
         }
         .agent-card.hidden-by-search { display: none; }
+
+        /* Top accent bar — widens + glows on hover. */
         .agent-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-            background: var(--card-color, var(--green)); opacity: 0.6;
-            transition: opacity 0.2s;
+            content: ''; position: absolute; top: 0; left: 50%; height: 3px;
+            width: 38%; transform: translateX(-50%);
+            background: var(--card-color, var(--green));
+            opacity: 0.55; border-radius: 0 0 4px 4px;
+            transition: width 0.3s ease, opacity 0.2s, box-shadow 0.2s;
         }
+        .agent-card:hover::before {
+            width: 100%;
+            opacity: 1;
+            box-shadow: 0 0 14px var(--card-color, var(--green));
+        }
+
+        /* Cursor-tracked highlight — radial gradient following mouse. */
+        .agent-card::after {
+            content: ''; position: absolute; inset: 0;
+            background: radial-gradient(
+                420px circle at var(--mx) var(--my),
+                color-mix(in srgb, var(--card-color, var(--green)) 14%, transparent),
+                transparent 50%
+            );
+            opacity: 0; transition: opacity 0.25s;
+            pointer-events: none; z-index: 1;
+        }
+        .agent-card:hover::after { opacity: 1; }
+        /* Keep all child content above the highlight overlay. */
+        .agent-card > * { position: relative; z-index: 2; }
+
         .agent-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 12px 40px color-mix(in srgb, var(--card-color, var(--green)) 20%, transparent);
-            border-color: color-mix(in srgb, var(--card-color, var(--green)) 40%, transparent);
+            transform: translateY(-6px);
+            box-shadow:
+                0 16px 44px color-mix(in srgb, var(--card-color, var(--green)) 22%, transparent),
+                0 0 0 1px color-mix(in srgb, var(--card-color, var(--green)) 24%, transparent);
+            border-color: color-mix(in srgb, var(--card-color, var(--green)) 50%, transparent);
         }
-        .agent-card:hover::before { opacity: 1; }
 
         .agent-card .avatar {
             width: 80px; height: 80px; border-radius: 50%; margin: 0 auto 16px;
@@ -285,13 +553,25 @@
             background: var(--green-hover); transform: scale(1.05);
         }
 
-        /* Status dot */
+        /* Status dot — now with a ripple ring around it for "live" feel. */
         .status-dot {
             position: absolute; top: 14px; right: 14px;
-            width: 8px; height: 8px; background: var(--green);
+            width: 9px; height: 9px; background: var(--green);
             border-radius: 50%;
-            box-shadow: 0 0 6px var(--green);
+            box-shadow: 0 0 8px var(--green);
             animation: pulse-dot 2.5s ease-in-out infinite;
+            z-index: 3;
+        }
+        .status-dot::after {
+            content: ''; position: absolute; inset: -3px;
+            border: 2px solid var(--green); border-radius: 50%;
+            opacity: 0.7;
+            animation: ripple 2.5s ease-out infinite;
+        }
+        @keyframes ripple {
+            0%   { transform: scale(0.85); opacity: 0.7; }
+            70%  { transform: scale(2.2);  opacity: 0;   }
+            100% { transform: scale(2.2);  opacity: 0;   }
         }
 
         /* ── FAVORITE STAR BUTTON ── */
@@ -417,6 +697,9 @@
         <a href="/agents/activity" class="nav-link">🤖 Activity</a>
         <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
         <a href="/patents/library" class="nav-link">🏛️ Patents</a>
+        @if(Auth::user()->isManager())
+            <a href="/mission" class="nav-link" title="Mission Control — single-pane view">🛰️ Mission</a>
+        @endif
         <a href="/reports" class="nav-link">📁 Reports</a>
         <a href="/stats" class="nav-link">📈 Stats</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
@@ -424,7 +707,16 @@
         @if(Auth::user()->isAdmin())
             <a href="/admin/users" class="nav-link admin">⚙️ Admin</a>
         @endif
-        <span class="user-name">{{ Auth::user()->name }}</span>
+        @php
+            $cyName = trim((string) Auth::user()->name);
+            $cyParts = preg_split('/\s+/', $cyName) ?: [];
+            $cyInitials = mb_strtoupper(mb_substr($cyParts[0] ?? '?', 0, 1) . mb_substr($cyParts[count($cyParts)-1] ?? '', 0, 1));
+        @endphp
+        <span class="user-chip" title="Sessão activa — {{ $cyName }}">
+            <span class="user-chip-avatar">{{ $cyInitials }}</span>
+            <span class="user-chip-name">{{ $cyName }}</span>
+            <span class="user-chip-live" title="online"></span>
+        </span>
         <button type="button" class="theme-toggle" id="themeToggle" title="Toggle theme" aria-label="Toggle dark/light theme">
             <span class="theme-icon-light">🌙</span>
             <span class="theme-icon-dark">☀️</span>
@@ -436,9 +728,23 @@
     </div>
 </header>
 
+{{-- Live activity ticker — populated via /api/activity-feed every 30s.
+     Hidden initially; the script reveals it once data is ready so we
+     don't flash an empty rail on first paint. --}}
+<div class="ticker-rail" id="cy-ticker" style="display:none">
+    <span class="ticker-label"><span class="live-dot"></span>Live</span>
+    <div class="ticker-track-wrap">
+        <div class="ticker-track" id="cy-ticker-track"></div>
+    </div>
+</div>
+
 <div class="hero">
+    <span class="hero-counter-chip" title="Total de agentes prontos">
+        <span class="live-dot"></span>
+        {{ $agentCount ?? 27 }} agentes · live
+    </span>
     <p class="hero-label">HP-Group · PartYard Marine · PartYard Military</p>
-    <h1>Choose your <span>Agent</span></h1>
+    <h1>Choose your <span class="accent">Agent</span></h1>
     <p>© PartYard/Setq.AI Rights reserved 2026 — {{ $agentCount ?? 27 }} specialised agents ready to help</p>
 
     <div class="search-wrap">
@@ -976,6 +1282,93 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 </script>
 
 @include('partials.keyboard-shortcuts')
+@include('partials.command-palette')
+
+{{-- ─── Futurista UX layer (added 2026-05-01) ─────────────────
+     1. Scroll-aware shrink of the sticky header
+     2. Cursor-tracked highlight on agent cards (via CSS vars)
+     Pure-vanilla JS, ~30 lines, no framework cost.
+--}}
+<script>
+(function () {
+    // 1) Header shrink on scroll. Threshold = 80px so a tiny scroll
+    //    doesn't trigger the transition repeatedly.
+    const header = document.querySelector('.header');
+    if (header) {
+        const onScroll = () => {
+            const past = window.scrollY > 80;
+            header.classList.toggle('is-scrolled', past);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    }
+
+    // 1b) Live activity ticker. Polls /api/activity-feed every 30s
+    //     and renders items twice in the track (so the keyframe that
+    //     translates -50% creates a seamless infinite scroll).
+    const tickerEl   = document.getElementById('cy-ticker');
+    const trackEl    = document.getElementById('cy-ticker-track');
+    function escTick(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    async function refreshTicker() {
+        if (!trackEl) return;
+        try {
+            const r = await fetch('/api/activity-feed', { headers: { 'Accept':'application/json' }, credentials:'same-origin' });
+            if (!r.ok) return;
+            const data = await r.json();
+            const items = data.items || [];
+            if (items.length === 0) {
+                tickerEl.style.display = 'none';
+                return;
+            }
+            const renderOne = (it) => {
+                const inner = `${escTick(it.icon || '·')} ${escTick(it.label)}<span class="ti-ago">· ${escTick(it.ago)}</span>`;
+                return it.url
+                    ? `<a class="ticker-item" href="${escTick(it.url)}">${inner}</a><span class="ti-sep">·</span>`
+                    : `<span class="ticker-item">${inner}</span><span class="ti-sep">·</span>`;
+            };
+            // Duplicate the list so the -50% keyframe loops seamlessly.
+            const html = items.map(renderOne).join('');
+            trackEl.innerHTML = html + html;
+            tickerEl.style.display = 'flex';
+        } catch (e) { /* silent */ }
+    }
+    refreshTicker();
+    setInterval(refreshTicker, 30000);
+
+    // 2) Cursor-tracked highlight + 3D tilt on every .agent-card.
+    //    We update --mx and --my CSS vars + a CSS transform on
+    //    each mousemove. Disabled on touch devices and when the
+    //    user prefers reduced motion.
+    const reduceMotion = window.matchMedia &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isTouch = 'ontouchstart' in window && !window.matchMedia('(hover: hover)').matches;
+    if (!reduceMotion && !isTouch) {
+        document.querySelectorAll('.agent-card').forEach((card) => {
+            card.addEventListener('mousemove', (e) => {
+                const rect = card.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                card.style.setProperty('--mx', x + 'px');
+                card.style.setProperty('--my', y + 'px');
+                // Tilt: ±5° based on cursor position relative to centre.
+                const tiltX = ((y / rect.height) - 0.5) * -5;
+                const tiltY = ((x / rect.width)  - 0.5) *  5;
+                card.style.transform =
+                    'translateY(-6px) perspective(900px) ' +
+                    'rotateX(' + tiltX.toFixed(2) + 'deg) ' +
+                    'rotateY(' + tiltY.toFixed(2) + 'deg)';
+            });
+            card.addEventListener('mouseleave', () => {
+                card.style.transform = '';
+                card.style.setProperty('--mx', '50%');
+                card.style.setProperty('--my', '50%');
+            });
+        });
+    }
+})();
+</script>
 
 </body>
 </html>

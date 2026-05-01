@@ -63,6 +63,12 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
     Route::get('/agents/activity', [AgentActivityController::class, 'data']);
     Route::get('/agents/activity/{key}', [AgentActivityController::class, 'detail']);
 
+    // Live ticker (dashboard top bar) — futurista upgrade #4
+    Route::get('/activity-feed', [\App\Http\Controllers\ActivityFeedController::class, 'index']);
+
+    // Cmd+K cross-entity search — futurista upgrade #5
+    Route::get('/cmdk-search', [\App\Http\Controllers\CommandPaletteController::class, 'search']);
+
     // SAP Documents table — Richard SAP UI
     Route::get('/sap/table',  [SapTableController::class, 'tableData']);
     Route::get('/sap/years',  [SapTableController::class, 'yearRange']);

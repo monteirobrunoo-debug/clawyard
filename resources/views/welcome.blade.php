@@ -3698,6 +3698,7 @@ updateShareBtn();
 </div>
 
 @include('partials.keyboard-shortcuts')
+@include('partials.command-palette')
 
 </body>
 </html>

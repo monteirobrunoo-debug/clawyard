@@ -382,6 +382,10 @@ Route::middleware(['auth'])
     ->where('docId', '[A-Fa-f0-9\-]{36}')   // UUID shape
     ->name('hp_history.doc');
 
+// Mission Control — single-pane manager view (futurista upgrade #7).
+Route::middleware(['auth'])->get('/mission', [\App\Http\Controllers\MissionControlController::class, 'index'])
+    ->name('mission');
+
 // Suppliers directory — H&P approved supplier list + auto-extracted
 // candidates from agent messages. Read for any auth user; write
 // (create/update/blacklist) gated on isManager() inside the controller.
