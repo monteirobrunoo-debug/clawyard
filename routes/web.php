@@ -720,6 +720,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/conversations/{conversation}', [AdminController::class, 'conversation'])->name('admin.conversation');
     Route::get('/schedules', function () { return view('admin.schedules'); })->name('admin.schedules');
 
+    // Unified admin panel — health + secrets + cron + flags + integrations
+    Route::get ('/panel',                [\App\Http\Controllers\AdminPanelController::class, 'index'])->name('admin.panel');
+    Route::post('/panel/flag',           [\App\Http\Controllers\AdminPanelController::class, 'setFlag'])->name('admin.panel.flag');
+    Route::post('/panel/health-refresh', [\App\Http\Controllers\AdminPanelController::class, 'refreshHealth'])->name('admin.panel.refresh');
+
     // Per-user agent access control. Matrix view + cell toggle + preset
     // bulk-apply. The toggle endpoint is JSON so the matrix can update
     // a cell in-place without a full reload.

@@ -762,7 +762,7 @@
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
         <a href="/shares" class="nav-link">👥 Shared</a>
         @if(Auth::user()->isAdmin())
-            <a href="/admin/users" class="nav-link admin">⚙️ Admin</a>
+            <a href="{{ route('admin.panel') }}" class="nav-link admin" title="Admin Panel — health + secrets + flags">⚙️ Admin</a>
         @endif
         @php
             $cyName = trim((string) Auth::user()->name);
