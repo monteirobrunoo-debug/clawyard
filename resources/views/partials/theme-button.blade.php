@@ -53,6 +53,13 @@
         }
         sync();
         btn.addEventListener('click', () => {
+            // Flash ring — additive, gives the eye a focal anchor so the
+            // 0.4s background fade reads as deliberate.
+            btn.classList.remove('cy-flash');
+            void btn.offsetWidth;     // force reflow so re-add is observed
+            btn.classList.add('cy-flash');
+            setTimeout(() => btn.classList.remove('cy-flash'), 600);
+
             const cur  = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
             const next = cur === 'light' ? 'dark' : 'light';
             if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');

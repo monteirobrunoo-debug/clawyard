@@ -70,8 +70,42 @@
 
         body {
             font-family: 'Inter', system-ui, sans-serif;
-            background: var(--bg); color: var(--text); min-height: 100vh;
-            transition: background 0.2s, color 0.2s;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            /* Smooth 0.4s cross-fade when toggling dark/light. The
+               longer duration (vs old 0.2s) plus extra colour-channel
+               coverage means card backgrounds, borders, and accents
+               all animate together rather than popping at different
+               speeds — feels deliberate instead of glitchy. */
+            transition:
+                background-color 0.4s ease,
+                color 0.4s ease;
+        }
+        /* Animate the gradient layers behind the page (hero, header)
+           so they breathe through the theme change instead of a hard
+           swap. */
+        .header, .hero, .agent-card, .ticker-rail {
+            transition:
+                background-color 0.4s ease,
+                background-image 0.4s ease,
+                border-color 0.4s ease,
+                box-shadow 0.4s ease,
+                color 0.4s ease;
+        }
+        /* Small "flash ring" emitted from the theme button on toggle —
+           gives the eye a focal point so the transition feels intentional
+           rather than something randomly happening. */
+        .theme-toggle.cy-flash::after {
+            content: ''; position: absolute; inset: -4px;
+            border: 2px solid var(--green); border-radius: 50%;
+            opacity: 0;
+            animation: theme-flash-ring 0.55s ease-out;
+        }
+        .theme-toggle { position: relative; }
+        @keyframes theme-flash-ring {
+            0%   { transform: scale(0.85); opacity: 0.9; }
+            100% { transform: scale(2.2);  opacity: 0;   }
         }
 
         /* ── HEADER ── */
@@ -1233,6 +1267,67 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
         if (key) window.location.href = '/agents/' + encodeURIComponent(key);
     });
 
+    // ── Drag-reorder of favorites (futurista round 4) ──────────────
+    // Make every favorite-clone draggable so the user can re-order
+    // their bookmarked agents by drag. The order persists via the
+    // existing favs[] in localStorage (writeFavs).
+    function enableReorder() {
+        const cards = grid.querySelectorAll('.agent-card[data-fav-clone]');
+        cards.forEach(card => {
+            card.setAttribute('draggable', 'true');
+            // Visual cue on hover only — no permanent grip handle so
+            // the look stays clean for users who don't reorder.
+            card.style.cursor = 'grab';
+        });
+    }
+    let dragSrc = null;
+    grid.addEventListener('dragstart', (e) => {
+        const card = e.target.closest('.agent-card');
+        if (!card || !card.hasAttribute('data-fav-clone')) return;
+        dragSrc = card;
+        card.style.opacity = '0.4';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.getAttribute('data-agent-key') || '');
+    });
+    grid.addEventListener('dragend', (e) => {
+        if (dragSrc) dragSrc.style.opacity = '';
+        dragSrc = null;
+    });
+    grid.addEventListener('dragover', (e) => {
+        if (!dragSrc) return;
+        e.preventDefault();
+        const target = e.target.closest('.agent-card[data-fav-clone]');
+        if (!target || target === dragSrc) return;
+        const rect = target.getBoundingClientRect();
+        // Insert before or after based on cursor position relative to
+        // the target's horizontal centre.
+        const before = (e.clientX - rect.left) < rect.width / 2;
+        if (before) target.parentNode.insertBefore(dragSrc, target);
+        else        target.parentNode.insertBefore(dragSrc, target.nextSibling);
+    });
+    grid.addEventListener('drop', (e) => {
+        if (!dragSrc) return;
+        e.preventDefault();
+        // Read the new order from the DOM and persist.
+        const newOrder = Array.from(grid.querySelectorAll('.agent-card[data-fav-clone]'))
+            .map(c => c.getAttribute('data-agent-key'))
+            .filter(Boolean);
+        writeFavs(newOrder);
+        // Toast the user so they know it stuck.
+        if (window.cyToast) {
+            window.cyToast({ title: '✓ Ordem dos favoritos guardada', tone: 'success', duration: 2000 });
+        }
+        dragSrc = null;
+    });
+
+    // Re-enable drag attribute every time the favorites section
+    // refreshes (cloned cards lose attributes otherwise).
+    const _origRefresh = refreshFavoritesSection;
+    refreshFavoritesSection = function () {
+        _origRefresh();
+        enableReorder();
+    };
+
     // Initial render
     refreshFavoritesSection();
 })();
@@ -1308,6 +1403,10 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 @include('partials.command-palette')
 @include('partials.toast-system')
 @include('partials.view-transitions')
+@include('partials.cheat-sheet')
+@include('partials.global-dropzone')
+@include('partials.presence')
+@include('partials.activity-meter')
 
 {{-- ─── Futurista UX layer (added 2026-05-01) ─────────────────
      1. Scroll-aware shrink of the sticky header

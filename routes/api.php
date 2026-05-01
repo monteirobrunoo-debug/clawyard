@@ -69,6 +69,10 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
     // Cmd+K cross-entity search — futurista upgrade #5
     Route::get('/cmdk-search', [\App\Http\Controllers\CommandPaletteController::class, 'search']);
 
+    // Real-time presence (futurista round 4) — heartbeat + who's-here
+    Route::post('/presence/heartbeat', [\App\Http\Controllers\PresenceController::class, 'heartbeat']);
+    Route::get ('/presence/who',       [\App\Http\Controllers\PresenceController::class, 'who']);
+
     // SAP Documents table — Richard SAP UI
     Route::get('/sap/table',  [SapTableController::class, 'tableData']);
     Route::get('/sap/years',  [SapTableController::class, 'yearRange']);

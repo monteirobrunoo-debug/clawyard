@@ -3815,6 +3815,10 @@ updateShareBtn();
 @include('partials.command-palette')
 @include('partials.toast-system')
 @include('partials.view-transitions')
+@include('partials.cheat-sheet')
+@include('partials.global-dropzone')
+@include('partials.presence')
+@include('partials.activity-meter')
 
 </body>
 </html>
