@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Tender;
+use App\Services\TenderDifficultyClassifier;
 use App\Services\TenderSupplierSuggesterService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -44,8 +45,10 @@ class AnalyseTenderJob implements ShouldQueue
 
     public function __construct(public int $tenderId) {}
 
-    public function handle(TenderSupplierSuggesterService $svc): void
-    {
+    public function handle(
+        TenderSupplierSuggesterService $svc,
+        TenderDifficultyClassifier $difficulty,
+    ): void {
         $tender = Tender::find($this->tenderId);
         if (!$tender) return;
 
@@ -60,8 +63,14 @@ class AnalyseTenderJob implements ShouldQueue
             return;
         }
 
+        // Curriculum classification — easy tenders skip Tavily and use
+        // a smaller supplier shortlist. Hard ones get the wider net.
+        $bucket = $difficulty->classify($tender);
+        $localLimit = $difficulty->localSupplierLimit($bucket['level']);
+        $includeWeb = $difficulty->shouldIncludeWeb($bucket['level']);
+
         try {
-            $bundle = $svc->suggest($tender, localLimit: 8, includeWeb: true);
+            $bundle = $svc->suggest($tender, localLimit: $localLimit, includeWeb: $includeWeb);
         } catch (\Throwable $e) {
             Log::warning('AnalyseTenderJob: suggester failed', [
                 'tender_id' => $tender->id,
@@ -71,7 +80,9 @@ class AnalyseTenderJob implements ShouldQueue
         }
 
         $payload = [
-            'version'          => 1,
+            'version'          => 2,
+            'difficulty'       => $bucket['level'],
+            'difficulty_reasons' => $bucket['reasons'],
             'categories'       => $bundle['categories'],
             'top_supplier_ids' => $bundle['local']->pluck('id')->all(),
             'web_query'        => $bundle['query']         ?? null,

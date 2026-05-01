@@ -125,18 +125,29 @@ TXT;
     /**
      * Build the synthesis user message — same as userFor() but
      * frames it for the JSON-emitting role.
+     *
+     * @param array $signal       the signal payload
+     * @param array $priorContext earlier agent outputs
+     * @param string $precedentBlock formatted PRECEDENTS section
+     *                              (LeadPrecedentRetriever::formatForPrompt);
+     *                              empty string when no past outcomes
+     *                              are similar enough to inject.
      */
-    public function synthesisUserFor(array $signal, array $priorContext): string
+    public function synthesisUserFor(array $signal, array $priorContext, string $precedentBlock = ''): string
     {
         $signalJson = $this->jsonClip($signal, 4000);
         $priorJson  = $this->jsonClip($this->trimPriorContext($priorContext), 6000);
+
+        $precedentSection = $precedentBlock !== ''
+            ? "\n\n{$precedentBlock}"
+            : '';
 
         return <<<TXT
 SIGNAL:
 {$signalJson}
 
 CHAIN_OUTPUTS:
-{$priorJson}
+{$priorJson}{$precedentSection}
 
 Now emit the final lead JSON per the synthesis contract. JSON only.
 TXT;

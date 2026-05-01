@@ -173,18 +173,39 @@
                     $topIds = (array) ($pa['top_supplier_ids'] ?? []);
                     $cats = (array) ($pa['categories'] ?? []);
                     $webHits = count((array) ($pa['web_results'] ?? []));
+                    $difficulty = (string) ($pa['difficulty'] ?? '');
+                    $diffReasons = (array) ($pa['difficulty_reasons'] ?? []);
+                    $diffPill = match ($difficulty) {
+                        'easy'   => ['🟢 Fácil',  'bg-emerald-100 text-emerald-800'],
+                        'hard'   => ['🔴 Difícil', 'bg-red-100 text-red-800'],
+                        'medium' => ['🟡 Médio',  'bg-amber-100 text-amber-800'],
+                        default  => null,
+                    };
                 @endphp
                 <section class="rounded-lg bg-emerald-50/40 border border-emerald-200 p-4 text-sm">
                     <div class="flex items-start gap-3">
                         <span class="text-2xl">⚡</span>
                         <div class="flex-1">
-                            <div class="font-semibold text-emerald-800">Pré-análise pronta</div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-semibold text-emerald-800">Pré-análise pronta</span>
+                                @if($diffPill)
+                                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold {{ $diffPill[1] }}"
+                                          title="{{ implode(' · ', $diffReasons) ?: 'classificação por defeito' }}">
+                                        {{ $diffPill[0] }}
+                                    </span>
+                                @endif
+                            </div>
                             <div class="text-xs text-emerald-700 mt-0.5">
                                 Computada {{ $tender->prelim_analysed_at->diffForHumans() }} ·
                                 <strong>{{ count($topIds) }}</strong> fornecedores H&amp;P sugeridos ·
                                 <strong>{{ $webHits }}</strong> resultados web ·
                                 Categorias: <code class="bg-white border border-emerald-200 rounded px-1">{{ implode(', ', $cats) ?: 'nenhuma' }}</code>
                             </div>
+                            @if(!empty($diffReasons))
+                                <div class="text-[11px] text-emerald-600 mt-1">
+                                    <strong>Razões:</strong> {{ implode(' · ', $diffReasons) }}
+                                </div>
+                            @endif
                             <p class="text-[11px] text-emerald-600 mt-1">
                                 Clica "🔎 Procurar fornecedores" abaixo para ver o detalhe e gerar drafts.
                             </p>

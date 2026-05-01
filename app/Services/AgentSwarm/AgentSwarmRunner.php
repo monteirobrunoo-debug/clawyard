@@ -51,6 +51,8 @@ class AgentSwarmRunner
     private PromptBuilder $prompts;
     /** C2: per-agent metric writer. Optional — null disables reward recording. */
     private ?RewardRecorder $rewards;
+    /** RL loop: feeds past won/lost outcomes into the synthesis prompt. */
+    private LeadPrecedentRetriever $precedents;
 
     /**
      * All dependencies injected (defaults via container) so tests
@@ -63,12 +65,14 @@ class AgentSwarmRunner
         ?AgentDispatcher $dispatcher = null,
         ?PromptBuilder $prompts = null,
         ?RewardRecorder $rewards = null,
+        ?LeadPrecedentRetriever $precedents = null,
     ) {
         $this->maxCostPerRun = $maxCostPerRun ?? (float) config('services.agent_swarm.max_cost_per_run', 0.10);
         $this->maxCostPerDay = $maxCostPerDay ?? (float) config('services.agent_swarm.max_cost_per_day', 5.00);
         $this->dispatcher    = $dispatcher    ?? app(AgentDispatcher::class);
         $this->prompts       = $prompts       ?? app(PromptBuilder::class);
         $this->rewards       = $rewards       ?? app(RewardRecorder::class);
+        $this->precedents    = $precedents    ?? app(LeadPrecedentRetriever::class);
     }
 
     /**
@@ -216,8 +220,24 @@ class AgentSwarmRunner
     ): array {
         $signal = $context['signal'] ?? [];
         $system = $this->prompts->systemFor($agentKey, $isSynthesis);
-        $user   = $isSynthesis
-            ? $this->prompts->synthesisUserFor($signal, $context)
+
+        // RL feedback loop: when synthesising, fetch up to 5 similar
+        // past wins/losses and inject them as PRECEDENTS so the
+        // synthesiser calibrates its score against actual outcomes
+        // instead of running stateless every time. Empty when no
+        // past terminal leads match — synthesis behaves as before.
+        $precedentBlock = '';
+        if ($isSynthesis) {
+            try {
+                $picked = $this->precedents->fetch($signal, maxExamples: 5);
+                $precedentBlock = $this->precedents->formatForPrompt($picked);
+            } catch (\Throwable $e) {
+                Log::info('LeadPrecedentRetriever skipped', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $user = $isSynthesis
+            ? $this->prompts->synthesisUserFor($signal, $context, $precedentBlock)
             : $this->prompts->userFor($agentKey, $signal, $context);
 
         // Synthesis gets a higher max_tokens so it has room for the
