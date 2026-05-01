@@ -185,20 +185,16 @@
                  statuses (ganho/perdido/cancelado/não tratar) and long-
                  expired rows are intentionally excluded so the headline
                  reflects actionable work, not lifetime imports. --}}
+            {{-- Stats hero — ring charts with the live pipeline as denominator
+                 so each slice shows what fraction of "actionable work" is in
+                 each state at a glance. --}}
+            @php $tdrTotal = max(1, (int) $stats['total']); @endphp
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                @foreach([
-                    ['label' => 'Em curso',               'hint' => 'activos + dentro do prazo', 'value' => $stats['total'],       'color' => 'text-gray-800'],
-                    ['label' => 'Dentro do prazo',        'hint' => 'deadline no futuro',        'value' => $stats['active'],      'color' => 'text-indigo-700'],
-                    ['label' => 'Em atraso ≤'.\App\Models\Tender::OVERDUE_WINDOW_DAYS.'d', 'hint' => 'ainda recuperáveis', 'value' => $stats['overdue'], 'color' => 'text-red-600'],
-                    ['label' => 'Urgentes ≤7d',           'hint' => 'deadline em ≤7 dias',       'value' => $stats['urgent'],      'color' => 'text-orange-600'],
-                    ['label' => 'Sem nº SAP',             'hint' => 'atribuídos, sem oportunidade', 'value' => $stats['needing_sap'], 'color' => 'text-yellow-700'],
-                ] as $card)
-                    <div class="rounded-lg bg-white p-4 shadow-sm border border-gray-100">
-                        <div class="text-xs uppercase tracking-wide text-gray-500">{{ $card['label'] }}</div>
-                        <div class="mt-1 text-2xl font-bold {{ $card['color'] }}">{{ $card['value'] }}</div>
-                        <div class="mt-0.5 text-[10px] text-gray-400">{{ $card['hint'] }}</div>
-                    </div>
-                @endforeach
+                @include('partials.ring-chart', ['label' => 'Em curso',         'value' => $stats['total'],       'total' => $stats['total'],   'tone' => 'gray',    'subline' => 'pipeline live'])
+                @include('partials.ring-chart', ['label' => 'Dentro do prazo', 'value' => $stats['active'],      'total' => $tdrTotal,         'tone' => 'indigo',  'subline' => 'deadline futura'])
+                @include('partials.ring-chart', ['label' => 'Em atraso ≤'.\App\Models\Tender::OVERDUE_WINDOW_DAYS.'d', 'value' => $stats['overdue'], 'total' => $tdrTotal, 'tone' => 'red',     'subline' => 'recuperáveis'])
+                @include('partials.ring-chart', ['label' => 'Urgentes ≤7d',     'value' => $stats['urgent'],      'total' => $tdrTotal,         'tone' => 'amber',   'subline' => 'deadline ≤7d'])
+                @include('partials.ring-chart', ['label' => 'Sem nº SAP',       'value' => $stats['needing_sap'], 'total' => $tdrTotal,         'tone' => 'amber',   'subline' => 'atribuídos s/ opp'])
             </div>
 
             {{-- ─── Source-restriction transparency banner ──────────────────

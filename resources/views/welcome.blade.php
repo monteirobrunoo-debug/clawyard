@@ -213,10 +213,60 @@
         @keyframes blink-cur { 0%,100%{opacity:1} 50%{opacity:0} }
 
         /* Typing indicator */
-        .typing .bubble { padding:14px; }
-        .dot { width:7px; height:7px; background:var(--muted); border-radius:50%; animation:bounce 1.2s infinite; display:inline-block; }
-        .dot:nth-child(2){animation-delay:.2s} .dot:nth-child(3){animation-delay:.4s}
-        @keyframes bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+        /* "Agent thinking" indicator — upgraded 2026-05-01.
+           Shows the agent's name + a wave of dots that travel with a
+           soft glow in the agent's brand colour, plus a rotating
+           caption ("a pensar… → a consultar memória…  → a redigir…")
+           so the user perceives progress instead of a flat wait. */
+        .typing .bubble {
+            padding:12px 16px;
+            background: linear-gradient(135deg,
+                color-mix(in srgb, var(--agent-color, #76b900) 8%, var(--bg)),
+                color-mix(in srgb, var(--agent-color, #76b900) 4%, var(--bg)));
+            border: 1px solid color-mix(in srgb, var(--agent-color, #76b900) 22%, var(--border2));
+            position: relative; overflow: hidden;
+        }
+        .typing .bubble::before {
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(90deg,
+                transparent,
+                color-mix(in srgb, var(--agent-color, #76b900) 14%, transparent),
+                transparent);
+            transform: translateX(-100%);
+            animation: typing-shimmer 2.6s ease-in-out infinite;
+        }
+        @keyframes typing-shimmer {
+            0%,100% { transform: translateX(-100%); }
+            50%     { transform: translateX(100%); }
+        }
+        .typing-row {
+            display: flex; align-items: center; gap: 10px;
+            position: relative; z-index: 1;
+        }
+        .typing-caption {
+            font-size: 12px; color: var(--muted2);
+            font-style: italic; letter-spacing: 0.2px;
+            opacity: 0; animation: typing-caption-fade 6s ease-in-out infinite;
+        }
+        @keyframes typing-caption-fade {
+            0%,100% { opacity: 0; }
+            10%,40% { opacity: 1; }
+            50%,60% { opacity: 0; }
+        }
+        .dot {
+            width: 8px; height: 8px;
+            background: var(--agent-color, #76b900);
+            border-radius: 50%; display: inline-block;
+            box-shadow: 0 0 6px color-mix(in srgb, var(--agent-color, #76b900) 60%, transparent);
+            animation: dot-wave 1.2s infinite ease-in-out;
+        }
+        .dot:nth-child(2) { animation-delay: 0.15s; }
+        .dot:nth-child(3) { animation-delay: 0.30s; }
+        @keyframes dot-wave {
+            0%,60%,100% { transform: translateY(0)   scale(1);   opacity: 0.55; }
+            30%         { transform: translateY(-6px) scale(1.15); opacity: 1;    }
+        }
 
         /* ── SUGGESTIONS ── */
         .suggestions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
@@ -2024,16 +2074,56 @@ function attachOutlookRoundup(msgEl, agentName) {
 function addTyping(agentName = '') {
     const msg = document.createElement('div');
     msg.className = 'message ai typing';
+    const displayName = AGENT_NAMES[agentName] || 'ClawYard';
+    // Rotating captions cycle every ~6s via the JS interval below.
+    // Each agent type gets contextual phrases so it doesn't feel
+    // generic. Falls back to "a pensar" for unknown keys.
+    const captionsByAgent = {
+        crm:        ['a consultar SAP…', 'a verificar Business Partners…', 'a redigir oportunidade…'],
+        sales:      ['a recolher contexto…', 'a consultar tabela de preços…', 'a redigir resposta…'],
+        email:      ['a estudar template…', 'a redigir email…', 'a verificar assinatura…'],
+        mildef:     ['a consultar NSPA/NCAGE…', 'a cruzar com histórico…', 'a redigir resposta…'],
+        quantum:    ['a pesquisar arXiv/EPO…', 'a cruzar referências…', 'a sintetizar findings…'],
+        aria:       ['a auditar protocolos…', 'a verificar CSP…', 'a sintetizar findings…'],
+        briefing:   ['a consultar todos os agentes…', 'a sintetizar dados…', 'a preparar briefing…'],
+        capitao:    ['a consultar IMO/MARPOL…', 'a verificar dados de navio…', 'a redigir resposta…'],
+        finance:    ['a consultar facturação SAP…', 'a calcular margens…', 'a redigir nota…'],
+        engineer:   ['a consultar specs técnicas…', 'a cruzar manuais…', 'a redigir solução…'],
+        document:   ['a indexar documento…', 'a extrair pontos-chave…', 'a sintetizar resumo…'],
+        orchestrator: ['a delegar aos agentes…', 'a recolher respostas…', 'a sintetizar…'],
+    };
+    const captions = captionsByAgent[agentName] || ['a pensar…', 'a consultar memória…', 'a redigir resposta…'];
+
     msg.innerHTML = `
         <div class="avatar">${AGENT_EMOJIS[agentName] || '🤖'}</div>
         <div class="msg-col">
-            <div class="msg-meta"><span>${AGENT_NAMES[agentName] || 'ClawYard'}</span></div>
-            <div class="bubble" style="display:flex;gap:4px;align-items:center">
-                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="msg-meta"><span>${displayName}</span></div>
+            <div class="bubble">
+                <div class="typing-row">
+                    <span style="display:inline-flex;gap:4px;align-items:center">
+                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                    </span>
+                    <span class="typing-caption" data-captions='${JSON.stringify(captions).replace(/'/g, "&#39;")}'>${captions[0]}</span>
+                </div>
             </div>
         </div>`;
     chat.appendChild(msg);
     chat.scrollTop = chat.scrollHeight;
+
+    // Cycle the caption every 6s (must match the CSS keyframe duration
+    // so the fade-in/out lines up with the text swap).
+    const captionEl = msg.querySelector('.typing-caption');
+    if (captionEl && captions.length > 1) {
+        let i = 0;
+        const tick = setInterval(() => {
+            // Stop ticking when the typing bubble is removed from DOM.
+            if (!captionEl.isConnected) { clearInterval(tick); return; }
+            i = (i + 1) % captions.length;
+            captionEl.textContent = captions[i];
+        }, 6000);
+        // Stash for cleanup when the message is removed elsewhere.
+        msg._captionTick = tick;
+    }
     return msg;
 }
 

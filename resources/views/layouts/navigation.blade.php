@@ -31,6 +31,12 @@
                     <x-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
                         🏭 {{ __('Fornecedores') }}
                     </x-nav-link>
+                    @if(Auth::user()?->isManager())
+                        <x-nav-link :href="route('mission')" :active="request()->routeIs('mission')"
+                                    title="Mission Control — single-pane manager view">
+                            🛰️ {{ __('Mission') }}
+                        </x-nav-link>
+                    @endif
                     <x-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.index')">
                         🤖 {{ __('Robot') }}
                     </x-nav-link>
@@ -115,6 +121,11 @@
             <x-responsive-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
                 🏭 {{ __('Fornecedores') }}
             </x-responsive-nav-link>
+            @if(Auth::user()?->isManager())
+                <x-responsive-nav-link :href="route('mission')" :active="request()->routeIs('mission')">
+                    🛰️ {{ __('Mission') }}
+                </x-responsive-nav-link>
+            @endif
             <x-responsive-nav-link :href="route('robot.index')" :active="request()->routeIs('robot.index')">
                 🤖 {{ __('Robot') }}
             </x-responsive-nav-link>

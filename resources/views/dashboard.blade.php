@@ -506,12 +506,15 @@
             box-shadow: 0 0 14px var(--card-color, var(--green));
         }
 
-        /* Cursor-tracked highlight — radial gradient following mouse. */
+        /* Cursor-tracked highlight — radial gradient following mouse.
+           Boosted to 22% saturation + a secondary inner ring at 35%
+           so the brand colour really pops on hover. */
         .agent-card::after {
             content: ''; position: absolute; inset: 0;
             background: radial-gradient(
                 420px circle at var(--mx) var(--my),
-                color-mix(in srgb, var(--card-color, var(--green)) 14%, transparent),
+                color-mix(in srgb, var(--card-color, var(--green)) 22%, transparent) 0%,
+                color-mix(in srgb, var(--card-color, var(--green)) 8%, transparent) 22%,
                 transparent 50%
             );
             opacity: 0; transition: opacity 0.25s;
@@ -521,12 +524,32 @@
         /* Keep all child content above the highlight overlay. */
         .agent-card > * { position: relative; z-index: 2; }
 
+        /* Brand-coloured outer glow on hover — pulsates softly so the
+           card feels "alive" rather than just statically lit. Each
+           agent has its own --card-color from the catalogue, so the
+           glow tints to that brand. */
+        @keyframes card-glow-breathe {
+            0%, 100% { box-shadow:
+                0 16px 44px color-mix(in srgb, var(--card-color, var(--green)) 28%, transparent),
+                0 0 0 1px  color-mix(in srgb, var(--card-color, var(--green)) 28%, transparent),
+                0 0 32px   color-mix(in srgb, var(--card-color, var(--green)) 16%, transparent); }
+            50%      { box-shadow:
+                0 22px 56px color-mix(in srgb, var(--card-color, var(--green)) 38%, transparent),
+                0 0 0 1px   color-mix(in srgb, var(--card-color, var(--green)) 36%, transparent),
+                0 0 48px    color-mix(in srgb, var(--card-color, var(--green)) 28%, transparent); }
+        }
         .agent-card:hover {
             transform: translateY(-6px);
+            border-color: color-mix(in srgb, var(--card-color, var(--green)) 60%, transparent);
+            animation: card-glow-breathe 2.6s ease-in-out infinite;
+        }
+
+        /* Avatar gets a brand-coloured halo on hover (subtle radial
+           around the photo). */
+        .agent-card:hover .avatar {
             box-shadow:
-                0 16px 44px color-mix(in srgb, var(--card-color, var(--green)) 22%, transparent),
-                0 0 0 1px color-mix(in srgb, var(--card-color, var(--green)) 24%, transparent);
-            border-color: color-mix(in srgb, var(--card-color, var(--green)) 50%, transparent);
+                0 0 0 3px color-mix(in srgb, var(--card-color, var(--green)) 12%, transparent),
+                0 0 24px color-mix(in srgb, var(--card-color, var(--green)) 32%, transparent);
         }
 
         .agent-card .avatar {

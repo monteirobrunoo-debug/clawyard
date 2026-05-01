@@ -43,23 +43,22 @@
 
     <div class="py-6 max-w-6xl mx-auto px-4">
 
-        {{-- ── Stats hero — 5 cards uniformes ───────────────────────── --}}
+        {{-- ── Stats hero — 4 ring charts + 1 currency card ───────────
+             Currency value doesn't fit the ring metaphor (no obvious
+             denominator), so it stays as a flat card. The 4 count-based
+             stats share a common denominator so the slices show what
+             fraction of the total order pool sits in each state. --}}
+        @php $mpTotal = max(1, (int) $stats['total_orders']); @endphp
         <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-            @php
-                $heroStats = [
-                    ['label' => 'Orders',          'value' => $stats['total_orders'],                         'tone' => 'text-gray-900'],
-                    ['label' => 'STL prontos',     'value' => $stats['stl_ready'],                            'tone' => 'text-emerald-700'],
-                    ['label' => 'Cancelados',      'value' => $stats['cancelled'],                            'tone' => 'text-gray-500'],
-                    ['label' => 'Gasto total',     'value' => '$' . number_format($stats['total_spent_usd'], 2), 'tone' => 'text-amber-700'],
-                    ['label' => 'Agentes activos', 'value' => $stats['agents_active'],                        'tone' => 'text-indigo-700'],
-                ];
-            @endphp
-            @foreach($heroStats as $hs)
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-col justify-between min-h-[78px]">
-                    <div class="text-[10px] uppercase tracking-wider text-gray-500">{{ $hs['label'] }}</div>
-                    <div class="text-2xl font-bold {{ $hs['tone'] }}">{{ $hs['value'] }}</div>
-                </div>
-            @endforeach
+            @include('partials.ring-chart', ['label' => 'Orders',          'value' => $stats['total_orders'], 'total' => $stats['total_orders'], 'tone' => 'gray',    'subline' => 'cumulative'])
+            @include('partials.ring-chart', ['label' => 'STL prontos',     'value' => $stats['stl_ready'],    'total' => $mpTotal,                'tone' => 'emerald', 'subline' => 'modelo gerado'])
+            @include('partials.ring-chart', ['label' => 'Cancelados',      'value' => $stats['cancelled'],    'total' => $mpTotal,                'tone' => 'gray',    'subline' => 'rejeitados'])
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex flex-col justify-between min-h-[78px]">
+                <div class="text-[10px] uppercase tracking-wider text-gray-500">Gasto total</div>
+                <div class="text-2xl font-bold text-amber-700">${{ number_format($stats['total_spent_usd'], 2) }}</div>
+                <div class="text-[10px] text-gray-400">paper money</div>
+            </div>
+            @include('partials.ring-chart', ['label' => 'Agentes activos', 'value' => $stats['agents_active'], 'total' => 27, 'tone' => 'indigo', 'subline' => 'do catálogo'])
         </div>
 
         {{-- ── Top wallets ────────────────────────────────────────── --}}
