@@ -190,6 +190,11 @@
         .p-item-badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; }
         .p-item-link { font-size:11px; color:var(--green); text-decoration:none; }
         .p-item-link:hover { text-decoration:underline; }
+        /* Quando o item inteiro é um link (relatório / conversa / descoberta),
+           remove o sublinhado nativo do <a> mas dá hover sutil para mostrar
+           que é clicável. */
+        a.p-item, a.p-item-link-wrap { display:block; text-decoration:none; color:inherit; cursor:pointer; transition:background .15s; }
+        a.p-item:hover, a.p-item-link-wrap:hover { background:rgba(118,185,0,.06); }
 
         .panel-loading { display:flex; align-items:center; justify-content:center; padding:60px 0; }
         .spinner-sm { width:22px; height:22px; border:2.5px solid var(--border); border-top-color:var(--green); border-radius:50%; animation:spin .7s linear infinite; }
@@ -372,44 +377,54 @@ function renderPanelTab() {
         if (!panelData.reports || !panelData.reports.length) {
             body.innerHTML = '<div class="panel-empty">📄 Nenhum relatório ainda.</div>'; return;
         }
+        // Wrap in <a> so the WHOLE card is clickable to open /reports/{id}.
         body.innerHTML = `<div class="panel-section">${panelData.reports.map(r => `
-            <div class="p-item">
+            <a href="${esc(r.url || '#')}" class="p-item p-item-link-wrap" title="Abrir relatório">
                 <div class="p-item-title">${esc(r.title)}</div>
                 ${r.preview ? `<div class="p-item-preview">${esc(r.preview)}</div>` : ''}
                 <div class="p-item-meta">
                     <span class="p-item-badge" style="background:rgba(118,185,0,.15);color:#76b900">📄 Relatório</span>
                     <span class="p-item-time">${esc(r.date)} · ${esc(r.created_at)}</span>
                 </div>
-            </div>`).join('')}</div>`;
+            </a>`).join('')}</div>`;
     }
 
     if (currentTab === 'discoveries') {
         if (!panelData.discoveries || !panelData.discoveries.length) {
             body.innerHTML = '<div class="panel-empty">🔍 Nenhuma descoberta ainda.</div>'; return;
         }
-        body.innerHTML = `<div class="panel-section">${panelData.discoveries.map(d => `
-            <div class="p-item">
+        // Each discovery wraps in an <a> when there's an outbound URL —
+        // descobertas frequently link directly to arXiv/EPO/USPTO.
+        body.innerHTML = `<div class="panel-section">${panelData.discoveries.map(d => {
+            const inner = `
                 <div class="p-item-title">${esc(d.title)}</div>
                 <div class="p-item-meta">
                     <span class="p-item-badge" style="background:rgba(153,51,255,.15);color:#9933ff">🔬 ${esc(d.source)}</span>
                     <span class="p-item-time">${esc(d.date)} · ${esc(d.created_at)}</span>
-                    ${d.url ? `<a href="${esc(d.url)}" target="_blank" class="p-item-link">Ver →</a>` : ''}
-                </div>
-            </div>`).join('')}</div>`;
+                    ${d.url ? `<span class="p-item-link">Ver →</span>` : ''}
+                </div>`;
+            return d.url
+                ? `<a href="${esc(d.url)}" target="_blank" rel="noopener" class="p-item p-item-link-wrap">${inner}</a>`
+                : `<div class="p-item">${inner}</div>`;
+        }).join('')}</div>`;
     }
 
     if (currentTab === 'messages') {
         if (!panelData.messages || !panelData.messages.length) {
             body.innerHTML = '<div class="panel-empty">💬 Nenhuma mensagem ainda.</div>'; return;
         }
-        body.innerHTML = `<div class="panel-section">${panelData.messages.map(m => `
-            <div class="p-item">
+        // Messages link to the parent /conversations/{id} when available.
+        body.innerHTML = `<div class="panel-section">${panelData.messages.map(m => {
+            const inner = `
                 <div class="p-item-preview">${esc(m.preview)}</div>
                 <div class="p-item-meta">
                     <span class="p-item-badge" style="background:rgba(0,204,102,.15);color:#00cc66">💬 Resposta</span>
                     <span class="p-item-time">${esc(m.date)} · ${esc(m.created_at)}</span>
-                </div>
-            </div>`).join('')}</div>`;
+                </div>`;
+            return m.url
+                ? `<a href="${esc(m.url)}" class="p-item p-item-link-wrap" title="Abrir conversa">${inner}</a>`
+                : `<div class="p-item">${inner}</div>`;
+        }).join('')}</div>`;
     }
 }
 

@@ -153,6 +153,8 @@ class AgentActivityController extends Controller
             ->limit(15)
             ->get()
             ->map(fn($r) => [
+                'id'         => $r->id,
+                'url'        => '/reports/' . $r->id,
                 'title'      => $r->title ?: 'Relatório',
                 'preview'    => \Str::limit(strip_tags($r->content ?? ''), 180),
                 'created_at' => $r->created_at->diffForHumans(),
@@ -166,6 +168,7 @@ class AgentActivityController extends Controller
             ->limit(15)
             ->get()
             ->map(fn($d) => [
+                'id'         => $d->id,
                 'title'      => $d->title,
                 'source'     => strtoupper($d->source ?? ''),
                 'created_at' => $d->created_at->diffForHumans(),
@@ -179,6 +182,14 @@ class AgentActivityController extends Controller
             ->limit(10)
             ->get()
             ->map(fn($m) => [
+                'id'              => $m->id,
+                'conversation_id' => $m->conversation_id,
+                // Link to the parent conversation when available so the
+                // user can open it; otherwise fall back to the agent's
+                // chat URL.
+                'url'        => $m->conversation_id
+                    ? '/conversations/' . $m->conversation_id
+                    : ($meta['chat_url'] ?? null),
                 'preview'    => \Str::limit(strip_tags($m->content ?? ''), 160),
                 'created_at' => $m->created_at->diffForHumans(),
                 'date'       => $m->created_at->format('d/m/Y H:i'),

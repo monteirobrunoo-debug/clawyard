@@ -513,7 +513,12 @@ class NvidiaController extends Controller
             // Auto-save report for all agents (responses > 150 chars)
             if (strlen($fullReplyPersisted) > 150) {
                 try {
-                    $agentLabel = $agentName_final;
+                    // Look up the canonical display name from AgentCatalog
+                    // (Marta CRM, Daniel Email, …) instead of stamping the
+                    // raw agent key onto the report title — the latter
+                    // shows up as "crm — 2026-04-30" in the reports list.
+                    $catalogMeta = \App\Services\AgentCatalog::find($agentName_final);
+                    $agentLabel  = $catalogMeta['name'] ?? $agentName_final;
                     $title = $agentLabel . ' — ' . now()->format('Y-m-d H:i');
                     \App\Models\Report::create([
                         'title'   => $title,

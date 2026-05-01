@@ -2780,7 +2780,11 @@ async function createAgentPdf() {
 
     const fullText = Array.from(bubbles).map(b => b.innerText || b.textContent).join('\n\n---\n\n');
     const date     = new Date().toLocaleDateString('pt-PT', { day:'2-digit', month:'long', year:'numeric' });
-    const title    = agentName + ' — Relatório ' + date;
+    // Use the canonical display name (Marta CRM, Daniel Email, …)
+    // instead of the raw agent key. Otherwise the report title shows
+    // up as "crm — 2026-04-30" which the user sees as broken.
+    const displayName = (window.AGENT_NAMES && AGENT_NAMES[agentName]) || agentName;
+    const title    = displayName + ' — Relatório ' + date;
 
     const origHTML = btn.innerHTML;
     btn.innerHTML  = '⏳';

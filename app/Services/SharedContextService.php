@@ -276,7 +276,10 @@ class SharedContextService
             // Match numbers: optionally prefixed by € $ £
             // Handles both PT format (145.000,50) and EN format (145,000.50)
             preg_match_all('/[\€\$\£]?\s*\d[\d\s.,]*\d|\b\d{2,}\b/', $text, $m);
-            return array_filter(array_map(function (string $n): float {
+            // CRITICAL: array_values() to re-key after filter — the
+            // downstream code accesses $arr[$i] sequentially and a
+            // dropped first element used to throw "Undefined array key 0".
+            return array_values(array_filter(array_map(function (string $n): float {
                 $n = trim($n, " \t€\$£");
                 // PT format: 145.000,50 → detect by trailing ,XX
                 if (preg_match('/\.\d{3}(,\d+)?$/', $n)) {
@@ -287,7 +290,7 @@ class SharedContextService
                     $n = str_replace(',', '', $n);
                 }
                 return (float) $n;
-            }, $m[0]), fn($v) => $v > 0);
+            }, $m[0]), fn($v) => $v > 0));
         };
 
         $oldNums = $extractNums($oldText);
@@ -364,6 +367,13 @@ class SharedContextService
      */
     private function extractSummary(string $content): string
     {
+        // FIRST: scrub broken UTF-8 sequences. Truncating a Claude
+        // response mid-multibyte char (e.g. cutting an em-dash "—" /
+        // E2 80 94 in half) leaves bytes Postgres rejects with
+        // "invalid byte sequence for encoding UTF8". mb_convert
+        // replaces invalid sequences with U+FFFD instead of throwing.
+        $content = mb_convert_encoding($content, 'UTF-8', 'UTF-8');
+
         $clean = preg_replace('/^#{1,4}\s+/m', '', $content);
         $clean = preg_replace('/\*{2,}([^*]+)\*{2,}/', '$1', $clean);
         $clean = preg_replace('/`[^`]+`/', '', $clean);
@@ -372,11 +382,15 @@ class SharedContextService
         $clean = preg_replace('/\n{3,}/', "\n", $clean);
         $clean = trim($clean);
 
-        if (strlen($clean) <= self::MAX_SUMMARY_CHARS) return $clean;
+        if (mb_strlen($clean) <= self::MAX_SUMMARY_CHARS) return $clean;
 
-        $truncated  = substr($clean, 0, self::MAX_SUMMARY_CHARS);
-        $lastPeriod = strrpos($truncated, '.');
-        if ($lastPeriod > 150) return substr($truncated, 0, $lastPeriod + 1);
+        // mb_substr operates on characters, not bytes — never splits
+        // a multibyte sequence in the middle.
+        $truncated  = mb_substr($clean, 0, self::MAX_SUMMARY_CHARS);
+        $lastPeriod = mb_strrpos($truncated, '.');
+        if ($lastPeriod !== false && $lastPeriod > 150) {
+            return mb_substr($truncated, 0, $lastPeriod + 1);
+        }
 
         return $truncated . '…';
     }
