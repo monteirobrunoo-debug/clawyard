@@ -1306,6 +1306,8 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 
 @include('partials.keyboard-shortcuts')
 @include('partials.command-palette')
+@include('partials.toast-system')
+@include('partials.view-transitions')
 
 {{-- ─── Futurista UX layer (added 2026-05-01) ─────────────────
      1. Scroll-aware shrink of the sticky header

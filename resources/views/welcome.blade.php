@@ -419,8 +419,32 @@
         .icon-btn { width:44px; height:44px; background:var(--bg3); border:1px solid var(--border2); border-radius:10px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:all 0.2s; flex-shrink:0; font-size:17px; }
         .icon-btn:hover { border-color:var(--green); }
         .icon-btn.active { background:var(--green); border-color:var(--green); }
-        .icon-btn.recording { animation:pulse-rec 1s infinite; }
-        @keyframes pulse-rec { 0%,100%{box-shadow:0 0 0 0 rgba(118,185,0,.4)} 50%{box-shadow:0 0 0 6px rgba(118,185,0,0)} }
+        /* Recording state — multi-layer pulse + bouncing emoji + 3 wave bars
+           overlaid on the right edge of the button so the user has a clear
+           "live mic" signal. */
+        .icon-btn.recording {
+            background: var(--green);
+            border-color: var(--green);
+            color: #000;
+            animation: pulse-rec 1.4s infinite;
+            position: relative;
+        }
+        .icon-btn.recording::after {
+            content: ''; position: absolute; inset: -4px;
+            border: 2px solid var(--green); border-radius: 12px;
+            opacity: 0.7;
+            animation: voice-ripple 1.4s ease-out infinite;
+            pointer-events: none;
+        }
+        @keyframes pulse-rec {
+            0%,100% { box-shadow: 0 0 0 0   rgba(118,185,0,0.5),  0 0 18px rgba(118,185,0,0.55); }
+            50%     { box-shadow: 0 0 0 10px rgba(118,185,0,0),    0 0 26px rgba(118,185,0,0.85); }
+        }
+        @keyframes voice-ripple {
+            0%   { transform: scale(0.95); opacity: 0.7; }
+            70%  { transform: scale(1.45); opacity: 0;   }
+            100% { transform: scale(1.45); opacity: 0;   }
+        }
         #message-input { flex:1; background:var(--bg3); border:1px solid var(--border2); border-radius:12px; padding:11px 15px; color:var(--text); font-size:13.5px; resize:none; outline:none; min-height:44px; max-height:150px; font-family:inherit; line-height:1.5; transition:border-color 0.2s; }
         #message-input:focus { border-color:var(--green); }
         #message-input::placeholder { color:#333; }
@@ -3789,6 +3813,8 @@ updateShareBtn();
 
 @include('partials.keyboard-shortcuts')
 @include('partials.command-palette')
+@include('partials.toast-system')
+@include('partials.view-transitions')
 
 </body>
 </html>

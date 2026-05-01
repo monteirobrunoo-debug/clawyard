@@ -34,5 +34,7 @@
         </div>
 
         @include('partials.command-palette')
+        @include('partials.toast-system')
+        @include('partials.view-transitions')
     </body>
 </html>

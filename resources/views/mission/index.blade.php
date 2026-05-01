@@ -16,9 +16,13 @@
         </div>
     </x-slot>
 
-    {{-- Auto-reload silently every 60s. --}}
+    {{-- Auto-reload silently every 60s + activity-toasts opt-in.
+         The toast system sees this meta and starts polling /api/activity-feed
+         to surface new events as glass toasts. Only on Mission since the
+         operator opens it deliberately to monitor activity. --}}
     @push('head')
         <meta http-equiv="refresh" content="60">
+        <meta name="cy-activity-toasts" content="enabled">
     @endpush
 
     <div class="py-4">

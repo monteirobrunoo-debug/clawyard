@@ -66,6 +66,40 @@
                             {{ __('Profile') }}
                         </x-dropdown-link>
 
+                        {{-- Toast sound toggle (futurista round 3).
+                             Persists in localStorage 'cy-sound-enabled' so
+                             every device remembers the user's choice. --}}
+                        <button type="button" id="cy-sound-toggle"
+                                class="block w-full px-4 py-2 text-start text-sm leading-5 text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition duration-150 ease-in-out">
+                            <span id="cy-sound-label">🔊 Sons: a verificar…</span>
+                        </button>
+                        <script>
+                        (function () {
+                            const btn = document.getElementById('cy-sound-toggle');
+                            const lbl = document.getElementById('cy-sound-label');
+                            if (!btn || !lbl) return;
+                            const refresh = () => {
+                                const on = localStorage.getItem('cy-sound-enabled') === '1';
+                                lbl.textContent = on ? '🔊 Sons: ligados' : '🔈 Sons: desligados';
+                            };
+                            refresh();
+                            btn.addEventListener('click', () => {
+                                const on = localStorage.getItem('cy-sound-enabled') === '1';
+                                localStorage.setItem('cy-sound-enabled', on ? '0' : '1');
+                                refresh();
+                                if (window.cyToast) {
+                                    window.cyToast({
+                                        title: on ? 'Sons desligados' : 'Sons ligados',
+                                        body: on ? null : 'Vais ouvir um ping suave em eventos importantes.',
+                                        tone: on ? 'info' : 'success',
+                                        duration: 2200,
+                                        sound: !on,
+                                    });
+                                }
+                            });
+                        })();
+                        </script>
+
                         @if(Auth::user()?->isManager())
                             {{-- Back-office: only managers feed historical proposals
                                  into hp-history. Hidden from regular users to
