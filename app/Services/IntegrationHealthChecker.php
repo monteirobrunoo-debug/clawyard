@@ -130,8 +130,9 @@ class IntegrationHealthChecker
 
     private function checkSap(): array
     {
-        $url  = (string) config('services.sap.url');
-        $user = (string) config('services.sap.username');
+        // The canonical key in config/services.php is 'base_url'.
+        $url  = (string) config('services.sap.base_url', '');
+        $user = (string) config('services.sap.username', '');
         if ($url === '' || $user === '') {
             return ['ok' => true, 'state' => 'not_configured', 'detail' => 'SAP_B1_URL/USER em falta no .env', 'latency_ms' => null];
         }
