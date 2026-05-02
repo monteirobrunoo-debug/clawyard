@@ -744,23 +744,28 @@
          Tudo o resto era mistura caótica de roxo/azul/amarelo/verde —
          removido. Adicionado 🏆 Rewards e 🛒 Marketplace que estavam em falta. --}}
     <div class="nav-links">
+        {{-- ── Visível para todos os roles autenticados ─────────────────── --}}
         <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
         <a href="{{ route('tenders.index') }}" class="nav-link">📋 Concursos</a>
         <a href="{{ route('rewards.me') }}" class="nav-link">🏆 Rewards</a>
         <a href="{{ route('marketplace.index') }}" class="nav-link">🛒 Marketplace</a>
-        <a href="{{ route('robot.index') }}" class="nav-link">🤖 Robot</a>
-        <a href="{{ route('robot.research') }}" class="nav-link">🔬 Council</a>
-        <a href="/intel" class="nav-link">🔗 Intel Bus</a>
-        <a href="/agents/activity" class="nav-link">🤖 Activity</a>
         <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
         <a href="/patents/library" class="nav-link">🏛️ Patents</a>
-        @if(Auth::user()->isManager())
-            <a href="/mission" class="nav-link" title="Mission Control — single-pane view">🛰️ Mission</a>
-        @endif
         <a href="/reports" class="nav-link">📁 Reports</a>
-        <a href="/stats" class="nav-link">📈 Stats</a>
         <a href="/schedules" class="nav-link">🗓️ Schedule</a>
         <a href="/shares" class="nav-link">👥 Shared</a>
+
+        {{-- ── Manager + Admin (role operacional / gestão) ──────────────── --}}
+        @if(Auth::user()->isManager())
+            <a href="{{ route('robot.index') }}" class="nav-link">🤖 Robot</a>
+            <a href="{{ route('robot.research') }}" class="nav-link">🔬 Council</a>
+            <a href="/intel" class="nav-link">🔗 Intel Bus</a>
+            <a href="/agents/activity" class="nav-link">🤖 Activity</a>
+            <a href="/stats" class="nav-link">📈 Stats</a>
+            <a href="/mission" class="nav-link" title="Mission Control — single-pane view">🛰️ Mission</a>
+        @endif
+
+        {{-- ── Admin exclusivo ──────────────────────────────────────────── --}}
         @if(Auth::user()->isAdmin())
             <a href="{{ route('admin.panel') }}" class="nav-link admin" title="Admin Panel — health + secrets + flags">⚙️ Admin</a>
         @endif
@@ -856,10 +861,18 @@ $categories = [
     'security'   => ['title' => 'Security · Automation · Ops', 'subtitle' => 'Cybersecurity, encryption, web automation and batching',  'icon' => '🔐', 'color' => '#ef4444'],
 ];
 
-// Group agents by category in order
+// Filter agents to only those the current user is allowed to use.
+// canUseAgent(): admin → always true; allowed_agents=null → all; array → whitelist.
+// This hides cards at render time — no more "visible but 403 on click".
+$_dashUser = Auth::user();
+$agents = array_values(array_filter($agents, fn($a) => $_dashUser->canUseAgent($a['key'])));
+
+// Group agents by category in order; drop categories with no visible agents
+// so a user on vendor_spares never sees an empty "Security" header.
 $grouped = [];
 foreach ($categories as $catKey => $catMeta) {
-    $grouped[$catKey] = array_values(array_filter($agents, fn($a) => $a['category'] === $catKey));
+    $catAgents = array_values(array_filter($agents, fn($a) => $a['category'] === $catKey));
+    if (!empty($catAgents)) $grouped[$catKey] = $catAgents;
 }
 
 // Quick lookup by key for the recent-conversations strip
