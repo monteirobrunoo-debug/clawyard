@@ -59,12 +59,15 @@ class TenderSupplierSuggesterService
 
         // Specialist-agent consultation. Picks the 1-2 most-relevant
         // agents from EXPERTISE_BY_CATEGORY and dispatches one LLM
-        // call each. Cached per (tender, agent, body_hash) for 1h.
+        // call each. Cached per (tender, agent, body+webhits hash)
+        // for 1h. Now feeds the Tavily web hits to each expert so
+        // the agent's pick can include fresh web signal alongside
+        // its tribal knowledge — user request 2026-05-02.
         $expertOpinions = [];
         if ($includeExperts) {
             $picked = $this->experts->pickExperts($categories, max: 2);
             foreach ($picked as $agentKey) {
-                $opinion = $this->experts->consult($tender, $agentKey);
+                $opinion = $this->experts->consult($tender, $agentKey, $webResults);
                 if ($opinion['ok'] ?? false) {
                     $expertOpinions[] = $opinion;
                 }

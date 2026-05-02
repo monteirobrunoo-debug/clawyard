@@ -91,9 +91,14 @@ class AgentExpertSupplierConsultant
      * Loose parsing (the same tolerance as Daniel's parser): accepts
      * markdown fences and stray preambles.
      */
-    public function consult(Tender $tender, string $agentKey): array
+    /**
+     * @param array $webHits Optional Tavily search snippets to feed
+     *   the agent so its picks consider fresh web signal too.
+     *   Each entry: ['title' => ..., 'url' => ..., 'snippet' => ...]
+     */
+    public function consult(Tender $tender, string $agentKey, array $webHits = []): array
     {
-        $cacheKey = $this->cacheKeyFor($tender, $agentKey);
+        $cacheKey = $this->cacheKeyFor($tender, $agentKey, $webHits);
         $cached = Cache::get($cacheKey);
         if ($cached !== null) return $cached;
 
@@ -107,7 +112,7 @@ class AgentExpertSupplierConsultant
         // domain-specific framing so the response is sharper than a
         // generic "list suppliers" query.
         $system = $this->buildSystemPrompt($agentKey, $meta);
-        $user   = $this->buildUserPrompt($tender);
+        $user   = $this->buildUserPrompt($tender, $webHits);
 
         $res = $this->dispatcher->dispatch(
             systemPrompt: $system,
@@ -181,7 +186,7 @@ REGRAS:
 PROMPT;
     }
 
-    private function buildUserPrompt(Tender $tender): string
+    private function buildUserPrompt(Tender $tender, array $webHits = []): string
     {
         $deadline = $tender->deadline_lisbon?->format('d/m/Y') ?? '—';
         $ref      = $tender->reference ?: '—';
@@ -201,6 +206,26 @@ PROMPT;
             }
         } catch (\Throwable $e) { /* attachments not loaded */ }
 
+        // Web research block — gives the agent fresh Tavily snippets so
+        // its supplier picks can consider companies that recently opened
+        // facilities, won contracts, or got mentioned in industry press.
+        // The agent is instructed to use this as INPUT but never copy
+        // verbatim, and to flag if it doesn't recognise a hit.
+        $webBlock = '';
+        if (!empty($webHits)) {
+            $webChunks = [];
+            foreach (array_slice($webHits, 0, 5) as $hit) {
+                $title   = mb_substr((string) ($hit['title']   ?? ''), 0, 120);
+                $url     = (string) ($hit['url']     ?? '');
+                $snippet = mb_substr((string) ($hit['snippet'] ?? ''), 0, 240);
+                $webChunks[] = "• {$title}\n  {$url}\n  {$snippet}";
+            }
+            $webBlock = "\n\nResultados da pesquisa web (Tavily) — usa como contexto, NÃO como verdade absoluta:\n"
+                      . implode("\n\n", $webChunks)
+                      . "\n\nSe algum destes resultados for um fornecedor que reconheças e queiras incluir, "
+                      . "menciona-o explicitamente. Se algum parecer suspeito ou marketing puro, ignora.";
+        }
+
         return <<<USER
 Concurso para o qual preciso da tua leitura:
 
@@ -208,9 +233,10 @@ Concurso para o qual preciso da tua leitura:
   • Referência: {$ref}
   • Fonte: {$tender->source}
   • Organização: {$org}
-  • Deadline: {$deadline}{$pdfBlock}
+  • Deadline: {$deadline}{$pdfBlock}{$webBlock}
 
 Devolve o JSON com o teu summary + até 4 fornecedores que conheças do teu domínio.
+Considera tanto a tua experiência interna como (se relevante) os resultados da web.
 USER;
     }
 
@@ -244,16 +270,20 @@ USER;
     }
 
     /**
-     * Cache key includes a hash of the tender body so an edit
-     * invalidates the cached opinion.
+     * Cache key includes a hash of the tender body + the web hits
+     * fingerprint so the cached opinion stays valid only while both
+     * inputs are unchanged.
      */
-    private function cacheKeyFor(Tender $tender, string $agentKey): string
+    private function cacheKeyFor(Tender $tender, string $agentKey, array $webHits = []): string
     {
         $bodyHash = sha1(implode('|', [
             (string) $tender->title,
             (string) $tender->reference,
             (string) $tender->notes,
             (string) $tender->updated_at,
+            // Web hits change daily (Tavily indexes evolve) — fingerprint
+            // their URLs so the agent re-runs when they shift.
+            implode(',', array_map(fn($h) => (string) ($h['url'] ?? ''), array_slice($webHits, 0, 5))),
         ]));
         return 'expert_supplier:' . $tender->id . ':' . $agentKey . ':' . substr($bodyHash, 0, 12);
     }
