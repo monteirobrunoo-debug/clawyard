@@ -744,28 +744,55 @@
          Tudo o resto era mistura caótica de roxo/azul/amarelo/verde —
          removido. Adicionado 🏆 Rewards e 🛒 Marketplace que estavam em falta. --}}
     <div class="nav-links">
-        {{-- ── Visível para todos os roles autenticados ─────────────────── --}}
-        <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
-        <a href="{{ route('tenders.index') }}" class="nav-link">📋 Concursos</a>
-        <a href="{{ route('rewards.me') }}" class="nav-link">🏆 Rewards</a>
-        <a href="{{ route('marketplace.index') }}" class="nav-link">🛒 Marketplace</a>
-        <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
-        <a href="/patents/library" class="nav-link">🏛️ Patents</a>
-        <a href="/reports" class="nav-link">📁 Reports</a>
-        <a href="/schedules" class="nav-link">🗓️ Schedule</a>
-        <a href="/shares" class="nav-link">👥 Shared</a>
-
-        {{-- ── Manager + Admin (role operacional / gestão) ──────────────── --}}
-        @if(Auth::user()->isManager())
+        {{-- Nav driven by User::canSeeNav() — per-user whitelist or role defaults.
+             Toggle per user at /admin/nav-access. Admin panel stays hardcoded. --}}
+        @if(Auth::user()->canSeeNav('briefing'))
+            <a href="/briefing" class="nav-link briefing">📊 Briefing</a>
+        @endif
+        @if(Auth::user()->canSeeNav('tenders'))
+            <a href="{{ route('tenders.index') }}" class="nav-link">📋 Concursos</a>
+        @endif
+        @if(Auth::user()->canSeeNav('rewards'))
+            <a href="{{ route('rewards.me') }}" class="nav-link">🏆 Rewards</a>
+        @endif
+        @if(Auth::user()->canSeeNav('marketplace'))
+            <a href="{{ route('marketplace.index') }}" class="nav-link">🛒 Marketplace</a>
+        @endif
+        @if(Auth::user()->canSeeNav('discoveries'))
+            <a href="/discoveries" class="nav-link">🔬 Discoveries</a>
+        @endif
+        @if(Auth::user()->canSeeNav('patents'))
+            <a href="/patents/library" class="nav-link">🏛️ Patents</a>
+        @endif
+        @if(Auth::user()->canSeeNav('robot'))
             <a href="{{ route('robot.index') }}" class="nav-link">🤖 Robot</a>
+        @endif
+        @if(Auth::user()->canSeeNav('council'))
             <a href="{{ route('robot.research') }}" class="nav-link">🔬 Council</a>
+        @endif
+        @if(Auth::user()->canSeeNav('intel'))
             <a href="/intel" class="nav-link">🔗 Intel Bus</a>
+        @endif
+        @if(Auth::user()->canSeeNav('activity'))
             <a href="/agents/activity" class="nav-link">🤖 Activity</a>
-            <a href="/stats" class="nav-link">📈 Stats</a>
+        @endif
+        @if(Auth::user()->canSeeNav('mission'))
             <a href="/mission" class="nav-link" title="Mission Control — single-pane view">🛰️ Mission</a>
         @endif
+        @if(Auth::user()->canSeeNav('reports'))
+            <a href="/reports" class="nav-link">📁 Reports</a>
+        @endif
+        @if(Auth::user()->canSeeNav('stats'))
+            <a href="/stats" class="nav-link">📈 Stats</a>
+        @endif
+        @if(Auth::user()->canSeeNav('schedules'))
+            <a href="/schedules" class="nav-link">🗓️ Schedule</a>
+        @endif
+        @if(Auth::user()->canSeeNav('shares'))
+            <a href="/shares" class="nav-link">👥 Shared</a>
+        @endif
 
-        {{-- ── Admin exclusivo ──────────────────────────────────────────── --}}
+        {{-- Admin panel: sempre hardcoded a isAdmin() — fora da matriz --}}
         @if(Auth::user()->isAdmin())
             <a href="{{ route('admin.panel') }}" class="nav-link admin" title="Admin Panel — health + secrets + flags">⚙️ Admin</a>
         @endif

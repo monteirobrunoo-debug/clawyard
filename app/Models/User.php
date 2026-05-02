@@ -11,7 +11,7 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents'];
+    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents', 'allowed_nav'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -22,11 +22,58 @@ class User extends Authenticatable
             'last_login_at'     => 'datetime',
             'password'          => 'hashed',
             'is_active'         => 'boolean',
-            // Per-user agent whitelist. Same NULL/[]/array semantics as
-            // TenderCollaborator::allowed_sources — see the migration
-            // for the full rationale.
             'allowed_agents'    => 'array',
+            // Per-user nav-link whitelist. null = role defaults,
+            // [] = blocked, [...] = explicit whitelist.
+            // Controlled via /admin/nav-access matrix.
+            'allowed_nav'       => 'array',
         ];
+    }
+
+    // ── Nav-section visibility ────────────────────────────────────────────
+    /**
+     * All configurable nav sections. 'default_roles' lists which roles
+     * see the section when allowed_nav is null (role-based defaults).
+     * The admin panel is NOT in this list — it stays hardcoded to isAdmin().
+     */
+    public const NAV_SECTIONS = [
+        'briefing'    => ['emoji' => '📊', 'label' => 'Briefing',    'default_roles' => ['guest','user','manager','admin']],
+        'tenders'     => ['emoji' => '📋', 'label' => 'Concursos',   'default_roles' => ['guest','user','manager','admin']],
+        'rewards'     => ['emoji' => '🏆', 'label' => 'Rewards',     'default_roles' => ['user','manager','admin']],
+        'marketplace' => ['emoji' => '🛒', 'label' => 'Marketplace', 'default_roles' => ['user','manager','admin']],
+        'discoveries' => ['emoji' => '🔬', 'label' => 'Discoveries', 'default_roles' => ['user','manager','admin']],
+        'patents'     => ['emoji' => '🏛️', 'label' => 'Patents',     'default_roles' => ['user','manager','admin']],
+        'reports'     => ['emoji' => '📁', 'label' => 'Reports',     'default_roles' => ['user','manager','admin']],
+        'schedules'   => ['emoji' => '🗓️', 'label' => 'Schedule',    'default_roles' => ['user','manager','admin']],
+        'shares'      => ['emoji' => '👥', 'label' => 'Shared',      'default_roles' => ['user','manager','admin']],
+        'robot'       => ['emoji' => '🤖', 'label' => 'Robot',       'default_roles' => ['manager','admin']],
+        'council'     => ['emoji' => '🔬', 'label' => 'Council',     'default_roles' => ['manager','admin']],
+        'intel'       => ['emoji' => '🔗', 'label' => 'Intel Bus',   'default_roles' => ['manager','admin']],
+        'activity'    => ['emoji' => '🤖', 'label' => 'Activity',    'default_roles' => ['manager','admin']],
+        'stats'       => ['emoji' => '📈', 'label' => 'Stats',       'default_roles' => ['manager','admin']],
+        'mission'     => ['emoji' => '🛰️', 'label' => 'Mission',     'default_roles' => ['manager','admin']],
+    ];
+
+    /**
+     * Can this user see a nav section?
+     *
+     *   • Admin: always yes.
+     *   • allowed_nav=null: use NAV_SECTIONS default_roles for the section.
+     *   • allowed_nav=[...]: explicit whitelist — only listed keys visible.
+     *   • allowed_nav=[]: blocked from all nav.
+     */
+    public function canSeeNav(string $section): bool
+    {
+        if ($this->isAdmin()) return true;
+
+        $allowed = $this->allowed_nav;
+        if ($allowed === null) {
+            $meta = self::NAV_SECTIONS[$section] ?? null;
+            if (!$meta) return false;
+            return in_array($this->role, $meta['default_roles'], true);
+        }
+
+        return in_array($section, (array) $allowed, true);
     }
 
     // ── Agent-access presets ──────────────────────────────────────────────

@@ -743,6 +743,13 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post  ('/users/{user}/agents/preset/{preset}', [AdminController::class, 'applyAgentPreset'])
         ->where('preset', '[a-z_]+')
         ->name('admin.users.agentPreset');
+
+    // Per-user nav visibility matrix
+    Route::get   ('/nav-access',                       [AdminController::class, 'navAccess'])
+        ->name('admin.navAccess');
+    Route::patch ('/users/{user}/nav/{section}',       [AdminController::class, 'toggleNavAccess'])
+        ->where('section', '[a-z_]+|reset')
+        ->name('admin.users.toggleNav');
 });
 
 // QNAP File download — serve files from /var/www/qnapbackup (auth required)

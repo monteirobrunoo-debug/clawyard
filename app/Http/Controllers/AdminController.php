@@ -303,6 +303,87 @@ class AdminController extends Controller
         ]);
     }
 
+    // ── Per-user nav visibility control ──────────────────────────────────
+
+    /** Matrix view of every active user × every nav section. */
+    public function navAccess()
+    {
+        $users = User::query()
+            ->where('is_active', true)
+            ->whereIn('role', ['guest', 'user', 'manager', 'admin'])
+            ->orderBy('role')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role', 'allowed_nav']);
+
+        return view('admin.nav-access', [
+            'users'    => $users,
+            'sections' => User::NAV_SECTIONS,
+        ]);
+    }
+
+    /**
+     * Toggle one (user, nav section) pair.
+     * Same intent-driven UX as toggleAgentAccess: first click on a
+     * NULL row materialises whitelist as "all sections minus this one".
+     */
+    public function toggleNavAccess(Request $request, User $user, string $section)
+    {
+        if ($user->isAdmin()) {
+            return response()->json(['ok' => false, 'error' => 'Admins vêem sempre tudo.'], 422);
+        }
+
+        // Reset: clear allowed_nav → back to role defaults
+        if ($section === 'reset') {
+            $user->allowed_nav = null;
+            $user->save();
+            \App\Models\UserAdminEvent::create([
+                'target_user_id' => $user->id,
+                'actor_user_id'  => auth()->id(),
+                'event_type'     => 'nav_access_reset',
+                'payload'        => ['reset_to' => 'role_defaults'],
+            ]);
+            return response()->json(['ok' => true, 'mode' => 'default']);
+        }
+
+        if (!isset(User::NAV_SECTIONS[$section])) {
+            return response()->json(['ok' => false, 'error' => "Secção desconhecida: {$section}"], 422);
+        }
+
+        $allKeys = array_keys(User::NAV_SECTIONS);
+        $current = $user->allowed_nav;
+
+        if ($current === null) {
+            // Materialise as "all minus this one"
+            $next = array_values(array_diff($allKeys, [$section]));
+        } elseif (in_array($section, $current, true)) {
+            $next = array_values(array_filter($current, fn($k) => $k !== $section));
+        } else {
+            $next = array_values(array_unique(array_merge($current, [$section])));
+        }
+
+        // Collapse to NULL when the list equals the full set
+        if (!empty($next) && count(array_diff($allKeys, $next)) === 0) {
+            $next = null;
+        }
+
+        $user->allowed_nav = $next;
+        $user->save();
+
+        \App\Models\UserAdminEvent::create([
+            'target_user_id' => $user->id,
+            'actor_user_id'  => auth()->id(),
+            'event_type'     => 'nav_access_toggle',
+            'payload'        => ['section' => $section, 'now_visible' => $user->canSeeNav($section)],
+        ]);
+
+        return response()->json([
+            'ok'          => true,
+            'allowed_nav' => $next,
+            'now_visible' => $user->canSeeNav($section),
+            'mode'        => $next === null ? 'default' : (empty($next) ? 'blocked' : 'whitelist'),
+        ]);
+    }
+
     /**
      * Apply one of User::AGENT_PRESETS to a user. Idempotent — the
      * preset replaces whatever was there.
