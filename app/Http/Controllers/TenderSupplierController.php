@@ -52,12 +52,13 @@ class TenderSupplierController extends Controller
         $bundle = $svc->suggest($tender, localLimit: 12, includeWeb: $includeWeb);
 
         return response()->json([
-            'categories'    => $bundle['categories'],
-            'web_query'     => $bundle['query'],
-            'web_available' => $bundle['web_available'],
-            'confidential'  => false,
-            'local'         => $bundle['local']->map(fn(Supplier $s) => $this->shapeSupplier($s))->values()->all(),
-            'web' => $bundle['web'],
+            'categories'      => $bundle['categories'],
+            'web_query'       => $bundle['query'],
+            'web_available'   => $bundle['web_available'],
+            'confidential'    => false,
+            'local'           => $bundle['local']->map(fn(Supplier $s) => $this->shapeSupplier($s))->values()->all(),
+            'web'             => $bundle['web'],
+            'expert_opinions' => $bundle['expert_opinions'] ?? [],
         ]);
     }
 

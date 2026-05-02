@@ -28,21 +28,23 @@ class TenderSupplierSuggesterService
 {
     public function __construct(
         private WebSearchService $web,
+        private AgentExpertSupplierConsultant $experts,
     ) {}
 
     /**
      * Run the full suggester pipeline for a tender.
      *
-     * @return array{
-     *   categories: array<string>,
-     *   local: Collection<Supplier>,
-     *   web: array<int, array{title:string,url:string,snippet:string}>,
-     *   web_available: bool,
-     *   query: string
-     * }
+     * @param bool $includeExperts when true (default), also consults the
+     *  1-2 most-relevant specialist agents (Cor. Rodrigues for military,
+     *  Marco Sales for engines, Captain Porto for ports, etc.) and folds
+     *  their picks into the bundle. Costs ≈ $0.01 in LLM tokens.
      */
-    public function suggest(Tender $tender, int $localLimit = 12, bool $includeWeb = true): array
-    {
+    public function suggest(
+        Tender $tender,
+        int $localLimit = 12,
+        bool $includeWeb = true,
+        bool $includeExperts = true,
+    ): array {
         $categories = $this->inferCategories($tender);
 
         $local = $this->matchLocal($tender, $categories, $localLimit);
@@ -55,12 +57,27 @@ class TenderSupplierSuggesterService
             $webResults = $this->searchWeb($query);
         }
 
+        // Specialist-agent consultation. Picks the 1-2 most-relevant
+        // agents from EXPERTISE_BY_CATEGORY and dispatches one LLM
+        // call each. Cached per (tender, agent, body_hash) for 1h.
+        $expertOpinions = [];
+        if ($includeExperts) {
+            $picked = $this->experts->pickExperts($categories, max: 2);
+            foreach ($picked as $agentKey) {
+                $opinion = $this->experts->consult($tender, $agentKey);
+                if ($opinion['ok'] ?? false) {
+                    $expertOpinions[] = $opinion;
+                }
+            }
+        }
+
         return [
-            'categories'    => $categories,
-            'local'         => $local,
-            'web'           => $webResults,
-            'web_available' => $webAvailable,
-            'query'         => $query,
+            'categories'      => $categories,
+            'local'           => $local,
+            'web'             => $webResults,
+            'web_available'   => $webAvailable,
+            'query'           => $query,
+            'expert_opinions' => $expertOpinions,
         ];
     }
 

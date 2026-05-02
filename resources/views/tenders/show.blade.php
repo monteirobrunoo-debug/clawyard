@@ -454,16 +454,57 @@
                 });
 
                 function renderSuggestions(data) {
-                    const cats = (data.categories || []).join(', ');
-                    const local = data.local || [];
-                    const web   = data.web   || [];
+                    const cats     = (data.categories || []).join(', ');
+                    const local    = data.local           || [];
+                    const web      = data.web             || [];
+                    const opinions = data.expert_opinions || [];
 
                     let html = `
                         <div class="rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600 mb-3">
                             🏷️ Categorias inferidas: <span class="font-mono text-gray-800">${esc(cats || 'nenhuma')}</span>
-                            · ${local.length} fornecedor(es) H&amp;P · ${web.length} sugestão(ões) web
+                            · ${local.length} fornecedor(es) H&amp;P · ${web.length} web
+                            ${opinions.length ? `· <span class="text-purple-700 font-medium">${opinions.length} especialista(s) consultado(s)</span>` : ''}
                         </div>
                     `;
+
+                    // ── Expert opinions panel — appears ABOVE the local list
+                    //    so the operator reads the human-style rationale
+                    //    BEFORE picking suppliers from the directory. The
+                    //    opinions are advisory; the checkboxes still drive
+                    //    Daniel email generation from the local table.
+                    if (opinions.length > 0) {
+                        html += `<div class="space-y-2 mb-4">`;
+                        opinions.forEach(op => {
+                            const meta = op.agent_meta || {};
+                            const color = meta.color || '#76b900';
+                            html += `
+                                <div class="rounded-md border-l-4 bg-gradient-to-r from-white to-gray-50 px-4 py-3 shadow-sm" style="border-left-color:${esc(color)}">
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="text-base">${esc(meta.emoji || '🤖')}</span>
+                                        <span class="font-semibold text-sm" style="color:${esc(color)}">${esc(meta.name || op.agent)}</span>
+                                        <span class="text-[10px] text-gray-400 ml-auto">consultado · ~$${(op.cost_usd || 0).toFixed(4)}</span>
+                                    </div>
+                                    ${op.response ? `<div class="text-xs text-gray-700 italic mb-2">"${esc(op.response)}"</div>` : ''}
+                                    ${(op.suppliers && op.suppliers.length) ? `
+                                        <div class="text-[11px] text-gray-500 mb-1 font-semibold uppercase tracking-wider">Sugestões do ${esc(meta.name || op.agent)}:</div>
+                                        <ul class="space-y-1">
+                                            ${op.suppliers.map(s => `
+                                                <li class="text-xs">
+                                                    <span class="font-semibold text-gray-800">${esc(s.name)}</span>
+                                                    ${s.why ? `<span class="text-gray-600"> — ${esc(s.why)}</span>` : ''}
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                        <div class="text-[10px] text-gray-400 mt-2">
+                                            💡 Estes são pareceres do agente — não estão no directório H&amp;P.
+                                            Para os promover a aprovados, abre <a href="/suppliers/create" class="underline">/suppliers/create</a>.
+                                        </div>
+                                    ` : `<div class="text-[11px] text-gray-500 italic">Sem fornecedores específicos a sugerir.</div>`}
+                                </div>
+                            `;
+                        });
+                        html += `</div>`;
+                    }
 
                     // Local approved
                     if (local.length === 0) {
