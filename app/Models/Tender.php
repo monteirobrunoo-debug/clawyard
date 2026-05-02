@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -114,6 +115,13 @@ class Tender extends Model
     public function collaborator(): BelongsTo
     {
         return $this->belongsTo(TenderCollaborator::class, 'assigned_collaborator_id');
+    }
+
+    /** PDFs anexados pelo operador. Source-of-truth para Marta CRM,
+     *  suggester e Daniel — todos lêem o extracted_text destes rows. */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TenderAttachment::class)->orderByDesc('created_at');
     }
 
     public function assignedBy(): BelongsTo

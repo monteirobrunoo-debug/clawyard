@@ -185,6 +185,27 @@ class TenderSupplierController extends Controller
 
         $noteBlock = $note !== '' ? "\n\nNotas adicionais do operador:\n{$note}" : '';
 
+        // PDF context: the actual RFP/RFQ body usually has the spec
+        // detail Daniel needs to write a credible quote-request email.
+        // We feed him the first ~6KB of each attached PDF (capped via
+        // promptSnippet on the model) so he can reference real
+        // equipment / part numbers / quantities in each draft.
+        $pdfBlock = '';
+        try {
+            $atts = $tender->attachments()->where('extraction_status', 'ok')->get();
+            if ($atts->isNotEmpty()) {
+                $chunks = [];
+                foreach ($atts as $att) {
+                    $chunks[] = "[{$att->original_name}]\n" . $att->promptSnippet(6000);
+                }
+                $pdfBlock = "\n\nDocumentos do concurso (RFP/RFQ):\n---\n"
+                          . implode("\n\n---\n\n", $chunks)
+                          . "\n---\n\nUsa o conteúdo destes documentos para tornar cada email "
+                          . "específico aos equipamentos / part-numbers / quantidades reais. "
+                          . "NUNCA inventes números — se um detalhe não estiver no documento, omite-o.";
+            }
+        } catch (\Throwable $e) { /* attachments relation missing — skip silently */ }
+
         // Explicit SHAPE B instruction so Daniel doesn't collapse to a single email.
         return <<<PROMPT
 Concurso/RFQ:
@@ -192,7 +213,7 @@ Concurso/RFQ:
   • Referência: {$ref}
   • Organização: {$org}
   • Deadline: {$deadline}
-  • Fonte: {$tender->source}
+  • Fonte: {$tender->source}{$pdfBlock}
 
 Por favor escreve UM email tailored POR FORNECEDOR — usa o template "Quote Request" /
 "Cold Outreach" conforme apropriado. {$langLine}

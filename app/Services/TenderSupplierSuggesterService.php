@@ -98,12 +98,24 @@ class TenderSupplierSuggesterService
             $codes = array_merge($codes, $sourceMap[$source]);
         }
 
-        // 2. Keyword scan over the tender's free-text fields
+        // 2. Keyword scan over the tender's free-text fields PLUS the
+        //    extracted text from any attached PDF (RFP/RFQ body has
+        //    far more signal than the tender title for category
+        //    inference). Cap each PDF contribution to keep regex
+        //    passes fast and predictable.
+        $pdfBlob = '';
+        try {
+            foreach ($tender->attachments()->where('extraction_status', 'ok')->get() as $att) {
+                $pdfBlob .= ' ' . mb_substr((string) $att->extracted_text, 0, 8000);
+            }
+        } catch (\Throwable $e) { /* attachments relation missing on legacy boot path */ }
+
         $haystack = mb_strtolower(implode(' ', array_filter([
             $tender->title,
             $tender->reference,
             $tender->purchasing_org,
             $tender->notes,
+            $pdfBlob,
         ])));
 
         $keywordMap = [

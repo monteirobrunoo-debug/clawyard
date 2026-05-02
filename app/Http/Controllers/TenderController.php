@@ -331,7 +331,7 @@ class TenderController extends Controller
         $similar = $similarity->findSimilar($tender, 5);
 
         return view('tenders.show', [
-            'tender'  => $tender->load(['collaborator.user', 'lastImport', 'assignedBy']),
+            'tender'  => $tender->load(['collaborator.user', 'lastImport', 'assignedBy', 'attachments']),
             'similar' => $similar,
             'canEdit' => $user->can('tenders.update', $tender),
         ]);

@@ -131,6 +131,178 @@
                 </dl>
             </section>
 
+            {{-- ─── PDFs do concurso (drag-drop) + Marta CRM trigger ────────
+                 Permite ao operador arrastar os PDFs do RFP/RFQ directamente
+                 para a página, sem ter de ir ao /hp-history/upload separado.
+                 Após upload o texto é extraído via smalot/pdfparser e fica
+                 disponível para:
+                   • Marta CRM — botão à direita pré-popula o /chat com
+                     contexto completo do concurso + texto dos PDFs.
+                   • Suggester — categorias inferidas do conteúdo.
+                   • Daniel  — drafts ancorados nas specs reais.
+                 Oculto se o concurso for confidencial (consistência com a
+                 secção do suggester). --}}
+            @if(!$tender->is_confidential)
+                <section id="tender-attachments" class="rounded-lg bg-white shadow-sm border border-gray-100 p-5">
+                    <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+                        <div>
+                            <h2 class="text-base font-semibold text-gray-800">📎 PDFs do concurso</h2>
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                Arrasta os ficheiros (RFP, RFQ, anexos técnicos) ou clica para escolher.
+                                O texto é extraído automaticamente e usado pelo Marta + Suggester + Daniel.
+                            </p>
+                        </div>
+                        @php
+                            // Pré-construir o prompt para a Marta com tudo o que ela precisa para
+                            // criar a oportunidade SAP. O front-end abre /chat?agent=crm&prompt=…
+                            // por isso o texto vai URL-encoded no link.
+                            $deadline = $tender->deadline_lisbon?->format('d/m/Y H:i') ?? '—';
+                            $martaPrompt = "Cria oportunidade SAP B1 para este concurso:\n"
+                                . "• Título: {$tender->title}\n"
+                                . "• Referência: " . ($tender->reference ?? '—') . "\n"
+                                . "• Fonte: " . strtoupper((string) $tender->source) . "\n"
+                                . "• Organização: " . ($tender->purchasing_org ?: '—') . "\n"
+                                . "• Deadline: {$deadline}\n";
+                            if ($tender->attachments->isNotEmpty()) {
+                                $martaPrompt .= "\nDocumentos anexados ({$tender->attachments->count()} PDF):\n";
+                                foreach ($tender->attachments as $a) {
+                                    $martaPrompt .= "  - {$a->original_name} ({$a->extracted_chars} chars extraídos)\n";
+                                }
+                                $first = $tender->attachments->where('extraction_status', 'ok')->first();
+                                if ($first) {
+                                    $snippet = mb_substr((string) $first->extracted_text, 0, 1500);
+                                    $martaPrompt .= "\nExcerto do primeiro PDF:\n---\n{$snippet}\n---\n";
+                                }
+                            }
+                            $martaPrompt .= "\nQuando criares a oportunidade, devolve o ID SAP para eu actualizar este concurso.";
+                        @endphp
+                        <a href="/chat?agent=crm&prompt={{ urlencode($martaPrompt) }}"
+                           class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500"
+                           title="Pré-popula o /chat com Marta CRM e todo o contexto do concurso">
+                            🤖 Pedir à Marta para abrir SAP
+                        </a>
+                    </div>
+
+                    @php
+                        $extractedOk = $tender->attachments->where('extraction_status', 'ok')->count();
+                        $extractedFail = $tender->attachments->where('extraction_status', 'failed')->count();
+                    @endphp
+                    @if($tender->attachments->isNotEmpty())
+                        <div class="mb-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-700 flex items-center gap-3 flex-wrap">
+                            <strong>{{ $tender->attachments->count() }}</strong> PDFs anexados ·
+                            <span class="text-emerald-700">{{ $extractedOk }} parsed</span>
+                            @if($extractedFail > 0)
+                                · <span class="text-red-700">{{ $extractedFail }} falharam</span>
+                            @endif
+                        </div>
+                        <ul class="divide-y divide-gray-100 mb-3 border border-gray-100 rounded-md">
+                            @foreach($tender->attachments as $a)
+                                <li class="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                                    <a href="{{ route('tenders.attachments.download', [$tender, $a]) }}"
+                                       class="font-mono text-indigo-700 hover:underline truncate flex-1"
+                                       title="{{ $a->original_name }}">
+                                        📄 {{ \Illuminate\Support\Str::limit($a->original_name, 60) }}
+                                    </a>
+                                    <span class="text-gray-500 shrink-0">{{ number_format($a->size_bytes / 1024, 0) }} KB</span>
+                                    @if($a->extraction_status === 'ok')
+                                        <span class="rounded bg-emerald-50 text-emerald-800 px-1.5 py-0.5 text-[10px] shrink-0" title="{{ $a->extracted_chars }} chars extraídos">
+                                            ✓ texto OK
+                                        </span>
+                                    @elseif($a->extraction_status === 'failed')
+                                        <span class="rounded bg-red-50 text-red-800 px-1.5 py-0.5 text-[10px] shrink-0" title="{{ $a->extraction_error }}">
+                                            ✗ falha
+                                        </span>
+                                    @else
+                                        <span class="rounded bg-gray-50 text-gray-600 px-1.5 py-0.5 text-[10px] shrink-0">·</span>
+                                    @endif
+                                    <span class="text-gray-400 shrink-0">{{ $a->created_at?->diffForHumans(['short' => true]) }}</span>
+                                    @if($canEdit)
+                                        <form method="POST" action="{{ route('tenders.attachments.destroy', [$tender, $a]) }}"
+                                              onsubmit="return confirm('Remover {{ addslashes($a->original_name) }}?')"
+                                              class="shrink-0">
+                                            @csrf @method('DELETE')
+                                            <button class="text-red-500 hover:text-red-700" title="Remover">✗</button>
+                                        </form>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+
+                    <div id="ta-dropzone"
+                         class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 px-6 py-8 text-center cursor-pointer hover:bg-gray-100 hover:border-indigo-400 transition">
+                        <svg class="mx-auto h-9 w-9 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 7.5h-.75A2.25 2.25 0 0 0 4.5 9.75v7.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-7.5a2.25 2.25 0 0 0-2.25-2.25h-.75m-9 4.5 3.75-3.75m0 0 3.75 3.75M12 7.5v9" />
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-700">
+                            <span class="font-semibold text-indigo-600">Arrasta para aqui</span> ou clica para escolher
+                        </p>
+                        <p class="mt-1 text-[11px] text-gray-500">
+                            PDF apenas · máx. 10 ficheiros &middot; 10 MB cada
+                        </p>
+                        <input id="ta-file" type="file" accept=".pdf,application/pdf" multiple class="hidden">
+                    </div>
+                    <div id="ta-status" class="mt-3 hidden text-xs"></div>
+                </section>
+
+                <script>
+                (function () {
+                    const drop  = document.getElementById('ta-dropzone');
+                    const input = document.getElementById('ta-file');
+                    const status= document.getElementById('ta-status');
+                    if (!drop || !input || !status) return;
+                    const csrf  = document.querySelector('meta[name=csrf-token]')?.content || '';
+                    const url   = "{{ route('tenders.attachments.store', $tender) }}";
+
+                    function show(msg, tone) {
+                        status.classList.remove('hidden');
+                        status.className = 'mt-3 text-xs ' + (tone === 'err' ? 'text-red-700' : tone === 'ok' ? 'text-emerald-700' : 'text-gray-600');
+                        status.textContent = msg;
+                    }
+
+                    async function uploadFiles(fileList) {
+                        const fd = new FormData();
+                        Array.from(fileList).forEach(f => fd.append('files[]', f));
+                        if (!fd.has('files[]')) return;
+                        show('A enviar e a extrair texto…');
+                        try {
+                            const r = await fetch(url, {
+                                method: 'POST',
+                                body: fd,
+                                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                                credentials: 'same-origin',
+                            });
+                            if (!r.ok) {
+                                const txt = await r.text();
+                                throw new Error('HTTP ' + r.status + ': ' + txt.slice(0, 160));
+                            }
+                            const data = await r.json();
+                            const parts = [];
+                            if (data.created)    parts.push(data.created + ' novo(s)');
+                            if (data.duplicates) parts.push(data.duplicates + ' duplicados');
+                            if (data.failed?.length) parts.push(data.failed.length + ' falharam');
+                            show('✓ ' + parts.join(' · ') + ' — a recarregar…', 'ok');
+                            if (window.cyToast) window.cyToast({ title: '✓ PDFs anexados', body: parts.join(' · '), tone: 'success', duration: 2400 });
+                            setTimeout(() => location.reload(), 900);
+                        } catch (e) {
+                            show('Erro: ' + e.message, 'err');
+                        }
+                    }
+
+                    drop.addEventListener('click', () => input.click());
+                    input.addEventListener('change', (e) => uploadFiles(e.target.files));
+
+                    ['dragenter','dragover'].forEach(ev =>
+                        drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('bg-indigo-50','border-indigo-400'); }));
+                    ['dragleave','drop'].forEach(ev =>
+                        drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('bg-indigo-50','border-indigo-400'); }));
+                    drop.addEventListener('drop', (e) => {
+                        if (e.dataTransfer?.files) uploadFiles(e.dataTransfer.files);
+                    });
+                })();
+                </script>
+            @endif
+
             {{-- ─── Sugerir fornecedores + drafts ──────────────────────────
                  Click → AJAX → mostra lista de fornecedores aprovados (H&P)
                  que fazem match na categoria do concurso + sugestões web

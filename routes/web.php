@@ -608,6 +608,13 @@ Route::middleware(['auth'])->group(function () {
         ->name('tenders.suggest_suppliers');
     Route::post('/tenders/{tender}/draft-supplier-emails', [\App\Http\Controllers\TenderSupplierController::class, 'draft'])
         ->name('tenders.draft_supplier_emails');
+    // PDF attachments — upload + download + delete (manager+ to delete).
+    Route::post  ('/tenders/{tender}/attachments',                    [\App\Http\Controllers\TenderAttachmentController::class, 'store'])
+        ->name('tenders.attachments.store');
+    Route::get   ('/tenders/{tender}/attachments/{attachment}/download', [\App\Http\Controllers\TenderAttachmentController::class, 'download'])
+        ->name('tenders.attachments.download');
+    Route::delete('/tenders/{tender}/attachments/{attachment}',       [\App\Http\Controllers\TenderAttachmentController::class, 'destroy'])
+        ->name('tenders.attachments.destroy');
     Route::get('/tenders/{tender}',             [TenderController::class, 'show'])->name('tenders.show');
     Route::patch('/tenders/{tender}',           [TenderController::class, 'update'])->name('tenders.update');
     Route::post('/tenders/{tender}/observe',    [TenderController::class, 'observe'])->name('tenders.observe');
