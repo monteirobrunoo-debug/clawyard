@@ -47,10 +47,32 @@ class SupplierEnrichmentService
      *   raw_extraction?: array<string,mixed>,
      * }
      */
+    /**
+     * Category codes that must NOT be enriched via Tavily / Claude
+     * automatically. A military or PartYard-Systems supplier's name
+     * being sent to a US third-party search API could reveal our
+     * defence supply chain. Operators who want enrichment for these
+     * must do it manually via the supplier edit form.
+     */
+    private const RESTRICTED_CATEGORIES = ['13', '14'];
+
     public function enrichOne(Supplier $supplier): array
     {
         if (!$this->web->isAvailable()) {
             return ['ok' => false, 'updated' => [], 'reason' => 'tavily_not_configured'];
+        }
+
+        // Security: block automatic web enrichment for military / PartYard
+        // Systems suppliers. Their names must not leave the server via
+        // Tavily — see security audit 2026-05-02.
+        $supplierCats = array_values((array) ($supplier->categories ?? []));
+        if (!empty(array_intersect($supplierCats, self::RESTRICTED_CATEGORIES))) {
+            return [
+                'ok'     => false,
+                'updated'=> [],
+                'reason' => 'restricted_category',
+                'detail' => 'Fornecedor nas categorias de defesa/militar — enriquecimento automático bloqueado por política de segurança. Use a edição manual.',
+            ];
         }
 
         $query = $this->buildQuery($supplier);

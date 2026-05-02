@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\SafeEncryptedString;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -17,6 +18,10 @@ class TenderAttachment extends Model
     protected $casts = [
         'size_bytes'      => 'integer',
         'extracted_chars' => 'integer',
+        // AES-encrypted at rest via APP_KEY. Same pattern as Message.content.
+        // Existing plaintext rows return SafeEncryptedString::PLACEHOLDER on
+        // decrypt failure until the backfill migration re-encrypts them.
+        'extracted_text'  => SafeEncryptedString::class,
     ];
 
     public const STATUS_PENDING = 'pending';
