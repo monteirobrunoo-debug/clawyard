@@ -44,22 +44,25 @@
             @endif
 
             {{-- Pipeline stats — ring charts. Total = confident+review+contacted+won+lost+discarded+draft.
-                 Each chart's denominator is that grand total so the slices add up to ~100% of the pipeline. --}}
+                 Each chart's denominator is that grand total so the slices add up to ~100% of the pipeline.
+                 NOTE: status keys are inlined as strings rather than referenced via a `use` alias because
+                 Blade's @php block can't host a `use` statement when wrapped in conditional context (it
+                 compiles to an unexpected token error). The strings match the constants in
+                 \App\Models\LeadOpportunity. --}}
             @php
-                use App\Models\LeadOpportunity as L;
                 $ldT = max(1, array_sum([
-                    $counts[L::STATUS_CONFIDENT] ?? 0, $counts[L::STATUS_REVIEW]    ?? 0,
-                    $counts[L::STATUS_CONTACTED] ?? 0, $counts[L::STATUS_WON]       ?? 0,
-                    $counts[L::STATUS_LOST]      ?? 0, $counts[L::STATUS_DISCARDED] ?? 0,
-                    $counts[L::STATUS_DRAFT]     ?? 0,
+                    $counts['confident'] ?? 0, $counts['review']    ?? 0,
+                    $counts['contacted'] ?? 0, $counts['won']       ?? 0,
+                    $counts['lost']      ?? 0, $counts['discarded'] ?? 0,
+                    $counts['draft']     ?? 0,
                 ]));
             @endphp
             <div class="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                @include('partials.ring-chart', ['label' => 'Confident', 'value' => $counts[L::STATUS_CONFIDENT] ?? 0, 'total' => $ldT, 'tone' => 'emerald', 'subline' => '> 70 score'])
-                @include('partials.ring-chart', ['label' => 'Review',    'value' => $counts[L::STATUS_REVIEW]    ?? 0, 'total' => $ldT, 'tone' => 'blue',    'subline' => '30-70 score'])
-                @include('partials.ring-chart', ['label' => 'Contacted', 'value' => $counts[L::STATUS_CONTACTED] ?? 0, 'total' => $ldT, 'tone' => 'indigo',  'subline' => 'em follow-up'])
-                @include('partials.ring-chart', ['label' => 'Won',       'value' => $counts[L::STATUS_WON]       ?? 0, 'total' => $ldT, 'tone' => 'emerald', 'subline' => 'fechados'])
-                @include('partials.ring-chart', ['label' => 'Drafts',    'value' => $counts[L::STATUS_DRAFT]     ?? 0, 'total' => $ldT, 'tone' => 'gray',    'subline' => 'baixo score'])
+                @include('partials.ring-chart', ['label' => 'Confident', 'value' => $counts['confident'] ?? 0, 'total' => $ldT, 'tone' => 'emerald', 'subline' => '> 70 score'])
+                @include('partials.ring-chart', ['label' => 'Review',    'value' => $counts['review']    ?? 0, 'total' => $ldT, 'tone' => 'blue',    'subline' => '30-70 score'])
+                @include('partials.ring-chart', ['label' => 'Contacted', 'value' => $counts['contacted'] ?? 0, 'total' => $ldT, 'tone' => 'indigo',  'subline' => 'em follow-up'])
+                @include('partials.ring-chart', ['label' => 'Won',       'value' => $counts['won']       ?? 0, 'total' => $ldT, 'tone' => 'emerald', 'subline' => 'fechados'])
+                @include('partials.ring-chart', ['label' => 'Drafts',    'value' => $counts['draft']     ?? 0, 'total' => $ldT, 'tone' => 'gray',    'subline' => 'baixo score'])
             </div>
 
             {{-- Filters bar — kept as a simple GET form so the admin can
