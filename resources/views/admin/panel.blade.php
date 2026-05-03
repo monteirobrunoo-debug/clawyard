@@ -37,6 +37,70 @@
                 <div class="rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-800">{{ session('status') }}</div>
             @endif
 
+            {{-- ── 0. GESTÃO DE UTILIZADORES — acesso rápido ───────────── --}}
+            @php
+                $totalUsers  = \App\Models\User::where('is_active', true)->count();
+                $adminCount  = \App\Models\User::where('role','admin')->count();
+                $managerCount= \App\Models\User::where('role','manager')->count();
+            @endphp
+            <section class="rounded-lg bg-white border border-gray-100 shadow-sm overflow-hidden">
+                <header class="px-4 py-3 border-b border-gray-100 bg-gradient-to-r from-violet-50 to-white flex items-center justify-between">
+                    <div>
+                        <h3 class="text-sm font-semibold text-gray-800">👥 Gestão de Utilizadores</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            {{ $totalUsers }} utilizadores activos ·
+                            {{ $adminCount }} admin · {{ $managerCount }} manager
+                        </p>
+                    </div>
+                    <a href="/admin/users"
+                       class="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-violet-500 transition-colors">
+                        + Criar utilizador
+                    </a>
+                </header>
+                <div class="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+
+                    {{-- Card 1 — Lista de utilizadores --}}
+                    <a href="/admin/users"
+                       class="flex items-start gap-3 px-5 py-4 hover:bg-violet-50/60 transition-colors group no-underline">
+                        <span class="text-2xl mt-0.5">👥</span>
+                        <div>
+                            <div class="text-sm font-semibold text-gray-800 group-hover:text-violet-700">Utilizadores</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Ver, criar e editar contas · alterar role · activar/desactivar</div>
+                            <div class="mt-2 inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+                                {{ $totalUsers }} activos
+                            </div>
+                        </div>
+                    </a>
+
+                    {{-- Card 2 — Matriz de agentes --}}
+                    <a href="/admin/agent-access"
+                       class="flex items-start gap-3 px-5 py-4 hover:bg-blue-50/60 transition-colors group no-underline">
+                        <span class="text-2xl mt-0.5">🎭</span>
+                        <div>
+                            <div class="text-sm font-semibold text-gray-800 group-hover:text-blue-700">Agentes por Utilizador</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Seleccionar quais agentes cada user pode usar · presets rápidos</div>
+                            <div class="mt-2 inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+                                Matriz users × agentes
+                            </div>
+                        </div>
+                    </a>
+
+                    {{-- Card 3 — Matriz de navegação --}}
+                    <a href="/admin/nav-access"
+                       class="flex items-start gap-3 px-5 py-4 hover:bg-emerald-50/60 transition-colors group no-underline">
+                        <span class="text-2xl mt-0.5">🗺️</span>
+                        <div>
+                            <div class="text-sm font-semibold text-gray-800 group-hover:text-emerald-700">Navegação por Utilizador</div>
+                            <div class="text-xs text-gray-500 mt-0.5">Mostrar/ocultar secções do menu · Reports, Patents, Intel Bus…</div>
+                            <div class="mt-2 inline-flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-600">
+                                15 secções configuráveis
+                            </div>
+                        </div>
+                    </a>
+
+                </div>
+            </section>
+
             {{-- ── 1. OVERVIEW STRIP ────────────────────────────────────── --}}
             @php
                 $up        = $overall['up'];

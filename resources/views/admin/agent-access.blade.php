@@ -119,6 +119,7 @@
         <a href="/admin/agent-access" class="active">🎭 Agentes × Users</a>
         <a href="/admin/nav-access">🗺️ Nav × Users</a>
         <a href="/admin/conversations">💬 Conversas</a>
+        <a href="{{ route('admin.panel') }}">⚙️ Painel</a>
         <a href="/dashboard">🏠 Dashboard</a>
     </nav>
     <div class="user-info">
