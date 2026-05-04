@@ -3301,8 +3301,19 @@ async function sendMessage() {
                 // Clean up any leftover typing indicator or empty bubble
                 if (typing.parentNode) typing.remove();
                 if (streamMsg && streamBubble && !accumulated.trim()) {
-                    // Empty response — replace bubble with timeout error
-                    streamBubble.innerHTML = '<span style="color:#ff6b6b;font-size:12px">⏱️ O agente SAP B1 está a demorar mais que o esperado. Tenta novamente — os dados SAP podem estar a carregar.</span>';
+                    // Empty response — replace bubble with timeout error.
+                    // Hint: Max Batch + PDFs frequently exceed the 100s
+                    // Cloudflare cap on Forge — show a tailored message.
+                    const agentName = (metaData?.agent || selectedAgent || '').toLowerCase();
+                    let msg;
+                    if (agentName === 'batch') {
+                        msg = '⏱️ O Max Batch demorou demasiado a processar. PDFs pesados ou muitos ficheiros podem ultrapassar o limite de 100s — tenta com menos itens ou divide em batches mais pequenos.';
+                    } else if (agentName === 'sap') {
+                        msg = '⏱️ O Richard SAP B1 está a demorar mais que o esperado. Tenta novamente — os dados SAP podem estar a carregar.';
+                    } else {
+                        msg = '⏱️ O agente está a demorar mais que o esperado. A ligação foi cortada — tenta novamente.';
+                    }
+                    streamBubble.innerHTML = '<span style="color:#ff6b6b;font-size:12px">' + msg + '</span>';
                 }
                 break;
             }
