@@ -274,48 +274,16 @@ SPECIALTY;
 
         $todayLong = now()->format('d \d\e F \d\e Y');
         $prompt    = "Generate today's executive daily briefing for PartYard / HP-Group.\n\nToday is: {$todayLong}\n\n{$intelligence}";
-        $messages  = [['role' => 'user', 'content' => $prompt]];
+        $systemP   = $this->enrichSystemPrompt($this->systemPrompt);
+        $provider  = (string) config('services.briefing.provider', 'anthropic');
 
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($prompt),
-            'stream'  => true,
-            'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
-                'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
-                'messages'   => $messages,
-                'stream'     => true,
-            ],
-        ]);
-
-        $body     = $response->getBody();
-        $buf      = '';
-        $lastBeat = time();
-
-        while (!$body->eof()) {
-            $buf .= $body->read(1024);
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            if ($heartbeat && (time() - $lastBeat) >= 5) {
-                $heartbeat('Renato a escrever');
-                $lastBeat = time();
-            }
+        // Route the streaming call based on the configured provider.
+        // Anthropic uses Messages API (system + messages), NVIDIA uses
+        // OpenAI-compatible chat/completions (system as message[0]).
+        if ($provider === 'nvidia') {
+            $full = $this->streamViaNvidia($systemP, $prompt, $onChunk, $heartbeat, $full);
+        } else {
+            $full = $this->streamViaAnthropic($systemP, $prompt, $onChunk, $heartbeat, $full);
         }
 
         $full = trim($full);
@@ -377,5 +345,129 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'briefing'; }
-    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
+
+    /** Reflects the active provider so the chip in the UI shows the right model. */
+    public function getModel(): string
+    {
+        $provider = config('services.briefing.provider', 'anthropic');
+        return $provider === 'nvidia'
+            ? (string) config('services.briefing.nvidia_model', 'nvidia/llama-3.3-nemotron-super-49b-v1.5')
+            : (string) config('services.anthropic.model_opus',  'claude-opus-4-5');
+    }
+
+    // ─── Provider-specific streaming helpers ───────────────────────────────
+    /**
+     * Stream via Anthropic Messages API (default — Claude Opus 4.5).
+     * Same logic that lived inline in stream() before the provider switch.
+     */
+    private function streamViaAnthropic(string $systemPrompt, string $prompt, callable $onChunk, ?callable $heartbeat, string $full): string
+    {
+        $response = $this->client->post('/v1/messages', [
+            'headers' => $this->headersForMessage($prompt),
+            'stream'  => true,
+            'json'    => [
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'max_tokens' => 8192,
+                'system'     => $systemPrompt,
+                'messages'   => [['role' => 'user', 'content' => $prompt]],
+                'stream'     => true,
+            ],
+        ]);
+
+        $body     = $response->getBody();
+        $buf      = '';
+        $lastBeat = time();
+
+        while (!$body->eof()) {
+            $buf .= $body->read(1024);
+            while (($pos = strpos($buf, "\n")) !== false) {
+                $line = substr($buf, 0, $pos);
+                $buf  = substr($buf, $pos + 1);
+                $line = trim($line);
+                if (!str_starts_with($line, 'data: ')) continue;
+                $json = substr($line, 6);
+                if ($json === '[DONE]') break 2;
+                $evt = json_decode($json, true);
+                if (!is_array($evt)) continue;
+                if (($evt['type'] ?? '') === 'content_block_delta'
+                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
+                    $text = $evt['delta']['text'] ?? '';
+                    if ($text !== '') {
+                        $full .= $text;
+                        $onChunk($text);
+                    }
+                }
+            }
+            if ($heartbeat && (time() - $lastBeat) >= 5) {
+                $heartbeat('Renato a escrever (Claude Opus)');
+                $lastBeat = time();
+            }
+        }
+
+        return $full;
+    }
+
+    /**
+     * Stream via NVIDIA NIM (OpenAI-compatible chat/completions).
+     * System prompt becomes message[0]; deltas are read from
+     * choices[0].delta.content (vs Anthropic's content_block_delta).
+     */
+    private function streamViaNvidia(string $systemPrompt, string $prompt, callable $onChunk, ?callable $heartbeat, string $full): string
+    {
+        $baseUri = (string) config('services.nvidia.base_url', 'https://integrate.api.nvidia.com/v1');
+        $baseUri = preg_replace('#^http://#i', 'https://', $baseUri) ?: $baseUri;
+
+        $client = new Client([
+            'base_uri'        => rtrim($baseUri, '/') . '/',
+            'timeout'         => 180,
+            'connect_timeout' => 10,
+            'headers'         => [
+                'Authorization' => 'Bearer ' . config('services.nvidia.api_key'),
+                'User-Agent'    => 'ClawYard-Renato/1.0',
+            ],
+        ]);
+
+        $response = $client->post('chat/completions', [
+            'stream' => true,
+            'json'   => [
+                'model'       => config('services.briefing.nvidia_model', 'nvidia/llama-3.3-nemotron-super-49b-v1.5'),
+                'messages'    => [
+                    ['role' => 'system', 'content' => $systemPrompt],
+                    ['role' => 'user',   'content' => $prompt],
+                ],
+                'max_tokens'  => 8192,
+                'temperature' => 0.5,
+                'stream'      => true,
+            ],
+        ]);
+
+        $body     = $response->getBody();
+        $buf      = '';
+        $lastBeat = time();
+
+        while (!$body->eof()) {
+            $buf .= $body->read(1024);
+            while (($pos = strpos($buf, "\n")) !== false) {
+                $line = substr($buf, 0, $pos);
+                $buf  = substr($buf, $pos + 1);
+                $line = trim($line);
+                if (!str_starts_with($line, 'data: ')) continue;
+                $json = substr($line, 6);
+                if ($json === '[DONE]') break 2;
+                $evt = json_decode($json, true);
+                if (!is_array($evt)) continue;
+                $text = $evt['choices'][0]['delta']['content'] ?? '';
+                if ($text !== '') {
+                    $full .= $text;
+                    $onChunk($text);
+                }
+            }
+            if ($heartbeat && (time() - $lastBeat) >= 5) {
+                $heartbeat('Renato a escrever (Nemotron Super)');
+                $lastBeat = time();
+            }
+        }
+
+        return $full;
+    }
 }

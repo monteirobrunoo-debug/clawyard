@@ -116,6 +116,19 @@ return [
         'probe_sap' => env('ARIA_PROBE_SAP', false),
     ],
 
+    // ── Briefing Agent (Strategist Renato) — provider switcher ──────────────
+    // Default: Anthropic Claude Opus 4.5 (deep reasoning, long context).
+    // Alternative: NVIDIA Nemotron Super 49B v1.5 (open model, free inference
+    // on the integrate.api.nvidia.com endpoint we already use for Carlos).
+    //
+    // Flip BRIEFING_PROVIDER=nvidia in the .env to swap. No code change needed.
+    // Useful for A/B-testing strategic briefings cost-vs-quality without
+    // touching every other Anthropic-backed agent.
+    'briefing' => [
+        'provider'     => env('BRIEFING_PROVIDER',     'anthropic'),  // anthropic | nvidia
+        'nvidia_model' => env('BRIEFING_NVIDIA_MODEL', 'nvidia/llama-3.3-nemotron-super-49b-v1.5'),
+    ],
+
     'deploy_token' => env('DEPLOY_TOKEN', ''),
 
     'sap' => [
