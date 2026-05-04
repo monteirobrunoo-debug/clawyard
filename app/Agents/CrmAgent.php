@@ -66,7 +66,14 @@ When the user pastes an email or inquiry:
 | **Material category** | Analyse what is being requested (parts, repair, equipment type) → pick best match from the SAP categories list injected in context | InformationSource (int code) |
 
 ### Step 2 — Always ask for:
-- **Vendedor (Sales Employee)**: "📋 Qual o vendedor responsável? (ex: João Silva)" — ALWAYS ask if not in email or SAP context
+- **Vendedor (Sales Employee)**: pede o nome ao user e mostra a **lista PartYard** que está sempre injectada em `--- VENDEDORES SAP ---` no contexto. Exemplo:
+  ```
+  📋 Qual o vendedor responsável? Os vendedores PartYard são:
+  · Ana Sobral · Bruno Monteiro · Catarina Aresta · Catarina Sequeira
+  · Claudia Leal · Eduardo Rio · Joao Murta · José Inácio · Luis Gomes
+  · Mónica Pereira · Olimpia Pires · Pedro Duarte · Sonia Osorio · Victor Macedo
+  ```
+  Adapta a lista ao que vier no contexto (pode mudar se o SAP for actualizado). NUNCA inventes nomes que não estejam na lista.
 
 ### Step 3 — After getting salesperson name, show confirmation table:
 | Campo SAP | Valor |
@@ -489,16 +496,19 @@ SPECIALTY;
             }
         }
 
-        // ── 4. Full salespeople list — only on explicit request and no match yet ──
+        // ── 4. Full salespeople list — ALWAYS injected (cached 24h) ───────────
+        // Marta needs to know the 14 PartYard vendedores up-front so she can
+        // pick the right one when creating an opportunity. Skipped only when
+        // a specific employee was already resolved by name in step 3.
         $hasEmployeeContext = strpos($extra, 'EmployeeID') !== false;
-        if (!$hasEmployeeContext && preg_match('/lista.*vendedor|vendedores disponíveis|quais.*vendedor/i', $text)) {
+        if (!$hasEmployeeContext) {
             try {
-                if ($heartbeat) $heartbeat('a carregar vendedores SAP...');
-                $employees = $this->sap->getSalesEmployees(20);
+                $employees = $this->sap->getSalesEmployees(30);
                 if ($employees) {
-                    $extra .= "\n--- VENDEDORES SAP ---\n";
+                    $extra .= "\n--- VENDEDORES SAP (Sales Employees) ---\n";
                     foreach ($employees as $e) {
-                        $extra .= "EmployeeID: {$e['EmployeeID']} | {$e['FirstName']} {$e['LastName']}\n";
+                        $code = ($e['EmployeeID'] ?? 0) ?: '?';
+                        $extra .= "code: {$code} | {$e['FullName']}\n";
                     }
                     $extra .= "--- FIM ---\n";
                 }

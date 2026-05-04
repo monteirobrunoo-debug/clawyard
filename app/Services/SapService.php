@@ -1041,30 +1041,76 @@ class SapService
     }
 
     /**
+     * Hardcoded fallback list of PartYard Sales Persons.
+     * Used when SAP B1 is offline / returns empty. EmployeeID 0 means
+     * "no SAP code yet" — Marta should still be able to validate the name
+     * via searchSalesEmployee() before creating the opportunity.
+     *
+     * Match the SAP screenshot 2026-05-03 — keep alphabetical (matches
+     * SAP's default $orderby).
+     */
+    public const SALES_EMPLOYEES_FALLBACK = [
+        'Ana Sobral',
+        'Bruno Monteiro',
+        'Catarina Aresta',
+        'Catarina Sequeira',
+        'Claudia Leal',
+        'Eduardo Rio',
+        'Joao Murta',
+        'José Inácio',
+        'Luis Gomes',
+        'Mónica Pereira',
+        'Olimpia Pires',
+        'Pedro Duarte',
+        'Sonia Osorio',
+        'Victor Macedo',
+    ];
+
+    /**
      * Fetch all SAP Sales Persons (the list used by CRM Opportunities).
      *
      * Uses the SalesPersons entity — NOT EmployeesInfo — because the
      * SalesOpportunities.SalesPerson field takes SalesEmployeeCode from this table.
-     * Known persons: Ana Sobral, Bruno Monteiro, Catarina Aresta, Catarina Sequeira,
-     * Claudia Leal, Eduardo Rio, Joao Murta, José Inácio, Luis Gomes,
-     * Mónica Pereira, Olimpia Pires, Sonia Osorio, Victor Macedo.
+     * Cached 24h — these rarely change. Falls back to SALES_EMPLOYEES_FALLBACK
+     * when SAP is unreachable so Marta keeps showing the correct names.
      */
     public function getSalesEmployees(int $top = 30): array
     {
-        $data = $this->get('SalesPersons', [
-            '$select'  => 'SalesEmployeeCode,SalesEmployeeName,Active',
-            '$filter'  => "Active eq 'tYES'",
-            '$top'     => $top,
-            '$orderby' => 'SalesEmployeeName asc',
-        ]);
+        $cacheKey = 'sap_sales_employees_v2:' . $top;
 
-        // Normalise to common field names expected by callers
-        return array_map(fn($r) => [
-            'EmployeeID' => $r['SalesEmployeeCode'] ?? 0,
-            'FirstName'  => $r['SalesEmployeeName'] ?? '',
-            'LastName'   => '',
-            'FullName'   => $r['SalesEmployeeName'] ?? '',
-        ], $data['value'] ?? []);
+        return Cache::remember($cacheKey, 1440, function () use ($top) {
+            try {
+                $data = $this->get('SalesPersons', [
+                    '$select'  => 'SalesEmployeeCode,SalesEmployeeName,Active',
+                    '$filter'  => "Active eq 'tYES'",
+                    '$top'     => $top,
+                    '$orderby' => 'SalesEmployeeName asc',
+                ]);
+
+                $rows = $data['value'] ?? [];
+                if (!empty($rows)) {
+                    return array_map(fn($r) => [
+                        'EmployeeID' => $r['SalesEmployeeCode'] ?? 0,
+                        'FirstName'  => $r['SalesEmployeeName'] ?? '',
+                        'LastName'   => '',
+                        'FullName'   => $r['SalesEmployeeName'] ?? '',
+                    ], $rows);
+                }
+                Log::warning('SAP: SalesPersons returned empty — using fallback');
+            } catch (\Throwable $e) {
+                Log::warning('SAP: getSalesEmployees failed — ' . $e->getMessage());
+            }
+
+            // Fallback: known PartYard names. EmployeeID=0 sinaliza "sem
+            // código SAP no contexto" — Marta deve confirmar via search
+            // antes de criar a oportunidade.
+            return array_map(fn($name) => [
+                'EmployeeID' => 0,
+                'FirstName'  => $name,
+                'LastName'   => '',
+                'FullName'   => $name,
+            ], self::SALES_EMPLOYEES_FALLBACK);
+        });
     }
 
     /**
