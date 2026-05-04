@@ -1074,11 +1074,17 @@ class SapService
      * Cached 24h — these rarely change. Falls back to SALES_EMPLOYEES_FALLBACK
      * when SAP is unreachable so Marta keeps showing the correct names.
      */
+    /** Cache key prefix used by getSalesEmployees — exposed for admin refresh. */
+    public const SALES_EMPLOYEES_CACHE_PREFIX = 'sap_sales_employees_v2:';
+
     public function getSalesEmployees(int $top = 30): array
     {
-        $cacheKey = 'sap_sales_employees_v2:' . $top;
+        $cacheKey = self::SALES_EMPLOYEES_CACHE_PREFIX . $top;
 
-        return Cache::remember($cacheKey, 1440, function () use ($top) {
+        // 60 min cache: balance between SAP session pressure and freshness.
+        // New vendor added in SAP → visible to Marta within 1h, OR immediately
+        // via the "↻ Refresh SAP catalog" button in /admin/panel.
+        return Cache::remember($cacheKey, 60, function () use ($top) {
             try {
                 $data = $this->get('SalesPersons', [
                     '$select'  => 'SalesEmployeeCode,SalesEmployeeName,Active',
@@ -1259,9 +1265,14 @@ class SapService
      * Returns array of ['code' => int, 'name' => string].
      * Cached for 24 h — these rarely change.
      */
+    /** Cache key used by getOpportunitySources — exposed for admin refresh. */
+    public const OPP_SOURCES_CACHE_KEY = 'sap_opp_sources';
+
     public function getOpportunitySources(): array
     {
-        return Cache::remember('sap_opp_sources', 1440, function () {
+        // 60 min — same trade-off as getSalesEmployees. Manual refresh
+        // available in /admin/panel for immediate updates.
+        return Cache::remember(self::OPP_SOURCES_CACHE_KEY, 60, function () {
             try {
                 $session = $this->ensureSession();
                 if (!$session) return [];

@@ -26,6 +26,15 @@
                     @csrf
                     <button type="submit" class="rounded-md border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50">↻ Re-correr probes</button>
                 </form>
+                <form method="POST" action="{{ route('admin.panel.refreshSap') }}" class="inline"
+                      onsubmit="return confirm('Forçar a Marta a buscar vendedores e categorias novamente do SAP?')">
+                    @csrf
+                    <button type="submit"
+                            class="rounded-md border border-violet-300 bg-violet-50 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100"
+                            title="Limpa cache de vendedores + InformationSource. Usar depois de adicionar/alterar no SAP.">
+                        ↻ Refresh SAP catalog
+                    </button>
+                </form>
             </div>
         </div>
     </x-slot>

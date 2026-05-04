@@ -76,6 +76,31 @@ class AdminPanelController extends Controller
         return back()->with('status', '✓ Health probes re-corridos.');
     }
 
+    /**
+     * POST /admin/panel/refresh-sap-catalog — invalida caches do
+     * Marta CRM (vendedores + categorias InformationSource).
+     *
+     * Usar quando alguém adicionou um vendedor novo ou alterou as
+     * categorias no SAP B1 e o operador quer que a Marta veja
+     * imediatamente, sem esperar pelo TTL de 1h.
+     */
+    public function refreshSapCatalog()
+    {
+        $user = Auth::user();
+        if (!$user || !$user->isAdmin()) abort(403);
+
+        // Categorias (InformationSource)
+        \Illuminate\Support\Facades\Cache::forget(\App\Services\SapService::OPP_SOURCES_CACHE_KEY);
+
+        // Vendedores — chave inclui o $top, limpamos as variantes mais usadas
+        $prefix = \App\Services\SapService::SALES_EMPLOYEES_CACHE_PREFIX;
+        foreach ([20, 30, 50] as $top) {
+            \Illuminate\Support\Facades\Cache::forget($prefix . $top);
+        }
+
+        return back()->with('status', '✓ Cache SAP limpa — Marta vai voltar a buscar vendedores e categorias na próxima mensagem.');
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────
 
     private function aggregateState(array $report): array
