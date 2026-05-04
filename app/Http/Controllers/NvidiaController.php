@@ -322,6 +322,31 @@ class NvidiaController extends Controller
             }
 
             if (!empty($pdfBlocks)) {
+                // ── Payload size guard ────────────────────────────────
+                // The llm-proxy nginx has a client_max_body_size cap
+                // (default 1 MB). 413 Request Entity Too Large was killing
+                // Max Batch with 5+ PDFs. Fail fast with a useful message
+                // so the user knows to split the batch instead of seeing
+                // a generic timeout.
+                $totalB64 = 0;
+                foreach ($pdfBlocks as $b) {
+                    $totalB64 += strlen($b['source']['data'] ?? '');
+                }
+                // 9 MB headroom leaves space for system prompt + history.
+                // Bump this when llm-proxy nginx client_max_body_size goes up.
+                $maxBytes = 9 * 1024 * 1024;
+                if ($totalB64 > $maxBytes) {
+                    $totalMb = round($totalB64 / 1024 / 1024, 1);
+                    \Log::warning("ClawYard: PDF batch too large [{$totalMb}MB > 9MB cap]", [
+                        'pdf_count' => count($pdfBlocks),
+                        'agent'     => $agentName_final ?? null,
+                    ]);
+                    return response()->json([
+                        'error'  => 'payload_too_large',
+                        'detail' => "Os PDFs anexados somam {$totalMb} MB — limite de 9 MB por mensagem. Divide em batches mais pequenos (ex: 3-4 PDFs de cada vez).",
+                    ], 413);
+                }
+
                 // Build content array: text first, then all PDF document blocks
                 $contentBlocks = [['type' => 'text', 'text' => $augmentedMessage . $textAppend]];
                 foreach ($pdfBlocks as $block) {

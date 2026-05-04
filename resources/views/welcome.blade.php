@@ -3130,7 +3130,11 @@ async function sendMessage() {
             typing.remove();
             let errMsg;
             if (res.status === 413) {
-                errMsg = '❌ Ficheiro demasiado grande para o servidor. Tenta um ficheiro mais pequeno (< 1 MB) ou pede ao admin para aumentar o limite do Nginx (client_max_body_size 50M).';
+                // Try to extract the detailed message from our backend
+                // (which includes the actual MB total + suggestion).
+                let detail = '';
+                try { const j = JSON.parse(raw); detail = j.detail || ''; } catch (e) {}
+                errMsg = '❌ ' + (detail || 'Ficheiros demasiado grandes para o servidor. Divide em batches mais pequenos ou pede ao admin para aumentar o client_max_body_size do Nginx.');
             } else if (res.status === 422) {
                 errMsg = '❌ Dados inválidos: ' + (raw.replace(/<[^>]+>/g,'').trim().substring(0,200) || 'Verifica o tamanho do ficheiro.');
             } else {
