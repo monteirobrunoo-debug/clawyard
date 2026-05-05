@@ -48,11 +48,16 @@ class UserWeeklyDigestService
                 'end'   => $weekEnd->copy()->subDay()->format('d/m'),
                 'iso'   => $weekStart->format('Y-W'),
             ],
-            'core'    => $this->coreStats($user, $weekStart, $weekEnd),
-            'agents'  => $this->agentUsage($user, $weekStart, $weekEnd),
-            'stats'   => $this->extraStats($user, $weekStart, $weekEnd, $prevWeekStart, $prevWeekEnd),
-            'todos'   => $this->todoLists($user),
-            'rewards' => $this->rewardsBlock($user, $weekStart, $weekEnd),
+            'core'         => $this->coreStats($user, $weekStart, $weekEnd),
+            'agents'       => $this->agentUsage($user, $weekStart, $weekEnd),
+            'stats'        => $this->extraStats($user, $weekStart, $weekEnd, $prevWeekStart, $prevWeekEnd),
+            'top_categories' => $this->topCategories($user, $weekStart, $weekEnd),
+            'top_suppliers'  => $this->topSuppliersContacted($user, $weekStart, $weekEnd),
+            'cost'           => $this->aiCost($user, $weekStart, $weekEnd, $prevWeekStart, $prevWeekEnd),
+            'todos'        => $this->todoLists($user),
+            'intel'        => $this->intelligenceBlock($user),
+            'team_compare' => $this->teamCompareAnonymized($weekStart, $weekEnd),
+            'rewards'      => $this->rewardsBlock($user, $weekStart, $weekEnd),
             'manager' => method_exists($user, 'isManager') && $user->isManager()
                 ? $this->managerOverview($weekStart, $weekEnd)
                 : null,
@@ -186,7 +191,7 @@ class UserWeeklyDigestService
     {
         $userTenderIds = Tender::forUser($user->id)->pluck('id');
 
-        // Concursos com deadline ≤ 7 dias
+        // 15. Concursos com deadline ≤ 7 dias
         $upcoming = Tender::whereIn('id', $userTenderIds)
             ->active()
             ->whereNotIn('status', Tender::DONE_FROM_USER_POV)
@@ -203,18 +208,245 @@ class UserWeeklyDigestService
                 'days'      => $t->deadline_at?->diffInDays(now()),
             ])->values()->all();
 
-        // Concursos sem nº oportunidade SAP
+        // 16. Concursos sem nº oportunidade SAP
         $missingSap = Tender::whereIn('id', $userTenderIds)
             ->needingSapOpportunity()
             ->limit(5)
             ->pluck('reference', 'id')
             ->toArray();
 
+        // 17. Fornecedores PENDING para validar (count global; aprovar
+        // alarga o pool nas sugestões dos concursos)
+        $pendingSuppliers = 0;
+        try {
+            $pendingSuppliers = DB::table('suppliers')
+                ->where('status', 'pending')
+                ->whereNotNull('primary_email')
+                ->where('primary_email', '!=', '')
+                ->count();
+        } catch (\Throwable $e) { /* tabela ausente em testes */ }
+
+        // 18. Concursos atrasados ainda recuperáveis
+        $overdue = Tender::whereIn('id', $userTenderIds)
+            ->overdue()
+            ->orderBy('deadline_at')
+            ->limit(5)
+            ->get(['id', 'reference', 'title', 'deadline_at'])
+            ->map(fn($t) => [
+                'id'        => $t->id,
+                'reference' => $t->reference,
+                'title'     => mb_substr((string) $t->title, 0, 80),
+                'deadline'  => $t->deadline_at?->format('d/m H:i'),
+                'days_late' => $t->deadline_at?->diffInDays(now()),
+            ])->values()->all();
+
         return [
-            'upcoming_deadlines' => $upcoming,
-            'missing_sap_count'  => count($missingSap),
-            'missing_sap_sample' => array_slice(array_values($missingSap), 0, 3),
+            'upcoming_deadlines'  => $upcoming,
+            'missing_sap_count'   => count($missingSap),
+            'missing_sap_sample'  => array_slice(array_values($missingSap), 0, 3),
+            'pending_suppliers'   => $pendingSuppliers,
+            'overdue_recoverable' => $overdue,
         ];
+    }
+
+    /**
+     * 8. Top 3 categorias H&P trabalhadas — agregadas dos
+     * prelim_analysis.categories nos concursos touched esta semana.
+     */
+    private function topCategories(User $user, Carbon $start, Carbon $end): array
+    {
+        $userTenderIds = Tender::forUser($user->id)
+            ->whereBetween('updated_at', [$start, $end])
+            ->pluck('id');
+
+        $rows = Tender::whereIn('id', $userTenderIds)
+            ->whereNotNull('prelim_analysis')
+            ->get(['prelim_analysis']);
+
+        $tally = [];
+        foreach ($rows as $r) {
+            $cats = (array) ($r->prelim_analysis['categories'] ?? []);
+            foreach ($cats as $c) {
+                $tally[$c] = ($tally[$c] ?? 0) + 1;
+            }
+        }
+        arsort($tally);
+
+        $catLabels = [
+            '1'  => 'Ships', '2' => 'Shipyard', '3' => 'Ship fittings',
+            '4'  => 'Prime movers', '5' => 'Auxiliary', '6' => 'Propulsion',
+            '7'  => 'Ship operation', '8' => 'Cargo handling', '9' => 'Electrical',
+            '10' => 'Marine tech', '11' => 'Ports', '12' => 'Maritime services',
+            '13' => 'Militar/Defesa', '14' => 'PartYard Systems',
+            '15' => 'Industrial', '16' => 'Brand reps', '17' => 'Communications',
+            '18' => 'Medical', '19' => 'Logistics', '20' => 'Storage',
+        ];
+
+        $top = [];
+        foreach (array_slice($tally, 0, 3, true) as $code => $count) {
+            $top[] = [
+                'code'  => $code,
+                'label' => $catLabels[$code] ?? "Cat {$code}",
+                'count' => $count,
+            ];
+        }
+        return $top;
+    }
+
+    /**
+     * 9. Top 3 fornecedores contactados — supplier_outreach se
+     * existir, senão devolve [] (degradação suave).
+     */
+    private function topSuppliersContacted(User $user, Carbon $start, Carbon $end): array
+    {
+        try {
+            return DB::table('supplier_outreach')
+                ->join('suppliers', 'suppliers.id', '=', 'supplier_outreach.supplier_id')
+                ->where('supplier_outreach.created_by_user_id', $user->id)
+                ->whereBetween('supplier_outreach.created_at', [$start, $end])
+                ->select(
+                    'suppliers.id',
+                    'suppliers.name',
+                    DB::raw('COUNT(*) as touches')
+                )
+                ->groupBy('suppliers.id', 'suppliers.name')
+                ->orderByDesc('touches')
+                ->limit(3)
+                ->get()
+                ->map(fn($r) => ['id' => $r->id, 'name' => $r->name, 'touches' => (int) $r->touches])
+                ->values()
+                ->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * 14. Custo IA — semana, semana anterior, mês corrente.
+     * Fonte: tender_service_analyses.total_cost_usd (proxy razoável
+     * porque é onde o user gasta mais; chat normal não tracked por user).
+     */
+    private function aiCost(User $user, Carbon $start, Carbon $end, Carbon $prevStart, Carbon $prevEnd): array
+    {
+        try {
+            $weekCost  = (float) DB::table('tender_service_analyses')
+                ->where('generated_by_user_id', $user->id)
+                ->whereBetween('generated_at', [$start, $end])
+                ->sum('total_cost_usd');
+            $prevCost  = (float) DB::table('tender_service_analyses')
+                ->where('generated_by_user_id', $user->id)
+                ->whereBetween('generated_at', [$prevStart, $prevEnd])
+                ->sum('total_cost_usd');
+            $monthCost = (float) DB::table('tender_service_analyses')
+                ->where('generated_by_user_id', $user->id)
+                ->whereBetween('generated_at', [now()->startOfMonth(), now()->endOfMonth()])
+                ->sum('total_cost_usd');
+            return [
+                'week_usd'  => round($weekCost, 4),
+                'prev_usd'  => round($prevCost, 4),
+                'month_usd' => round($monthCost, 4),
+            ];
+        } catch (\Throwable $e) {
+            return ['week_usd' => 0, 'prev_usd' => 0, 'month_usd' => 0];
+        }
+    }
+
+    /**
+     * 19+20. Discoveries arXiv/patents (act_now/monitor, últimos 14d)
+     * + concursos órfãos sem owner que matcham categorias do user.
+     */
+    private function intelligenceBlock(User $user): array
+    {
+        $discoveries = [];
+        try {
+            $discoveries = DB::table('discoveries')
+                ->whereIn('priority', ['act_now', 'monitor'])
+                ->where('created_at', '>=', now()->copy()->subDays(14))
+                ->orderByDesc('relevance_score')
+                ->orderByDesc('created_at')
+                ->limit(3)
+                ->get(['id', 'title', 'source', 'category', 'relevance_score', 'url'])
+                ->map(fn($d) => [
+                    'title'    => mb_substr((string) $d->title, 0, 90),
+                    'source'   => $d->source,
+                    'category' => $d->category,
+                    'score'    => (int) $d->relevance_score,
+                    'url'      => $d->url,
+                ])->values()->all();
+        } catch (\Throwable $e) { /* discoveries opcional */ }
+
+        $orphanMatches = [];
+        try {
+            $myCategories = Tender::forUser($user->id)
+                ->where('updated_at', '>=', now()->copy()->subDays(90))
+                ->whereNotNull('prelim_analysis')
+                ->get(['prelim_analysis'])
+                ->flatMap(fn($t) => (array) ($t->prelim_analysis['categories'] ?? []))
+                ->unique()
+                ->take(5)
+                ->all();
+
+            if (!empty($myCategories)) {
+                $orphans = Tender::query()
+                    ->active()
+                    ->whereNotIn('status', Tender::DONE_FROM_USER_POV)
+                    ->whereNull('assigned_collaborator_id')
+                    ->where('created_at', '>=', now()->copy()->subDays(7))
+                    ->whereNotNull('prelim_analysis')
+                    ->limit(20)
+                    ->get(['id', 'reference', 'title', 'prelim_analysis']);
+
+                foreach ($orphans as $o) {
+                    $oCats = (array) ($o->prelim_analysis['categories'] ?? []);
+                    if (array_intersect($oCats, $myCategories)) {
+                        $orphanMatches[] = [
+                            'id'        => $o->id,
+                            'reference' => $o->reference,
+                            'title'     => mb_substr((string) $o->title, 0, 80),
+                        ];
+                        if (count($orphanMatches) >= 3) break;
+                    }
+                }
+            }
+        } catch (\Throwable $e) { /* prelim_analysis pode estar ausente */ }
+
+        return [
+            'discoveries'    => $discoveries,
+            'orphan_matches' => $orphanMatches,
+        ];
+    }
+
+    /**
+     * 21. Comparação anonimizada — só posições + counts, sem nomes,
+     * para criar contexto sem expor colegas individualmente.
+     */
+    private function teamCompareAnonymized(Carbon $start, Carbon $end): array
+    {
+        try {
+            $driver = DB::connection()->getDriverName();
+            // Postgres regexp_replace; SQLite/MySQL não têm — fallback p/ LIKE prefix
+            if ($driver === 'pgsql') {
+                $rows = DB::table('messages')
+                    ->join('conversations', 'conversations.id', '=', 'messages.conversation_id')
+                    ->whereBetween('messages.created_at', [$start, $end])
+                    ->where('messages.role', 'user')
+                    ->select(
+                        DB::raw("regexp_replace(conversations.session_id, '^u(\\d+)_.*', '\\1') as uid"),
+                        DB::raw('COUNT(*) as msgs')
+                    )
+                    ->groupBy('uid')
+                    ->orderByDesc('msgs')
+                    ->limit(3)
+                    ->get();
+                return $rows->map(fn($r, $i) => [
+                    'rank' => $i + 1,
+                    'msgs' => (int) $r->msgs,
+                ])->values()->all();
+            }
+            return [];
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     private function rewardsBlock(User $user, Carbon $start, Carbon $end): array
@@ -236,6 +468,10 @@ class UserWeeklyDigestService
         }
     }
 
+    /**
+     * 22-25. Manager block — agregados de equipa + custo LLM total
+     * + integrações em down (health snapshot).
+     */
     private function managerOverview(Carbon $start, Carbon $end): array
     {
         try {
@@ -247,10 +483,35 @@ class UserWeeklyDigestService
                 ->whereNull('assigned_collaborator_id')
                 ->where('created_at', '<=', now()->copy()->subDays(14))
                 ->count();
+
+            // 23. Custo LLM total — semana corrente + mês corrente
+            // Soma de TODAS as análises (não só as deste user)
+            $teamWeekCost  = (float) DB::table('tender_service_analyses')
+                ->whereBetween('generated_at', [$start, $end])
+                ->sum('total_cost_usd');
+            $teamMonthCost = (float) DB::table('tender_service_analyses')
+                ->whereBetween('generated_at', [now()->startOfMonth(), now()->endOfMonth()])
+                ->sum('total_cost_usd');
+
+            // 25. Integrações em down — best-effort, lê o cache do
+            // IntegrationHealthChecker se ainda fresco
+            $downIntegrations = [];
+            try {
+                $health = app(\App\Services\IntegrationHealthChecker::class)->report();
+                foreach ($health as $key => $check) {
+                    if (($check['state'] ?? null) === 'down') {
+                        $downIntegrations[] = $key;
+                    }
+                }
+            } catch (\Throwable $e) { /* health probe falha — não bloquear digest */ }
+
             return [
-                'team_submitted' => $teamSubmitted,
-                'team_won'       => $teamWon,
-                'orphan_tenders' => $orphans,
+                'team_submitted'  => $teamSubmitted,
+                'team_won'        => $teamWon,
+                'orphan_tenders'  => $orphans,
+                'team_week_cost'  => round($teamWeekCost, 4),
+                'team_month_cost' => round($teamMonthCost, 4),
+                'down_integrations' => $downIntegrations,
             ];
         } catch (\Throwable $e) {
             return [];

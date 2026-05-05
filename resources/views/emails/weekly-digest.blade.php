@@ -4,7 +4,12 @@
     $c  = $digest['core'];
     $a  = $digest['agents'];
     $s  = $digest['stats'];
+    $tc = $digest['top_categories'] ?? [];
+    $ts = $digest['top_suppliers']  ?? [];
+    $cost = $digest['cost'] ?? ['week_usd' => 0, 'prev_usd' => 0, 'month_usd' => 0];
     $td = $digest['todos'];
+    $intel = $digest['intel'] ?? ['discoveries' => [], 'orphan_matches' => []];
+    $teamCmp = $digest['team_compare'] ?? [];
     $r  = $digest['rewards'];
     $m  = $digest['manager'];
     $appUrl = config('app.url', 'https://clawyard.partyard.eu');
@@ -126,30 +131,98 @@
     </table>
   </td></tr>
 
-  {{-- ── A FAZER ─────────────────────────────────────── --}}
-  @if(!empty($td['upcoming_deadlines']) || $td['missing_sap_count'] > 0)
+  {{-- ── 8. TOP CATEGORIAS H&P TRABALHADAS ─────────────── --}}
+  @if(!empty($tc))
+  <tr><td style="background:#fff; padding:16px 28px; border-top:1px solid #e5e7eb;">
+    <div style="font-size:13px; font-weight:700; color:#1f2937; margin-bottom:10px;">🏷 Top categorias trabalhadas</div>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:12px;">
+      @foreach($tc as $i => $cat)
+      <tr>
+        <td width="32" style="padding:3px 0; color:#9ca3af;">{{ $i+1 }}.</td>
+        <td style="padding:3px 0;"><strong>{{ $cat['label'] }}</strong>
+          <span style="color:#6b7280;">· cat {{ $cat['code'] }}</span></td>
+        <td width="60" style="padding:3px 0; text-align:right; color:#374151; font-weight:700;">
+          {{ $cat['count'] }} concurso(s)
+        </td>
+      </tr>
+      @endforeach
+    </table>
+  </td></tr>
+  @endif
+
+  {{-- ── 9. TOP FORNECEDORES CONTACTADOS ───────────────── --}}
+  @if(!empty($ts))
+  <tr><td style="background:#fff; padding:16px 28px; border-top:1px solid #e5e7eb;">
+    <div style="font-size:13px; font-weight:700; color:#1f2937; margin-bottom:10px;">🤝 Fornecedores mais contactados</div>
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:12px;">
+      @foreach($ts as $i => $sup)
+      <tr>
+        <td width="32" style="padding:3px 0; color:#9ca3af;">{{ $i+1 }}.</td>
+        <td style="padding:3px 0;"><strong>{{ $sup['name'] }}</strong></td>
+        <td width="60" style="padding:3px 0; text-align:right; color:#374151; font-weight:700;">
+          {{ $sup['touches'] }} contacto(s)
+        </td>
+      </tr>
+      @endforeach
+    </table>
+  </td></tr>
+  @endif
+
+  {{-- ── 14. CUSTO IA ──────────────────────────────────── --}}
+  @if($cost['week_usd'] > 0 || $cost['month_usd'] > 0)
+  <tr><td style="background:#f9fafb; padding:14px 28px; border-top:1px solid #e5e7eb;">
+    <div style="font-size:12px; color:#6b7280;">
+      💰 <strong>Custo IA</strong> ·
+      semana <strong style="color:#1f2937;">${{ number_format($cost['week_usd'], 4) }}</strong>
+      @if($cost['prev_usd'] > 0)
+        <span style="color:#9ca3af;">(vs ${{ number_format($cost['prev_usd'], 4) }})</span>
+      @endif
+      · mês <strong style="color:#1f2937;">${{ number_format($cost['month_usd'], 4) }}</strong>
+    </div>
+  </td></tr>
+  @endif
+
+  {{-- ── 15-18. A FAZER ────────────────────────────────── --}}
+  @if(!empty($td['upcoming_deadlines']) || $td['missing_sap_count'] > 0 || $td['pending_suppliers'] > 0 || !empty($td['overdue_recoverable']))
   <tr><td style="background:#fff; padding:20px 28px; border-top:1px solid #e5e7eb;">
-    <div style="font-size:13px; font-weight:700; color:#1f2937; margin-bottom:10px;">⏰ A não esquecer na próxima semana</div>
+    <div style="font-size:13px; font-weight:700; color:#1f2937; margin-bottom:10px;">⏰ A não esquecer</div>
 
     @if(!empty($td['upcoming_deadlines']))
       <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">Deadlines até 7 dias:</div>
-      <ul style="margin:0 0 14px 18px; padding:0; line-height:1.6; font-size:12px;">
-        @foreach($td['upcoming_deadlines'] as $u)
+      <ul style="margin:0 0 12px 18px; padding:0; line-height:1.6; font-size:12px;">
+        @foreach($td['upcoming_deadlines'] as $up)
         <li>
-          <a href="{{ $appUrl }}/tenders/{{ $u['id'] }}" style="color:#4f46e5; text-decoration:none;">
-            <strong>{{ $u['reference'] ?: '#'.$u['id'] }}</strong>
+          <a href="{{ $appUrl }}/tenders/{{ $up['id'] }}" style="color:#4f46e5; text-decoration:none;">
+            <strong>{{ $up['reference'] ?: '#'.$up['id'] }}</strong>
           </a>
-          — {{ $u['title'] }}
-          <span style="color:{{ ($u['days'] ?? 99) <= 2 ? '#dc2626' : '#f59e0b' }};">
-            · {{ $u['deadline'] }} ({{ $u['days'] }}d)
+          — {{ $up['title'] }}
+          <span style="color:{{ ($up['days'] ?? 99) <= 2 ? '#dc2626' : '#f59e0b' }};">
+            · {{ $up['deadline'] }} ({{ $up['days'] }}d)
           </span>
         </li>
         @endforeach
       </ul>
     @endif
 
+    @if(!empty($td['overdue_recoverable']))
+      <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">
+        🚨 <strong style="color:#dc2626;">Concursos atrasados ainda recuperáveis:</strong>
+      </div>
+      <ul style="margin:0 0 12px 18px; padding:0; line-height:1.6; font-size:12px;">
+        @foreach($td['overdue_recoverable'] as $od)
+        <li>
+          <a href="{{ $appUrl }}/tenders/{{ $od['id'] }}" style="color:#dc2626; text-decoration:none;">
+            <strong>{{ $od['reference'] ?: '#'.$od['id'] }}</strong>
+          </a>
+          — {{ $od['title'] }}
+          <span style="color:#dc2626;">· atrasado {{ $od['days_late'] }}d</span>
+        </li>
+        @endforeach
+      </ul>
+    @endif
+
     @if($td['missing_sap_count'] > 0)
-      <div style="font-size:12px; color:#6b7280;">
+      <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">
         🆔 <strong>{{ $td['missing_sap_count'] }}</strong> concurso(s) sem nº oportunidade SAP
         @if(!empty($td['missing_sap_sample']))
           (ex: {{ implode(', ', $td['missing_sap_sample']) }})
@@ -157,6 +230,62 @@
         — usa a Marta para criar.
       </div>
     @endif
+
+    @if($td['pending_suppliers'] > 0)
+      <div style="font-size:12px; color:#6b7280;">
+        🏷 <strong>{{ $td['pending_suppliers'] }}</strong> fornecedor(es) PENDING aguardam validação em
+        <a href="{{ $appUrl }}/suppliers-review" style="color:#4f46e5;">/suppliers-review</a>
+        — aprová-los desbloqueia mais sugestões nos concursos.
+      </div>
+    @endif
+  </td></tr>
+  @endif
+
+  {{-- ── 19+20. INTELIGÊNCIA: discoveries + concursos órfãos ── --}}
+  @if(!empty($intel['discoveries']) || !empty($intel['orphan_matches']))
+  <tr><td style="background:#eef2ff; padding:18px 28px; border-top:1px solid #c7d2fe;">
+    <div style="font-size:13px; font-weight:700; color:#1e1b4b; margin-bottom:10px;">🔮 Inteligência para ti</div>
+
+    @if(!empty($intel['discoveries']))
+      <div style="font-size:12px; color:#3730a3; margin-bottom:6px;">Descobertas relevantes (arXiv / Patents últimos 14d):</div>
+      <ul style="margin:0 0 12px 18px; padding:0; line-height:1.55; font-size:12px;">
+        @foreach($intel['discoveries'] as $d)
+        <li>
+          @if($d['url'])<a href="{{ $d['url'] }}" style="color:#4f46e5; text-decoration:none;"><strong>{{ $d['title'] }}</strong></a>
+          @else<strong>{{ $d['title'] }}</strong>@endif
+          <span style="color:#6366f1; font-size:10px;">· {{ strtoupper($d['source']) }} · {{ $d['category'] }} · score {{ $d['score'] }}/10</span>
+        </li>
+        @endforeach
+      </ul>
+    @endif
+
+    @if(!empty($intel['orphan_matches']))
+      <div style="font-size:12px; color:#3730a3; margin-bottom:6px;">Concursos novos sem owner que matcham o teu perfil:</div>
+      <ul style="margin:0; padding:0 0 0 18px; line-height:1.55; font-size:12px;">
+        @foreach($intel['orphan_matches'] as $om)
+        <li>
+          <a href="{{ $appUrl }}/tenders/{{ $om['id'] }}" style="color:#4f46e5; text-decoration:none;">
+            <strong>{{ $om['reference'] ?: '#'.$om['id'] }}</strong>
+          </a>
+          — {{ $om['title'] }}
+        </li>
+        @endforeach
+      </ul>
+    @endif
+  </td></tr>
+  @endif
+
+  {{-- ── 21. COMPARAÇÃO ANONIMIZADA ────────────────────── --}}
+  @if(!empty($teamCmp))
+  <tr><td style="background:#f9fafb; padding:14px 28px; border-top:1px solid #e5e7eb;">
+    <div style="font-size:12px; color:#6b7280;">
+      🏅 <strong>Top 3 da equipa esta semana</strong> (mensagens enviadas, anónimo):
+      @foreach($teamCmp as $tcRow)
+        <span style="display:inline-block; margin-left:4px; padding:1px 6px; border-radius:4px; background:#e0e7ff; color:#3730a3; font-size:11px;">
+          #{{ $tcRow['rank'] }} · {{ $tcRow['msgs'] }} msgs
+        </span>
+      @endforeach
+    </div>
   </td></tr>
   @endif
 
@@ -178,15 +307,31 @@
   </td></tr>
   @endif
 
-  {{-- ── MANAGER BLOCK ───────────────────────────────── --}}
-  @if($m && (($m['team_submitted'] ?? 0) > 0 || ($m['team_won'] ?? 0) > 0 || ($m['orphan_tenders'] ?? 0) > 0))
+  {{-- ── MANAGER BLOCK (22-25) ───────────────────────── --}}
+  @if($m && (($m['team_submitted'] ?? 0) > 0 || ($m['team_won'] ?? 0) > 0 || ($m['orphan_tenders'] ?? 0) > 0 || ($m['team_week_cost'] ?? 0) > 0 || !empty($m['down_integrations'] ?? [])))
   <tr><td style="background:#1e1b4b; color:#e0e7ff; padding:18px 28px; border-top:2px solid #4f46e5;">
     <div style="font-size:13px; font-weight:700; color:#fff;">👔 Visão de equipa</div>
-    <div style="font-size:12px; line-height:1.7; margin-top:6px;">
-      📑 Submetidos pela equipa: <strong style="color:#fff;">{{ $m['team_submitted'] }}</strong><br>
-      🏆 Ganhos esta semana: <strong style="color:#fff;">{{ $m['team_won'] }}</strong><br>
-      🆔 Concursos sem owner há +14 dias: <strong style="color:#fbbf24;">{{ $m['orphan_tenders'] }}</strong>
+    <div style="font-size:12px; line-height:1.7; margin-top:8px;">
+      📑 Submetidos pela equipa: <strong style="color:#fff;">{{ $m['team_submitted'] ?? 0 }}</strong><br>
+      🏆 Ganhos esta semana: <strong style="color:#fff;">{{ $m['team_won'] ?? 0 }}</strong><br>
+      🆔 Concursos sem owner há +14 dias: <strong style="color:#fbbf24;">{{ $m['orphan_tenders'] ?? 0 }}</strong>
     </div>
+
+    @if(($m['team_week_cost'] ?? 0) > 0 || ($m['team_month_cost'] ?? 0) > 0)
+    <div style="font-size:12px; line-height:1.7; margin-top:10px; padding-top:10px; border-top:1px solid #4338ca;">
+      💸 <strong>Custo LLM equipa</strong> ·
+      semana <strong style="color:#fff;">${{ number_format($m['team_week_cost'] ?? 0, 4) }}</strong> ·
+      mês <strong style="color:#fff;">${{ number_format($m['team_month_cost'] ?? 0, 4) }}</strong>
+    </div>
+    @endif
+
+    @if(!empty($m['down_integrations'] ?? []))
+    <div style="font-size:12px; line-height:1.7; margin-top:10px; padding:8px 12px; background:#7f1d1d; border-radius:6px;">
+      🚨 <strong style="color:#fff;">Integrações em down:</strong>
+      <span style="color:#fca5a5;">{{ implode(', ', $m['down_integrations']) }}</span>
+      — verifica em <a href="{{ $appUrl }}/admin/panel" style="color:#fbbf24;">/admin/panel</a>
+    </div>
+    @endif
   </td></tr>
   @endif
 
