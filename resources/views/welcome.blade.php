@@ -847,6 +847,7 @@
             <input type="file" id="image-input" accept="image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls,.pptx,.md,.eml,.msg" multiple style="position:absolute;width:0;height:0;opacity:0;pointer-events:none">
             <button class="icon-btn" id="clear-btn" title="Limpar histórico desta conversa" onclick="clearHistory()">🗑️</button>
             <button type="button" id="finance-pdf-btn" onclick="createAgentPdf()" title="Gerar relatório PDF desta conversa" style="display:none;align-items:center;gap:5px;background:#10b981;border:none;color:#fff;font-size:11px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;white-space:nowrap;height:38px;flex-shrink:0;">📄 PDF</button>
+            <button type="button" id="workreport-docx-btn" onclick="downloadWorkReportDocx()" title="Descarregar último relatório do Eng. Repair como Word .docx" style="display:none;align-items:center;gap:5px;background:#0891b2;border:none;color:#fff;font-size:11px;font-weight:700;padding:0 12px;border-radius:8px;cursor:pointer;white-space:nowrap;height:38px;flex-shrink:0;">📄 Word</button>
             <textarea
                 id="message-input"
                 placeholder="Pergunta ao ClawYard… (Enter enviar · Shift+Enter nova linha)"
@@ -990,6 +991,7 @@ const AGENT_DESCRIPTIONS = {
     mildef:   'Procurement militar mundial (excl. China/Rússia) — radares, SAM, AAM, artilharia, munições, bombs — contexto NATO/EU/USLI',
     crm:      'Cria oportunidades SAP B1 a partir de emails recebidos — extrai campos automaticamente e grava no CRM',
     shipping: 'Logística/PartYard — cotações UPS/FedEx, faturação pro-forma/CMR/AWB, Incoterms 2020 e pauta aduaneira HS/CN/TARIC',
+    workreport: 'Eng. Naval — pre-relatórios + relatórios finais (soldadura, mecânica, NDT/UTM). Anexa PDF/Word/Excel via 📎 e descarrega Word em "📄 Word"',
 };
 
 const AGENT_CHIPS = {
@@ -1381,6 +1383,7 @@ applyAgentColor(initAgent);
 updateEmptyState(initAgent);
 updateShareBtn();
 document.getElementById('finance-pdf-btn').style.display = 'flex';
+document.getElementById('workreport-docx-btn').style.display = (initAgent === 'workreport') ? 'flex' : 'none';
 // Mark initial agent in grid
 document.querySelectorAll('.agent-grid-item').forEach(el => {
     el.classList.toggle('active', el.dataset.agent === initAgent);
@@ -1423,6 +1426,8 @@ agentSelect.addEventListener('change', () => {
     updateHistoryLink(agent);
     // PDF button always visible
     document.getElementById('finance-pdf-btn').style.display = 'flex';
+    // Word .docx button só aparece para Eng. Repair
+    document.getElementById('workreport-docx-btn').style.display = (agent === 'workreport') ? 'flex' : 'none';
     document.querySelectorAll('.agent-grid-item').forEach(el => {
         el.classList.toggle('active', el.dataset.agent === agent);
         const statusEl = el.querySelector('.ag-status');
@@ -2945,6 +2950,65 @@ function esc(text) {
 //  SAVE AS REPORT
 // ═══════════════════════════════
 // ── Gerar PDF da conversa atual ───────────────────────────────────────────
+/**
+ * Download the LAST Eng. Repair (workreport) reply as a .docx file.
+ * Posts the raw markdown to /workreport/export.docx — server uses
+ * DocxBuilder (built-in ZipArchive, no PHP-Word dependency) to
+ * produce a Word document with H1-H3, bold/italic, lists, tables.
+ */
+async function downloadWorkReportDocx() {
+    const btn = document.getElementById('workreport-docx-btn');
+    // Pegar a ÚLTIMA bolha de resposta do agente
+    const bubbles = document.querySelectorAll('.message.ai .bubble');
+    if (!bubbles.length) {
+        alert('Sem relatório do Eng. Repair para exportar. Pede primeiro a um relatório.');
+        return;
+    }
+    const last = bubbles[bubbles.length - 1];
+    // Tenta obter o markdown bruto se foi guardado, senão usa innerText
+    const markdown = last.dataset?.markdown || last.innerText || last.textContent || '';
+    if (markdown.trim().length < 30) {
+        alert('Última resposta demasiado curta — não parece um relatório.');
+        return;
+    }
+
+    const orig = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    btn.disabled  = true;
+
+    try {
+        const res = await fetch('/workreport/export.docx', {
+            method:  'POST',
+            headers: { 'Content-Type':'application/json', 'X-CSRF-TOKEN': CSRF },
+            body:    JSON.stringify({
+                markdown,
+                title: 'Work Report — ' + new Date().toLocaleDateString('pt-PT'),
+            }),
+        });
+        if (res.status === 401 && await window.maybeRedirectOnOtp(res)) return;
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+
+        // Stream → blob → download trigger
+        const blob = await res.blob();
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'work-report-' + new Date().toISOString().slice(0,16).replace(':','') + '.docx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        btn.innerHTML = '✅';
+        logActivity('📄', 'Word descarregado — Eng. Repair', 'done');
+    } catch (e) {
+        btn.innerHTML = '❌';
+        console.error('Word export failed:', e);
+        alert('Erro ao gerar Word: ' + e.message);
+    } finally {
+        setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 2200);
+    }
+}
+
 async function createAgentPdf() {
     const btn       = document.getElementById('finance-pdf-btn');
     const agent     = agentSelect.value || 'auto';
