@@ -688,6 +688,7 @@
         <option value="vessel">⚓ Capitão Vasco</option>
         <option value="mildef">🎖️ Cor. Rodrigues Defesa</option>
         <option value="shipping">🚚 Logística/PartYard</option>
+        <option value="workreport">🛠️ Eng. Repair</option>
     </select>
     <button id="share-agent-btn" onclick="openShareModal()" title="Partilhar este agente com um cliente" style="background:var(--agent-color,#76b900);border:none;color:#000;font-size:12px;font-weight:800;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;flex-shrink:0;margin-left:auto;">🔗 Share</button>
     <div class="hdr-right" style="margin-left:8px;">
