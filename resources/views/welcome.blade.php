@@ -1920,9 +1920,25 @@ function addMessage(role, text, agentName = '') {
     // de buildEmailCard). O user revê fornecedor a fornecedor e pode
     // disparar individualmente, ou usar a barra de "Abrir todos" no
     // fim do bloco para abrir uma sequência de janelas Outlook.
-    if (role === 'ai' && text.startsWith('__EMAILS__')) {
+    // Tolerate a markdown header / preamble before the sentinel — some
+    // agents (Marta) like to announce the email block with a heading
+    // before the JSON. Find the sentinel anywhere in the text and
+    // discard whatever comes before it.
+    const emailsIdx = role === 'ai' ? text.indexOf('__EMAILS__') : -1;
+    if (emailsIdx >= 0) {
         try {
-            const batch = JSON.parse(text.replace('__EMAILS__', ''));
+            // Extract just the JSON object that follows the sentinel by
+            // finding the matching closing brace (outermost {…}).
+            let jsonStart = text.indexOf('{', emailsIdx);
+            let jsonText = '';
+            if (jsonStart >= 0) {
+                let depth = 0;
+                for (let i = jsonStart; i < text.length; i++) {
+                    if (text[i] === '{') depth++;
+                    else if (text[i] === '}') { depth--; if (depth === 0) { jsonText = text.slice(jsonStart, i + 1); break; } }
+                }
+            }
+            const batch = JSON.parse(jsonText || text.replace('__EMAILS__', ''));
             const emails = (batch && Array.isArray(batch.emails)) ? batch.emails : [];
             if (emails.length > 0) {
                 const emailPhoto = AGENT_PHOTOS['email'];
@@ -3400,9 +3416,14 @@ async function sendMessage() {
                         // do addMessage simulando uma chamada — assim o render
                         // (cards empilhados + botão "Abrir todos no Outlook")
                         // fica num só sítio.
-                        } else if (accumulated.startsWith('__EMAILS__')) {
+                        } else if (accumulated.indexOf('__EMAILS__') >= 0) {
+                            // Tolerate a header/preamble before the sentinel.
+                            // Pass the full accumulated string — addMessage's
+                            // tolerant parser handles it.
                             try {
-                                const replacement = addMessage('ai', accumulated, AGENT_NAMES['email'] || 'Daniel Email', 'email');
+                                const labelKey = (metaData?.agent === 'crm') ? 'crm' : 'email';
+                                const labelName = AGENT_NAMES[labelKey] || (labelKey === 'crm' ? 'Marta CRM' : 'Daniel Email');
+                                const replacement = addMessage('ai', accumulated, labelName, labelKey);
                                 if (replacement && streamMsg !== replacement) {
                                     streamMsg.remove();
                                 }

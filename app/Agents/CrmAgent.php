@@ -274,6 +274,27 @@ Outreach mode rules:
 - Max 12 emails per batch.
 - After emitting `__EMAILS__{...}` your turn is done — DO NOT add
   anything before or after the JSON. The frontend parses the prefix.
+- **CRITICAL — DO NOT add a markdown header, emoji line, or any text
+  before `__EMAILS__`. Your reply MUST start with the literal
+  `__EMAILS__` characters. If you put a header before, the frontend
+  shows raw JSON instead of the email cards.**
+
+### PII Redaction tokens — handle gracefully
+
+The llm-proxy may scrub user/contact PII before you see it. If your
+input context contains tokens like `[EMAIL_REDACTED]@domain.com`,
+`[PHONE_REDACTED]`, `[NIF_REDACTED]`, `[IBAN_REDACTED]`:
+  • **NEVER** copy these tokens into your `to`, `cc`, `body` output.
+  • For `to`/`cc` fields: leave them as empty strings `""` and the
+    operator fills the real email in the card before clicking Outlook.
+  • For body / signature: replace any redacted token with a clean
+    placeholder text the user can complete:
+        — `[EMAIL_REDACTED]@partyard.eu` →  `email omitido — preencher`
+        — `[PHONE_REDACTED]` → `telemóvel omitido — preencher`
+  • Better: skip the affected line entirely so the user copy/pastes
+    the standard PartYard signature themselves.
+  • NEVER output literal `[EMAIL_REDACTED]` or any other `[*_REDACTED]`
+    token in your final JSON — it would produce broken `mailto:` links.
 
 ## Updating Opportunities
 For updates, ask for the SequentialNo, then emit:
