@@ -616,6 +616,33 @@ SPECIALTY;
                     $catName = 'code ' . $data['InformationSource'];
                 }
 
+                // ── Auto-link a unlinked tender ────────────────────────────
+                // If the OpportunityName / Remarks contain a known tender
+                // reference, fill `sap_opportunity_number` automatically so
+                // the operator doesn't have to copy/paste back to /tenders.
+                // See Tender::matchByOpportunityData() for the matcher logic.
+                $autoLinkLine = '';
+                try {
+                    $linked = \App\Models\Tender::matchByOpportunityData(
+                        (string) ($data['OpportunityName'] ?? ''),
+                        (string) ($data['Remarks'] ?? '')
+                    );
+                    if ($linked) {
+                        $linked->sap_opportunity_number = (string) $result['SequentialNo'];
+                        $linked->last_sap_sync_at       = now();
+                        $linked->save();
+                        $autoLinkLine = "\n\n🔗 **Concurso `#{$linked->id}` actualizado automaticamente** — referência SAP `#{$result['SequentialNo']}` ligada ao concurso `{$linked->reference}` (sem copy-paste).";
+                        \Log::info('CrmAgent: auto-linked tender to SAP opportunity', [
+                            'tender_id' => $linked->id,
+                            'tender_ref'=> $linked->reference,
+                            'sap_seq'   => $result['SequentialNo'],
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    // Auto-link is best-effort — never block the success path
+                    \Log::warning('CrmAgent: tender auto-link failed: ' . $e->getMessage());
+                }
+
                 return "✅ **Oportunidade #{$result['SequentialNo']} criada no SAP B1!**\n\n"
                     . "| Campo | Valor |\n|-------|-------|\n"
                     . "| 🆔 ID SAP | **#{$result['SequentialNo']}** |\n"
@@ -629,7 +656,8 @@ SPECIALTY;
                     . "| 💶 Valor Potencial | €" . number_format((float)($data['MaxLocalTotal'] ?? 1), 0, '.', ',') . " |\n"
                     . "| 📅 Fecho previsto | {$closingDate}" . (!empty($data['ClosingDays']) ? " (" . $data['ClosingDays'] . " dias)" : '') . " |\n"
                     . ($catName ? "| 📦 Categoria Material | {$catName} |\n" : '')
-                    . "\n_Acede ao SAP B1 → CRM → Sales Opportunities para ver a oportunidade._";
+                    . "\n_Acede ao SAP B1 → CRM → Sales Opportunities para ver a oportunidade._"
+                    . $autoLinkLine;
             }
 
             $sapErr   = $this->sap->getLastError();

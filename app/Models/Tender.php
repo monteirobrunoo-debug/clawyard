@@ -360,6 +360,53 @@ class Tender extends Model
     }
 
     /**
+     * Find an unlinked tender that matches the opportunity data Marta is
+     * about to push to SAP B1. Used to auto-fill `sap_opportunity_number`
+     * after Marta creates the opp — saves the operator a copy/paste.
+     *
+     * Strategy: scan recent unlinked tenders for ANY whose `reference` (or
+     * `title`, fallback) appears verbatim in the OpportunityName + Remarks
+     * blob. The LONGEST match wins (more specific reference beats a
+     * substring collision). Refs shorter than 4 chars are rejected to
+     * avoid noise like "RFP" matching every tender.
+     *
+     * Performance: capped at 200 most-recent unlinked tenders. Run only
+     * once per opportunity creation (rare event, ~5/day in steady state).
+     *
+     * @return self|null  Matched tender, or null if no confident match.
+     */
+    public static function matchByOpportunityData(string $oppName, string $remarks = ''): ?self
+    {
+        $haystack = mb_strtolower($oppName . ' ' . $remarks);
+        if (trim($haystack) === '') return null;
+
+        $candidates = self::query()
+            ->where(function ($w) {
+                $w->whereNotNull('reference')->where('reference', '!=', '');
+            })
+            ->where(function ($w) {
+                $w->whereNull('sap_opportunity_number')
+                  ->orWhere('sap_opportunity_number', '');
+            })
+            ->orderByDesc('created_at')
+            ->limit(200)
+            ->get(['id', 'reference', 'title']);
+
+        $best = null;
+        $bestLen = 0;
+        foreach ($candidates as $t) {
+            $ref = mb_strtolower((string) $t->reference);
+            if (mb_strlen($ref) < 4) continue;          // too short → noise
+            if (!str_contains($haystack, $ref)) continue;
+            if (mb_strlen($ref) > $bestLen) {
+                $best    = $t;
+                $bestLen = mb_strlen($ref);
+            }
+        }
+        return $best;
+    }
+
+    /**
      * The "live pipeline" — everything still on someone's plate: active
      * status AND deadline either in the future or at most
      * OVERDUE_WINDOW_DAYS in the past. Used for the TOTAL card so the
