@@ -41,7 +41,7 @@ class TenderSupplierSuggesterService
      */
     public function suggest(
         Tender $tender,
-        int $localLimit = 12,
+        int $localLimit = 3,
         bool $includeWeb = true,
         bool $includeExperts = true,
     ): array {
@@ -184,23 +184,29 @@ class TenderSupplierSuggesterService
 
     /**
      * Pull internal suppliers matching any of the inferred categories.
-     * Ranking:
-     *   1. has primary_email (we can actually reach them)
-     *   2. iqf_score DESC (best-rated first)
-     *   3. last_contacted_at DESC (recent relationships first)
-     *   4. name ASC
+     * Strict mode: ONLY validated() rows (status=approved + has email).
+     * Auto-extracted PENDING suppliers são deliberadamente excluídos —
+     * o operador só vê fornecedores vetted manualmente.
+     *
+     * If the result is empty, the suggester returns an empty collection
+     * and the dashboard mostra apenas as opções web (Tavily) — melhor
+     * vazio que sugerir um fornecedor inventado.
+     *
+     * Ranking entre os validados:
+     *   1. iqf_score DESC (best-rated first)
+     *   2. last_contacted_at DESC (relação recente primeiro)
+     *   3. name ASC
      */
-    public function matchLocal(Tender $tender, array $codes, int $limit = 12): Collection
+    public function matchLocal(Tender $tender, array $codes, int $limit = 3): Collection
     {
         if (empty($codes)) return collect();
 
-        $query = Supplier::contactable()
+        $query = Supplier::validated()
             ->where(function ($w) use ($codes) {
                 foreach ($codes as $c) $w->orWhere(fn($q) => $q->inCategory($c));
             });
 
         return $query
-            ->orderByRaw('primary_email IS NULL')
             ->orderByRaw('iqf_score IS NULL, iqf_score DESC')
             ->orderByRaw('last_contacted_at IS NULL, last_contacted_at DESC')
             ->orderBy('name')

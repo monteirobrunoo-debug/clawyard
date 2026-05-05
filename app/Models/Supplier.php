@@ -64,6 +64,26 @@ class Supplier extends Model
         return $q->whereIn('status', [self::STATUS_APPROVED, self::STATUS_PENDING]);
     }
 
+    /**
+     * Suppliers we trust enough to surface as a CONFIRMED suggestion.
+     * Stricter than contactable() — used by the tender dashboard so
+     * operators only see vetted vendors (não auto-extracted, não a
+     * pedir review). User feedback 2026-05-05: "tem de ser verdadeiros".
+     *
+     *   • status = APPROVED (manual review passed; auto-extracted PENDING
+     *     rows são rejeitadas até alguém validar em /suppliers-review)
+     *   • primary_email NOT NULL (sem email não há outreach possível)
+     *
+     * If the directory has zero validated matches for the tender's
+     * categories, the dashboard falls back to web search (Tavily).
+     */
+    public function scopeValidated(Builder $q): Builder
+    {
+        return $q->where('status', self::STATUS_APPROVED)
+                 ->whereNotNull('primary_email')
+                 ->where('primary_email', '!=', '');
+    }
+
     /** Match by category code (top-level, e.g. "13" for Military). */
     public function scopeInCategory(Builder $q, string $code): Builder
     {

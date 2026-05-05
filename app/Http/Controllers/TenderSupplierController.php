@@ -36,7 +36,7 @@ class TenderSupplierController extends Controller
         // no Tavily, no Claude. Only the local supplier match runs.
         // See migration 2026_04_30_000004 for the rationale.
         if ($tender->is_confidential) {
-            $bundle = $svc->suggest($tender, localLimit: 12, includeWeb: false);
+            $bundle = $svc->suggest($tender, localLimit: 3, includeWeb: false);
             return response()->json([
                 'categories'    => $bundle['categories'],
                 'web_query'     => null,
@@ -49,7 +49,7 @@ class TenderSupplierController extends Controller
 
         $includeWeb = $request->boolean('include_web', true);
 
-        $bundle = $svc->suggest($tender, localLimit: 12, includeWeb: $includeWeb);
+        $bundle = $svc->suggest($tender, localLimit: 3, includeWeb: $includeWeb);
 
         return response()->json([
             'categories'      => $bundle['categories'],
