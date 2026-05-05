@@ -603,6 +603,29 @@ SPECIALTY;
         $data = $pending['data'];
 
         if ($type === 'create') {
+            // ── Pré-flight: encontrar tender correspondente PARA enriquecer
+            // o Remarks com a pré-análise antes de chegar ao SAP.
+            // O matcher é o mesmo que depois é usado para auto-link, mas
+            // aqui invocado ANTES de createOpportunity — assim o SAP fica
+            // logo com as notas certas (categorias inferidas, contagem
+            // de fornecedores H&P sugeridos, query web, etc).
+            $tenderForEnrich = null;
+            try {
+                $tenderForEnrich = \App\Models\Tender::matchByOpportunityData(
+                    (string) ($data['OpportunityName'] ?? ''),
+                    (string) ($data['Remarks'] ?? '')
+                );
+            } catch (\Throwable $e) {
+                \Log::warning('CrmAgent: pre-create tender match failed: ' . $e->getMessage());
+            }
+
+            if ($tenderForEnrich) {
+                $data['Remarks'] = $this->enrichRemarksWithPrelimAnalysis(
+                    (string) ($data['Remarks'] ?? ''),
+                    $tenderForEnrich
+                );
+            }
+
             $result = $this->sap->createOpportunity($data);
 
             if ($result && isset($result['SequentialNo'])) {
@@ -616,31 +639,24 @@ SPECIALTY;
                     $catName = 'code ' . $data['InformationSource'];
                 }
 
-                // ── Auto-link a unlinked tender ────────────────────────────
-                // If the OpportunityName / Remarks contain a known tender
-                // reference, fill `sap_opportunity_number` automatically so
-                // the operator doesn't have to copy/paste back to /tenders.
-                // See Tender::matchByOpportunityData() for the matcher logic.
+                // ── Auto-link já feito no pre-flight ───────────────────────
+                // O $tenderForEnrich foi determinado antes de createOpportunity
+                // (para enriquecer o Remarks). Reusar aqui para evitar 2ª query.
                 $autoLinkLine = '';
                 try {
-                    $linked = \App\Models\Tender::matchByOpportunityData(
-                        (string) ($data['OpportunityName'] ?? ''),
-                        (string) ($data['Remarks'] ?? '')
-                    );
-                    if ($linked) {
-                        $linked->sap_opportunity_number = (string) $result['SequentialNo'];
-                        $linked->last_sap_sync_at       = now();
-                        $linked->save();
-                        $autoLinkLine = "\n\n🔗 **Concurso `#{$linked->id}` actualizado automaticamente** — referência SAP `#{$result['SequentialNo']}` ligada ao concurso `{$linked->reference}` (sem copy-paste).";
+                    if ($tenderForEnrich) {
+                        $tenderForEnrich->sap_opportunity_number = (string) $result['SequentialNo'];
+                        $tenderForEnrich->last_sap_sync_at       = now();
+                        $tenderForEnrich->save();
+                        $autoLinkLine = "\n\n🔗 **Concurso `#{$tenderForEnrich->id}` actualizado automaticamente** — referência SAP `#{$result['SequentialNo']}` ligada ao concurso `{$tenderForEnrich->reference}` (sem copy-paste). Pré-análise incluída nas notas SAP.";
                         \Log::info('CrmAgent: auto-linked tender to SAP opportunity', [
-                            'tender_id' => $linked->id,
-                            'tender_ref'=> $linked->reference,
+                            'tender_id' => $tenderForEnrich->id,
+                            'tender_ref'=> $tenderForEnrich->reference,
                             'sap_seq'   => $result['SequentialNo'],
                         ]);
                     }
                 } catch (\Throwable $e) {
-                    // Auto-link is best-effort — never block the success path
-                    \Log::warning('CrmAgent: tender auto-link failed: ' . $e->getMessage());
+                    \Log::warning('CrmAgent: tender auto-link save failed: ' . $e->getMessage());
                 }
 
                 return "✅ **Oportunidade #{$result['SequentialNo']} criada no SAP B1!**\n\n"
@@ -843,4 +859,57 @@ SPECIALTY;
 
     public function getName(): string  { return 'crm'; }
     public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
+
+    /**
+     * Build SAP B1 Remarks enriquecido com a pré-análise do concurso.
+     *
+     * SAP B1 limita Remarks a 254 chars — o método garante que o resultado
+     * cabe, dando prioridade aos campos de maior valor de procurement
+     * (categorias inferidas, contagens de fornecedores) e cortando o
+     * Remarks original do email no fim, não a metadata.
+     *
+     * Estrutura final tipica:
+     *   "[#concursoId · ref] cat 13,14,15 · 8 H&P · 5 web · prazo 12/05.
+     *    <até 150 chars do Remarks original do email>"
+     */
+    private function enrichRemarksWithPrelimAnalysis(string $original, \App\Models\Tender $tender): string
+    {
+        $analysis = (array) ($tender->prelim_analysis ?? []);
+        $bits = [];
+
+        // Tag inicial — dá ao operador SAP referência cruzada imediata
+        $idTag = "#{$tender->id}";
+        if ($tender->reference) $idTag .= ' ' . mb_substr((string) $tender->reference, 0, 24);
+        $bits[] = "[{$idTag}]";
+
+        // Categorias inferidas (top-level codes)
+        if (!empty($analysis['categories'])) {
+            $cats = implode(',', array_slice((array) $analysis['categories'], 0, 5));
+            $bits[] = "cat {$cats}";
+        }
+
+        // Contagens — útil para o vendedor saber se já há leads internas
+        if (!empty($analysis['top_supplier_ids'])) {
+            $bits[] = count($analysis['top_supplier_ids']) . ' H&P';
+        }
+        if (!empty($analysis['web_results'])) {
+            $bits[] = count($analysis['web_results']) . ' web';
+        }
+
+        // Deadline (curto)
+        if ($tender->deadline_at) {
+            $bits[] = 'prazo ' . $tender->deadline_at->format('d/m');
+        }
+
+        $prefix = implode(' · ', array_filter($bits));
+        // Sufixo do operador (Remarks original do email) — limitar para
+        // garantir que prefix + suffix ≤ 254 (SAP cap).
+        $original = trim($original);
+        $remaining = 254 - mb_strlen($prefix) - 2; // 2 chars para ". "
+        if ($remaining > 30 && $original !== '') {
+            $suffix = mb_substr($original, 0, $remaining);
+            return $prefix . '. ' . $suffix;
+        }
+        return mb_substr($prefix, 0, 254);
+    }
 }
