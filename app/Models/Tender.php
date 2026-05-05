@@ -147,27 +147,46 @@ class Tender extends Model
     }
 
     /**
+     * Statuses to EXCLUDE from "trabalho ainda a fazer" dashboards.
+     * SUBMETIDO = proposta já entregue → deadline irrelevante; não
+     * deve continuar a aparecer em "diárias" nem em "atraso".
+     * AVALIACAO = à espera do cliente; também não há trabalho do nosso lado.
+     * Estes ainda contam para active() (admin views, listas completas)
+     * mas não poluem o "what's on my plate today" do user.
+     */
+    public const DONE_FROM_USER_POV = [
+        self::STATUS_SUBMETIDO,
+        self::STATUS_AVALIACAO,
+    ];
+
+    /**
      * "Activos" as the dashboard user reads them: in an active status AND
-     * the deadline hasn't passed yet (or there's no deadline at all).
+     * the deadline hasn't passed yet (or there's no deadline at all) AND
+     * the user still has work to do (não submetido nem em avaliação).
      * Overdue tenders are intentionally excluded — they live in their own
      * bucket for separate triage.
      */
     public function scopeActiveInProgress(Builder $q): Builder
     {
-        return $q->active()->where(function ($w) {
-            $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', now());
-        });
+        return $q->active()
+            ->whereNotIn('status', self::DONE_FROM_USER_POV)
+            ->where(function ($w) {
+                $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', now());
+            });
     }
 
     /**
      * Overdue but still rescuable — past deadline by 0..OVERDUE_WINDOW_DAYS.
      * Older than that is considered expired/abandoned and excluded here.
+     * Concursos já submetidos ou em avaliação NÃO aparecem aqui — uma vez
+     * entregue a proposta, a deadline original deixa de ser actionable.
      */
     public function scopeOverdue(Builder $q): Builder
     {
         $now    = now();
         $cutoff = $now->copy()->subDays(self::OVERDUE_WINDOW_DAYS);
         return $q->active()
+            ->whereNotIn('status', self::DONE_FROM_USER_POV)
             ->whereNotNull('deadline_at')
             ->where('deadline_at', '<', $now)
             ->where('deadline_at', '>=', $cutoff);
@@ -411,13 +430,16 @@ class Tender extends Model
      * status AND deadline either in the future or at most
      * OVERDUE_WINDOW_DAYS in the past. Used for the TOTAL card so the
      * number reflects actionable backlog instead of lifetime imports.
+     * Excludes SUBMETIDO/AVALIACAO — proposta entregue não é backlog.
      */
     public function scopeLivePipeline(Builder $q): Builder
     {
         $cutoff = now()->copy()->subDays(self::OVERDUE_WINDOW_DAYS);
-        return $q->active()->where(function ($w) use ($cutoff) {
-            $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', $cutoff);
-        });
+        return $q->active()
+            ->whereNotIn('status', self::DONE_FROM_USER_POV)
+            ->where(function ($w) use ($cutoff) {
+                $w->whereNull('deadline_at')->orWhere('deadline_at', '>=', $cutoff);
+            });
     }
 
     // ── Timezone accessors ───────────────────────────────────────────────

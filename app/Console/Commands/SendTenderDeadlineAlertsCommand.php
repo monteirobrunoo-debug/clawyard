@@ -46,6 +46,9 @@ class SendTenderDeadlineAlertsCommand extends Command
 
         $candidates = Tender::query()
             ->active()
+            // Já submetido / em avaliação — não vale a pena lembrar o
+            // colaborador da deadline original; trabalho dele acabou.
+            ->whereNotIn('status', Tender::DONE_FROM_USER_POV)
             ->whereNotNull('deadline_at')
             ->whereBetween('deadline_at', [$windowStart, $windowEnd])
             ->whereNull('deadline_alert_sent_at')

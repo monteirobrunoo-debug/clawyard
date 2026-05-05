@@ -201,8 +201,12 @@ Route::get('/dashboard', function () {
     $mySharedAgents = collect();
     if ($user && $user->email) {
         $expiredCut = now()->copy()->subDays(\App\Models\Tender::OVERDUE_WINDOW_DAYS);
+        // Excluir submetidos / em avaliação — proposta entregue já não
+        // é "trabalho a fazer" do ponto de vista do user. Aparecem em
+        // /tenders?status=submetido se quiseres ver explicitamente.
         $tendersQuery = \App\Models\Tender::query()
             ->active()
+            ->whereNotIn('status', \App\Models\Tender::DONE_FROM_USER_POV)
             ->forUser($userId)
             ->where(function ($q) use ($expiredCut) {
                 $q->whereNull('deadline_at')->orWhere('deadline_at', '>=', $expiredCut);
