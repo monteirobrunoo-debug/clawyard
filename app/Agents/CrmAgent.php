@@ -686,8 +686,11 @@ SPECIALTY;
         $recentHistory = array_slice($history, -self::CONTEXT_WINDOW);
         $messages = array_merge($recentHistory, [['role' => 'user', 'content' => $message]]);
 
+        // Detect outreach intent so supplier emails flow through unredacted.
+        $bypass = $this->isOutreachIntent($this->messageText($message));
+
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
+            'headers' => $this->headersForMessage($message, $bypass),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
@@ -734,6 +737,27 @@ SPECIALTY;
 
     // ─── Public interface ─────────────────────────────────────────────────────
 
+    /**
+     * Detect supplier-outreach intent in the user's request. Triggers the
+     * X-Bypass-Pii-Redaction header so supplier emails / signature
+     * phones don't get scrubbed by the llm-proxy on the way out — the
+     * mailto: link needs the real address to be useful.
+     *
+     * Conservative: requires BOTH a verb-of-creation AND
+     * "fornecedor(es)" in the same message. Avoids accidentally
+     * bypassing redaction during normal opportunity-creation flows.
+     */
+    private function isOutreachIntent(string $rawText): bool
+    {
+        $t = mb_strtolower($rawText);
+        $hasFornecedor = preg_match('/\bfornecedor(es)?\b|\bsupplier(s)?\b/i', $t);
+        if (!$hasFornecedor) return false;
+        return (bool) preg_match(
+            '/\b(prepara|escreve|envia|gera|cria|draft|write|send)\b.*\bemail|\bemail.*\bpara\b|\bum email para cada\b|\boutreach\b|\bcotação\b|\bquote\b/i',
+            $t
+        );
+    }
+
     public function chat(string|array $message, array $history = []): string
     {
         $rawText = $this->messageText($message);
@@ -747,8 +771,10 @@ SPECIALTY;
         $recentHistory = array_slice($history, -self::CONTEXT_WINDOW);
         $messages      = array_merge($recentHistory, [['role' => 'user', 'content' => $message]]);
 
+        $bypass = $this->isOutreachIntent($rawText);
+
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
+            'headers' => $this->headersForMessage($message, $bypass),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 4096,

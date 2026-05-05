@@ -261,7 +261,11 @@ SPECIALTY;
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
+            // Daniel always produces outbound business emails (B2B
+            // outreach to suppliers, customer replies). The supplier
+            // email + signature phone need to flow through unredacted
+            // so mailto: links work end-to-end.
+            'headers' => $this->headersForMessage($message, true),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
@@ -285,7 +289,11 @@ SPECIALTY;
         ]);
 
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
+            // Daniel always produces outbound business emails (B2B
+            // outreach to suppliers, customer replies). The supplier
+            // email + signature phone need to flow through unredacted
+            // so mailto: links work end-to-end.
+            'headers' => $this->headersForMessage($message, true),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),

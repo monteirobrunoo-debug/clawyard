@@ -99,7 +99,7 @@ trait AnthropicKeyTrait
         return PiiRedactor::scrubMessages($messages);
     }
 
-    protected function apiHeaders(bool $withPdf = false): array
+    protected function apiHeaders(bool $withPdf = false, bool $bypassPii = false): array
     {
         $headers = [
             'x-api-key'         => self::getAnthropicKey(),
@@ -110,23 +110,38 @@ trait AnthropicKeyTrait
         if ($withPdf) {
             $headers['anthropic-beta'] = 'pdfs-2024-09-25';
         }
+        // Outbound business-comms agents (Daniel email outreach, Marta in
+        // outreach mode) need supplier emails / phones to flow through
+        // unredacted so mailto: links work end-to-end. The llm-proxy
+        // recognises this header and skips PiiRedactor for the request.
+        // Header is implicitly authenticated by the request-body HMAC
+        // when split-VM signing is enabled (see proxy_shared_key).
+        if ($bypassPii) {
+            $headers['X-Bypass-Pii-Redaction'] = '1';
+        }
         return $headers;
     }
 
     /**
      * Detect if message contains a PDF document block and return headers accordingly.
+     *
+     * @param bool $bypassPii  When true, instructs the llm-proxy to skip its
+     *   PII redaction pipeline. Use only for outbound B2B comms (supplier
+     *   outreach, signed messages) — NEVER for customer-data flows.
      */
-    protected function headersForMessage(string|array $message): array
+    protected function headersForMessage(string|array $message, bool $bypassPii = false): array
     {
+        $hasPdf = false;
         if (is_array($message)) {
             foreach ($message as $block) {
                 if (($block['type'] ?? '') === 'document'
                     && str_contains($block['source']['media_type'] ?? '', 'pdf')) {
-                    return $this->apiHeaders(true);
+                    $hasPdf = true;
+                    break;
                 }
             }
         }
-        return $this->apiHeaders();
+        return $this->apiHeaders($hasPdf, $bypassPii);
     }
 
     /**
