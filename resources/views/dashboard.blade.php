@@ -1141,7 +1141,13 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
     <div class="agents-grid" id="favoritesGrid"></div>
 </section>
 
-@foreach($categories as $catKey => $cat)
+{{-- Iterate over $grouped (already filtered by canUseAgent + non-empty
+     check). Categories with no visible agents for this user are skipped
+     entirely. Defensive lookup of $cat handles a future scenario where
+     $grouped contains a key not in $categories. --}}
+@foreach($grouped as $catKey => $catAgents)
+    @php $cat = $categories[$catKey] ?? null; @endphp
+    @if($cat)
     <section class="category-section" data-category="{{ $catKey }}">
         <div class="category-header" style="--cat-color: {{ $cat['color'] }}">
             <div class="category-icon">{{ $cat['icon'] }}</div>
@@ -1149,11 +1155,11 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                 <div class="category-title">{{ $cat['title'] }}</div>
                 <div class="category-subtitle">{{ $cat['subtitle'] }}</div>
             </div>
-            <span class="category-count">{{ count($grouped[$catKey]) }} agent{{ count($grouped[$catKey]) === 1 ? '' : 's' }}</span>
+            <span class="category-count">{{ count($catAgents) }} agent{{ count($catAgents) === 1 ? '' : 's' }}</span>
         </div>
 
         <div class="agents-grid">
-            @foreach($grouped[$catKey] as $agent)
+            @foreach($catAgents as $agent)
                 @php
                     $href    = isset($agent['special']) && $agent['key'] === 'briefing' ? '/briefing' : '/chat?agent=' . $agent['key'];
                     $imgPath = null;
@@ -1194,6 +1200,7 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
             @endforeach
         </div>
     </section>
+    @endif {{-- /if($cat) --}}
 @endforeach
 
 <div class="empty-state" id="emptyState">
