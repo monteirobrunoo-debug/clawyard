@@ -292,12 +292,53 @@
                     drop.addEventListener('click', () => input.click());
                     input.addEventListener('change', (e) => uploadFiles(e.target.files));
 
+                    // ── Local zone highlight while dragging ─────────────
                     ['dragenter','dragover'].forEach(ev =>
                         drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('bg-indigo-50','border-indigo-400'); }));
                     ['dragleave','drop'].forEach(ev =>
                         drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('bg-indigo-50','border-indigo-400'); }));
                     drop.addEventListener('drop', (e) => {
                         if (e.dataTransfer?.files) uploadFiles(e.dataTransfer.files);
+                    });
+
+                    // ── Page-level capture so dropping ANYWHERE on the
+                    // tender page uploads to THIS tender (sem navegar para
+                    // o ficheiro nem ir parar à hp-history). Without this,
+                    // dropping outside the dashed dropzone makes the browser
+                    // open the PDF in-place — perdendo a página do concurso.
+                    let pageDragCounter = 0;
+                    document.addEventListener('dragenter', (e) => {
+                        if (!e.dataTransfer?.types?.includes('Files')) return;
+                        e.preventDefault();
+                        pageDragCounter++;
+                        drop.classList.add('bg-indigo-50','border-indigo-400');
+                        // Optional: scroll dropzone into view so user sees the target
+                        if (pageDragCounter === 1) drop.scrollIntoView({ block:'center', behavior:'smooth' });
+                    });
+                    document.addEventListener('dragleave', (e) => {
+                        if (!e.dataTransfer?.types?.includes('Files')) return;
+                        pageDragCounter--;
+                        if (pageDragCounter <= 0) {
+                            pageDragCounter = 0;
+                            drop.classList.remove('bg-indigo-50','border-indigo-400');
+                        }
+                    });
+                    document.addEventListener('dragover', (e) => {
+                        if (!e.dataTransfer?.types?.includes('Files')) return;
+                        e.preventDefault();
+                    });
+                    document.addEventListener('drop', (e) => {
+                        if (!e.dataTransfer?.types?.includes('Files')) return;
+                        // Browser default would navigate to file URL → kill it.
+                        e.preventDefault();
+                        pageDragCounter = 0;
+                        drop.classList.remove('bg-indigo-50','border-indigo-400');
+                        // If drop was already handled by the dropzone, e.defaultPrevented
+                        // will be true on this bubbled event — but uploadFiles is
+                        // idempotent enough; check files anyway.
+                        if (e.target?.id === 'ta-dropzone' || drop.contains(e.target)) return;
+                        const files = e.dataTransfer?.files;
+                        if (files?.length) uploadFiles(files);
                     });
                 })();
                 </script>
