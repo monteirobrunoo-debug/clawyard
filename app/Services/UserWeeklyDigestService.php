@@ -104,18 +104,20 @@ class UserWeeklyDigestService
             ->whereBetween('created_at', [$start, $end])
             ->count();
 
-        // Aggregate by agent — uses messages.agent_key when present,
-        // else falls back to the conversation's primary agent
+        // Aggregate por agente — agent vive em conversations.agent
+        // (não há agent_key em messages na schema actual). Quando uma
+        // conversa "muda de agente" mid-stream, contamos para o agente
+        // primário daquela sessão — aceitável para um digest semanal.
         $rows = DB::table('messages')
             ->join('conversations', 'conversations.id', '=', 'messages.conversation_id')
             ->where('conversations.session_id', 'like', $sessionPattern)
             ->whereBetween('messages.created_at', [$start, $end])
             ->where('messages.role', 'assistant')
             ->select(
-                DB::raw('COALESCE(messages.agent_key, conversations.agent) as agent'),
+                DB::raw('conversations.agent as agent'),
                 DB::raw('COUNT(*) as msgs')
             )
-            ->groupBy('agent')
+            ->groupBy('conversations.agent')
             ->orderByDesc('msgs')
             ->limit(8)
             ->get();
