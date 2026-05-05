@@ -134,6 +134,18 @@ Schedule::command('leads:draft-outreach --limit=20')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Weekly digest — sextas 09:00 Lisboa ──────────────────────────────────
+// Resumo semanal de actividade por user (concursos trabalhados/submetidos,
+// agentes mais usados, PDFs, custo IA, A-fazer). Idempotente por
+// (user, week_start) — re-runs no mesmo dia não duplicam. Skip silencioso
+// para users sem actividade na semana.
+Schedule::command('clawyard:send-weekly-digest')
+    ->fridays()
+    ->at('09:00')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Individual deadline alert — fires ~24h before each tender's deadline,
 // exactly ONCE per tender lifetime (de-duped via deadline_alert_sent_at).
 // Sent only to the assigned collaborator so we don't duplicate the digest.

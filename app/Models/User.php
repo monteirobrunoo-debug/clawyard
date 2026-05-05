@@ -11,7 +11,7 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents', 'allowed_nav', 'last_verified_ip', 'last_otp_at'];
+    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents', 'allowed_nav', 'last_verified_ip', 'last_otp_at', 'weekly_digest_enabled'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -31,7 +31,9 @@ class User extends Authenticatable
             // user successfully OTP'd from; cleared on Login/Logout so
             // every fresh session re-verifies. See RequireIpVerification
             // middleware + UserOtpService.
-            'last_otp_at'       => 'datetime',
+            'last_otp_at'           => 'datetime',
+            // Weekly Friday digest opt-in. Default true (set in migration).
+            'weekly_digest_enabled' => 'boolean',
         ];
     }
 
