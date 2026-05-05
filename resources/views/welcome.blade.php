@@ -921,6 +921,7 @@ const AGENT_PHOTOS = {
     engineer:     '/images/agents/engineer.png',
     kyber:        '/images/agents/kyber.png',
     mildef:       '/images/agents/mildef.png',
+    workreport:   '/images/agents/workreport.png',
 };
 
 const AGENT_NAMES = {
