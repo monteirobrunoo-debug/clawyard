@@ -95,6 +95,25 @@ Then: "✅ Confirmas a criação? Escreve **SIM** para criar no SAP B1."
 ## ⚠️ CRITICAL — How the SAP call works
 When the user types **SIM** (or yes/confirmo/ok), the **PHP backend intercepts it automatically** and calls the SAP B1 API directly. You do NOT call SAP yourself. You do NOT wait for a response. You do NOT ask the user to paste any result. After emitting the `json_opp` block and asking for SIM confirmation, your job is done — the backend handles everything and shows the result.
 
+### 🚫 NUNCA FABRIQUES SUCESSO
+
+**Regra absoluta:** se NÃO viste uma mensagem do sistema que comece com
+"✅ **Oportunidade #NÚMERO criada no SAP B1!**" (com hashtag e número),
+a oportunidade NÃO foi criada. Mesmo que o user pareça confirmar.
+
+NUNCA escrevas "Oportunidade criada com sucesso" ou tabelas de
+campos como se fosse confirmação se o backend ainda não respondeu.
+Isto engana o user e gera reports falsos.
+
+Se o user disser algo ambíguo (ex: "ok podes criar", "sim, cria-la",
+"yeah sure"), tem de ser **TU** a re-pedir confirmação explícita:
+
+> Para criar no SAP B1 preciso que escrevas **SIM** exactamente
+> (sem mais palavras). Continuas a confirmar?
+
+Só o backend tem permissão para gerar a tabela de "oportunidade
+criada" — tu nunca a deves emitir tu próprio.
+
 ## Material Category (InformationSource)
 Analyse what is being **requested** in the email and pick the SINGLE best matching category code.
 The available categories are injected in context as `--- CATEGORIAS SAP (InformationSource) ---`.
@@ -379,11 +398,26 @@ SPECIALTY;
      * "y", which meant a casual keystroke would silently trigger a SAP B1
      * write. Require the full Portuguese / English word (or "confirmo"/"ok criar").
      */
+    /**
+     * Detecta confirmação do user para criar/actualizar a oportunidade
+     * SAP. Mais lenient que antes — apanha variações como:
+     *   "sim", "Sim cria", "ok criar", "ok podes criar",
+     *   "sim, confirma", "yes please", "proceed", "confirmo"
+     * mas NÃO apanha negações ("não cria", "no") nem perguntas
+     * ("e se eu disser sim?" — termina em ?).
+     */
     protected function isConfirmation(string $message): bool
     {
+        $t = trim(mb_strtolower($message));
+        if ($t === '' || mb_strlen($t) > 80) return false;
+        // Negações explícitas → false
+        if (preg_match('/\b(n[aã]o|n[aã]o\s+cri|negativo|cancela|não|cancel|stop)\b/i', $t)) return false;
+        // Perguntas → false
+        if (str_ends_with($t, '?')) return false;
+        // Aprovação afirmativa em português ou inglês
         return (bool) preg_match(
-            '/^\s*(sim|yes|confirma(r)?|ok\s+criar|criar|cria|proceed|confirmo|afirmativo)\s*\.?$/i',
-            trim($message)
+            '/^(sim|yes|ok|confirmo|confirma|criar|cria|cria-la|proceed|afirmativo|go\s*ahead|ok\s+criar)\b/i',
+            $t
         );
     }
 
@@ -853,8 +887,47 @@ SPECIALTY;
         $message = $this->augmentWithCrmContext($message, $heartbeat);
         if ($heartbeat) $heartbeat('Marta a responder...');
         $full = $this->callClaude($message, $history, $onChunk, $heartbeat);
+
+        // ── Anti-hallucination guard ──────────────────────────────────────
+        // Se a Marta gerou uma mensagem que parece confirmação de criação
+        // SAP (palavras-chave) MAS nenhum SequentialNo apareceu no texto,
+        // marca como aviso. O sucesso real do backend tem sempre o padrão
+        // "✅ **Oportunidade #N criada" (hashtag + número). Se o user
+        // confirmou e o backend não correu (regex falhou, sessão expirou,
+        // etc), evitamos enganá-lo a achar que SAP foi actualizado.
+        if ($this->looksLikeFakeSuccessMessage($full)) {
+            \Log::warning('CrmAgent: blocked hallucinated SAP success message', [
+                'preview' => mb_substr($full, 0, 200),
+            ]);
+            $warning = "\n\n⚠️ **Atenção: a oportunidade NÃO foi criada no SAP.**\n\n"
+                . "A confirmação não foi processada pelo backend (provavelmente o teu "
+                . "\"sim\" tinha mais texto à mistura). Para criar no SAP, escreve "
+                . "**apenas `SIM`** (sem mais palavras) na próxima mensagem.\n\n"
+                . "_Se acabaste de ver uma tabela acima a dizer \"oportunidade criada\", "
+                . "ignora-a — o ID SAP não está visível, sinal claro de que o passo não correu._";
+            $onChunk($warning);
+            $full .= $warning;
+        }
+
         $this->publishSharedContext($full);
         return $full;
+    }
+
+    /**
+     * Detecta padrões que indicam que a Marta escreveu uma confirmação
+     * fake de criação SAP. Critério:
+     *   • Texto contém "criada" ou "criou" ou "registada" + "SAP"/"oportunidade"
+     *   • MAS não contém o padrão real do backend "Oportunidade #NÚMERO"
+     */
+    private function looksLikeFakeSuccessMessage(string $text): bool
+    {
+        $hasSuccess = preg_match('/\b(criada|criou|registada|criado)\b.{0,80}\b(SAP|oportunidade|oportun)/iu', $text)
+                   || preg_match('/✅.*\b(sucesso|criada|registada)\b.*\b(SAP|oportunidade|oportun)/iu', $text);
+        if (!$hasSuccess) return false;
+        // Real backend sempre inclui "#NÚMERO" depois de "Oportunidade".
+        $hasRealId = preg_match('/Oportunidade\s+#\d{3,}/u', $text)
+                  || preg_match('/ID\s+SAP[^|]*#\d{3,}/iu', $text);
+        return !$hasRealId;
     }
 
     public function getName(): string  { return 'crm'; }
