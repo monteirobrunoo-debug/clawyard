@@ -1927,18 +1927,35 @@ function addMessage(role, text, agentName = '') {
     const emailsIdx = role === 'ai' ? text.indexOf('__EMAILS__') : -1;
     if (emailsIdx >= 0) {
         try {
-            // Extract just the JSON object that follows the sentinel by
-            // finding the matching closing brace (outermost {…}).
+            // Extract just the JSON object that follows the sentinel.
+            // String-aware brace balancer — ignores {/} inside "..."
+            // strings (so signatures or templates with curly braces in
+            // body text don't fool the matcher) and handles \" / \\
+            // escapes correctly.
             let jsonStart = text.indexOf('{', emailsIdx);
             let jsonText = '';
             if (jsonStart >= 0) {
-                let depth = 0;
+                let depth = 0, inStr = false, esc = false;
                 for (let i = jsonStart; i < text.length; i++) {
-                    if (text[i] === '{') depth++;
-                    else if (text[i] === '}') { depth--; if (depth === 0) { jsonText = text.slice(jsonStart, i + 1); break; } }
+                    const c = text[i];
+                    if (esc)         { esc = false;  continue; }
+                    if (c === '\\')  { esc = true;   continue; }
+                    if (c === '"')   { inStr = !inStr; continue; }
+                    if (inStr) continue;
+                    if (c === '{') depth++;
+                    else if (c === '}') {
+                        depth--;
+                        if (depth === 0) { jsonText = text.slice(jsonStart, i + 1); break; }
+                    }
                 }
             }
-            const batch = JSON.parse(jsonText || text.replace('__EMAILS__', ''));
+            // Last-resort fallback when the balancer didn't find a
+            // matching brace (truncated JSON / weird text). Try parsing
+            // from the sentinel onwards — the original behaviour.
+            if (!jsonText) {
+                jsonText = text.slice(emailsIdx).replace('__EMAILS__', '').trim();
+            }
+            const batch = JSON.parse(jsonText);
             const emails = (batch && Array.isArray(batch.emails)) ? batch.emails : [];
             if (emails.length > 0) {
                 const emailPhoto = AGENT_PHOTOS['email'];
@@ -2008,7 +2025,13 @@ function addMessage(role, text, agentName = '') {
                 chat.scrollTop = chat.scrollHeight;
                 return msg;
             }
-        } catch (e) { /* fall through to default rendering */ }
+        } catch (e) {
+            // Surfaces the parse error in the browser console so the user
+            // can see WHY the email cards didn't render. Falls through to
+            // standard markdown rendering (raw JSON visible) as before.
+            console.warn('[__EMAILS__ parse failed]', e?.message || e);
+            console.debug('[__EMAILS__ text]', text.slice(0, 500));
+        }
     }
 
     const saveBtn = role === 'ai' ? `<button class="save-report-btn" onclick="saveAsReport(this,'${agentName}')" title="Guardar como relatório">💾</button>` : '';
