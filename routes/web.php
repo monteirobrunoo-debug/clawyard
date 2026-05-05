@@ -608,6 +608,13 @@ Route::middleware(['auth'])->group(function () {
         ->name('tenders.suggest_suppliers');
     Route::post('/tenders/{tender}/draft-supplier-emails', [\App\Http\Controllers\TenderSupplierController::class, 'draft'])
         ->name('tenders.draft_supplier_emails');
+    // Multi-agent service-execution analysis (Cor. Rodrigues + Sales +
+    // Engineer + Capitao + Shipping/Acingov consoante categorias).
+    // Generate é POST (corre LLMs ~30-60s); show é GET (printable view).
+    Route::post('/tenders/{tender}/service-analysis', [\App\Http\Controllers\TenderServiceAnalysisController::class, 'generate'])
+        ->name('tenders.service-analysis.generate');
+    Route::get ('/tenders/{tender}/service-analysis', [\App\Http\Controllers\TenderServiceAnalysisController::class, 'show'])
+        ->name('tenders.service-analysis.show');
     // PDF attachments — upload + download + delete (manager+ to delete).
     Route::post  ('/tenders/{tender}/attachments',                    [\App\Http\Controllers\TenderAttachmentController::class, 'store'])
         ->name('tenders.attachments.store');

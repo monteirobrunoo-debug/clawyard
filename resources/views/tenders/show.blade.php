@@ -181,7 +181,54 @@
                            title="Pré-popula o /chat com Marta CRM e todo o contexto do concurso">
                             🤖 Pedir à Marta para abrir SAP
                         </a>
+                        @unless($tender->is_confidential)
+                        <button type="button" id="ts-service-analysis-btn"
+                                class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-500"
+                                title="Multi-agente: Cor. Rodrigues + Sales + Engineer + Logística + Capitao consoante o concurso. Gera relatório imprimível.">
+                            🎯 Análise do serviço (multi-agente)
+                        </button>
+                        @endunless
                     </div>
+
+                    {{-- Status box for service-analysis button --}}
+                    <div id="ts-service-analysis-status" class="mt-3 hidden text-xs"></div>
+                    <script>
+                    (function () {
+                        const btn = document.getElementById('ts-service-analysis-btn');
+                        const status = document.getElementById('ts-service-analysis-status');
+                        if (!btn) return;
+                        const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+                        const url  = "{{ route('tenders.service-analysis.generate', $tender) }}";
+
+                        btn.addEventListener('click', async () => {
+                            btn.disabled = true;
+                            const orig = btn.textContent;
+                            btn.textContent = '🔄 A consultar agentes (~30-60s)...';
+                            status.classList.remove('hidden');
+                            status.className = 'mt-3 text-xs text-gray-600';
+                            status.textContent = 'Cor. Rodrigues, Marco Sales, Eng. Victor e outros estão a analisar...';
+                            try {
+                                const res = await fetch(url, {
+                                    method: 'POST',
+                                    headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                                    credentials: 'same-origin',
+                                });
+                                if (res.status === 401 && await window.maybeRedirectOnOtp(res)) return;
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.detail || 'HTTP ' + res.status);
+                                status.className = 'mt-3 text-xs text-emerald-700';
+                                status.textContent = (data.cached ? '✓ Análise pronta (cached). ' : '✓ Análise gerada. ') + 'A abrir...';
+                                window.open(data.view_url, '_blank');
+                            } catch (e) {
+                                status.className = 'mt-3 text-xs text-red-700';
+                                status.textContent = 'Erro: ' + e.message;
+                            } finally {
+                                btn.disabled = false;
+                                btn.textContent = orig;
+                            }
+                        });
+                    })();
+                    </script>
 
                     @php
                         $extractedOk = $tender->attachments->where('extraction_status', 'ok')->count();
