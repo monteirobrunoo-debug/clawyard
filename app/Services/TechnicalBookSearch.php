@@ -28,29 +28,49 @@ class TechnicalBookSearch
         $query = trim($query);
         if (mb_strlen($query) < 3) return [];
 
-        $driver = DB::connection()->getDriverName();
+        // Tokenizer simples — split por espaços + pontuação, mantém códigos
+        // tipo E7018, P/N 1290, MTU-16V4000 (números + letras OK).
+        // Filtra palavras curtas comuns ("de", "da", "do", "para", "que")
+        // que iam matar a relevância do ranking por hit count.
+        $stopWords = ['de','da','do','dos','das','para','que','com','em','na','no','os','as',
+                      'um','uma','e','ou','a','o','é','se','ao','aos','for','of','the','and'];
+        $words = preg_split('/[\s,;:.!?()"\'\/]+/u', mb_strtolower($query)) ?: [];
+        $words = array_values(array_filter($words, function ($w) use ($stopWords) {
+            return mb_strlen($w) >= 2 && !in_array($w, $stopWords, true);
+        }));
+        if (empty($words)) $words = [$query];
 
-        if ($driver === 'pgsql') {
-            // Postgres: usa to_tsvector + ts_rank para ranking real
-            $sql = "SELECT book_title, page_no, content, domain,
-                           ts_rank(to_tsvector('portuguese', content),
-                                   plainto_tsquery('portuguese', ?)) AS rank
-                    FROM technical_book_chunks
-                    WHERE to_tsvector('portuguese', content) @@ plainto_tsquery('portuguese', ?)
-                    " . ($domain ? "AND domain = ?" : "") . "
-                    ORDER BY rank DESC
-                    LIMIT ?";
-            $bindings = $domain
-                ? [$query, $query, $domain, $limit]
-                : [$query, $query, $limit];
-            $rows = DB::select($sql, $bindings);
-        } else {
-            // SQLite/MySQL fallback: LIKE simples
-            $q = TechnicalBookChunk::query()
-                ->where('content', 'LIKE', '%' . $query . '%');
-            if ($domain) $q->where('domain', $domain);
-            $rows = $q->limit($limit)->get(['book_title', 'page_no', 'content', 'domain'])->all();
-        }
+        $driver = DB::connection()->getDriverName();
+        $likeOp = $driver === 'pgsql' ? 'ILIKE' : 'LIKE';
+
+        // Constrói query: ranking = nº de palavras-chave que fazem match
+        // (case-insensitive). Mais palavras matched → maior score.
+        $q = TechnicalBookChunk::query();
+        $q->where(function ($w) use ($words, $likeOp) {
+            foreach ($words as $word) {
+                $w->orWhere('content', $likeOp, '%' . $word . '%');
+            }
+        });
+        if ($domain) $q->where('domain', $domain);
+
+        // Pull mais que limit (até 20) e re-rank em PHP por nº de matches.
+        // Para 1.736 chunks é instantâneo; para 100k+ adicionar índice tsvector.
+        $candidates = $q->limit(20)->get(['book_title', 'page_no', 'content', 'domain'])->all();
+
+        // Ranking PHP: contagem de palavras únicas que aparecem no chunk
+        usort($candidates, function ($a, $b) use ($words) {
+            $score = function ($chunk) use ($words) {
+                $low = mb_strtolower((string) $chunk->content);
+                $hits = 0;
+                foreach ($words as $w) {
+                    if (str_contains($low, $w)) $hits++;
+                }
+                return $hits;
+            };
+            return $score($b) <=> $score($a);
+        });
+
+        $rows = array_slice($candidates, 0, $limit);
 
         return array_map(function ($r) use ($query) {
             $content = (string) ($r->content ?? '');
