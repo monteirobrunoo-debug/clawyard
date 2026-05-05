@@ -218,6 +218,15 @@ class AgentChipsService
                 '🖥️ Compara os preços de frete marítimo Rotterdam→Sines nos principais forwarding agents',
                 '🖥️ Pesquisa os últimos press releases dos concorrentes Wärtsilä, Rolls-Royce Marine e Kongsberg',
             ],
+            // ── Eng. Repair (Work Reports — Marine/Welding/Repairs) ──────
+            'workreport' => [
+                '🛠️ Analisa este PO/RFQ e extrai scope, vessel, deadline e tipo de trabalho',
+                '⚙️ Pre-job checklist: hot-work em tank de combustível 12m³, gas-free + permits',
+                '🔬 WPS para ligação T 6mm em A-Gr.B (PTSB) com FCAW E71T-1, pré-aquecimento e PWHT',
+                '📐 UTM grid de casco 35×60m: limites mínimos por classe DNV e plano de pontos',
+                '🔧 Substituição de impulsor + selo SKF em bomba centrífuga MARELLI — passos + materials',
+                '📑 Gera Work Report final em markdown — overhaul completo motor MTU 12V4000 (drydock)',
+            ],
             // ── Capitão Vasco ─────────────────────────────────────────────
             'vessel' => [
                 '⚓ Procura navio fluvial automotor 2300+ DWT, máx 112m, máx €2M — Rhine/Danube flag',

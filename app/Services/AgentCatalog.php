@@ -119,6 +119,7 @@ class AgentCatalog
             'finance'   => ['Análise de tesouraria Q1 2026', 'Impacto fiscal compra intracomunitária', 'Cálculo IRC estimado 2025'],
             'acingov'   => ['Concursos públicos naval esta semana', 'Tenders NATO para peças defesa', 'Oportunidades EU defence procurement'],
             'vessel'    => ['Procura OSV 3000 DWT em venda', 'Drydocks DNV classe no Mediterrâneo', 'Ship brokers ativos para vessels militares'],
+            'workreport'=> ['Pre-job hot-work tank — checklist completo', 'WPS para FCAW T-joint 6mm A-Gr.B', 'Gera Work Report final em markdown'],
             'engineer'  => ['Roadmap TRL para SmartShield UXS', 'CAPEX estimado para nova linha de produção', 'Plano R&D próximo semestre'],
             'patent'    => ['Prior art EPO para "maritime camouflage"', 'Patentabilidade SmartShield USPTO', 'FTO análise para produto naval novo'],
             'quantum'   => ['Papers arXiv recentes sobre post-quantum crypto', 'Patentes USPTO quantum sensing naval', 'Aplicações quântum em defesa marítima'],
