@@ -896,7 +896,7 @@ const AGENT_EMOJIS = {
     aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
     thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓', mildef:'🎖️',
-    shipping:'🚚'
+    shipping:'🚚', workreport:'🛠️'
 };
 
 // Agents with a real photo (stored in /images/agents/{key}.png)
@@ -938,7 +938,8 @@ const AGENT_NAMES = {
     computer: 'RoboDesk',
     vessel:   'Capitão Vasco',
     mildef:   'Cor. Rodrigues Defesa',
-    shipping: 'Logística/PartYard'
+    shipping: 'Logística/PartYard',
+    workreport: 'Eng. Repair'
 };
 
 const AGENT_COLORS = {

@@ -46,6 +46,11 @@ class AgentManager
             // via ShippingSkillTrait, so even non-shipping conversations
             // can answer basic transport questions.
             'shipping'  => new ShippingAgent(),
+            // Eng. Repair — Work Report agent (marine/welding/repairs).
+            // Espelha o PartYard Work Report App standalone (Python) trazendo
+            // o conhecimento de estruturação de relatórios + WPS + NDT
+            // para dentro do clawyard. Análise visual fica no app standalone.
+            'workreport'=> new WorkReportAgent(),
         ];
 
         $this->orchestrator = new OrchestratorAgent($this->agents);
