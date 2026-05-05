@@ -9,6 +9,7 @@ use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
+use App\Services\TechnicalBookSearch;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -62,16 +63,28 @@ class WorkReportAgent implements AgentInterface
     public function __construct()
     {
         $persona = <<<'PERSONA'
-Você é o **Eng. Repair** — Especialista Sénior em Reparação Naval, Soldadura e Work Reports do ClawYard / PartYard / HP-Group.
+Você é o **Eng. Repair** — Engenheiro Naval Sénior + Especialista de Reparação Naval, Mecânica Marítima, Soldadura e Work Reports do ClawYard / PartYard / HP-Group.
+
+SCOPE DO RELATÓRIO DE ENGENHARIA NAVAL:
+Os Work Reports cobrem TODO o espectro de reparação marítima:
+  • Soldaduras (chapa, viga, tubagem, hot-work em tank)
+  • Equipamento mecânico (bombas, válvulas, redutores, veios, chumaceiras)
+  • Reparações estruturais (plate replacement, doublers, fairing)
+  • Sistemas (HVAC, fuel oil, lubrification, cooling, fire fighting)
+  • NDT / UTM / inspecções de classificação
+  • Pintura e tratamento anti-corrosivo
+  • Trabalhos eléctricos / alarms / sistemas de comando
+NÃO te limites a soldadura — qualquer trabalho de reparação naval
+entra. Adapta a estrutura do report ao tipo de intervenção.
 
 CREDENCIAIS E QUALIFICAÇÕES:
-- Eng. Naval com 25+ anos em estaleiro de reparação (drydock + afloat)
+- Eng. Naval / Mecânico com 25+ anos em estaleiro de reparação
 - IWS — International Welding Specialist (IIW)
 - CSWIP 3.1 / 3.2 Welding Inspector
-- Auditor de procedimentos WPS / PQR conforme AWS D1.1, ISO 15614, ASME IX
-- Familiar com regulamentação IACS (DNV, BV, Lloyd's Register, ABS, RINA)
+- Auditor WPS / PQR conforme AWS D1.1, ISO 15614, ASME IX
+- IACS (DNV, BV, Lloyd's Register, ABS, RINA, NK, KR, CCS)
 - Expert em redacção de Work Reports PartYard (estrutura, fotografia, captions)
-- Conhecimento da biblioteca técnica PartYard: 15 livros de soldadura naval
+- Acesso à biblioteca técnica PartYard (15 livros: 9 soldadura + 6 naval)
 PERSONA;
 
         $specialty = <<<'SPECIALTY'
@@ -157,19 +170,52 @@ SPECIALTY;
         ]);
     }
 
+    /**
+     * Se a query do user contém keywords técnicas, faz pesquisa
+     * keyword-based na biblioteca técnica e injecta os trechos
+     * mais relevantes no system prompt para o agente citar.
+     */
+    private function augmentWithBooks(string|array $message): string
+    {
+        try {
+            $text = is_string($message) ? $message
+                : implode(' ', array_map(fn($b) => is_array($b) ? ($b['text'] ?? '') : (string) $b, (array) $message));
+            // Apenas activar se a query for substancial e contiver
+            // termos técnicos típicos da biblioteca
+            if (mb_strlen(trim($text)) < 8) return '';
+            $needles = ['welding','soldadura','wps','pqr','aws','iso 15614','asme','mig','mag',
+                        'tig','fcaw','smaw','utm','ndt','preheat','pwht','hot work',
+                        'plate','chapa','bomba','pump','válvula','valve','redutor','gearbox',
+                        'naval','navio','vessel','shipyard','estaleiro','reparação','repair'];
+            $hasTechnical = false;
+            $lower = mb_strtolower($text);
+            foreach ($needles as $kw) { if (str_contains($lower, $kw)) { $hasTechnical = true; break; } }
+            if (!$hasTechnical) return '';
+
+            return app(TechnicalBookSearch::class)->buildContextBlock($text, 4);
+        } catch (\Throwable $e) {
+            Log::warning('WorkReportAgent: book search failed: ' . $e->getMessage());
+            return '';
+        }
+    }
+
     public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentWithWebSearch($message);
+        $bookCtx  = $this->augmentWithBooks($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
+
+        $sysPrompt = $this->enrichSystemPrompt($this->systemPrompt);
+        if ($bookCtx !== '') $sysPrompt .= "\n\n" . $bookCtx;
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sysPrompt,
                 'messages'   => $messages,
             ],
         ]);
@@ -184,9 +230,14 @@ SPECIALTY;
     {
         if ($heartbeat) $heartbeat('Eng. Repair a analisar...');
         $message  = $this->augmentWithWebSearch($message, $heartbeat);
+        if ($heartbeat) $heartbeat('A consultar biblioteca técnica PartYard...');
+        $bookCtx  = $this->augmentWithBooks($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
+
+        $sysPrompt = $this->enrichSystemPrompt($this->systemPrompt);
+        if ($bookCtx !== '') $sysPrompt .= "\n\n" . $bookCtx;
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
@@ -194,7 +245,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sysPrompt,
                 'messages'   => $messages,
                 'stream'     => true,
             ],

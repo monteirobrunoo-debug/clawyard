@@ -116,6 +116,15 @@ return [
         'probe_sap' => env('ARIA_PROBE_SAP', false),
     ],
 
+    // ── Eng. Repair / Work Report App standalone ─────────────────────────
+    // Bridge HTTP entre clawyard e o app Python Flask em /Volumes/Public/
+    // IT Division/PY_Work_Report/Work_Report_App/. Fornece vision API para
+    // análise de fotos + biblioteca técnica embebida.
+    'work_report' => [
+        'url'   => env('WORK_REPORT_APP_URL', ''),     // ex: http://10.0.0.5:5050
+        'token' => env('WORK_REPORT_APP_TOKEN', ''),    // X-Bridge-Token shared secret
+    ],
+
     // ── Briefing Agent (Strategist Renato) — provider switcher ──────────────
     // Default: Anthropic Claude Opus 4.5 (deep reasoning, long context).
     // Alternative: NVIDIA Nemotron Super 49B v1.5 (open model, free inference

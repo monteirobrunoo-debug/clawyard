@@ -606,6 +606,19 @@ Route::middleware(['auth'])->group(function () {
     // CSV export — para abrir/integrar no Excel principal. Aplica os
     // mesmos filtros do dashboard. Registado ANTES do {tender} wildcard.
     Route::get('/tenders/export.csv',           [TenderController::class, 'export'])->name('tenders.export');
+
+    // Eng. Repair / Work Report integrations
+    // - Bridge HTTP para o app Python standalone (vision)
+    // - Pesquisa biblioteca técnica indexada
+    // - Export Word .docx do markdown produzido pelo agente
+    Route::post('/workreport/bridge/analyze-pdf-scope', [\App\Http\Controllers\WorkReportController::class, 'analyzePdfScope'])
+        ->name('workreport.analyzePdf');
+    Route::post('/workreport/bridge/analyze-photos',    [\App\Http\Controllers\WorkReportController::class, 'analyzePhotos'])
+        ->name('workreport.analyzePhotos');
+    Route::get ('/workreport/books/search',             [\App\Http\Controllers\WorkReportController::class, 'booksSearch'])
+        ->name('workreport.books');
+    Route::post('/workreport/export.docx',              [\App\Http\Controllers\WorkReportController::class, 'exportDocx'])
+        ->name('workreport.export');
     // JSON endpoint for the async SAP Opportunity card on the show page.
     // Registered BEFORE the /{tender} wildcard so "sap-preview" isn't swallowed
     // as a slug — same trap that bit /agents/activity earlier.
