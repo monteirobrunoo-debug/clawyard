@@ -148,15 +148,19 @@ class Tender extends Model
 
     /**
      * Statuses to EXCLUDE from "trabalho ainda a fazer" dashboards.
-     * SUBMETIDO = proposta já entregue → deadline irrelevante; não
-     * deve continuar a aparecer em "diárias" nem em "atraso".
-     * AVALIACAO = à espera do cliente; também não há trabalho do nosso lado.
+     *
+     * SUBMETIDO = proposta já entregue → deadline original irrelevante,
+     * não deve continuar a aparecer em "diárias" nem em "atraso".
+     *
+     * AVALIACAO continua incluído deliberadamente — o user ainda
+     * precisa de fazer follow-up, negociar, ter info pronta para
+     * questões do cliente. Não é "trabalho a zero" como o submetido.
+     *
      * Estes ainda contam para active() (admin views, listas completas)
      * mas não poluem o "what's on my plate today" do user.
      */
     public const DONE_FROM_USER_POV = [
         self::STATUS_SUBMETIDO,
-        self::STATUS_AVALIACAO,
     ];
 
     /**
