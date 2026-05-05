@@ -1244,6 +1244,15 @@ const AGENT_CHIPS = {
         '✈️ EUR.1 para exportação de peças aeronáuticas para Marrocos — procedimento',
         '📦 Envio de peças Collins Aerospace EUA→PT — direitos aduaneiros e IVA de importação',
     ],
+    // ── Eng. Repair (Work Reports — engenharia naval) ─────────────────────
+    workreport: [
+        '🛠️ Analisa este PO/RFQ e extrai scope, vessel, deadline e tipo de trabalho',
+        '📋 Pre-relatório: hot-work em tank de combustível 12m³ — gas-free + permits + checklist segurança',
+        '🔬 WPS para ligação T 6mm em A-Gr.B com FCAW E71T-1 — pré-aquecimento e PWHT',
+        '📐 UTM grid de casco 35×60m — limites mínimos por classe DNV e plano de pontos',
+        '🔧 Substituição de impulsor + selo SKF em bomba centrífuga MARELLI — passos + materials',
+        '📑 Relatório FINAL em markdown — overhaul completo motor MTU 12V4000 (drydock)',
+    ],
 };
 
 function applyAgentColor(agent) {
