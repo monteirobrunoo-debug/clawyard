@@ -603,6 +603,9 @@ Route::middleware(['auth'])->group(function () {
 
     // Dashboard + per-tender detail + edit + append-only observation.
     Route::get('/tenders',                      [TenderController::class, 'index'])->name('tenders.index');
+    // CSV export — para abrir/integrar no Excel principal. Aplica os
+    // mesmos filtros do dashboard. Registado ANTES do {tender} wildcard.
+    Route::get('/tenders/export.csv',           [TenderController::class, 'export'])->name('tenders.export');
     // JSON endpoint for the async SAP Opportunity card on the show page.
     // Registered BEFORE the /{tender} wildcard so "sap-preview" isn't swallowed
     // as a slug — same trap that bit /agents/activity earlier.

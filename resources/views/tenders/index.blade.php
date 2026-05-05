@@ -79,6 +79,18 @@
                         Importar Excel
                     </a>
                 @endif
+
+                {{-- Export CSV — preserva os filtros activos para que o ficheiro
+                     reflicta exactamente o que está na tabela. Abre directamente
+                     no Excel (BOM UTF-8 + separador ;). --}}
+                <a href="{{ route('tenders.export', request()->query()) }}"
+                   class="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-500"
+                   title="Exporta a tabela actual (com os filtros aplicados) para CSV — abre no Excel principal">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                    </svg>
+                    Exportar Excel (CSV)
+                </a>
             </div>
         </div>
     </x-slot>

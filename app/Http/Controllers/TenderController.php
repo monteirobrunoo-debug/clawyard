@@ -785,6 +785,95 @@ class TenderController extends Controller
      * that just arrived should float to the top so the super-user sees
      * fresh work without having to dig.
      */
+    /**
+     * Export the tenders dashboard to CSV (Excel-compatible).
+     * Streamed (chunk-based) so 10k+ rows não rebentam memória.
+     *
+     * Aplica os MESMOS filtros que index() para que o ficheiro
+     * reflicta o que o admin está a ver. Manager+ vê tudo; user
+     * normal vê só os seus.
+     *
+     * BOM (UTF-8 byte order mark) garante que acentos portugueses
+     * abrem correctamente no Excel sem o operador ter de mudar
+     * encoding manualmente.
+     */
+    public function export(Request $request): \Symfony\Component\HttpFoundation\StreamedResponse
+    {
+        $user       = Auth::user();
+        $canViewAll = $user->can('tenders.view-all');
+
+        $filters = $this->parseFilters($request);
+        $sort    = $this->validateSort($request->string('sort')->trim()->value() ?: null);
+        $dir     = $request->string('dir')->trim()->value() === 'desc' ? 'desc' : 'asc';
+
+        $query = Tender::query()->with(['collaborator.user']);
+        if (!$canViewAll) $query->forUser($user->id);
+        $this->applyFilters($query, $filters);
+        $this->applySort($query, $sort, $dir);
+
+        $filename = 'clawyard-concursos-' . now()->format('Y-m-d-Hi') . '.csv';
+
+        return response()->streamDownload(function () use ($query) {
+            $out = fopen('php://output', 'w');
+            // BOM UTF-8 para Excel reconhecer acentos
+            fwrite($out, "\xEF\xBB\xBF");
+            // Header row
+            fputcsv($out, [
+                'ID', 'Referência', 'Fonte', 'Título', 'Status', 'Prioridade',
+                'Tipo', 'Organização', 'Deadline', 'Dias até deadline',
+                'Colaborador', 'Email colab.', 'Atribuído em',
+                'Nº Oportunidade SAP', 'Última sync SAP',
+                'Categorias', 'Confidencial', 'Valor proposta', 'Moeda',
+                'Resultado', 'Notas', 'Importado em', 'Última actualização',
+            ], ';');
+
+            $query->chunk(500, function ($rows) use ($out) {
+                foreach ($rows as $t) {
+                    $cats = '';
+                    if ($t->prelim_analysis && is_array($t->prelim_analysis['categories'] ?? null)) {
+                        $cats = implode(',', $t->prelim_analysis['categories']);
+                    }
+                    $colab = $t->collaborator;
+                    $now = now();
+                    $daysToDeadline = $t->deadline_at
+                        ? (int) round($t->deadline_at->floatDiffInDays($now, false))
+                        : null;
+
+                    fputcsv($out, [
+                        $t->id,
+                        $t->reference,
+                        $t->source,
+                        $t->title,
+                        $t->status,
+                        $t->priority,
+                        $t->type,
+                        $t->purchasing_org,
+                        $t->deadline_at?->format('Y-m-d H:i'),
+                        $daysToDeadline,
+                        $colab?->name ?? $colab?->user?->name ?? '',
+                        $colab?->email ?? $colab?->user?->email ?? '',
+                        $t->assigned_at?->format('Y-m-d H:i'),
+                        $t->sap_opportunity_number,
+                        $t->last_sap_sync_at?->format('Y-m-d H:i'),
+                        $cats,
+                        $t->is_confidential ? 'sim' : 'não',
+                        $t->offer_value,
+                        $t->currency,
+                        $t->result,
+                        mb_substr((string) $t->notes, 0, 1000),
+                        $t->created_at?->format('Y-m-d H:i'),
+                        $t->updated_at?->format('Y-m-d H:i'),
+                    ], ';');
+                }
+            });
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Cache-Control'       => 'no-cache, no-store',
+        ]);
+    }
+
     private function applySort($query, ?string $sort, string $dir): void
     {
         // Default view: newest imports first. Secondary sort on id so
