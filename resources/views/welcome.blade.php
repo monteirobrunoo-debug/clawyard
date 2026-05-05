@@ -1710,29 +1710,46 @@ async function fileInputChangeHandler(e) {
 }
 
 // ── Drag & Drop file attach (works for ALL agents including Luis) ──────────
+//
+// NOTA IMPORTANTE: o e.preventDefault() em dragenter/dragover TEM de ser
+// chamado SEMPRE (incondicional) sobre QUALQUER drag, senão o browser cai
+// no default — abre o ficheiro / navega para outro URL — e perdemos a
+// página. Alguns browsers (especialmente Safari + drags de Finder) não
+// populam dataTransfer.types durante o drag, só no drop. Por isso o
+// check "Files in types" só serve para mostrar o overlay, não para
+// decidir se preventDefault corre.
+//
+// User reportado 2026-05-05: "ao arrastar PDF na página do Eng. Repair,
+// abre a pasta do hp-history" — exactamente o sintoma deste bug.
 (function () {
     const overlay   = document.getElementById('drop-overlay');
-    let dragCounter = 0; // track nested dragenter/dragleave
+    let dragCounter = 0;
 
-    // Show overlay when dragging a file over the window
+    // SEMPRE prevenir default — não importa o tipo do drag
+    const preventNav = (e) => { e.preventDefault(); };
+
     document.addEventListener('dragenter', (e) => {
-        if (!e.dataTransfer?.types?.includes('Files')) return;
-        e.preventDefault();
-        dragCounter++;
-        overlay.classList.add('active');
+        preventNav(e);
+        const isFile = e.dataTransfer?.types?.includes('Files');
+        if (isFile) {
+            dragCounter++;
+            overlay?.classList.add('active');
+        }
     });
+
     document.addEventListener('dragleave', (e) => {
+        const isFile = e.dataTransfer?.types?.includes('Files');
+        if (!isFile) return;
         dragCounter--;
-        if (dragCounter <= 0) { dragCounter = 0; overlay.classList.remove('active'); }
+        if (dragCounter <= 0) { dragCounter = 0; overlay?.classList.remove('active'); }
     });
-    document.addEventListener('dragover', (e) => {
-        if (!e.dataTransfer?.types?.includes('Files')) return;
-        e.preventDefault(); // allow drop
-    });
+
+    document.addEventListener('dragover', preventNav);
+
     document.addEventListener('drop', (e) => {
-        e.preventDefault();
+        preventNav(e);
         dragCounter = 0;
-        overlay.classList.remove('active');
+        overlay?.classList.remove('active');
         const droppedFiles = e.dataTransfer?.files;
         if (droppedFiles?.length) {
             fileInputChangeHandler({ target: { files: droppedFiles } });
