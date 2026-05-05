@@ -805,3 +805,19 @@ Route::get('/opcache-reset', function () {
 });
 
 require __DIR__.'/auth.php';
+
+// ──────────────────────────────────────────────────────────────────────
+//  IP-bound OTP challenge
+// ──────────────────────────────────────────────────────────────────────
+// Available to logged-in users only. The RequireIpVerification middleware
+// bypasses /otp/* paths so the challenge UI is reachable while the user
+// has an unverified IP.
+Route::middleware('auth')->group(function () {
+    Route::get ('/otp/challenge', [\App\Http\Controllers\UserOtpController::class, 'challenge'])
+        ->name('otp.challenge');
+    Route::post('/otp/verify',    [\App\Http\Controllers\UserOtpController::class, 'verify'])
+        ->name('otp.verify');
+    Route::post('/otp/resend',    [\App\Http\Controllers\UserOtpController::class, 'resend'])
+        ->middleware('throttle:5,1')
+        ->name('otp.resend');
+});

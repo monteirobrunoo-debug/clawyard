@@ -13,11 +13,16 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'admin' => \App\Http\Middleware\AdminMiddleware::class,
+            'admin'       => \App\Http\Middleware\AdminMiddleware::class,
+            'verified.ip' => \App\Http\Middleware\RequireIpVerification::class,
         ]);
         // Security headers on all web responses
         $middleware->web(append: [
             \App\Http\Middleware\SecurityHeadersMiddleware::class,
+            // IP-bound OTP gate — runs after StartSession+Authenticate
+            // so we know the user. The middleware bypasses itself for
+            // /otp/* and /logout so the challenge UI is reachable.
+            \App\Http\Middleware\RequireIpVerification::class,
         ]);
         // Allow API routes to read web session (for session-based auth),
         // and append security headers so JSON/SSE responses also carry

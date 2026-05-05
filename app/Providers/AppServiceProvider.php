@@ -59,6 +59,29 @@ class AppServiceProvider extends ServiceProvider
         // Applied on /api/chat (chatStream) and /api/agents (filters the
         // returned list). Admin always passes — see User::canUseAgent.
         Gate::define('agents.use', fn(User $u, string $agentKey) => $u->canUseAgent($agentKey));
+
+        // ── IP-bound OTP trigger ────────────────────────────────────────────
+        // On logout, clear last_verified_ip so the next login (even from
+        // the same IP) requires a fresh OTP — user feedback 2026-05-05:
+        // "quando acaba a ligação ou muda de IP tem de validar OTP".
+        // Same idea on Login: clear immediately so the middleware kicks
+        // in on the very first authenticated request.
+        \Illuminate\Support\Facades\Event::listen(
+            \Illuminate\Auth\Events\Logout::class,
+            function ($event) {
+                if ($event->user) {
+                    $event->user->forceFill(['last_verified_ip' => null])->saveQuietly();
+                }
+            }
+        );
+        \Illuminate\Support\Facades\Event::listen(
+            \Illuminate\Auth\Events\Login::class,
+            function ($event) {
+                if ($event->user) {
+                    $event->user->forceFill(['last_verified_ip' => null])->saveQuietly();
+                }
+            }
+        );
     }
 
     /**
