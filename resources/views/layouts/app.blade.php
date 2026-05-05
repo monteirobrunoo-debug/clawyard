@@ -13,6 +13,24 @@
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+        <script>
+            // Global helper: detect 401 OTP requirements from any AJAX
+            // call and redirect to /otp/challenge automatically. Pages
+            // wrap their fetches with:
+            //   if (res.status === 401 && await maybeRedirectOnOtp(res)) return;
+            // Returns true when handled (caller should bail), false otherwise.
+            window.maybeRedirectOnOtp = async function (res) {
+                try {
+                    const data = await res.clone().json();
+                    if (data && data.error === 'otp_required' && data.redirect) {
+                        window.location.href = data.redirect;
+                        return true;
+                    }
+                } catch (_) { /* not JSON or no body — fall through */ }
+                return false;
+            };
+        </script>
     </head>
     <body class="font-sans antialiased">
         <div class="min-h-screen bg-gray-100">

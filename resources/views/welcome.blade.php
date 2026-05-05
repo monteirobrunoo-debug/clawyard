@@ -596,6 +596,20 @@
             .bubble table { display: block; overflow-x: auto; white-space: nowrap; }
         }
     </style>
+    <script>
+        // OTP redirect helper — detects 401 with otp_required hint from
+        // any AJAX/SSE call and bounces the user to the challenge page.
+        window.maybeRedirectOnOtp = async function (res) {
+            try {
+                const data = await res.clone().json();
+                if (data && data.error === 'otp_required' && data.redirect) {
+                    window.location.href = data.redirect;
+                    return true;
+                }
+            } catch (_) { /* not JSON */ }
+            return false;
+        };
+    </script>
 </head>
 <body>
 
@@ -3164,6 +3178,10 @@ async function sendMessage() {
             body:    requestBody,
         });
 
+        if (res.status === 401 && await window.maybeRedirectOnOtp(res)) {
+            typing.remove();
+            return;
+        }
         if (!res.ok) {
             const raw = await res.text();
             typing.remove();

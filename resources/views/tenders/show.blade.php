@@ -272,6 +272,9 @@
                                 headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
                                 credentials: 'same-origin',
                             });
+                            if (r.status === 401) {
+                                if (await maybeRedirectOnOtp(r)) return;
+                            }
                             if (!r.ok) {
                                 const txt = await r.text();
                                 throw new Error('HTTP ' + r.status + ': ' + txt.slice(0, 160));
@@ -483,6 +486,7 @@
                             body: JSON.stringify({ include_web: incWeb.checked }),
                             credentials: 'same-origin',
                         });
+                        if (res.status === 401 && await maybeRedirectOnOtp(res)) return;
                         if (!res.ok) throw new Error(`HTTP ${res.status}`);
                         const data = await res.json();
                         renderSuggestions(data);
@@ -683,6 +687,7 @@
                             }),
                             credentials: 'same-origin',
                         });
+                        if (res.status === 401 && await maybeRedirectOnOtp(res)) return;
                         if (!res.ok) {
                             const err = await res.text();
                             throw new Error(`HTTP ${res.status}: ${err.slice(0,200)}`);
