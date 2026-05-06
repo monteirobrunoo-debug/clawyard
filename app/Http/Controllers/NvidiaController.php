@@ -8,6 +8,7 @@ use App\Models\Document;
 use App\Services\RagService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class NvidiaController extends Controller
@@ -160,7 +161,7 @@ class NvidiaController extends Controller
     /**
      * POST /api/chat/stream — SSE streaming chat (fixes Cloudflare 504 timeouts)
      */
-    public function chatStream(Request $request): StreamedResponse
+    public function chatStream(Request $request): SymfonyResponse
     {
         set_time_limit(700); // 700s — matches Guzzle 600s + post-stream processing headroom
 
