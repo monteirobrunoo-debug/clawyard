@@ -7,6 +7,7 @@ use App\Models\Report;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
@@ -20,6 +21,7 @@ class BriefingAgent implements AgentInterface
     use SharedContextTrait;
 
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     // PSI bus — publish the executive briefing so downstream agents
     // (Engineer R&D, Finance, Strategist) reference today's conclusions.
     protected string $contextKey  = 'briefing_intel';
@@ -275,6 +277,11 @@ SPECIALTY;
         $todayLong = now()->format('d \d\e F \d\e Y');
         $prompt    = "Generate today's executive daily briefing for PartYard / HP-Group.\n\nToday is: {$todayLong}\n\n{$intelligence}";
         $systemP   = $this->enrichSystemPrompt($this->systemPrompt);
+        // Biblioteca técnica — se o pacote de inteligência mencionar
+        // soldadura, naval, peças, repair, etc, injecta trechos com
+        // citações de página para o Renato referenciar no briefing.
+        $bookCtx   = $this->augmentWithTechnicalBooks($intelligence, 3);
+        if ($bookCtx) $systemP .= "\n\n" . $bookCtx;
         $provider  = (string) config('services.briefing.provider', 'anthropic');
 
         // Route the streaming call based on the configured provider.

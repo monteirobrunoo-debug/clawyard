@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 
 use App\Agents\Traits\LogisticsSkillTrait;
 /**
@@ -31,6 +32,7 @@ class MilDefAgent implements AgentInterface
     use SharedContextTrait;
 
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $searchPolicy = 'always';
     protected string $contextKey   = 'mildef_intel';
     protected array  $contextTags  = [
@@ -279,6 +281,8 @@ SYSPROMPT;
     public function chat(string|array $message, array $history = []): string
     {
         $finalMessage = $this->augmentWithWebSearch($message);
+        $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
+        $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $finalMessage],
@@ -289,7 +293,7 @@ SYSPROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -305,6 +309,8 @@ SYSPROMPT;
     {
         if ($heartbeat) $heartbeat('🔍 a pesquisar fornecedores de defesa mundiais');
         $finalMessage = $this->augmentWithWebSearch($message, $heartbeat);
+        $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
+        $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $finalMessage],
@@ -318,7 +324,7 @@ SYSPROMPT;
             'json'    => [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],

@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
@@ -18,6 +19,7 @@ class EmailAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $contextKey  = 'email_intel';
     protected array  $contextTags = ['email','cliente','proposta','cotação','follow-up','armador','navio','contacto'];
     protected string $systemPrompt = '';
@@ -256,6 +258,8 @@ SPECIALTY;
     public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentWithWebSearch($message);
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 2);
+        $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -269,7 +273,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -284,6 +288,8 @@ SPECIALTY;
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $message  = $this->augmentWithWebSearch($message, $heartbeat);
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 2);
+        $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -298,7 +304,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
