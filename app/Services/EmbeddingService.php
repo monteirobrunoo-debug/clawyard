@@ -92,6 +92,12 @@ class EmbeddingService
                     'input'      => $clean,
                     'input_type' => $inputType,        // 'query' | 'passage'
                     'encoding_format' => 'float',
+                    // CRITICAL: nv-embedqa-e5-v5 tem limite de 512 tokens.
+                    // Sem truncate, qualquer chunk > 512 tokens (= ~2000 chars
+                    // PT/EN) faz a API rejeitar o BATCH INTEIRO. truncate=END
+                    // diz ao server para cortar nos 512 tokens — todos os
+                    // chunks passam, mesmo livros densos como Modenesi.
+                    'truncate'        => 'END',
                 ],
                 'http_errors' => false,
             ]);
@@ -101,8 +107,10 @@ class EmbeddingService
 
             if ($status >= 400) {
                 Log::warning('EmbeddingService: API error', [
-                    'status' => $status,
-                    'body'   => mb_substr($body, 0, 250),
+                    'status'      => $status,
+                    'body'        => mb_substr($body, 0, 400),
+                    'batch_size'  => count($clean),
+                    'first_chars' => mb_substr($clean[0] ?? '', 0, 80),
                 ]);
                 return [];
             }

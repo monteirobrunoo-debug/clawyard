@@ -73,7 +73,13 @@ class EmbedTechnicalBooksCommand extends Command
 
             // Concatena book_title + content para dar mais contexto ao embedder
             // (ajuda a desambiguar "soldagem" do Modenesi vs ESAB).
-            $payload = $chunks->map(fn($c) => trim(($c->book_title ?? '') . ': ' . $c->content))->all();
+            //
+            // PRE-TRUNCATE: nv-embedqa-e5-v5 limita 512 tokens (~2000 chars
+            // PT/EN). Truncamos client-side a 2500 para dar margem; o
+            // server-side `truncate=END` apanha os edge cases.
+            $payload = $chunks->map(fn($c) =>
+                mb_substr(trim(($c->book_title ?? '') . ': ' . $c->content), 0, 2500)
+            )->all();
 
             $vectors = $emb->embedBatch($payload, 'passage');
             $apiCalls++;
