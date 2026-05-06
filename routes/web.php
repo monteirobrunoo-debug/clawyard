@@ -606,6 +606,9 @@ Route::middleware(['auth'])->group(function () {
     // CSV export — para abrir/integrar no Excel principal. Aplica os
     // mesmos filtros do dashboard. Registado ANTES do {tender} wildcard.
     Route::get('/tenders/export.csv',           [TenderController::class, 'export'])->name('tenders.export');
+    // Criação manual — qualquer user autenticado (não requer gate import).
+    // Form vive numa modal no /tenders dashboard ou inline em /tenders/show.
+    Route::post('/tenders/manual',              [TenderController::class, 'storeManual'])->name('tenders.storeManual');
 
     // Eng. Repair / Work Report integrations
     // - Bridge HTTP para o app Python standalone (vision)

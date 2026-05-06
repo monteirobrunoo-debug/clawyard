@@ -100,6 +100,10 @@ class TenderDailyDigestService
         $expiredCut = now()->copy()->subDays(Tender::OVERDUE_WINDOW_DAYS);
         return Tender::query()
             ->active()
+            // User feedback 2026-05-06: concursos já submetidos NÃO devem
+            // aparecer no digest diário — proposta entregue, sem trabalho
+            // pendente do nosso lado. Continuam visíveis em /tenders.
+            ->whereNotIn('status', Tender::DONE_FROM_USER_POV)
             ->whereNull('assigned_collaborator_id')
             ->where(function ($q) use ($expiredCut) {
                 $q->whereNull('deadline_at')
@@ -118,6 +122,7 @@ class TenderDailyDigestService
 
         return Tender::query()
             ->active()
+            ->whereNotIn('status', Tender::DONE_FROM_USER_POV)
             ->forUser($userId)
             ->with('collaborator')
             ->where(function ($q) use ($expiredCut) {

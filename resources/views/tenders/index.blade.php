@@ -91,9 +91,111 @@
                     </svg>
                     Exportar Excel (CSV)
                 </a>
+
+                {{-- Criação manual — qualquer user autenticado pode criar 1
+                     concurso à mão (não precisa de gate `tenders.import`). --}}
+                <button type="button"
+                        onclick="document.getElementById('tender-manual-modal').classList.remove('hidden')"
+                        class="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-500"
+                        title="Cria 1 concurso manualmente — para registos que não vêm de Excel">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    + Novo concurso
+                </button>
             </div>
         </div>
     </x-slot>
+
+    {{-- Modal "Novo concurso manual" — escondido por defeito. Form
+         POST para tenders.storeManual. Validação server-side; se falhar
+         o user vê os errors no campo (Laravel old() + flash). --}}
+    <div id="tender-manual-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 px-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-xl w-full">
+            <div class="border-b border-gray-200 px-5 py-3 flex items-center justify-between">
+                <h3 class="text-base font-semibold text-gray-800">+ Novo concurso (manual)</h3>
+                <button type="button"
+                        onclick="document.getElementById('tender-manual-modal').classList.add('hidden')"
+                        class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+            </div>
+            <form method="POST" action="{{ route('tenders.storeManual') }}" class="px-5 py-4 space-y-3 text-sm">
+                @csrf
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="block">
+                        <span class="text-xs font-semibold text-gray-700">Referência</span>
+                        <input type="text" name="reference" placeholder="ex: RFP-2026-001"
+                               class="mt-1 block w-full rounded border-gray-300 text-sm" maxlength="80">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs font-semibold text-gray-700">Fonte *</span>
+                        <select name="source" required class="mt-1 block w-full rounded border-gray-300 text-sm">
+                            <option value="manual">Manual</option>
+                            <option value="email">Email</option>
+                            <option value="acingov">AcinGov</option>
+                            <option value="vortal">Vortal</option>
+                            <option value="ungm">UNGM</option>
+                            <option value="nspa">NSPA</option>
+                            <option value="sam_gov">SAM.gov</option>
+                            <option value="other">Outro</option>
+                        </select>
+                    </label>
+                </div>
+                <label class="block">
+                    <span class="text-xs font-semibold text-gray-700">Título *</span>
+                    <input type="text" name="title" required maxlength="500"
+                           placeholder="ex: Provision of NETGATE Hardware"
+                           class="mt-1 block w-full rounded border-gray-300 text-sm">
+                </label>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="block">
+                        <span class="text-xs font-semibold text-gray-700">Organização</span>
+                        <input type="text" name="purchasing_org" maxlength="200"
+                               placeholder="ex: NCIA, OceanPact, NSPA"
+                               class="mt-1 block w-full rounded border-gray-300 text-sm">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs font-semibold text-gray-700">Tipo</span>
+                        <input type="text" name="type" maxlength="40" placeholder="Supply / Service"
+                               class="mt-1 block w-full rounded border-gray-300 text-sm">
+                    </label>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="block">
+                        <span class="text-xs font-semibold text-gray-700">Deadline</span>
+                        <input type="datetime-local" name="deadline_at"
+                               class="mt-1 block w-full rounded border-gray-300 text-sm">
+                    </label>
+                    <label class="block">
+                        <span class="text-xs font-semibold text-gray-700">Prioridade</span>
+                        <select name="priority" class="mt-1 block w-full rounded border-gray-300 text-sm">
+                            <option value="normal">Normal</option>
+                            <option value="low">Baixa</option>
+                            <option value="high">Alta</option>
+                            <option value="urgent">Urgente</option>
+                        </select>
+                    </label>
+                </div>
+                <label class="block">
+                    <span class="text-xs font-semibold text-gray-700">Notas</span>
+                    <textarea name="notes" rows="3" maxlength="5000"
+                              placeholder="Detalhes adicionais — equipamentos, contactos, etc."
+                              class="mt-1 block w-full rounded border-gray-300 text-sm"></textarea>
+                </label>
+
+                <div class="flex justify-end gap-2 pt-2 border-t border-gray-100 mt-3">
+                    <button type="button"
+                            onclick="document.getElementById('tender-manual-modal').classList.add('hidden')"
+                            class="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            class="px-4 py-2 text-sm rounded bg-amber-600 text-white font-semibold hover:bg-amber-500">
+                        Criar concurso
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     {{-- ─── Just-assigned pulse animation ──────────────────────────────
          Runs ~5s (4 iterations × 1.2s), then settles into a persistent

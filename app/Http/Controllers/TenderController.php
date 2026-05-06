@@ -322,6 +322,66 @@ class TenderController extends Controller
         );
     }
 
+    /**
+     * Criação manual de concurso por qualquer user autenticado.
+     *
+     * User feedback 2026-05-06: "users podem criar linhas de novos
+     * concursos e referências". Não requer gate `tenders.import`
+     * porque essa é só para uploads em massa de Excel — criar 1
+     * concurso à mão é trabalho corrente de qualquer colaborador.
+     *
+     * Auto-atribui o creator como collaborator se ele tem TenderCollaborator
+     * com o seu email — assim o concurso aparece logo no "Os meus" dele.
+     */
+    public function storeManual(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        $user = Auth::user();
+        if (!$user || (method_exists($user, 'isGuest') && $user->isGuest())) {
+            abort(403, 'Guests não podem criar concursos.');
+        }
+
+        $data = $request->validate([
+            'reference'      => ['nullable', 'string', 'max:80'],
+            'title'          => ['required', 'string', 'max:500'],
+            'source'         => ['required', 'string', 'max:40'],
+            'type'           => ['nullable', 'string', 'max:40'],
+            'purchasing_org' => ['nullable', 'string', 'max:200'],
+            'deadline_at'    => ['nullable', 'date'],
+            'notes'          => ['nullable', 'string', 'max:5000'],
+            'priority'       => ['nullable', 'string', 'in:low,normal,high,urgent'],
+        ]);
+
+        $tender = new Tender();
+        $tender->source              = $data['source'];
+        $tender->reference           = $data['reference'] ?? null;
+        $tender->title               = $data['title'];
+        $tender->type                = $data['type']           ?? 'manual';
+        $tender->purchasing_org      = $data['purchasing_org'] ?? null;
+        $tender->deadline_at         = $data['deadline_at']    ?? null;
+        $tender->notes               = $data['notes']          ?? null;
+        $tender->priority            = $data['priority']       ?? 'normal';
+        $tender->status              = Tender::STATUS_PENDING;
+        $tender->source_modified_at  = now();
+        $tender->save();
+
+        // Auto-link ao colaborador do user (se existir TenderCollaborator
+        // com email correspondente, vincula para aparecer em "Os meus").
+        try {
+            $collab = \App\Models\TenderCollaborator::where('user_id', $user->id)
+                ->orWhere('email', $user->email)
+                ->first();
+            if ($collab) {
+                $tender->assigned_collaborator_id = $collab->id;
+                $tender->assigned_at              = now();
+                $tender->assigned_by_user_id      = $user->id;
+                $tender->save();
+            }
+        } catch (\Throwable $e) { /* link é best-effort */ }
+
+        return redirect()->route('tenders.show', $tender)
+            ->with('status', "✓ Concurso #{$tender->id} criado manualmente.");
+    }
+
     // ── Detail view ───────────────────────────────────────────────────────
     public function show(Tender $tender, TenderSimilarityService $similarity)
     {
