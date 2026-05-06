@@ -1647,8 +1647,10 @@ function updateFilePreviewUI() {
     wrapEl.style.display        = 'flex';
 }
 
-// Max binary file size before warning (nginx default limit ~1MB; base64 = ×1.33)
-const MAX_FILE_BYTES = 700 * 1024; // 700 KB → ~930 KB base64 → safe under 1MB nginx limit
+// Max binary file size — alinhado com cap do servidor (NvidiaController + nginx).
+// Cap actual: 50 MB raw / batch (~67 MB base64). O servidor devolve 413 com
+// mensagem clara se ultrapassar — aqui só avisa o user mais cedo.
+const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50 MB raw por ficheiro individual
 
 function readOneFile(file) {
     return new Promise((resolve) => {

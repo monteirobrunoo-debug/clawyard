@@ -324,27 +324,37 @@ class NvidiaController extends Controller
 
             if (!empty($pdfBlocks)) {
                 // ── Payload size guard ────────────────────────────────
-                // The llm-proxy nginx has a client_max_body_size cap
-                // (default 1 MB). 413 Request Entity Too Large was killing
-                // Max Batch with 5+ PDFs. Fail fast with a useful message
-                // so the user knows to split the batch instead of seeing
-                // a generic timeout.
+                // Cap aplicacional para PDFs anexados a uma mensagem.
+                // Cobre o caso em que o utilizador tenta meter 5+ PDFs
+                // grandes de uma só vez — fail fast com mensagem útil
+                // em vez de timeout genérico do nginx.
+                //
+                // Cap = ~67 MB base64 (= ~50 MB raw) + ~3 MB de cushion
+                // para system prompt + history. Total: 70 MB base64.
+                //
+                // ⚠️ Pré-requisitos infra para este cap funcionar:
+                //   • clawyard nginx:  client_max_body_size 80M;
+                //   • llm-proxy nginx: client_max_body_size 80M;
+                //   • PHP (clawyard):  upload_max_filesize=80M
+                //                      post_max_size=80M
+                //                      memory_limit≥256M
+                //   • Anthropic API:   limite de 32 MB por PDF individual
+                //                      (batches grandes = vários PDFs pequenos)
                 $totalB64 = 0;
                 foreach ($pdfBlocks as $b) {
                     $totalB64 += strlen($b['source']['data'] ?? '');
                 }
-                // 9 MB headroom leaves space for system prompt + history.
-                // Bump this when llm-proxy nginx client_max_body_size goes up.
-                $maxBytes = 9 * 1024 * 1024;
+                $maxBytes = 70 * 1024 * 1024; // ≈50 MB raw + cushion
                 if ($totalB64 > $maxBytes) {
-                    $totalMb = round($totalB64 / 1024 / 1024, 1);
-                    \Log::warning("ClawYard: PDF batch too large [{$totalMb}MB > 9MB cap]", [
+                    $totalMb    = round($totalB64 / 1024 / 1024, 1);
+                    $totalRawMb = round($totalB64 * 0.75 / 1024 / 1024, 1); // base64→raw
+                    \Log::warning("ClawYard: PDF batch too large [{$totalMb}MB b64 > 70MB cap]", [
                         'pdf_count' => count($pdfBlocks),
                         'agent'     => $agentName_final ?? null,
                     ]);
                     return response()->json([
                         'error'  => 'payload_too_large',
-                        'detail' => "Os PDFs anexados somam {$totalMb} MB — limite de 9 MB por mensagem. Divide em batches mais pequenos (ex: 3-4 PDFs de cada vez).",
+                        'detail' => "Os PDFs anexados somam ~{$totalRawMb} MB — limite de 50 MB por mensagem. Divide em batches mais pequenos ou comprime os PDFs (ex: usar 'Reduce File Size' no Preview/Adobe).",
                     ], 413);
                 }
 
