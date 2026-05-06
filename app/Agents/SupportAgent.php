@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
@@ -20,6 +21,7 @@ class SupportAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $contextKey  = 'support_intel';
     protected array  $contextTags = ['avaria','diagnóstico','motor','reparação','suporte','falha','MTU','CAT','técnico'];
     protected string $systemPrompt = '';
@@ -129,7 +131,9 @@ SPECIALTY;
 
     public function chat(string|array $message, array $history = []): string
     {
-        $message = $this->augmentMessage($message);
+        $message  = $this->augmentMessage($message);
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 3);
+        $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -139,7 +143,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -152,7 +156,9 @@ SPECIALTY;
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        $message = $this->augmentMessage($message, $heartbeat);
+        $message  = $this->augmentMessage($message, $heartbeat);
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 3);
+        $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -163,7 +169,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],

@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Models\PartnerWorkshop;
@@ -28,6 +29,7 @@ class VesselSearchAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use WebSearchTrait;
+    use TechnicalBookSkillTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
     protected string $systemPrompt = '';
@@ -305,17 +307,23 @@ SPECIALTY;
         // Always augment with live web search (searchPolicy = 'always')
         $message  = $this->augmentWithPartners($message);
         $message  = $this->smartAugment($message);
+        // Bonus: trechos da biblioteca técnica PartYard quando o user
+        // pergunta sobre naval architecture, drydock, classification, etc.
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 3, 'naval');
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
+
+        $sys = $this->enrichSystemPrompt($this->systemPrompt);
+        if ($bookCtx) $sys .= "\n\n" . $bookCtx;
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
                 'model'      => 'claude-sonnet-4-6',
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -333,10 +341,14 @@ SPECIALTY;
         // Always search web (searchPolicy = 'always') — live broker listings + repair yards
         $message  = $this->augmentWithPartners($message, $heartbeat);
         $message  = $this->smartAugment($message, $heartbeat);
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 3, 'naval');
 
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
+
+        $sys = $this->enrichSystemPrompt($this->systemPrompt);
+        if ($bookCtx) $sys .= "\n\n" . $bookCtx;
 
         try {
             $response = $this->client->post('/v1/messages', [
@@ -345,7 +357,7 @@ SPECIALTY;
                 'json'    => [
                     'model'      => 'claude-sonnet-4-6',
                     'max_tokens' => 8192,
-                    'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                    'system'     => $sys,
                     'messages'   => $messages,
                     'stream'     => true,
                 ],

@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
@@ -24,6 +25,7 @@ class EngineerAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -262,6 +264,7 @@ SPECIALTY;
             : $context . $message;
 
         $augmented = $this->augmentWithWebSearch($augmented);
+        $bookCtx   = $this->augmentWithTechnicalBooks($augmented, 3);
         $augmented = $this->sanitizeForApi($augmented);
         $history   = array_map(fn($m) => $this->sanitizeForApi($m), $history);
 
@@ -269,13 +272,16 @@ SPECIALTY;
             ['role' => 'user', 'content' => $augmented],
         ]);
 
+        $sys = $this->enrichSystemPrompt($this->systemPrompt);
+        if ($bookCtx) $sys .= "\n\n" . $bookCtx;
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($augmented),
             'json'    => [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -308,7 +314,11 @@ SPECIALTY;
             $augmented = $this->augmentWithWebSearch($augmented, $heartbeat);
         }
 
-        // 4. SECURITY/STABILITY: sanitise every string that Guzzle will
+        // 4. Biblioteca técnica PartYard (chama ANTES do sanitizeForApi
+        //    para que o pre-sanitised augmented siga para o keyword check)
+        $bookCtx = $this->augmentWithTechnicalBooks($augmented, 3);
+
+        // 5. SECURITY/STABILITY: sanitise every string that Guzzle will
         //    json_encode before it reaches api.anthropic.com. Malformed
         //    UTF-8 slipping in from DB-sourced briefings/discoveries (old
         //    Windows-1252 copy-pastes, truncated multibyte sequences)
@@ -322,6 +332,9 @@ SPECIALTY;
 
         if ($heartbeat) $heartbeat('a activar raciocínio técnico avançado 🔩');
 
+        $sys = $this->sanitizeForApi($this->enrichSystemPrompt($this->systemPrompt));
+        if ($bookCtx) $sys .= "\n\n" . $this->sanitizeForApi($bookCtx);
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($augmented),
             'stream'  => true,
@@ -329,7 +342,7 @@ SPECIALTY;
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $this->sanitizeForApi($this->enrichSystemPrompt($this->systemPrompt)),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
