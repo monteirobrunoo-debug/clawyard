@@ -470,6 +470,14 @@ class Tender extends Model
 
     public function getUrgencyBucketAttribute(): string
     {
+        // User feedback 2026-05-06: concursos já submetidos NÃO devem
+        // mostrar badge "em atraso" — proposta entregue, deadline original
+        // já não é actionable. Curto-circuita para um bucket dedicado
+        // 'submitted' que o template renderiza com tom neutro/azul.
+        if (in_array($this->status, self::DONE_FROM_USER_POV, true)) {
+            return 'submitted';
+        }
+
         $d = $this->days_to_deadline;
         if ($d === null)                                return 'unknown';
         // Overdue caps at OVERDUE_WINDOW_DAYS — anything older is "expired"

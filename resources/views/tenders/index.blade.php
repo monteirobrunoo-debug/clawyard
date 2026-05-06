@@ -9,6 +9,7 @@
      * in BOTH Europe/Lisbon and Europe/Luxembourg wall-clock (stored UTC).
      */
     $urgencyClasses = [
+        'submitted'=> 'bg-emerald-50 text-emerald-700 border-emerald-300',
         'expired'  => 'bg-gray-200 text-gray-800 border-gray-400 line-through',
         'overdue'  => 'bg-red-100 text-red-800 border-red-300',
         'critical' => 'bg-orange-100 text-orange-800 border-orange-300',
@@ -532,7 +533,9 @@
                                                 <div>{{ $t->deadline_lisbon->format('d/m/y H:i') }}</div>
                                                 <div class="mt-0.5">
                                                     <span class="inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
-                                                        @if($t->urgency_bucket === 'overdue')
+                                                        @if($t->urgency_bucket === 'submitted')
+                                                            ✓
+                                                        @elseif($t->urgency_bucket === 'overdue')
                                                             -{{ abs($t->days_to_deadline) }}d
                                                         @elseif($t->days_to_deadline !== null)
                                                             {{ $t->days_to_deadline }}d
@@ -855,7 +858,9 @@
                                         </td>
                                         <td class="px-3 py-2 align-middle whitespace-nowrap">
                                             <span class="inline-flex rounded border px-2 py-0.5 text-xs font-medium {{ $urgencyClasses[$t->urgency_bucket] ?? $urgencyClasses['unknown'] }}">
-                                                @if($t->urgency_bucket === 'expired')
+                                                @if($t->urgency_bucket === 'submitted')
+                                                    ✓ Submetido
+                                                @elseif($t->urgency_bucket === 'expired')
                                                     Expirado {{ abs($t->days_to_deadline) }}d
                                                 @elseif($t->urgency_bucket === 'overdue')
                                                     {{ abs($t->days_to_deadline) }}d atraso
