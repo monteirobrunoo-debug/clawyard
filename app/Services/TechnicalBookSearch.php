@@ -102,6 +102,24 @@ class TechnicalBookSearch
     }
 
     /**
+     * Extrai palavras úteis da query (filtra stopwords + curtas).
+     * Reusado pelo re-rank híbrido e pelo fallback ILIKE.
+     */
+    private function extractMeaningfulWords(string $query): array
+    {
+        $stopWords = [
+            'de','da','do','dos','das','para','que','com','em','na','no','os','as',
+            'um','uma','e','ou','a','o','é','se','ao','aos','for','of','the','and',
+            'how','to','by','at','on','in','is','are','what','why','when','como',
+            'qual','quando','onde','porque','sobre','about',
+        ];
+        $words = preg_split('/[\s,;:.!?()"\'\/]+/u', mb_strtolower($query)) ?: [];
+        return array_values(array_unique(array_filter($words, function ($w) use ($stopWords) {
+            return mb_strlen($w) >= 2 && !in_array($w, $stopWords, true);
+        })));
+    }
+
+    /**
      * Detecta automaticamente o domínio da query com base em palavras-chave
      * inequívocas. Devolve 'naval', 'soldadura' ou null (query mista/genérica
      * → não filtra, fallback ao ranking semântico puro).
@@ -178,6 +196,11 @@ class TechnicalBookSearch
 
             $literal = '[' . implode(',', array_map(fn($f) => sprintf('%.6f', $f), $vec)) . ']';
 
+            // Pull 3x mais candidatos do limit para o re-rank híbrido
+            // (semantic + keyword) escolher os melhores. O ranking final
+            // é mais robusto se houver ~12-20 candidatos na primeira passagem.
+            $candidatesCount = max(20, $limit * 4);
+
             $sql = "SELECT book_key, book_title, page_no, content, domain,
                            1 - (embedding <=> ?::vector) AS similarity
                     FROM technical_book_chunks
@@ -187,10 +210,37 @@ class TechnicalBookSearch
                     LIMIT ?";
 
             $bindings = $domain
-                ? [$literal, $domain, $literal, $limit]
-                : [$literal, $literal, $limit];
+                ? [$literal, $domain, $literal, $candidatesCount]
+                : [$literal, $literal, $candidatesCount];
 
             $rows = DB::select($sql, $bindings);
+
+            // ── Re-rank híbrido ───────────────────────────────────────
+            // semantic similarity é boa mas tem ranking ruim para queries
+            // com termos técnicos exactos (E7018 vs "low-hydrogen electrode"
+            // têm semantic similar mas o user que escreveu "E7018" quer o
+            // chunk com o código LITERAL no topo).
+            //
+            // Final score = 0.65 * semantic + 0.35 * exact_match_ratio
+            //   onde exact_match_ratio = palavras únicas da query que
+            //   aparecem case-insensitive no chunk / total palavras query
+            $words = $this->extractMeaningfulWords($query);
+            $totalWords = max(1, count($words));
+
+            $scored = array_map(function ($r) use ($words, $totalWords) {
+                $low = mb_strtolower((string) $r->content);
+                $hits = 0;
+                foreach ($words as $w) {
+                    if (str_contains($low, $w)) $hits++;
+                }
+                $exactScore = $hits / $totalWords;
+                $semScore   = (float) $r->similarity;
+                $r->final_score = 0.65 * $semScore + 0.35 * $exactScore;
+                return $r;
+            }, $rows);
+
+            usort($scored, fn($a, $b) => $b->final_score <=> $a->final_score);
+            $top = array_slice($scored, 0, $limit);
 
             return array_map(fn($r) => [
                 'book_key'   => (string) $r->book_key,
@@ -198,8 +248,8 @@ class TechnicalBookSearch
                 'page_no'    => (int) $r->page_no,
                 'domain'     => (string) $r->domain,
                 'snippet'    => $this->extractSnippet((string) $r->content, $query, 280),
-                'similarity' => round((float) $r->similarity, 3),
-            ], $rows);
+                'similarity' => round((float) $r->final_score, 3),  // score híbrido
+            ], $top);
         } catch (\Throwable $e) {
             \Log::warning('TechnicalBookSearch: semantic failed → keyword fallback', [
                 'error' => $e->getMessage(),
