@@ -116,6 +116,13 @@ return [
         'probe_sap' => env('ARIA_PROBE_SAP', false),
     ],
 
+    // ── Embeddings (biblioteca técnica + futuras integrações RAG) ────────
+    // Via NVIDIA NIM. Usa as mesmas credenciais services.nvidia.api_key.
+    // nv-embedqa-e5-v5 = 1024 dims · multilíngue · optimizado para retrieval.
+    'embedding' => [
+        'model' => env('EMBEDDING_MODEL', 'nvidia/nv-embedqa-e5-v5'),
+    ],
+
     // ── Eng. Repair / Work Report App standalone ─────────────────────────
     // Bridge HTTP entre clawyard e o app Python Flask em /Volumes/Public/
     // IT Division/PY_Work_Report/Work_Report_App/. Fornece vision API para

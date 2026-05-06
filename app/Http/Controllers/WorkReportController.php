@@ -46,6 +46,57 @@ class WorkReportController extends Controller
         return response()->json($result, ($result['ok'] ?? false) ? 200 : 502);
     }
 
+    /**
+     * Stream do PDF original do livro técnico, com hint de página
+     * via fragment #page=N (browsers nativos + PDF.js respeitam).
+     *
+     * Auth: any authenticated non-guest user. Path traversal blocked
+     * por whitelist do book_key contra a tabela technical_book_chunks.
+     *
+     *   GET /workreport/books/{book_key}.pdf?page=87
+     *
+     * Resposta tem Content-Disposition: inline para abrir no browser
+     * (não download). Browser navega o PDF para a página correcta
+     * via #page= fragment.
+     */
+    public function previewBook(Request $request, string $book_key): \Symfony\Component\HttpFoundation\Response
+    {
+        if (!Auth::check()) abort(401);
+        $page = max(1, min(2000, (int) $request->query('page', 1)));
+
+        // Resolve book_key → file path. Whitelist check: tem de existir
+        // pelo menos 1 chunk para este book_key. Bloqueia path traversal.
+        $exists = \App\Models\TechnicalBookChunk::where('book_key', $book_key)->exists();
+        if (!$exists) abort(404, 'Livro desconhecido');
+
+        // Procura o ficheiro físico nos sub-domains conhecidos
+        $base   = storage_path('app/biblioteca-tecnica');
+        $found  = null;
+        foreach (['soldadura', 'naval', 'outros'] as $dom) {
+            // Tenta nomes possíveis (com ou sem extensão sanitizada)
+            foreach (glob("{$base}/{$dom}/*.pdf") ?: [] as $candidate) {
+                $cand_key = preg_replace('/\.pdf$/i', '', basename($candidate));
+                $cand_key = preg_replace('/[^A-Za-z0-9_\-]/', '-', $cand_key);
+                if (mb_substr($cand_key, 0, 80) === $book_key) {
+                    $found = $candidate;
+                    break 2;
+                }
+            }
+        }
+
+        if (!$found || !is_readable($found)) {
+            abort(404, 'Ficheiro PDF não encontrado no servidor');
+        }
+
+        return response()->file($found, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . basename($found) . '"',
+            'X-Frame-Options'     => 'SAMEORIGIN',  // permite embed no clawyard
+            // page hint via fragment é client-side; cache 1h é seguro
+            'Cache-Control'       => 'private, max-age=3600',
+        ]);
+    }
+
     /** Pesquisa keyword na biblioteca técnica. */
     public function booksSearch(Request $request, TechnicalBookSearch $search): JsonResponse
     {

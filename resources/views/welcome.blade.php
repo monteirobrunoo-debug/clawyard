@@ -2858,6 +2858,19 @@ function openInOutlook(id) {
 function renderMarkdown(text) {
     if (typeof text !== 'string') return '';
 
+    // 0. Citações da biblioteca técnica → link clicável.
+    // Backend injecta tokens [BOOK:key:page] junto a citações.
+    // Usamos placeholder do mesmo tipo dos code-blocks (passo 1)
+    // para sobreviver ao esc() do passo 3.
+    const bookCites = [];
+    text = text.replace(/\[BOOK:([A-Za-z0-9_\-]+):(\d+)\]/g, (_, key, page) => {
+        const url = `/workreport/books/${encodeURIComponent(key)}.pdf?page=${page}#page=${page}`;
+        const html = `<a href="${url}" target="_blank" rel="noopener" class="book-citation" title="Abre o PDF na página ${page}" style="display:inline-block;background:#0891b2;color:#fff;padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600;text-decoration:none;margin:0 2px;vertical-align:baseline;">📖 p.${page}</a>`;
+        const idx = bookCites.length;
+        bookCites.push(html);
+        return `\x00BC${idx}\x00`;
+    });
+
     // 1. Protect fenced code blocks from esc()
     const codeBlocks = [];
     text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
@@ -2951,6 +2964,9 @@ function renderMarkdown(text) {
 
     // 8. Restore code blocks
     codeBlocks.forEach((block, i) => { html = html.replace(`\x00CB${i}\x00`, block); });
+
+    // 9. Restore book citations (passo 0)
+    bookCites.forEach((cite, i) => { html = html.replace(`\x00BC${i}\x00`, cite); });
 
     return html;
 }

@@ -617,6 +617,12 @@ Route::middleware(['auth'])->group(function () {
         ->name('workreport.analyzePhotos');
     Route::get ('/workreport/books/search',             [\App\Http\Controllers\WorkReportController::class, 'booksSearch'])
         ->name('workreport.books');
+    // Preview do PDF original — citation no chat clica e abre o livro
+    // na página citada (via #page= hint). Auth required, path-traversal
+    // bloqueado por whitelist do book_key contra a tabela.
+    Route::get ('/workreport/books/{book_key}.pdf',     [\App\Http\Controllers\WorkReportController::class, 'previewBook'])
+        ->where('book_key', '[A-Za-z0-9_\-]+')
+        ->name('workreport.books.preview');
     Route::post('/workreport/export.docx',              [\App\Http\Controllers\WorkReportController::class, 'exportDocx'])
         ->name('workreport.export');
     // JSON endpoint for the async SAP Opportunity card on the show page.

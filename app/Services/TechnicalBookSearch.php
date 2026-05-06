@@ -28,10 +28,18 @@ class TechnicalBookSearch
         $query = trim($query);
         if (mb_strlen($query) < 3) return [];
 
-        // Tokenizer simples — split por espaços + pontuação, mantém códigos
-        // tipo E7018, P/N 1290, MTU-16V4000 (números + letras OK).
-        // Filtra palavras curtas comuns ("de", "da", "do", "para", "que")
-        // que iam matar a relevância do ranking por hit count.
+        // 1) Semantic search via pgvector (se disponível).
+        //    Cosine distance via operador <=> (pgvector). Score baixo
+        //    = mais semelhante. ORDER BY embedding <=> query_vector ASC.
+        //    Cai para keyword search se NVIDIA não responder ou se
+        //    chunks ainda não têm embedding gerado.
+        $semantic = $this->semanticSearch($query, $limit, $domain);
+        if (!empty($semantic)) return $semantic;
+
+        // 2) Fallback keyword (ILIKE OR'd por palavra) — robusto para
+        //    códigos alfa-numéricos (E7018, P/N 12345). Mantido para
+        //    quando o pgvector não está disponível ou para queries
+        //    técnicas onde o exact-match supera semantics.
         $stopWords = ['de','da','do','dos','das','para','que','com','em','na','no','os','as',
                       'um','uma','e','ou','a','o','é','se','ao','aos','for','of','the','and'];
         $words = preg_split('/[\s,;:.!?()"\'\/]+/u', mb_strtolower($query)) ?: [];
@@ -55,7 +63,7 @@ class TechnicalBookSearch
 
         // Pull mais que limit (até 20) e re-rank em PHP por nº de matches.
         // Para 1.736 chunks é instantâneo; para 100k+ adicionar índice tsvector.
-        $candidates = $q->limit(20)->get(['book_title', 'page_no', 'content', 'domain'])->all();
+        $candidates = $q->limit(20)->get(['book_key', 'book_title', 'page_no', 'content', 'domain'])->all();
 
         // Ranking PHP: contagem de palavras únicas que aparecem no chunk
         usort($candidates, function ($a, $b) use ($words) {
@@ -75,12 +83,70 @@ class TechnicalBookSearch
         return array_map(function ($r) use ($query) {
             $content = (string) ($r->content ?? '');
             return [
+                'book_key'   => (string) ($r->book_key   ?? ''),
                 'book_title' => (string) ($r->book_title ?? ''),
                 'page_no'    => (int)    ($r->page_no    ?? 0),
                 'domain'     => (string) ($r->domain     ?? ''),
                 'snippet'    => $this->extractSnippet($content, $query, 280),
             ];
         }, $rows);
+    }
+
+    /**
+     * Pesquisa vectorial via pgvector (cosine similarity).
+     * Usa NVIDIA NIM nv-embedqa-e5-v5 (1024 dims) para gerar o embedding
+     * da query e ordena por proximidade semântica.
+     *
+     * Devolve [] em qualquer falha (NVIDIA down, chunks sem embedding,
+     * pgvector inactivo) → caller cai no keyword fallback.
+     */
+    private function semanticSearch(string $query, int $limit, ?string $domain): array
+    {
+        try {
+            if (DB::connection()->getDriverName() !== 'pgsql') return [];
+
+            // Verificar se há chunks com embedding (evita query desnecessária)
+            $hasEmbeddings = DB::selectOne(
+                'SELECT EXISTS(SELECT 1 FROM technical_book_chunks WHERE embedding IS NOT NULL LIMIT 1) as has'
+            );
+            if (!($hasEmbeddings->has ?? false)) return [];
+
+            $emb = app(\App\Services\EmbeddingService::class);
+            if (!$emb->isAvailable()) return [];
+
+            $vec = $emb->embed($query, 'query');
+            if (!$vec || count($vec) === 0) return [];
+
+            $literal = '[' . implode(',', array_map(fn($f) => sprintf('%.6f', $f), $vec)) . ']';
+
+            $sql = "SELECT book_key, book_title, page_no, content, domain,
+                           1 - (embedding <=> ?::vector) AS similarity
+                    FROM technical_book_chunks
+                    WHERE embedding IS NOT NULL
+                    " . ($domain ? "AND domain = ?" : "") . "
+                    ORDER BY embedding <=> ?::vector ASC
+                    LIMIT ?";
+
+            $bindings = $domain
+                ? [$literal, $domain, $literal, $limit]
+                : [$literal, $literal, $limit];
+
+            $rows = DB::select($sql, $bindings);
+
+            return array_map(fn($r) => [
+                'book_key'   => (string) $r->book_key,
+                'book_title' => (string) $r->book_title,
+                'page_no'    => (int) $r->page_no,
+                'domain'     => (string) $r->domain,
+                'snippet'    => $this->extractSnippet((string) $r->content, $query, 280),
+                'similarity' => round((float) $r->similarity, 3),
+            ], $rows);
+        } catch (\Throwable $e) {
+            \Log::warning('TechnicalBookSearch: semantic failed → keyword fallback', [
+                'error' => $e->getMessage(),
+            ]);
+            return [];
+        }
     }
 
     /**
@@ -110,15 +176,20 @@ class TechnicalBookSearch
 
         $lines = ['## 📚 BIBLIOTECA TÉCNICA PARTYARD — trechos relevantes para a tua resposta:'];
         foreach ($hits as $hit) {
+            // Token machine-readable [BOOK:key:page] permite ao frontend
+            // converter automaticamente em link clicável que abre o PDF
+            // na página exacta.
+            $token = '[BOOK:' . ($hit['book_key'] ?? '') . ':' . ($hit['page_no'] ?? 0) . ']';
             $lines[] = sprintf(
-                "\n**%s** · p.%d · _%s_\n> %s",
+                "\n**%s** · p.%d · _%s_ %s\n> %s",
                 $hit['book_title'],
                 $hit['page_no'],
                 $hit['domain'],
+                $token,
                 $hit['snippet']
             );
         }
-        $lines[] = "\n_Cita SEMPRE a fonte ao usar estes trechos: ex \"(Modenesi, p.87)\". Se nenhum trecho responder à pergunta exacta, di-lo._";
+        $lines[] = "\n**Citação:** ao referir um destes trechos no teu output, INCLUI o token machine-readable `[BOOK:key:page]` exactamente como aparece acima — o frontend converte-o em link clicável que abre o PDF na página certa. Exemplo: `Segundo Modenesi (p.87) [BOOK:01-metalurgia-da-soldagem-modenesi-marques-santos:87], o pré-aquecimento...`";
         return implode("\n", $lines);
     }
 }
