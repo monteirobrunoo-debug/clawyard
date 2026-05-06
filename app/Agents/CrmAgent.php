@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\SapService;
@@ -33,6 +34,7 @@ class CrmAgent implements AgentInterface
     use ShippingSkillTrait;
     use WebSearchTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $contextKey  = 'crm_intel';
     protected array  $contextTags = ['CRM','oportunidade','pipeline','SAP','cliente','negócio','proposta','contrato','vendedor'];
     protected string $systemPrompt = '';
@@ -767,13 +769,23 @@ SPECIALTY;
         // Detect outreach intent so supplier emails flow through unredacted.
         $bypass = $this->isOutreachIntent($this->messageText($message));
 
+        // Biblioteca técnica — Marta extrai oportunidades de emails de
+        // clientes que descrevem equipamentos (bombas, válvulas, motores,
+        // soldaduras). Os trechos da biblioteca ajudam a:
+        //   • identificar correctamente a categoria SAP
+        //     (cat 4 prime movers vs cat 5 auxiliary vs cat 9 electrical)
+        //   • reconhecer terminologia técnica (E7018, MIG/MAG, MTU 4000)
+        //   • desambiguar pedidos vagos com base em conhecimento técnico
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 2);
+        $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message, $bypass),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 4096,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
@@ -849,14 +861,16 @@ SPECIALTY;
         $recentHistory = array_slice($history, -self::CONTEXT_WINDOW);
         $messages      = array_merge($recentHistory, [['role' => 'user', 'content' => $message]]);
 
-        $bypass = $this->isOutreachIntent($rawText);
+        $bypass  = $this->isOutreachIntent($rawText);
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 2);
+        $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message, $bypass),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 4096,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
