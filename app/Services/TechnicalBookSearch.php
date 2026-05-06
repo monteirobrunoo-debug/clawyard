@@ -28,6 +28,15 @@ class TechnicalBookSearch
         $query = trim($query);
         if (mb_strlen($query) < 3) return [];
 
+        // Auto-detect do domínio quando o caller não força um.
+        // 1.312 chunks soldadura vs 424 naval — sem filter, queries naval
+        // ("estabilidade do navio") são dominadas por chunks de soldadura
+        // por volume. O auto-detect olha para palavras-chave inequívocas
+        // do query e força o filter no domínio certo.
+        if ($domain === null) {
+            $domain = $this->autoDetectDomain($query);
+        }
+
         // 1) Semantic search via pgvector (se disponível).
         //    Cosine distance via operador <=> (pgvector). Score baixo
         //    = mais semelhante. ORDER BY embedding <=> query_vector ASC.
@@ -90,6 +99,56 @@ class TechnicalBookSearch
                 'snippet'    => $this->extractSnippet($content, $query, 280),
             ];
         }, $rows);
+    }
+
+    /**
+     * Detecta automaticamente o domínio da query com base em palavras-chave
+     * inequívocas. Devolve 'naval', 'soldadura' ou null (query mista/genérica
+     * → não filtra, fallback ao ranking semântico puro).
+     *
+     * Heurística:
+     *   • Conta hits de keywords navais vs soldadura
+     *   • Se uma classe domina por 2x ou mais → força esse domínio
+     *   • Empate ou ambos zero → null (sem filtro)
+     */
+    private function autoDetectDomain(string $query): ?string
+    {
+        $lower = mb_strtolower($query);
+
+        $navalKeywords = [
+            'navio','vessel','casco','hull','estabilidade','displacement','deslocamento',
+            'plimsoll','load line','calado','draft','convés','deck','propulsor','propeller',
+            'leme','rudder','arquitectura naval','naval architecture','imo','solas','marpol',
+            'iacs','dnv','lloyd','class society','classification','tonelagem','ton',
+            'estaleiro','shipyard','drydock','dique','launching','dock',
+            'roll','pitch','yaw','metacentro','metacentric','flutuação','buoyancy',
+        ];
+
+        $soldaduraKeywords = [
+            'soldadura','soldagem','welding','weld','solda','wps','pqr','aws','iso 15614','asme ix',
+            'mma','smaw','tig','gtaw','mig','mag','gmaw','fcaw','saw','plasma',
+            'preheat','pré-aquecimento','pre aquecimento','pwht','interpass','metal de adição',
+            'electrode','eléctrodo','consumível','filler metal',
+            'e6013','e7018','e7016','e308l','er70s','er316l',
+            'cordão','cord','bead','passe','pass','junta soldada','weld joint',
+            'inclusão','porosidade','fissura térmica','crack','trinca','heat affected',
+            'metalurgia','metallurgy','austenita','ferrita','martensita',
+        ];
+
+        $navalScore     = 0;
+        $soldaduraScore = 0;
+        foreach ($navalKeywords as $kw)     { if (str_contains($lower, $kw)) $navalScore++; }
+        foreach ($soldaduraKeywords as $kw) { if (str_contains($lower, $kw)) $soldaduraScore++; }
+
+        // Domínio forte: 2x mais hits do que o outro (e pelo menos 1)
+        if ($navalScore >= 1 && $navalScore >= 2 * max(1, $soldaduraScore)) {
+            return 'naval';
+        }
+        if ($soldaduraScore >= 1 && $soldaduraScore >= 2 * max(1, $navalScore)) {
+            return 'soldadura';
+        }
+
+        return null;
     }
 
     /**
