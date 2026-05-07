@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use Illuminate\Support\Facades\Log;
@@ -23,6 +24,7 @@ class CapitaoAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -153,12 +155,16 @@ SPECIALTY;
             ['role' => 'user', 'content' => $message],
         ]);
 
+        // Biblioteca técnica naval (semantic + keyword via pgvector)
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 3, 'naval');
+        $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -177,13 +183,19 @@ SPECIALTY;
             ['role' => 'user', 'content' => $message],
         ]);
 
+        // Biblioteca técnica naval — Capitão Porto cita IMO/SOLAS/manutenção a partir
+        // dos manuais ingeridos (Maritime Engineering Reference, Modern Marine Engineer
+        // Manual I/II, Marine Propulsion Simulation, etc.).
+        $bookCtx  = $this->augmentWithTechnicalBooks($message, 3, 'naval');
+        $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
