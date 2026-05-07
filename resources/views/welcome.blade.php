@@ -477,11 +477,37 @@
         .pdf-export-btn:hover { opacity:1 !important; border-color:#76b900; color:#76b900; }
         .message.ai:hover .pdf-export-btn { opacity:0.5; }
 
+        /* Mobile drawer button — só visível em ecrãs estreitos */
+        #mobile-menu-btn { display:none; background:var(--bg3); border:1px solid var(--border2); color:var(--text); font-size:16px; padding:5px 10px; border-radius:8px; cursor:pointer; flex-shrink:0; }
+        #mobile-menu-btn:hover { background:#1f1f1f; }
+
+        /* Drawer (overlay) — apresenta os links da hdr-right + agent grid em mobile */
+        #mobile-drawer-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:998; opacity:0; transition:opacity .2s; }
+        #mobile-drawer-backdrop.open { display:block; opacity:1; }
+        #mobile-drawer {
+            position:fixed; top:0; right:0; bottom:0; width:min(320px, 88vw);
+            background:var(--bg2); border-left:1px solid var(--border);
+            z-index:999; transform:translateX(100%); transition:transform .25s ease;
+            display:flex; flex-direction:column; overflow-y:auto;
+        }
+        #mobile-drawer.open { transform:translateX(0); box-shadow:-8px 0 30px rgba(0,0,0,.5); }
+        #mobile-drawer .md-header { padding:14px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+        #mobile-drawer .md-header span { font-size:13px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; }
+        #mobile-drawer .md-close { background:none; border:none; color:var(--muted); font-size:22px; cursor:pointer; padding:0 4px; line-height:1; }
+        #mobile-drawer .md-close:hover { color:var(--text); }
+        #mobile-drawer .md-section { padding:12px 14px; border-bottom:1px solid var(--border); }
+        #mobile-drawer .md-section .md-title { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1.2px; margin-bottom:8px; }
+        #mobile-drawer .md-link { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; color:var(--text); text-decoration:none; font-size:14px; background:var(--bg3); border:1px solid var(--border); margin-bottom:6px; cursor:pointer; }
+        #mobile-drawer .md-link:hover { background:#1f1f1f; border-color:var(--border2); }
+        #mobile-drawer .md-link.danger { border-color:#ff6600; color:#ff8844; background:#1a0a00; }
+        #mobile-drawer .md-link.primary { border-color:#1e3300; color:#76b900; background:#0d1a00; font-weight:700; }
+
         /* ══════════════════════════════════════
-           MOBILE — max-width: 768px
-           Focus: agent select visible, input usable
+           MOBILE / TABLET — max-width: 1024px
+           Antes era 768 (deixava sidebar visível em iPad portrait
+           e landscape phones — ~50% do ecrã).
            ══════════════════════════════════════ */
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
 
             /* Fix iOS/Android viewport height (browser bar issue) */
             body { height: 100dvh; height: -webkit-fill-available; }
@@ -494,7 +520,7 @@
                 min-height: 52px;
             }
 
-            /* Esconde badge "AI" e botão toggle panel */
+            /* Esconde badge "AI" e botão toggle panel original (substituído pelo drawer) */
             .badge { display: none; }
             #toggle-panel { display: none; }
             #model-badge { display: none; }
@@ -511,16 +537,20 @@
                 max-width: 100%;
             }
 
-            /* Esconde todos os links de navegação no header */
+            /* Esconde links da hdr-right (ficam dentro do drawer) */
             .hdr-right {
                 display: none;
             }
 
-            /* ── SIDEBAR: escondida automaticamente em mobile ── */
+            /* Mostra o botão hamburger / kebab que abre o drawer */
+            #mobile-menu-btn { display: inline-flex; align-items:center; justify-content:center; }
+
+            /* ── SIDEBAR: escondida em mobile/tablet (ocupava metade do ecrã) ── */
             #activity-panel {
                 width: 0 !important;
                 min-width: 0 !important;
                 border-right: none !important;
+                border-left: none !important;
                 overflow: hidden !important;
             }
 
@@ -691,6 +721,7 @@
         <option value="workreport">🛠️ Eng. Repair</option>
     </select>
     <button id="share-agent-btn" onclick="openShareModal()" title="Partilhar este agente com um cliente" style="background:var(--agent-color,#76b900);border:none;color:#000;font-size:12px;font-weight:800;padding:5px 14px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:.15s;display:flex;align-items:center;gap:5px;flex-shrink:0;margin-left:auto;">🔗 Share</button>
+    <button id="mobile-menu-btn" title="Menu" aria-label="Abrir menu">☰</button>
     <div class="hdr-right" style="margin-left:8px;">
         <span id="model-badge">pronto</span>
         <a href="/discoveries" title="Descobertas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🔬 Descobertas</a>
@@ -719,6 +750,34 @@
         <button id="toggle-panel" title="Toggle activity panel">⚡</button>
     </div>
 </header>
+
+<!-- ── MOBILE DRAWER (overlay com links da hdr-right + activity panel) ── -->
+<div id="mobile-drawer-backdrop" onclick="closeMobileDrawer()"></div>
+<aside id="mobile-drawer" aria-hidden="true">
+    <div class="md-header">
+        <span>☰ Menu</span>
+        <button class="md-close" onclick="closeMobileDrawer()" aria-label="Fechar menu">✕</button>
+    </div>
+    <div class="md-section">
+        <div class="md-title">Acções</div>
+        <button class="md-link primary" onclick="clearHistory(); closeMobileDrawer();">🗑️ Nova conversa</button>
+        <button class="md-link" onclick="document.getElementById('toggle-panel').click(); closeMobileDrawer();">⚡ Painel de actividade</button>
+        <button class="md-link" onclick="document.getElementById('theme-toggle').click(); closeMobileDrawer();">🌓 Alternar tema</button>
+    </div>
+    <div class="md-section">
+        <div class="md-title">Navegação</div>
+        <a class="md-link" href="/briefing">📊 Briefing Executivo</a>
+        <a class="md-link" id="md-history-link" href="/conversations">💬 Histórico</a>
+        <a class="md-link" href="/discoveries">🔬 Descobertas</a>
+        <a class="md-link" href="/patents/library">🏛️ Patentes</a>
+        <a class="md-link" href="/reports">📋 Reports</a>
+        <a class="md-link" href="/schedules">🗓️ Schedule</a>
+        <a class="md-link" href="/shares">⚙️ Shares</a>
+        @if(Auth::user()->isAdmin())
+        <a class="md-link" href="/admin/users">⚙️ Admin</a>
+        @endif
+    </div>
+</aside>
 
 <!-- ── MAIN ── -->
 <div class="main">
@@ -1453,6 +1512,39 @@ agentSelect.addEventListener('change', () => {
 document.getElementById('toggle-panel').addEventListener('click', () => {
     panelOpen = !panelOpen;
     actPanel.classList.toggle('collapsed', !panelOpen);
+});
+
+// ── Mobile drawer (hamburger menu para ≤1024px) ──
+// O drawer aparece como overlay desde a direita e contém os links da hdr-right
+// (que ficam escondidos em mobile) + acções rápidas. Backdrop clica → fecha.
+window.openMobileDrawer = function () {
+    const d = document.getElementById('mobile-drawer');
+    const b = document.getElementById('mobile-drawer-backdrop');
+    if (!d || !b) return;
+    // Sincroniza o link de histórico com o agente actual (mesma lógica da hdr-right)
+    const hist = document.getElementById('history-link');
+    const mdHist = document.getElementById('md-history-link');
+    if (hist && mdHist) mdHist.href = hist.href;
+    d.classList.add('open');
+    d.setAttribute('aria-hidden', 'false');
+    b.classList.add('open');
+    document.body.style.overflow = 'hidden';
+};
+window.closeMobileDrawer = function () {
+    const d = document.getElementById('mobile-drawer');
+    const b = document.getElementById('mobile-drawer-backdrop');
+    if (!d || !b) return;
+    d.classList.remove('open');
+    d.setAttribute('aria-hidden', 'true');
+    b.classList.remove('open');
+    document.body.style.overflow = '';
+};
+document.getElementById('mobile-menu-btn')?.addEventListener('click', openMobileDrawer);
+// ESC fecha
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('mobile-drawer')?.classList.contains('open')) {
+        closeMobileDrawer();
+    }
 });
 
 // ── Voice input (Web Speech API) ─────────────────────────────────────────────
