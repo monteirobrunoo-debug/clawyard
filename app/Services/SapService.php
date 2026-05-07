@@ -841,14 +841,35 @@ class SapService
             ]
         ];
 
-        // SalesPerson (SAP EmployeeID)
+        // SalesPerson (SAP SalesEmployeeCode = OSLP.SlpCode)
         if (!empty($data['SalesPerson'])) {
             $payload['SalesPerson'] = (int) $data['SalesPerson'];
+
+            // ── Proprietário (OwnerCode) = mesmo recurso humano que o Vendedor ──
+            // Pedido do utilizador 2026-05-07: ao abrir oportunidades via MARTA
+            // o campo "Proprietário" ficava em branco no SAP. Política: o
+            // proprietário é sempre o vendedor da OP. OwnerCode → OHEM.empID,
+            // SalesPerson → OSLP.SlpCode. EmployeesInfo faz a ponte (cached 24h).
+            $ownerEmpId = $this->resolveOwnerCodeForSalesPerson((int) $data['SalesPerson']);
+            if ($ownerEmpId !== null) {
+                $payload['OwnerCode'] = $ownerEmpId;
+            }
         }
 
         // ContactPerson (SAP CntctCode)
         if (!empty($data['ContactPerson'])) {
             $payload['ContactPerson'] = (int) $data['ContactPerson'];
+        }
+
+        // ── UDF "Status Oportunidade" — sempre "Em aberto" ao criar via MARTA ──
+        // Pedido do utilizador 2026-05-07: o separador inferior do form (UDF
+        // custom OOPR.U_StatusOp ou similar) ficava vazio. Política: ao criar
+        // oportunidade por aqui, o estado custom arranca em "Em aberto".
+        // Discover é cacheado 24h e o retry abaixo lida com SAP a rejeitar
+        // o campo se a UDF não existir nesta instância.
+        [$statusUdfField, $statusUdfOpenValue] = $this->discoverStatusOportunidadeField();
+        if ($statusUdfField && $statusUdfOpenValue !== null) {
+            $payload[$statusUdfField] = $statusUdfOpenValue;
         }
 
         // Predicted Closing Date — explicit date OR today + ClosingDays.
@@ -903,6 +924,38 @@ class SapService
             unset($filtered['Source']);
             $result = $this->post('SalesOpportunities', $filtered);
             if ($result)  $this->lastError = '';          // success — clear error
+            elseif ($this->lastError === '') $this->lastError = $originalError;
+        }
+
+        // Retry 1b: Status UDF rejeitado (UDF não existe nesta instância OU
+        // valor "Em aberto" não está nos ValidValues). Dropa o campo e
+        // invalida cache para próxima criação re-descobrir.
+        if (!$result && $statusUdfField && isset($filtered[$statusUdfField])) {
+            $err = (string) $this->lastError;
+            $statusErr = str_contains($err, $statusUdfField)
+                || str_contains(strtolower($err), 'valid value')
+                || str_contains(strtolower($err), 'user defined field');
+            if ($statusErr) {
+                $originalError = $this->lastError;
+                Log::warning("CRM: retrying without Status UDF '{$statusUdfField}' (SAP: {$originalError})");
+                unset($filtered[$statusUdfField]);
+                Cache::forget('sap_udf_status_oportunidade_v2'); // re-descobre na próxima
+                $result = $this->post('SalesOpportunities', $filtered);
+                if ($result)  $this->lastError = '';
+                elseif ($this->lastError === '') $this->lastError = $originalError;
+            }
+        }
+
+        // Retry 1c: OwnerCode inválido (ex.: empID resolvido não está activo
+        // ou a instância não usa Owner em SalesOpportunities).
+        if (!$result && isset($filtered['OwnerCode'])
+            && (str_contains(strtolower((string) $this->lastError), 'owner')
+                || str_contains(strtolower((string) $this->lastError), 'employee'))) {
+            $originalError = $this->lastError;
+            Log::warning("CRM: retrying without OwnerCode (SAP: {$originalError})");
+            unset($filtered['OwnerCode']);
+            $result = $this->post('SalesOpportunities', $filtered);
+            if ($result)  $this->lastError = '';
             elseif ($this->lastError === '') $this->lastError = $originalError;
         }
 
@@ -1142,39 +1195,116 @@ class SapService
 
     /**
      * Auto-discover the UDF field name for "Status Oportunidade" in the OOPR table.
-     * Caches for 24 h — only queries SAP once per deployment.
+     * Caches for 24 h — só interroga o SAP uma vez por deploy.
      *
-     * Returns the API field name (e.g. "U_StatusOp") or null if not found.
+     * Devolve [field, value] onde field = nome da coluna API (ex.
+     * "U_StatusOp") e value = código do "Em aberto" descoberto a partir
+     * dos ValidValuesMD do UDF. Se não encontrar UDF de status, devolve
+     * [null, null]. Se encontrar campo mas não achar valor "aberto",
+     * devolve [field, null] — o caller fica responsável por decidir se
+     * envia algo.
+     *
+     * @return array{0: ?string, 1: ?string}
      */
-    public function discoverStatusOportunidadeField(): ?string
+    public function discoverStatusOportunidadeField(): array
     {
-        $cacheKey = 'sap_udf_status_oportunidade';
+        $cacheKey = 'sap_udf_status_oportunidade_v2';
 
         if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey) ?: null;  // '' stored = not found
+            return Cache::get($cacheKey) ?: [null, null];
         }
 
         try {
             $data = $this->get('UserFieldsMD', [
                 '$filter' => "TableName eq 'OOPR'",
-                '$select' => 'FieldID,FieldName,Description',
+                '$select' => 'FieldID,FieldName,Description,ValidValuesMD',
                 '$top'    => 50,
             ]);
 
             foreach ($data['value'] ?? [] as $udf) {
                 $desc = strtolower($udf['Description'] ?? '');
-                if (str_contains($desc, 'status')) {
+                $name = strtolower($udf['FieldName'] ?? '');
+                // Match descrição PT/BR ("Status Oportunidade"/"Estado Oportunidade")
+                // ou nome técnico do campo. Excluímos "status" do core (não vem aqui
+                // porque já filtrámos por OOPR + UDF only).
+                if (
+                    str_contains($desc, 'status') || str_contains($desc, 'estado')
+                    || str_contains($name, 'status') || str_contains($name, 'estado')
+                ) {
                     $apiField = 'U_' . $udf['FieldName'];
-                    Cache::put($cacheKey, $apiField, now()->addHours(24));
-                    Log::info("CRM: discovered Status Oportunidade UDF field: {$apiField}");
-                    return $apiField;
+
+                    // Procurar valor "Em aberto" / "Aberto" / "Open" nos ValidValuesMD
+                    $openValue = null;
+                    foreach (($udf['ValidValuesMD'] ?? []) as $vv) {
+                        $vDesc = strtolower($vv['Description'] ?? '');
+                        if (str_contains($vDesc, 'aberto') || str_contains($vDesc, 'open')) {
+                            $openValue = (string) ($vv['Value'] ?? '');
+                            break;
+                        }
+                    }
+                    // Fallback: se UDF não tem ValidValues definidos (alfanumérico
+                    // livre), assume que o texto "Em aberto" é o valor a inserir.
+                    if ($openValue === null && empty($udf['ValidValuesMD'])) {
+                        $openValue = 'Em aberto';
+                    }
+
+                    $tuple = [$apiField, $openValue];
+                    Cache::put($cacheKey, $tuple, now()->addHours(24));
+                    Log::info("CRM: Status Oportunidade UDF descoberto", [
+                        'field' => $apiField,
+                        'value' => $openValue,
+                    ]);
+                    return $tuple;
                 }
             }
         } catch (\Throwable $e) {
             Log::warning("CRM: could not discover Status UDF: " . $e->getMessage());
         }
 
-        Cache::put($cacheKey, '', now()->addHours(1));  // negative cache 1 h
+        Cache::put($cacheKey, [null, null], now()->addHours(1));  // negative cache 1 h
+        return [null, null];
+    }
+
+    /**
+     * Resolve OwnerCode (OHEM.empID) for a given SalesPerson (OSLP.SlpCode).
+     * O campo "Proprietário" no SAP B1 referencia OHEM, não OSLP — quando o
+     * utilizador escolhe um vendedor na MARTA, queremos que o documento fique
+     * "owned" pelo mesmo recurso humano. Cache 24 h por SlpCode.
+     *
+     * Devolve null se não encontrar (vendedor sem registo HR linkado).
+     */
+    public function resolveOwnerCodeForSalesPerson(int $slpCode): ?int
+    {
+        if ($slpCode <= 0) return null;
+
+        $cacheKey = "sap_owner_for_slp_{$slpCode}";
+        if (Cache::has($cacheKey)) {
+            $v = Cache::get($cacheKey);
+            return $v ? (int) $v : null;
+        }
+
+        try {
+            $data = $this->get('EmployeesInfo', [
+                '$filter' => "SalesPersonCode eq {$slpCode}",
+                '$select' => 'EmployeeID,SalesPersonCode,FirstName,LastName',
+                '$top'    => 1,
+            ]);
+
+            $row = $data['value'][0] ?? null;
+            $empId = $row && isset($row['EmployeeID']) ? (int) $row['EmployeeID'] : 0;
+
+            Cache::put($cacheKey, $empId, now()->addHours(24));
+            if ($empId > 0) {
+                Log::info("CRM: OwnerCode resolved", ['slpCode' => $slpCode, 'empId' => $empId]);
+                return $empId;
+            }
+        } catch (\Throwable $e) {
+            Log::warning("CRM: resolveOwnerCodeForSalesPerson failed", [
+                'slpCode' => $slpCode,
+                'error'   => $e->getMessage(),
+            ]);
+        }
+
         return null;
     }
 
