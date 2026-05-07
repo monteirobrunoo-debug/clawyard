@@ -427,67 +427,68 @@ SPECIALTY;
             // Proceed anyway — some CI apps set the session cookie on login even when
             // the response body still contains the form; the next GET will reveal success.
 
-            // Step 3: Search by defense/military keywords — collect up to 20 unique results
-            $keywords = [
-                // Defesa & Forças Armadas
-                'defesa', 'militar', 'marinha', 'força aérea', 'exército', 'NATO', 'armamento',
-                // Aviação & Aeronáutica
-                'aeronave', 'aviação', 'helicóptero', 'aeronáutica', 'MRO',
-                // Naval & Marítimo
-                'navio', 'naval', 'propulsão', 'embarcação',
-                // Motores & Peças
-                'motor', 'peças', 'sobressalentes', 'manutenção', 'revisão geral', 'overhaul',
-                // Equipamentos Médicos
-                'equipamento médico', 'médico', 'hospitalar', 'dispositivos médicos',
-                // Destruição de Documentos & Segurança
-                'destruição de documentos', 'destruidoras', 'fragmentação', 'trituração',
-                // Simulação & IT
-                'simulação', 'simulador', 'cibersegurança', 'tecnologia',
-                // Lubrificantes & Químicos
-                'lubrificantes', 'óleos', 'fluidos',
-            ];
             $seen  = [];
             $lines = [];
+            $listingUrl = $baseUrl . 'procedimentos_fornecedor/procedimentos_fornecedor_c';
 
-            $kwRequests = 0;
-            foreach ($keywords as $kw) {
-                if (count($lines) >= 20 || $kwRequests >= 8) break; // max 8 HTTP requests
-                $kwRequests++;
+            // ── PASSO 1: 3 folhas da listagem unfiltered (sempre, política do user) ──
+            $pageRequests = 0;
+            foreach ($this->acingovPagedUrls($listingUrl, 3) as $idx => $url) {
                 try {
-                    $resp = $client->get($baseUrl . 'procedimentos_fornecedor/procedimentos_fornecedor_c', [
-                        'query' => ['object' => $kw],
-                    ]);
+                    $resp = $client->get($url);
                     $html = $resp->getBody()->getContents();
-
-                    // If redirected to login, credentials failed
                     if (stripos($html, 'name="user"') !== false && stripos($html, 'name="pass"') !== false) {
                         Log::info('Acingov: credenciais inválidas ou sessão expirou');
                         return '';
                     }
+                    $rows = $this->parseAcingovTable($html, $seen, true);
+                    $lines = array_merge($lines, $rows);
+                    $pageRequests++;
+                } catch (\Throwable $e) {
+                    Log::info("Acingov [auth/page" . ($idx + 1) . "]: " . $e->getMessage());
+                }
+            }
 
-                    $rows  = $this->parseAcingovTable($html, $seen, true);
+            // ── PASSO 2: keyword search suplementar (apanha rows mais antigos) ──
+            $keywords   = [
+                'defesa', 'militar', 'marinha', 'aeronáutica',
+                'naval', 'motor', 'overhaul', 'sobressalente',
+            ];
+            $kwRequests = 0;
+            foreach ($keywords as $kw) {
+                if ($kwRequests >= 6 || count($lines) >= 100) break;
+                $kwRequests++;
+                try {
+                    $resp = $client->get($listingUrl, ['query' => ['object' => $kw]]);
+                    $html = $resp->getBody()->getContents();
+                    if (stripos($html, 'name="user"') !== false && stripos($html, 'name="pass"') !== false) break;
+                    $rows = $this->parseAcingovTable($html, $seen, true);
                     $lines = array_merge($lines, $rows);
                 } catch (\Throwable $e) {
                     Log::info("Acingov [auth/{$kw}]: " . $e->getMessage());
                 }
             }
 
-            // If keywords returned nothing, fall back to latest 20 unfiltered
-            if (empty($lines)) {
-                try {
-                    $resp = $client->get($baseUrl . 'procedimentos_fornecedor/procedimentos_fornecedor_c');
-                    $html = $resp->getBody()->getContents();
-                    if (stripos($html, 'name="user"') === false) {
-                        $lines = $this->parseAcingovTable($html, $seen, true);
-                    }
-                } catch (\Throwable $e) {
-                    Log::info('Acingov [auth/fallback]: ' . $e->getMessage());
-                }
-            }
-
-            $lines = array_slice($lines, 0, 40);
             if (empty($lines)) return '';
-            return "=== ACINGOV — Concursos (autenticado, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $lines);
+
+            // ── PASSO 3: ordenar por score de relevância PartYard (desc) ──
+            $scored = array_map(fn($l) => ['line' => $l, 'score' => $this->scoreAcingovRelevance($l)], $lines);
+            usort($scored, fn($a, $b) => $b['score'] <=> $a['score']);
+
+            $finalLines = array_map(function ($r) {
+                return $r['score'] > 0
+                    ? $r['line'] . " | RELEVANCE: {$r['score']}"
+                    : $r['line'];
+            }, array_slice($scored, 0, 40));
+
+            $hits = array_filter($scored, fn($r) => $r['score'] > 0);
+            Log::info("Acingov [auth]: 3 folhas analisadas — " . count($lines) . " rows, " . count($hits) . " com score>0", [
+                'pages_fetched' => $pageRequests,
+                'kw_requests'   => $kwRequests,
+                'top_score'     => $scored[0]['score'] ?? 0,
+            ]);
+
+            return "=== ACINGOV — Concursos (autenticado, 3 folhas analisadas, ordenadas por relevância PartYard, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $finalLines);
 
         } catch (\Throwable $e) {
             Log::info('Acingov [login]: ' . $e->getMessage());
@@ -495,33 +496,129 @@ SPECIALTY;
         }
     }
 
+    /**
+     * Pesos de relevância para HP-Group / PartYard. Quanto mais pesado, mais
+     * "core" da actividade do grupo é. Score = soma de pesos × ocorrências
+     * (case-insensitive) no objeto + entidade do procedimento.
+     *
+     * Pedido do utilizador 2026-05-07: "analisar sempre 3 folhas e mostrar por
+     * relevância" — esta tabela é a heurística que ordena as 3 páginas.
+     */
+    protected const ACINGOV_RELEVANCE_WEIGHTS = [
+        // ── Core defense / military (peso 10) ──
+        'defesa' => 10, 'militar' => 10, 'marinha' => 10, 'exército' => 10,
+        'força aérea' => 10, 'forças armadas' => 10, 'nato' => 10, 'armamento' => 10,
+        'munições' => 10, 'armas' => 10, 'guarda nacional' => 9, 'gnr' => 9, 'psp' => 8,
+        // ── Aviação / MRO (peso 9) ──
+        'aeronave' => 9, 'aeronáutica' => 9, 'aviação' => 9, 'helicóptero' => 9,
+        'mro' => 9, 'turbina' => 8, 'aeroporto' => 7,
+        // ── Naval / marítimo (peso 9) ──
+        'navio' => 9, 'naval' => 9, 'embarcação' => 9, 'propulsão' => 9,
+        'estaleiro' => 8, 'doca' => 7, 'porto' => 6, 'marítimo' => 8, 'fragata' => 10,
+        // ── Motores / spares / repair (peso 8) ──
+        'motor' => 8, 'sobressalente' => 8, 'overhaul' => 8, 'revisão geral' => 8,
+        'reparação' => 7, 'manutenção' => 6, 'peças' => 6, 'mtu' => 9, 'man' => 5,
+        'caterpillar' => 8, 'volvo penta' => 9, 'rolls-royce' => 9,
+        // ── Hospitalar / médico (peso 7) ──
+        'hospitalar' => 7, 'equipamento médico' => 7, 'dispositivos médicos' => 7,
+        'esterilização' => 7, 'cirurgia' => 6, 'monitorização' => 5,
+        // ── Segurança / destruição docs (peso 6) ──
+        'destruição de documentos' => 6, 'destruidora' => 6, 'fragmentação' => 5,
+        'trituração' => 5, 'shredder' => 6,
+        // ── Simulação / IT (peso 5) ──
+        'simulador' => 5, 'simulação' => 5, 'cibersegurança' => 6,
+        // ── Lubrificantes / químicos (peso 4) ──
+        'lubrificante' => 4, 'óleo' => 3, 'combustível' => 4,
+    ];
+
+    /**
+     * Extrai (objeto, entidade, ref) de uma linha já formatada por parseAcingovTable.
+     * Usado para fazer scoring de relevância — evita refactor invasivo do parser.
+     */
+    protected function extractAcingovFields(string $line): array
+    {
+        $get = fn(string $key) => preg_match('/\|\s*' . preg_quote($key, '/') . ':\s*([^|]+?)(?:\s*\||$)/u', $line, $m) ? trim($m[1]) : '';
+        return [
+            'ref'      => preg_match('/^-\s*REF:\s*([^|]+?)\s*\|/u', $line, $m) ? trim($m[1]) : '',
+            'objeto'   => $get('OBJETO'),
+            'entidade' => $get('ENTIDADE'),
+            'tipo'     => $get('TIPO'),
+        ];
+    }
+
+    /**
+     * Score de relevância para PartYard. Aplicado ao objeto + entidade.
+     * Devolve int — quanto maior, mais relevante.
+     */
+    protected function scoreAcingovRelevance(string $line): int
+    {
+        $f      = $this->extractAcingovFields($line);
+        $haystk = mb_strtolower(($f['objeto'] ?? '') . ' ' . ($f['entidade'] ?? ''));
+        if ($haystk === ' ' || trim($haystk) === '') return 0;
+
+        $score = 0;
+        foreach (self::ACINGOV_RELEVANCE_WEIGHTS as $kw => $weight) {
+            // substr_count em UTF-8 — usar mb_substr_count
+            $hits = mb_substr_count($haystk, mb_strtolower($kw));
+            if ($hits > 0) $score += $hits * $weight;
+        }
+        return $score;
+    }
+
+    /**
+     * Devolve a URL das primeiras N folhas da listagem unfiltered da Acingov.
+     *
+     * Acingov corre CodeIgniter — pagineção via segmento de URI:
+     *   /indexProcedimentos             → folha 1 (offset=0)
+     *   /indexProcedimentos/30          → folha 2 (offset=30, 30 itens/folha)
+     *   /indexProcedimentos/60          → folha 3 (offset=60)
+     *
+     * Tentamos também ?page=N como fallback caso a config esteja diferente.
+     */
+    protected function acingovPagedUrls(string $baseUrl, int $pages): array
+    {
+        $itemsPerPage = 30;
+        $urls = [];
+        for ($p = 0; $p < $pages; $p++) {
+            $offset = $p * $itemsPerPage;
+            $urls[] = $offset === 0 ? $baseUrl : rtrim($baseUrl, '/') . '/' . $offset;
+        }
+        return $urls;
+    }
+
     protected function fetchAcingovPublic(): string
     {
         $baseUrl  = 'https://www.acingov.pt/acingovprod/2/zonaPublica/zona_publica_c/indexProcedimentos';
-        $keywords = [
-            // Defesa & Forças Armadas
-            'defesa', 'militar', 'marinha', 'força aérea', 'exército', 'NATO', 'armamento',
-            // Aviação & Aeronáutica
-            'aeronave', 'aviação', 'helicóptero', 'aeronáutica', 'MRO',
-            // Naval & Marítimo
-            'navio', 'naval', 'propulsão', 'embarcação',
-            // Motores & Peças
-            'motor', 'peças', 'sobressalentes', 'manutenção', 'revisão geral', 'overhaul',
-            // Equipamentos Médicos
-            'equipamento médico', 'médico', 'hospitalar', 'dispositivos médicos',
-            // Destruição de Documentos & Segurança
-            'destruição de documentos', 'destruidoras', 'fragmentação', 'trituração',
-            // Simulação & IT
-            'simulação', 'simulador', 'cibersegurança', 'tecnologia',
-            // Lubrificantes & Químicos
-            'lubrificantes', 'óleos', 'fluidos',
-        ];
         $seen  = [];
         $lines = [];
 
+        // ── PASSO 1: 3 folhas da listagem unfiltered (ordenadas por data) ──
+        // Política do utilizador 2026-05-07: SEMPRE puxar 3 folhas e ordenar
+        // por relevância para PartYard, em vez de só pesquisar por keywords.
+        $pageRequests = 0;
+        foreach ($this->acingovPagedUrls($baseUrl, 3) as $idx => $url) {
+            try {
+                $resp = $this->httpClient->get($url, [
+                    'headers' => ['User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)', 'Accept' => 'text/html'],
+                    'timeout' => 12,
+                ]);
+                $rows = $this->parseAcingovTable($resp->getBody()->getContents(), $seen, false);
+                $lines = array_merge($lines, $rows);
+                $pageRequests++;
+            } catch (\Throwable $e) {
+                Log::info("Acingov [public/page" . ($idx + 1) . "]: " . $e->getMessage());
+            }
+        }
+
+        // ── PASSO 2: keyword targeted (suplementar) — apanha rows que possam
+        //    estar em folhas mais antigas mas ainda relevantes ──
+        $keywords = [
+            'defesa', 'militar', 'marinha', 'aeronáutica',
+            'naval', 'motor', 'overhaul', 'sobressalente',
+        ];
         $kwRequests = 0;
         foreach ($keywords as $kw) {
-            if (count($lines) >= 20 || $kwRequests >= 8) break; // max 8 HTTP requests
+            if ($kwRequests >= 6 || count($lines) >= 100) break;
             $kwRequests++;
             try {
                 $resp = $this->httpClient->get($baseUrl, [
@@ -529,30 +626,34 @@ SPECIALTY;
                     'headers' => ['User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)', 'Accept' => 'text/html'],
                     'timeout' => 10,
                 ]);
-                $html  = $resp->getBody()->getContents();
-                $rows  = $this->parseAcingovTable($html, $seen, false);
+                $rows = $this->parseAcingovTable($resp->getBody()->getContents(), $seen, false);
                 $lines = array_merge($lines, $rows);
             } catch (\Throwable $e) {
                 Log::info("Acingov [public/{$kw}]: " . $e->getMessage());
             }
         }
 
-        // Fallback: latest 20 unfiltered if keywords returned nothing
-        if (empty($lines)) {
-            try {
-                $resp  = $this->httpClient->get($baseUrl, [
-                    'headers' => ['User-Agent' => 'Mozilla/5.0 (compatible; HP-Group/1.0)', 'Accept' => 'text/html'],
-                    'timeout' => 10,
-                ]);
-                $lines = $this->parseAcingovTable($resp->getBody()->getContents(), $seen, false);
-            } catch (\Throwable $e) {
-                Log::info('Acingov [public/fallback]: ' . $e->getMessage());
-            }
-        }
-
-        $lines = array_slice($lines, 0, 40);
         if (empty($lines)) return '';
-        return "=== ACINGOV — Concursos (zona pública, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $lines);
+
+        // ── PASSO 3: Score por relevância e ordenar (desc) ──
+        $scored = array_map(fn($l) => ['line' => $l, 'score' => $this->scoreAcingovRelevance($l)], $lines);
+        usort($scored, fn($a, $b) => $b['score'] <=> $a['score']);
+
+        // Anota score nas linhas com >0 — ajuda a Ana a explicar a ordem.
+        $finalLines = array_map(function ($r) {
+            return $r['score'] > 0
+                ? $r['line'] . " | RELEVANCE: {$r['score']}"
+                : $r['line'];
+        }, array_slice($scored, 0, 40));
+
+        $hits = array_filter($scored, fn($r) => $r['score'] > 0);
+        Log::info("Acingov [public]: 3 folhas analisadas — " . count($lines) . " rows, " . count($hits) . " com score>0", [
+            'pages_fetched'  => $pageRequests,
+            'kw_requests'    => $kwRequests,
+            'top_score'      => $scored[0]['score'] ?? 0,
+        ]);
+
+        return "=== ACINGOV — Concursos (3 folhas analisadas, ordenadas por relevância PartYard, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $finalLines);
     }
 
     /**
