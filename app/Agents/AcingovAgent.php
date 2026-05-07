@@ -826,96 +826,98 @@ SPECIALTY;
         return $lines;
     }
 
-    // ─── base.gov.pt — direct public API (awarded contracts) ──────────────
+    // ─── base.gov.pt — busca via Tavily (anti-bot do portal mata HTTP direto) ──
+    //
+    // 2026-05-07: o IMPIC migrou o portal de /Base para /Base4 e a pesquisa
+    // agora é AJAX (POST /Base4/pt/resultados/) protegida por F5 BIG-IP. Pedidos
+    // programáticos recebem HTTP 200 com Content-Length: 0 (anti-scraping).
+    //
+    // Tested: GET homepage→200, POST resultados→200 0b (qualquer combinação de
+    // cookies / headers / UA testada via curl no droplet falha).
+    //
+    // Solução: indexar via Tavily (Google index → não bate em F5) e pedir
+    // `site:base.gov.pt`. Tavily devolve title+url+snippet — suficiente para
+    // a Ana classificar oportunidades. Resultados podem ter latência de horas
+    // vs o portal, mas o portal directo está in viable hoje.
     protected function fetchBaseGovPt(): string
     {
-        $dateFrom = now()->subDays(30)->format('d-m-Y'); // 30 days — adjudicados têm latência
-        $dateTo   = now()->format('d-m-Y');
+        if (!$this->searcher->isAvailable()) {
+            return "(base.gov.pt: TAVILY_API_KEY não configurada — search via web index não disponível)";
+        }
 
-        // Multiple keyword passes — all PartYard business areas
-        $keywords = [
-            // ⚓ Naval & Marítimo
-            'naval', 'marítimo', 'maritimo', 'marinha', 'propulsão naval', 'porto',
-            // 🛩️ Aviação & Aeronáutica
-            'aeronave', 'aviação', 'aeronáutica', 'manutenção aeronáutica', 'helicóptero', 'aeroporto',
-            // 🚗 Defesa & Militar
-            'defesa', 'militar', 'armamento', 'viaturas militares', 'forças armadas',
-            // 🔧 Motores & Peças
-            'motor diesel', 'peças sobressalentes', 'manutenção motores',
-            // 🎯 Simulação & Treino
-            'simulação', 'simulador', 'treino militar',
-            // 💻 Cibersegurança (SETQ)
-            'cibersegurança', 'segurança informática',
+        // Queries agrupadas por área PartYard. Cada chamada Tavily devolve
+        // 5 resultados; com 5 áreas = 25 contratos no máximo. site:base.gov.pt
+        // restringe ao domínio. "contratos públicos" + área força matches em
+        // títulos/URLs do portal.
+        $queries = [
+            'defesa-naval'   => 'site:base.gov.pt contratos públicos defesa OR naval OR marinha OR militar',
+            'aviacao'        => 'site:base.gov.pt contratos públicos aeronáutica OR aviação OR helicóptero OR MRO',
+            'motores-spares' => 'site:base.gov.pt contratos públicos "motor diesel" OR "peças sobressalentes" OR overhaul',
+            'hospitalar'     => 'site:base.gov.pt contratos públicos "equipamento médico" OR esterilização OR hospitalar',
+            'cyber-sim'      => 'site:base.gov.pt contratos públicos cibersegurança OR simulador OR "destruição de documentos"',
         ];
-        $seen       = [];
-        $lines      = [];
-        $kwRequests = 0;
 
-        foreach ($keywords as $kw) {
-            if ($kwRequests >= 6) break; // max 6 HTTP requests — avoid blocking
-            $kwRequests++;
+        $allLines = [];
+        $seenUrls = [];
+        $apiOk    = 0;
+
+        foreach ($queries as $area => $query) {
             try {
-                $resp = $this->httpClient->get(
-                    'https://www.base.gov.pt/Base/pt/ResultadoContratosSearch',
-                    [
-                        'query' => [
-                            'tipo'          => 'CO',
-                            'tipocontrato'  => '0',
-                            'cpv'           => '',
-                            'dte'           => $dateTo,
-                            'dta'           => $dateFrom,
-                            'designacao'    => $kw,
-                            'adjudicante'   => '',
-                            'adjudicatario' => '',
-                            'pageSize'      => '20',
-                            'page'          => '1',
-                        ],
-                        'headers' => [
-                            'Accept'           => 'application/json, text/javascript, */*; q=0.01',
-                            'X-Requested-With' => 'XMLHttpRequest',
-                            'Referer'          => 'https://www.base.gov.pt/Base/pt/Pesquisa',
-                            'User-Agent'       => 'Mozilla/5.0 (compatible; HP-Group/1.0)',
-                        ],
-                        'timeout' => 5, // reduced from 8 — fail fast
-                    ]
-                );
+                // 30d — alinhado com a janela de adjudicados que existia antes
+                $raw = $this->searcher->search($query, 5, 'basic', 30);
+                if (!$raw || str_contains($raw, '(No results found)') || str_contains($raw, 'failed')) {
+                    continue;
+                }
+                $apiOk++;
 
-                $body = $resp->getBody()->getContents();
-                $data = json_decode($body, true);
-                $contracts = $data['items'] ?? $data['list'] ?? $data ?? [];
+                // Parse Tavily output (formato: "N. **Title** XX%\n  URL: ...\n  content")
+                if (preg_match_all('/\d+\.\s+\*\*(.+?)\*\*.*?URL:\s*(\S+)\s*\n\s*(.+?)(?=\n\n|\n\d+\.|\z)/s', $raw, $matches, PREG_SET_ORDER)) {
+                    foreach ($matches as $m) {
+                        $title   = trim(preg_replace('/\s+/', ' ', $m[1]));
+                        $url     = trim($m[2]);
+                        $snippet = trim(preg_replace('/\s+/', ' ', $m[3]));
 
-                if (!is_array($contracts)) continue;
+                        if (!str_contains($url, 'base.gov.pt')) continue;
+                        if (isset($seenUrls[$url])) continue;
+                        $seenUrls[$url] = true;
 
-                foreach ($contracts as $c) {
-                    if (!is_array($c)) continue;
-                    $id = $c['id'] ?? $c['ncontrato'] ?? '';
-                    if ($id && isset($seen[$id])) continue;
-                    if ($id) $seen[$id] = true;
+                        // Extrai contractId do URL se for página de Detalhe
+                        $contractId = '';
+                        if (preg_match('#/[Dd]etalhe[^?]*\?[^=]*id=(\d+)|/[Dd]etalhe/Contratos/(\d+)#', $url, $im)) {
+                            $contractId = $im[1] ?? $im[2] ?? '';
+                        }
 
-                    $obj  = $c['objectoContrato']       ?? ($c['designacao']            ?? 'N/A');
-                    $ent  = $c['adjudicante']            ?? ($c['entidade']              ?? 'N/A');
-                    $win  = $c['adjudicatario']          ?? '';
-                    $val  = $c['precoContratual']        ?? ($c['valor']                 ?? '');
-                    $date = $c['dataCelebracaoContrato'] ?? ($c['dataPublicacao']         ?? 'N/A');
-                    $link = $id ? "https://www.base.gov.pt/Base/pt/Detalhe/Contratos/{$id}" : '';
-
-                    $line = "- OBJETO: {$obj} | ENTIDADE: {$ent}";
-                    if ($win)  $line .= " | ADJUDICATÁRIO: {$win}";
-                    if ($val)  $line .= " | VALOR: €{$val}";
-                    if ($date) $line .= " | DATA: {$date}";
-                    if ($link) $line .= " | URL: {$link}";
-                    $lines[] = $line;
+                        $line = "- OBJETO: " . mb_substr($title, 0, 180);
+                        if ($contractId) $line .= " | ID: {$contractId}";
+                        if ($snippet)    $line .= " | DETALHE: " . mb_substr($snippet, 0, 200);
+                        $line .= " | URL: {$url}";
+                        $allLines[] = $line;
+                    }
                 }
             } catch (\Throwable $e) {
-                Log::info("base.gov.pt [{$kw}]: " . $e->getMessage());
+                Log::info("base.gov.pt [Tavily/{$area}]: " . $e->getMessage());
             }
         }
 
-        if (empty($lines)) {
-            return "(base.gov.pt: sem contratos adjudicados nos últimos 30 dias para os critérios navais/defesa)";
+        if (empty($allLines)) {
+            return "(base.gov.pt: sem resultados via Tavily nos últimos 30 dias para os critérios navais/defesa)";
         }
 
-        return "=== BASE.GOV.PT — Contratos Adjudicados (últimos 30 dias) ===\n" . implode("\n", $lines);
+        // Score por relevância PartYard (reaproveita scoreAcingovRelevance — mesma tabela)
+        $scored = array_map(fn($l) => ['line' => $l, 'score' => $this->scoreAcingovRelevance($l)], $allLines);
+        usort($scored, fn($a, $b) => $b['score'] <=> $a['score']);
+
+        $finalLines = array_map(function ($r) {
+            return $r['score'] > 0
+                ? $r['line'] . " | RELEVANCE: {$r['score']}"
+                : $r['line'];
+        }, array_slice($scored, 0, 25));
+
+        Log::info("base.gov.pt: Tavily ok — " . count($allLines) . " contratos, " . count($finalLines) . " devolvidos", [
+            'queries_ok' => $apiOk . '/' . count($queries),
+        ]);
+
+        return "=== BASE.GOV.PT — Contratos (via Tavily/Google index, ordenados por relevância PartYard, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $finalLines);
     }
 
     // ─── UNGM — direct public API ──────────────────────────────────────────
