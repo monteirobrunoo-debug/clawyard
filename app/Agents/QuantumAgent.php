@@ -665,7 +665,22 @@ MSG;
         $lastBeat    = time();
 
         while (!$body->eof()) {
-            $buf .= $body->read(1024);
+            // Guzzle/PSR-7 read() lança "Error in input stream" quando o
+            // upstream fecha a connection mid-buffer (timeout do nginx
+            // llm-proxy, fim brusco do Anthropic, etc.). Apanhamos para
+            // distinguir entre "morreu antes de receber qq texto" (erro
+            // real, propaga) e "morreu depois da resposta toda" (graceful,
+            // ignora). Sintoma do user: balão completo + ❌ Erro: Error
+            // in input stream a seguir.
+            try {
+                $buf .= $body->read(1024);
+            } catch (\Throwable $readErr) {
+                if ($full === '') throw $readErr;
+                \Log::info('QuantumAgent: stream read error após resposta completa — graceful end', [
+                    'msg' => $readErr->getMessage(), 'len' => strlen($full),
+                ]);
+                break;
+            }
             while (($pos = strpos($buf, "\n")) !== false) {
                 $line = substr($buf, 0, $pos);
                 $buf  = substr($buf, $pos + 1);
@@ -675,6 +690,9 @@ MSG;
                 if ($json === '[DONE]') break 2;
                 $evt = json_decode($json, true);
                 if (!is_array($evt)) continue;
+                // Anthropic SSE termina com event message_stop — sai limpo
+                // do loop antes de qualquer read() final que possa falhar.
+                if (($evt['type'] ?? '') === 'message_stop') break 2;
                 if (($evt['type'] ?? '') === 'content_block_delta'
                     && ($evt['delta']['type'] ?? '') === 'text_delta') {
                     $text = $evt['delta']['text'] ?? '';
