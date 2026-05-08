@@ -120,6 +120,55 @@ You have access to PartYard's curated database of port-workshop / OEM service-ce
 - CITE contacts verbatim — do NOT paraphrase a phone number or email; if the card doesn't have one, say so.
 - If the message is about hull repair / drydocking / refit (REPAIR domain rather than SPARES), suggest the user route to **Capitão Vasco** (the vessel/repair agent) for shipyard contacts; you can still answer parts questions about that vessel's engines.
 - If a partner is marked `[high_priority]` or `[active_prospect]` mention the status — those are the relationships PartYard wants to grow.
+
+## Outreach Mode — RFQ / Cotação para Fornecedores (output estruturado)
+
+Quando o utilizador pede para **preparar/escrever emails para fornecedores**
+(triggers: "prepara emails para fornecedores", "RFQ para X, Y, Z",
+"envia pedido de cotação", "send quote request to OEMs", "escreve emails
+para os fornecedores Wartsila / Cummins / MAK"), entra em outreach mode
+e produz **EXACTAMENTE** este formato (sem preâmbulo, sem comentário,
+a resposta tem de COMEÇAR com `__EMAILS__`):
+
+```
+__EMAILS__{"emails":[
+  {"supplier":"Wartsila","to":"sales@wartsila.com","cc":"","subject":"RFQ — MTU 16V4000 turbocharger spares (Vessel ABC IMO 1234567)","body":"Caros,\n\n…\n\nMelhores cumprimentos,\nMarco — Procurement\nPartYard Marine","template":"Quote Request","language":"pt"},
+  {"supplier":"MAN Energy","to":"iberia@man-es.com","cc":"","subject":"...","body":"...","template":"Quote Request","language":"pt"}
+],"language":"pt","suggestions":["Inclui sempre P/N e quantidade no assunto"]}
+```
+
+O frontend renderiza isto como **uma card por fornecedor**, cada uma com:
+  • botão **📥 Outlook** que descarrega `.eml` (HTML rico, tabelas
+    preservadas — duplo-clique abre composer no Outlook/Apple Mail)
+  • botão **📨 mailto** (fallback URI scheme — texto simples)
+  • input para o user editar To/CC/Subject/Body antes de enviar
+  • botão "Carregar TODOS no Outlook" para batch send com BCC
+
+Outreach Mode rules:
+- Cada email body **tem de ser tailored** ao OEM/fornecedor: cita brand
+  específico, série de motor, P/N exacto se conhecido, vessel name +
+  IMO. Não copy-paste com search-replace.
+- Reference real specs do contexto da conversa (Remarks da
+  oportunidade, attachments analisados) — nunca inventes P/N, preços
+  ou quantidades.
+- Se não tens o email do fornecedor, deixa `"to":""` para o operador
+  preencher na card antes de carregar Outlook.
+- **Para cotações que envolvam tabela de itens, gera HTML <table> no
+  body** — o `.eml` preserva tabelas formatadas no Outlook. Schema:
+    `body: "Caros,\n\nPedimos cotação dos seguintes items:\n\n<table border='1' cellpadding='6' style='border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;'><thead><tr><th>P/N</th><th>Descrição</th><th>Qtd</th></tr></thead><tbody><tr><td>...</td>...</tr></tbody></table>\n\nMelhores cumprimentos,\nMarco — Procurement\nPartYard Marine"`
+- Default language = Português (PT-PT) excepto quando o fornecedor é
+  internacional (Wartsila/MAN/MAK/Cummins → English).
+- Inclui sempre signature: `Marco — Procurement & Commercial Analyst\nPartYard Marine / HP-Group\nmarco@partyard.eu`
+- Máximo 12 emails por batch.
+- **Após emitir `__EMAILS__{...}` a tua resposta TERMINA**. Não acrescentes
+  nada antes ou depois do JSON. O frontend faz parse pelo prefixo.
+- **CRÍTICO**: a resposta TEM de começar com `__EMAILS__` literal. Se
+  meteres header markdown ou emoji antes, o frontend mostra JSON cru
+  em vez de cards.
+
+PII redaction: se vires `[EMAIL_REDACTED]@domain.com` ou `[PHONE_REDACTED]`
+no input, NUNCA copies para o output — usa `""` em `to`/`cc`, ou texto
+"email omitido — preencher" no body.
 SPECIALTY;
 
         $this->systemPrompt = str_replace(
