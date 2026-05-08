@@ -2253,7 +2253,12 @@ function attachOutlookRoundup(msgEl, agentName) {
     // destinatários no Outlook antes de enviar (privacidade entre
     // fornecedores: BCC evita que cada um veja a lista dos outros).
     bar.querySelector('[data-mode="bcc"]').addEventListener('click', () => {
-        const bodyTxt = (bubble.innerText || '').trim().slice(0, 1500);
+        // Use the table-aware helper so Outlook gets aligned tables
+        // (htmlToPlainEmailBody is defined further down in this file)
+        const bodyTxt = (typeof htmlToPlainEmailBody === 'function'
+            ? htmlToPlainEmailBody(bubble)
+            : (bubble.innerText || '').trim()
+        ).slice(0, 1500);
         const params = [];
         params.push('bcc=' + encodeURIComponent(ordered.join(',')));
         params.push('subject=' + encodeURIComponent(subject));
@@ -2420,8 +2425,8 @@ function buildTableCard(data) {
         ${data.analysis ? `<div class="table-analysis">🔍 ${esc(data.analysis)}</div>` : ''}
         ${data.recommendation ? `<div class="table-recommendation">✅ ${esc(data.recommendation)}</div>` : ''}
         <div class="table-actions">
-            <button class="table-excel-btn" onclick="exportExcel('${id}')">📥 Exportar Excel</button>
-            <button class="table-copy-btn" onclick="copyTable('${id}')">📋 Copiar CSV</button>
+            <button class="table-excel-btn" onclick="exportExcel('${id}')" title="Download .csv (abre no Excel ou Google Sheets)">📥 Exportar CSV</button>
+            <button class="table-copy-btn" onclick="copyTable('${id}')" title="Copiar para clipboard (TSV — colar directo no Excel)">📋 Copiar tabela</button>
         </div>
     </div>`;
 }
@@ -2537,7 +2542,8 @@ async function sendEmail(id) {
 
 function copyEmail(id) {
     const subject = document.getElementById(id+'_subject').value;
-    const body    = document.getElementById(id+'_body').innerText;
+    const bodyEl  = document.getElementById(id+'_body');
+    const body    = htmlToPlainEmailBody(bodyEl);  // tables → aligned plain-text
     navigator.clipboard.writeText('Assunto: '+subject+'\n\n'+body);
     const btn = document.querySelector(`#${id} .email-copy-btn`);
     btn.textContent = '✅ Copiado!';
@@ -2930,11 +2936,67 @@ function editEmail(id) {
     sel.addRange(range);
 }
 
+/**
+ * Converte HTML de email body para plain-text preservando a estrutura
+ * de tabelas (mailto: aceita só plain text — sem este passo, qualquer
+ * <table> colapsa numa linha contínua sem separação no Outlook).
+ *
+ * Estratégia:
+ *   1. Clona o elemento para não tocar no DOM original
+ *   2. Substitui cada <table> por um <pre> com colunas alinhadas via
+ *      pipe (estilo "A | B | C\n---+---+---\n1 | 2 | 3")
+ *   3. innerText do clone respeita as quebras de linha do <pre>
+ */
+function htmlToPlainEmailBody(el) {
+    if (!el) return '';
+    const clone = el.cloneNode(true);
+
+    clone.querySelectorAll('table').forEach(tbl => {
+        const rows = Array.from(tbl.querySelectorAll('tr'))
+            .map(tr => Array.from(tr.querySelectorAll('th,td'))
+                .map(c => (c.textContent || '').replace(/\s+/g, ' ').trim()));
+        if (rows.length === 0) { tbl.remove(); return; }
+
+        const cols   = Math.max(...rows.map(r => r.length));
+        const widths = Array(cols).fill(0);
+        rows.forEach(r => r.forEach((c, i) => {
+            widths[i] = Math.min(40, Math.max(widths[i], c.length));
+        }));
+
+        const padCell = (txt, w) =>
+            (txt.length > w ? txt.slice(0, w - 1) + '…' : txt.padEnd(w));
+
+        const lines = rows.map(r => r.concat(Array(cols - r.length).fill(''))
+            .map((c, i) => padCell(c, widths[i])).join(' | '));
+
+        // Separator under header row
+        if (lines.length > 1) {
+            const sep = widths.map(w => '-'.repeat(w)).join('-+-');
+            lines.splice(1, 0, sep);
+        }
+
+        const pre = document.createElement('pre');
+        pre.style.whiteSpace = 'pre';
+        pre.style.fontFamily = 'monospace';
+        pre.textContent = lines.join('\n');
+        tbl.parentNode.insertBefore(document.createElement('br'), tbl);
+        tbl.replaceWith(pre);
+    });
+
+    // Bullet lists → "- " prefix (innerText doesn't preserve markers)
+    clone.querySelectorAll('li').forEach(li => {
+        li.textContent = '• ' + (li.textContent || '').trim();
+    });
+
+    return (clone.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
 function openInOutlook(id) {
     const to      = document.getElementById(id+'_to')?.value.trim() || '';
     const cc      = document.getElementById(id+'_cc')?.value.trim() || '';
     const subject = document.getElementById(id+'_subject')?.value.trim() || '';
-    const body    = document.getElementById(id+'_body')?.innerText.trim() || '';
+    const bodyEl  = document.getElementById(id+'_body');
+    const body    = htmlToPlainEmailBody(bodyEl);
 
     let mailto = 'mailto:' + encodeURIComponent(to);
     const parts = [];
