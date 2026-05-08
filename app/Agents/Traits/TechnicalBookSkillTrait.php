@@ -33,34 +33,82 @@ use Illuminate\Support\Facades\Log;
 trait TechnicalBookSkillTrait
 {
     /**
-     * Keywords técnicas que activam a pesquisa na biblioteca.
-     * Lista intencionalmente larga — termos de soldadura, NDT,
-     * engenharia naval, mecânica marinha, classificação societies.
+     * Keywords que activam a pesquisa na biblioteca.
+     *
+     * 2026-05-08: extendida de naval/welding only para cobrir as 10 domains
+     * actualmente na library (naval, soldadura, strategy, learning, finance,
+     * commercial, procurement, supply-chain/logistics, cyber, aerospace,
+     * engineering). Sem extensão, queries financeiras/comerciais não
+     * surfaceariam livros relevantes.
      */
     protected array $technicalBookKeywords = [
-        // Welding processes
+        // ── Welding / NDT (originais) ──
         'welding','soldadura','soldagem','wps','pqr','aws','iso 15614','asme ix',
         'mma','smaw','tig','gtaw','mig','mag','gmaw','fcaw','saw','plasma',
         'preheat','pré-aquecimento','pre aquecimento','pwht','interpass',
-        // Consumables
         'e6013','e7018','e7016','e308l','er70s','er316l','electrode','eléctrodo',
-        // NDT / Inspection
         'ndt','utm','dft','ut','rt','mt','pt','vt','ultrasónico','ultrasonico',
         'magnetic particle','penetrant','radiographic','visual testing',
-        // Naval engineering
+        // ── Naval / Marine ──
         'naval','navio','vessel','casco','hull','convés','arquitectura naval',
         'estabilidade','displacement','deslocamento','plimsoll','load line',
         'estaleiro','shipyard','drydock','dique seco','reparação','repair',
-        // Mechanical
+        // ── Mechanical ──
         'bomba','pump','válvula','valve','rolamento','bearing','redutor','gearbox',
         'veio','shaft','propulsor','propeller','helice','hélice','impulsor',
         'engine','motor','mtu','caterpillar','wartsila','cummins','mak',
-        // Class / IMO
+        // ── Class / IMO ──
         'imo','solas','marpol','dnv','lloyd','class society','classification',
         'iacs','bv','abs','rina','class survey','class notation',
-        // Defects / Repair
+        // ── Defects / Repair ──
         'crack','fissura','corrosion','corrosão','erosion','pitting',
         'plate replacement','doubler','fairing','overhaul','refit',
+
+        // ── Finance / Accounting (Dr. Luís + others) ──
+        'finance','financial','accounting','contabilidade','contabilístic','contabilist',
+        'cash flow','working capital','dcf','discount','npv','irr','ebitda','margin',
+        'revenue','receita','despesa','expense','lucro','profit','prejuízo','loss',
+        'balance','balanço','statement','demonstração','assets','passivos','equity',
+        'depreciation','amortization','goodwill','impairment','reserva',
+        'invoice','fatura','factura','receivable','payable','accruals','provisões',
+        'irc','iva','irs','ifrs','ias','snc','tax','imposto','fiscal','beps',
+        'audit','auditoria','due diligence','toc','roc','clc',
+        'budget','orçamento','forecast','projecção','projection','variance',
+        'roi','payback','cost-benefit','tco','capex','opex',
+
+        // ── Commercial / CRM / Sales ──
+        'crm','customer relationship','lead','prospect','pipeline','funnel','outreach',
+        'sales','vendas','closing','quota','commission','comissão','target',
+        'segmentação','segmentation','retention','retenção','churn','loyalty',
+        'cross-sell','upsell','nps','customer success',
+
+        // ── Procurement / Supply Chain / Logistics ──
+        'procurement','sourcing','tender','rfq','rfp','rfi','request for quote',
+        'supplier','fornecedor','vendor','contract','contrato','sla','kpi',
+        'supply chain','cadeia de abastecimento','logistics','logística',
+        'warehouse','armazém','inventory','inventário','stock','sku',
+        'freight','transporte','shipment','expedição','customs','alfândega',
+        'incoterm','cif','fob','dap','exw','fca',
+        'lean','six sigma','jit','just-in-time','kanban','3pl','4pl',
+
+        // ── Cybersecurity ──
+        'cyber','cybersecurity','cibersegurança','infosec','firewall','intrusion',
+        'malware','ransomware','phishing','vulnerability','vulnerabilidade',
+        'encryption','encriptação','tls','ssl','vpn','siem','soc','zero trust',
+        'penetration','pentest','red team','blue team','iso 27001','nist','gdpr',
+
+        // ── Aerospace / Aviation ──
+        'aerospace','aeronáutica','aircraft','aeronave','aviation','aviação',
+        'airworthiness','airframe','fuselagem','helicopter','helicóptero',
+        'turbine','turbina','jet','propulsion','aerodynamic','lift','drag',
+        'avionics','aviónica','faa','easa','part-145','iata',
+
+        // ── Strategy / Leadership / Learning ──
+        'strategy','estratégia','blue ocean','positioning','posicionamento',
+        'competitive','competitivo','differentiation','diferenciação',
+        'leadership','liderança','team','equipa','culture','cultura',
+        'okr','ksuccess','plano','plan','roadmap','vision','visão','mission',
+        'innovation','inovação','disruption','market','mercado',
     ];
 
     /**
@@ -107,5 +155,24 @@ trait TechnicalBookSkillTrait
             Log::warning(static::class . ': technical book search failed: ' . $e->getMessage());
             return '';
         }
+    }
+
+    /**
+     * Helper de uma chamada para wrap completo: enrichSystemPrompt do
+     * SharedContextTrait + augmentWithTechnicalBooks. Reduz o boilerplate
+     * em cada chat()/stream() de:
+     *   $bookCtx = $this->augmentWithTechnicalBooks($msg, 4);
+     *   $sys = $this->enrichSystemPrompt(...) . ($bookCtx ? "\n\n$bookCtx" : '');
+     * para:
+     *   $sys = $this->buildSystemWithBooks($msg, $this->systemPrompt, 4);
+     */
+    protected function buildSystemWithBooks(
+        string|array $message,
+        string $basePrompt,
+        int $limit = 4,
+        ?string $domain = null
+    ): string {
+        $book = $this->augmentWithTechnicalBooks($message, $limit, $domain);
+        return $this->enrichSystemPrompt($basePrompt) . ($book ? "\n\n" . $book : '');
     }
 }

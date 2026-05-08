@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -23,6 +24,7 @@ class ThinkingAgent implements AgentInterface
     use WebSearchTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $systemPrompt = '';
 
     // PSI bus — publish deep-thinking conclusions so other agents
@@ -109,7 +111,7 @@ SPECIALTY;
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 20000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 10000],
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -141,7 +143,7 @@ SPECIALTY;
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 20000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 10000],
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

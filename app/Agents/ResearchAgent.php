@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -23,6 +24,7 @@ class ResearchAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -161,7 +163,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -187,7 +189,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

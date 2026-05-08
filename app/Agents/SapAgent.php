@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Services\SapService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -18,6 +19,7 @@ class SapAgent implements AgentInterface
     use WebSearchTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $contextKey  = 'sap_intel';
     protected array  $contextTags = ['SAP','stock','fatura','encomenda','ERP','inventário','parceiro','cliente SAP','fornecedor'];
     protected string $systemPrompt = '';
@@ -143,7 +145,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -168,7 +170,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],

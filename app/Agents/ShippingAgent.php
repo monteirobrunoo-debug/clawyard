@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Services\HarmonizedCodesService;
 use App\Services\PartYardProfileService;
@@ -31,6 +32,7 @@ class ShippingAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     use WebSearchTrait;
 
     protected string $systemPrompt = '';
@@ -216,7 +218,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 4096,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
             ],
         ]);
@@ -238,7 +240,7 @@ SPECIALTY;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 4096,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
