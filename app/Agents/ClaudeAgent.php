@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -19,6 +20,7 @@ class ClaudeAgent implements AgentInterface
     use ShippingSkillTrait;
 
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
     protected Client $client;
@@ -72,12 +74,22 @@ class ClaudeAgent implements AgentInterface
             ['role' => 'user', 'content' => $message],
         ]);
 
+        // Bruno é o agente generalista — tem acesso à biblioteca técnica
+        // completa: 30 livros naval/soldadura + 3 de estratégia/liderança
+        // (Blue Ocean, Extreme Ownership, Manual do Líder Dohler).
+        // Sem domain → semantic search escolhe os melhores chunks por
+        // similarity 1024-dim, atravessa todos os domínios. Para queries
+        // de strategy/leadership, os chunks dos livros novos surgem
+        // naturalmente; para perguntas técnicas, surgem os naval/soldadura.
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 4);
+        $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -93,13 +105,17 @@ class ClaudeAgent implements AgentInterface
             ['role' => 'user', 'content' => $message],
         ]);
 
+        // Mesma biblioteca que em chat() — strategy/liderança + naval/soldadura.
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 4);
+        $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
