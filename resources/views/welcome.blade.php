@@ -2484,10 +2484,11 @@ function buildEmailCard(data) {
             <button class="email-send-btn" id="${id}_sendbtn" onclick="sendEmail('${id}')">
                 ✈️ Enviar
             </button>
-            <button class="email-outlook-btn" onclick="openInOutlook('${id}')" title="Abrir no Outlook">
+            <button class="email-outlook-btn" onclick="downloadEml('${id}')" title="Download .eml — abre no Outlook com tabelas e formatação HTML preservadas (recomendado)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4v16l10-2.5V6.5L7 4zm2 2.8l6 1.5v7.4l-6 1.5V6.8zM2 7v10l4 1V6L2 7z"/></svg>
                 Outlook
             </button>
+            <button class="email-mailto-btn" onclick="openInOutlook('${id}')" title="Abrir mailto: (texto simples — tabelas convertidas para grid pipe-aligned)" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 10px;border-radius:7px;font-size:11px;cursor:pointer;">📨 mailto</button>
             <button class="email-copy-btn" onclick="copyEmail('${id}')">📋 Copiar</button>
             <button class="email-edit-btn" onclick="editEmail('${id}')">✏️</button>
             <span class="email-status" id="${id}_status"></span>
@@ -3006,6 +3007,88 @@ function openInOutlook(id) {
     if (parts.length) mailto += '?' + parts.join('&');
 
     window.location.href = mailto;
+}
+
+// ─── EML download — preserva HTML + tabelas (alternativa ao mailto:) ───
+//
+// .eml é o formato standard RFC 5322 que o Outlook (Win/Mac), Apple Mail
+// e Thunderbird lêem nativamente: duplo-clique → abre composer com To/CC/
+// Subject/Body já preenchidos e o HTML rendered (tabelas, listas, bold).
+//
+// O ficheiro é gerado client-side, sem servidor — Blob → download.
+
+function b64utf8(str) {
+    // Encode UTF-8 string → base64 (handles é/ã/€ correctamente)
+    return btoa(unescape(encodeURIComponent(str || '')));
+}
+
+function encodeMimeHeader(str) {
+    // RFC 2047 encoded-word para non-ASCII em headers (Subject, etc.)
+    if (/^[\x00-\x7f]*$/.test(str)) return str;
+    return '=?UTF-8?B?' + b64utf8(str) + '?=';
+}
+
+function buildHtmlEmailWrapper(innerHtml) {
+    // Wrapper minimalista — tipografia clean para Outlook não meter Times.
+    // line-height + font-family universais que funcionam em Outlook 365 + Mac
+    // + Apple Mail + iOS Mail. Tabelas herdam style do innerHtml.
+    return '<!doctype html>\n<html><head><meta charset="UTF-8"></head>' +
+           '<body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.55;color:#1a1a1a;margin:0;padding:0;">' +
+           innerHtml +
+           '</body></html>';
+}
+
+function downloadEml(id) {
+    const to      = document.getElementById(id+'_to')?.value.trim() || '';
+    const cc      = document.getElementById(id+'_cc')?.value.trim() || '';
+    const subject = document.getElementById(id+'_subject')?.value.trim() || 'Email';
+    const bodyEl  = document.getElementById(id+'_body');
+    const htmlBody  = bodyEl ? bodyEl.innerHTML : '';
+    const plainBody = htmlToPlainEmailBody(bodyEl);
+
+    const boundary = 'SETQ_BOUNDARY_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    const lines = [];
+    if (to) lines.push('To: ' + to);
+    if (cc) lines.push('Cc: ' + cc);
+    lines.push('Subject: ' + encodeMimeHeader(subject));
+    lines.push('MIME-Version: 1.0');
+    lines.push('Content-Type: multipart/alternative; boundary="' + boundary + '"');
+    lines.push('');  // blank separates headers from body
+
+    // Plain text part (fallback)
+    lines.push('--' + boundary);
+    lines.push('Content-Type: text/plain; charset=UTF-8');
+    lines.push('Content-Transfer-Encoding: base64');
+    lines.push('');
+    lines.push(b64utf8(plainBody).match(/.{1,76}/g).join('\r\n'));  // wrap at 76 cols
+    lines.push('');
+
+    // HTML part (richer)
+    lines.push('--' + boundary);
+    lines.push('Content-Type: text/html; charset=UTF-8');
+    lines.push('Content-Transfer-Encoding: base64');
+    lines.push('');
+    lines.push(b64utf8(buildHtmlEmailWrapper(htmlBody)).match(/.{1,76}/g).join('\r\n'));
+    lines.push('');
+
+    lines.push('--' + boundary + '--');
+
+    const eml = lines.join('\r\n');
+    const blob = new Blob([eml], { type: 'message/rfc822;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const safeSubj = (subject || 'email').replace(/[^a-zA-Z0-9 _\-]/g, '').trim().replace(/\s+/g, '_').slice(0, 80) || 'email';
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = safeSubj + '.eml';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 0);
+
+    // Tiny user feedback
+    try {
+        toast(`📧 ${safeSubj}.eml descarregado — duplo-clique para abrir no Outlook`);
+    } catch (_) { /* toast not always available */ }
 }
 
 // ═══════════════════════════════
