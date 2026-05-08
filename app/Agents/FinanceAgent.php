@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
+use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use App\Services\SapService;
@@ -25,6 +26,7 @@ class FinanceAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
+    use TechnicalBookSkillTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -222,13 +224,19 @@ SPECIALTY;
             ['role' => 'user', 'content' => $message],
         ]);
 
+        // Luís é generalista financeiro — lê TODOS os 86 livros (finance,
+        // commercial, supply chain, naval, defesa, strategy, etc.) sem
+        // forçar domain. Semantic search 1024-dim escolhe os melhores chunks.
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 5);
+        $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
             ],
         ]);
@@ -252,6 +260,10 @@ SPECIALTY;
 
         if ($heartbeat) $heartbeat('a activar análise financeira avançada 💰');
 
+        // Mesma lógica que em chat() — todos os 86 livros disponíveis.
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 5);
+        $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
+
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'stream'  => true,
@@ -259,7 +271,7 @@ SPECIALTY;
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
