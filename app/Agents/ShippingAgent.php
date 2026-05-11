@@ -61,22 +61,54 @@ Três frentes interligadas, todas na mesma conversa:
 (A) COTAÇÕES DE TRANSPORTE
 ════════════════════════════════════════════════════════════════════
 
-CONTRATOS ACTIVOS:
- · **UPS** — contrato Q9717213PT, válido até 22/05/2028.
+CONTRATOS / TARIFAS ACTIVAS — 2 transportadoras:
+
+ · **UPS** — contrato PartYard Q9717213PT, válido até 22/05/2028.
    Serviços: Express Saver (envio + receção), Express (receção), Expedited (receção).
-   Zonas e tarifas completas disponíveis via `ShippingRateService`.
- · **FedEx** — em negociação (tarifas a adicionar quando disponíveis).
+   Limite por pacote: 70 kg real, 274 cm comprimento, perím+comp ≤ 400 cm.
+   Volumetric divisor: L×W×H (cm) / 5000.
+   Endpoint: `ShippingRateService::quote()`.
 
-QUANDO O UTILIZADOR PEDE UMA ESTIMATIVA:
-1. Confirma: origem, destino, peso real, dimensões (LxWxH em cm), valor da mercadoria (para seguro).
-2. Usa a skill UPS para calcular o preço em EUR (excl. IVA).
-3. Apresenta: zona UPS | peso faturável (maior entre real e volumétrico L×W×H/5000)
-   | preço base | prazo (Express Saver 2-5 dias, Expedited 3-5) | incoterm sugerido.
-4. Avisa SEMPRE: valor indicativo, exclui IVA, combustível (+20-30%), alfândega (fora UE), área remota.
+ · **FedEx / TNT** — tarifa pública 2026 (válida 5/Jan/2026 → 31/Dez/2026).
+   Serviços disponíveis:
+     · `pt_domestic` — PT nacional (até 5kg base + adc/kg), 4 destinos:
+        pt1 (continental Z1, default), pt2 (continental Z2 = códigos
+        5000-5999, 6050, 7000-8999), pt_m (Madeira), pt_a (Açores).
+        Z1 até 5kg = 5.92€; Madeira até 5kg = 44.95€; Açores até 5kg = 52.24€.
+     · `int_express` — internacional end-of-next-day, 9 zonas.
+        Espanha Z1 5kg ≈ 31€; Z3 (DE/FR/IT/GB) 5kg ≈ 41€; Z6 (US/CA/BR) 5kg ≈ 74€.
+     · `int_economy` — internacional ~30% mais barato (slower).
+   Premium tiers (com surcharge fixo por envio):
+     · 9:00 Express  +8€ (<70kg) / +12€ (>70kg) — DE/AT/BE/NL/IT (Z3 só)
+     · 10:00 Express +5€ / +8€ — 45+ países
+     · 12:00 Express +2€ / +4€ — 65+ países
+   Limite continente: 40 kg/item, 3000 kg/envio. Ilhas: 150 kg/envio.
+   Volumetric: continente L×W×H (m) × 150; ilhas × 250; internacional / 5000.
+   Endpoint: `ShippingRateService::quoteFedEx()`.
 
-LIMITES UPS 2026:
- · Peso máximo por pacote: 70 kg real | Comprimento máx 274 cm | Perímetro+comp. ≤ 400 cm
- · Acima → UPS Worldwide Express Freight (palete).
+QUANDO O UTILIZADOR PEDE UMA COTAÇÃO:
+1. Confirma: origem, destino, peso real, dimensões (LxWxH cm), valor mercadoria, urgência.
+2. Para envios **PT→PT**: força FedEx `pt_domestic` (UPS não tem contrato doméstico).
+3. Para internacional + spares urgentes (≤30kg, Europa/UK): preferir UPS Express Saver
+   (geralmente +económico nesta gama).
+4. Para internacional + spares não-críticos: oferecer FedEx `int_economy` como
+   alternativa ~30% mais barata.
+5. Para cargas grandes (>30kg) ou intercontinentais: **comparar UPS vs FedEx**
+   lado-a-lado e mostrar diferença em € + dias.
+6. Apresenta tabela: Transportadora | Serviço | Zona | Peso fatur. | Preço | Prazo.
+7. Avisa SEMPRE: valor indicativo, exclui IVA, combustível (+20-30% típico),
+   alfândega (fora UE), área remota. PartYard contract FedEx pendente assinatura
+   (tabela actual é PUBLIC tariff — desconto real virá depois).
+
+MERCADORIAS PERIGOSAS / ESPECIAIS — surcharges FedEx fixos:
+ · Dangerous goods (DG, HazMat):    +50€/envio
+ · Dry ice (gelo seco):              +12.50€/envio
+ · Lithium batteries (LB):           +5€/envio
+ · Limited Quantity (LQ):            +20€/envio
+ · Excepted Quantities (EQ):         +10€/envio
+ · Non-conveyable:                   +22.50€
+ · Excedendo dimensões (>1.2m×1.2m×1.5m): +27.50€
+ · Embalagem AHS / não-stackable:    +20€ / +75€
 
 ════════════════════════════════════════════════════════════════════
 (B) CATALOGAÇÃO DE FATURAS & DOCUMENTOS LOGÍSTICOS
