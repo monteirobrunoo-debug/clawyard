@@ -640,6 +640,8 @@
             return false;
         };
     </script>
+    {{-- SheetJS for real .xlsx export (preserves formatação, bold headers, auto-width) --}}
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
 </head>
 <body>
 
@@ -2430,10 +2432,72 @@ function buildTableCard(data) {
         ${data.analysis ? `<div class="table-analysis">🔍 ${esc(data.analysis)}</div>` : ''}
         ${data.recommendation ? `<div class="table-recommendation">✅ ${esc(data.recommendation)}</div>` : ''}
         <div class="table-actions">
-            <button class="table-excel-btn" onclick="exportExcel('${id}')" title="Download .csv (abre no Excel ou Google Sheets)">📥 Exportar CSV</button>
-            <button class="table-copy-btn" onclick="copyTable('${id}')" title="Copiar para clipboard (TSV — colar directo no Excel)">📋 Copiar tabela</button>
+            <button class="table-excel-btn" onclick="exportXlsx('${id}')" title="Download .xlsx — Excel nativo (com cabeçalho bold, larguras automáticas, auto-filter)">📥 Excel (.xlsx)</button>
+            <button class="table-excel-btn" onclick="exportExcel('${id}')" title="Download .csv — universal (Google Sheets, LibreOffice, etc.)" style="background:#445;border:1px solid #556;">📄 CSV</button>
+            <button class="table-copy-btn" onclick="copyTable('${id}')" title="Copiar para clipboard (TSV — colar directo no Excel)">📋 Copiar</button>
         </div>
     </div>`;
+}
+
+/**
+ * Export real .xlsx (Excel native format) via SheetJS.
+ *
+ * Preserva vs CSV:
+ *   • Cabeçalhos em bold
+ *   • Larguras de coluna automáticas (≈ max char count)
+ *   • Auto-filter no header
+ *   • Frozen header row (Pane split)
+ *   • Sheet name = título da tabela (sanitised)
+ *   • Detecção de tipo: números puros viram cells numéricas (não texto)
+ *
+ * Fallback: se SheetJS (XLSX) não carregou (sem internet), cai no CSV.
+ */
+function exportXlsx(id) {
+    if (typeof XLSX === 'undefined') {
+        toast?.('SheetJS ainda a carregar — uso CSV como fallback');
+        return exportExcel(id);
+    }
+    const card = document.getElementById(id);
+    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','').trim() || 'tabela_clawyard';
+    const rows = Array.from(card.querySelectorAll('table tr')).map(tr =>
+        Array.from(tr.querySelectorAll('th,td')).map(c => {
+            const v = c.textContent.trim();
+            // Convert to number if it's a clean numeric (no €, %, etc.)
+            if (/^-?\d+([.,]\d+)?$/.test(v)) {
+                return parseFloat(v.replace(',', '.'));
+            }
+            return v;
+        })
+    );
+    if (rows.length === 0) return;
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+
+    // Auto-width: cap a 60 chars para não ficar absurdo
+    const colCount = rows[0].length;
+    ws['!cols'] = Array(colCount).fill(0).map((_, i) => {
+        const maxLen = Math.max(...rows.map(r => String(r[i] ?? '').length));
+        return { wch: Math.min(Math.max(maxLen + 2, 10), 60) };
+    });
+
+    // Bold header (row 0) — SheetJS basic styling
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let c = range.s.c; c <= range.e.c; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
+        if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'E8E8E8' } } };
+    }
+
+    // Auto-filter on header
+    ws['!autofilter'] = { ref: ws['!ref'] };
+    // Freeze first row
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+    const wb = XLSX.utils.book_new();
+    const sheetName = title.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 31) || 'Tabela';
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+    const safeFn = title.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 80) || 'tabela_clawyard';
+    XLSX.writeFile(wb, safeFn + '.xlsx');
 }
 
 function exportExcel(id) {
