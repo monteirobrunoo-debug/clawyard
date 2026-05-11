@@ -165,6 +165,13 @@ class NvidiaController extends Controller
     {
         set_time_limit(700); // 700s — matches Guzzle 600s + post-stream processing headroom
 
+        // CRITICAL: continue running even if the browser disconnects mid-stream.
+        // Without this, closing the tab kills PHP at the next flush() and the
+        // assistant's reply is never persisted to messages — users complained
+        // their chat history disappeared when they closed the window before
+        // the response finished. Now PHP keeps streaming/saving to the end.
+        ignore_user_abort(true);
+
         $request->validate([
             'message'   => 'required|string|min:1|max:20000',
             'agent'     => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,crm,document,maritime,cyber,aria,quantum,finance,research,capitao,acingov,engineer,patent,energy,kyber,qnap,thinking,batch,computer,vessel,mildef,shipping,briefing,workreport',
@@ -468,6 +475,47 @@ class NvidiaController extends Controller
                 flush();
             };
 
+            // ── INCREMENTAL PERSISTENCE ────────────────────────────────────
+            // Create the assistant row up-front (empty content) so even if the
+            // script is killed mid-stream by PHP-FPM (timeout, OOM, fatal) the
+            // partial reply we already received is in the DB. Subsequent
+            // updates patch the same row instead of creating duplicates.
+            // Without this, the assistant reply only landed in DB AFTER the
+            // stream loop — closing the browser tab during streaming lost
+            // the whole response.
+            try {
+                $assistantMsg = $conversationRef->messages()->create([
+                    'role'    => 'assistant',
+                    'agent'   => $agentName_final,
+                    'content' => '',
+                ]);
+            } catch (\Throwable $e) {
+                \Log::warning('ClawYard: could not pre-create assistant row — ' . $e->getMessage());
+                $assistantMsg = null;
+            }
+
+            $fullReply     = '';
+            $lastSavedLen  = 0;
+            $lastSaveAt    = microtime(true);
+
+            // Shutdown handler: last line of defence. Fires on script exit
+            // for ANY reason — normal completion, fatal error, OOM, timeout,
+            // ignore_user_abort + connection drop. Flushes whatever buffer
+            // we have to DB so the user never loses generated content.
+            // Closures defined inside this method auto-bind $this with class
+            // scope, so calling private redactKyberSecrets() is fine.
+            register_shutdown_function(function () use (&$assistantMsg, &$fullReply, &$lastSavedLen) {
+                if (!$assistantMsg) return;
+                if (strlen($fullReply) <= $lastSavedLen) return; // already flushed
+                try {
+                    $assistantMsg->update([
+                        'content' => $this->redactKyberSecrets($fullReply),
+                    ]);
+                } catch (\Throwable $e) {
+                    // logger may also be gone in shutdown phase — swallow
+                }
+            });
+
             try {
                 // Sanitise ALL text to valid UTF-8 before Guzzle json-encodes the request.
                 // Bad bytes can come from Excel/Word extraction or old DB records.
@@ -477,9 +525,29 @@ class NvidiaController extends Controller
                 $fullReply = $resolvedAgent->stream(
                     $safeMessage,
                     $safeHistory,
-                    function (string $chunk) {
+                    function (string $chunk) use (&$fullReply, &$lastSavedLen, &$lastSaveAt, &$assistantMsg) {
                         echo 'data: ' . json_encode(['chunk' => $chunk], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                         flush();
+                        $fullReply .= $chunk;
+
+                        // Periodic save: every ≥4 KB of new content OR every 2s,
+                        // whichever comes first. Throttles DB writes so we don't
+                        // hammer Postgres on a fast stream while still bounding
+                        // data loss to a couple of seconds in the worst case.
+                        if (!$assistantMsg) return;
+                        $now      = microtime(true);
+                        $newBytes = strlen($fullReply) - $lastSavedLen;
+                        if ($newBytes >= 4096 || ($newBytes > 0 && ($now - $lastSaveAt) >= 2.0)) {
+                            try {
+                                $assistantMsg->update([
+                                    'content' => $this->redactKyberSecrets($fullReply),
+                                ]);
+                                $lastSavedLen = strlen($fullReply);
+                                $lastSaveAt   = $now;
+                            } catch (\Throwable $e) {
+                                // Don't interrupt streaming on a transient DB error
+                            }
+                        }
                     },
                     $heartbeat
                 );
@@ -514,13 +582,22 @@ class NvidiaController extends Controller
             // pipeline. A redacted marker keeps the UI consistent.
             $fullReplyPersisted = $this->redactKyberSecrets($fullReply);
 
-            // Save assistant reply after streaming completes
+            // Final save: patch the row we pre-created (incremental updates
+            // have been happening during the stream). If the early create
+            // failed for some reason, fall back to creating a fresh row so
+            // we never lose the reply.
             try {
-                $conversationRef->messages()->create([
-                    'role'    => 'assistant',
-                    'agent'   => $agentName_final,
-                    'content' => $fullReplyPersisted,
-                ]);
+                if ($assistantMsg) {
+                    $assistantMsg->update(['content' => $fullReplyPersisted]);
+                    // Prevent the shutdown handler from double-writing
+                    $lastSavedLen = strlen($fullReply);
+                } else {
+                    $conversationRef->messages()->create([
+                        'role'    => 'assistant',
+                        'agent'   => $agentName_final,
+                        'content' => $fullReplyPersisted,
+                    ]);
+                }
             } catch (\Throwable $e) {
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
             }
