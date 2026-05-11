@@ -2434,6 +2434,7 @@ function buildTableCard(data) {
         <div class="table-actions">
             <button class="table-excel-btn" onclick="exportXlsx('${id}')" title="Download .xlsx — Excel nativo (com cabeçalho bold, larguras automáticas, auto-filter)">📥 Excel (.xlsx)</button>
             <button class="table-excel-btn" onclick="exportExcel('${id}')" title="Download .csv — universal (Google Sheets, LibreOffice, etc.)" style="background:#445;border:1px solid #556;">📄 CSV</button>
+            <button class="table-excel-btn" onclick="exportTablePdf('${id}')" title="Abrir em vista PDF (Imprimir → Guardar PDF)" style="background:#a83232;border:1px solid #c84444;">📑 PDF</button>
             <button class="table-copy-btn" onclick="copyTable('${id}')" title="Copiar para clipboard (TSV — colar directo no Excel)">📋 Copiar</button>
         </div>
     </div>`;
@@ -2522,7 +2523,87 @@ function copyTable(id) {
     navigator.clipboard.writeText(csv);
     const btn = card.querySelector('.table-copy-btn');
     btn.textContent = '✅ Copiado!';
-    setTimeout(() => btn.textContent = '📋 Copiar CSV', 2000);
+    setTimeout(() => btn.textContent = '📋 Copiar', 2000);
+}
+
+/**
+ * Export table as PDF via browser print dialog.
+ * Mesmo padrão que exportMsgPDF — abre janela nova com layout limpo
+ * pronto para "Guardar como PDF". Inclui:
+ *   • Título da tabela + data
+ *   • Agente emissor (vem da .agent-tag pai do card)
+ *   • Tabela completa com bordas e linhas alternadas
+ *   • Bloco análise + recomendação se presentes
+ *   • Footer com branding ClawYard
+ */
+function exportTablePdf(id) {
+    const card  = document.getElementById(id);
+    if (!card) return;
+    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','').trim() || 'Tabela ClawYard';
+    const tableHtml  = card.querySelector('.table-wrap table')?.outerHTML || '<p>(sem tabela)</p>';
+    const analysisEl = card.querySelector('.table-analysis');
+    const recEl      = card.querySelector('.table-recommendation');
+    const analysis   = analysisEl ? analysisEl.textContent.replace(/^🔍 /, '').trim() : '';
+    const recommend  = recEl ? recEl.textContent.replace(/^✅ /, '').trim() : '';
+
+    // Agente emissor — busca o agent-tag mais próximo (parent .msg-col)
+    const msgCol  = card.closest('.msg-col');
+    const agentTag = msgCol?.querySelector('.agent-tag');
+    const agentLabel = agentTag ? agentTag.textContent.trim() : 'ClawYard';
+    const date    = new Date().toLocaleString('pt-PT', {day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+
+    // Pre-escape strings in PARENT scope (esc() exists here, not in popup)
+    const safeTitle = esc(title);
+    const safeAgent = esc(agentLabel);
+    const safeDate  = esc(date);
+    const safeAnalysis  = esc(analysis);
+    const safeRecommend = esc(recommend);
+
+    const win = window.open('', '_blank', 'width=900,height=900');
+    win.document.write(`<!DOCTYPE html>
+<html lang="pt"><head>
+<meta charset="UTF-8">
+<title>${safeTitle} — ${safeDate}</title>
+<style>
+  @page { size: A4 landscape; margin: 15mm; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 32px; color: #1a1a1a; font-size: 12px; line-height: 1.5; }
+  h1 { font-size: 18px; color: #1a1a1a; margin: 0 0 4px; border-bottom: 3px solid #76b900; padding-bottom: 8px; }
+  .meta { font-size: 11px; color: #666; margin-bottom: 22px; display: flex; justify-content: space-between; }
+  .meta strong { color: #1a1a1a; }
+  table { border-collapse: collapse; width: 100%; font-size: 11px; margin: 12px 0; }
+  thead th { background: #1a1a2a; color: #fff; font-weight: 700; padding: 9px 11px; text-align: left; border: 1px solid #1a1a2a; }
+  tbody td { padding: 7px 11px; border: 1px solid #d6d8df; vertical-align: top; }
+  tbody tr:nth-child(even) td { background: #f7f8fa; }
+  .panel { border-left: 4px solid #76b900; padding: 12px 16px; background: #f4f8eb; margin: 14px 0; border-radius: 0 4px 4px 0; }
+  .panel.rec { border-color: #2563eb; background: #eff6ff; }
+  .panel h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 6px; color: #555; font-weight: 700; }
+  .panel p { margin: 0; font-size: 12px; line-height: 1.5; }
+  footer { margin-top: 36px; padding-top: 12px; border-top: 1px solid #ccc; font-size: 9.5px; color: #888; display: flex; justify-content: space-between; }
+  @media print {
+    .no-print { display: none !important; }
+    body { margin: 0; }
+  }
+  .no-print { position: fixed; top: 12px; right: 12px; background: #fff; padding: 8px 14px; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+</style>
+</head><body>
+  <h1>${safeTitle}</h1>
+  <div class="meta">
+    <span>Gerado por <strong>${safeAgent}</strong></span>
+    <span>${safeDate}</span>
+  </div>
+  ${tableHtml}
+  ${analysis ? `<div class="panel"><h3>🔍 Análise</h3><p>${safeAnalysis}</p></div>` : ''}
+  ${recommend ? `<div class="panel rec"><h3>✅ Recomendação</h3><p>${safeRecommend}</p></div>` : ''}
+  <footer>
+    <span>ClawYard · HP-Group / PartYard</span>
+    <span>Documento gerado automaticamente</span>
+  </footer>
+  <div class="no-print">
+    <button onclick="window.print()" style="background:#76b900;color:#000;border:none;padding:10px 22px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;">🖨️ Imprimir / Guardar PDF</button>
+  </div>
+  <script>window.onload = () => setTimeout(() => window.print(), 300);<\/script>
+</body></html>`);
+    win.document.close();
 }
 
 function buildEmailCard(data) {
