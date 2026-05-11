@@ -34,9 +34,24 @@ class FedExRates
     public const EFFECTIVE_FROM  = '2026-01-05';   // 2026 tariff start
     public const EFFECTIVE_TO    = '2026-12-31';
     public const RII_FACTOR      = 1.06;           // Rate Increase 2026 (+6%)
-    public const CONTRACT_DISCOUNT = 1.0;          // 1.0 = public tariff
-                                                   // PartYard pending — atualizar quando assinado
-    public const CONTRACT        = 'TNT/FedEx — tarifário público 2026 (PT)';
+
+    /**
+     * Contract discount applied to PUBLIC tariff prices.
+     *   1.0   = sem desconto (tabela pública)
+     *   < 1.0 = desconto PartYard contratado (ex: 0.75 = -25%)
+     *
+     * 2026-05-11: contrato PartYard ASSINADO mas % ainda não introduzida —
+     * deixar a 1.0 até o utilizador confirmar valor. Quando aplicado,
+     * actualizar HAS_CONTRACT_DISCOUNT para true.
+     */
+    public const CONTRACT_DISCOUNT     = 1.0;
+    public const HAS_CONTRACT_DISCOUNT = false;
+    public const CONTRACT_SIGNED_AT    = '2026-05-11';  // data assinatura PartYard
+
+    public const CONTRACT_LABEL_PUBLIC = '⚠ Tabela pública 2026 — sem desconto PartYard aplicado';
+    public const CONTRACT_LABEL_PARTYARD = '✓ Tabela PartYard 2026 — desconto contratado aplicado';
+
+    public const CONTRACT        = 'TNT/FedEx — PartYard contract (signed 2026-05-11)';
     public const CLIENT          = 'PartYard, Lda';
 
     /** Volumetric divisor — different for continent vs ilhas */

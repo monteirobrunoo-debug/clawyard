@@ -437,6 +437,14 @@ class ShippingRateService
         string $service, float $weight, float $volumetric, float $billing,
         float $price, array $priced,
     ): array {
+        // Discount status — visible in every quote so user sabe se o
+        // preço é tabela pública (= a melhorar quando confirmar %) ou
+        // já tem o desconto PartYard aplicado.
+        $hasDiscount = FedExRates::HAS_CONTRACT_DISCOUNT;
+        $discountPct = $hasDiscount
+            ? round((1 - FedExRates::CONTRACT_DISCOUNT) * 100, 1)
+            : 0;
+
         return [
             'ok'             => true,
             'carrier'        => 'FedEx / TNT',
@@ -458,7 +466,14 @@ class ShippingRateService
             'overflow_rate'  => $priced['overflow_rate'],
             'effective_to'   => FedExRates::EFFECTIVE_TO,
             'contract'       => FedExRates::CONTRACT,
-            'disclaimer'     => 'Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. PartYard contract discount não aplicado (tabela = público).',
+            'has_discount'   => $hasDiscount,
+            'discount_pct'   => $discountPct,
+            'discount_label' => $hasDiscount
+                ? FedExRates::CONTRACT_LABEL_PARTYARD
+                : FedExRates::CONTRACT_LABEL_PUBLIC,
+            'disclaimer'     => $hasDiscount
+                ? "Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. Desconto PartYard {$discountPct}% já aplicado."
+                : 'Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. **Tabela pública** — desconto PartYard ainda não introduzido na configuração (FedExRates::CONTRACT_DISCOUNT = 1.0).',
         ];
     }
 
@@ -470,8 +485,17 @@ class ShippingRateService
             return $msg;
         }
 
+        // Discount badge sempre visível — line 2 da estimativa
+        $priceLine = '- **Preço estimado:** **'
+            . number_format($q['price_excl_vat'], 2, ',', ' ') . ' €** (excl. IVA)';
+        if ($q['has_discount']) {
+            $priceLine .= ' · *com desconto PartYard ' . $q['discount_pct'] . '%*';
+        } else {
+            $priceLine .= ' · *⚠ sem desconto PartYard (tabela pública)*';
+        }
+
         $lines = [
-            '📦 **Estimativa FedEx / TNT (tarifa 2026)**',
+            '📦 **Estimativa FedEx / TNT (' . $q['discount_label'] . ')**',
             '',
             '- **Rota:** ' . $q['origin'] . ' → ' . $q['destination']
                 . ' (' . $q['destination_pt'] . ', ' . $q['zone_label'] . ')',
@@ -480,7 +504,7 @@ class ShippingRateService
                 . ($q['volumetric_kg'] > $q['real_weight']
                     ? ' *(volumétrico ' . $q['volumetric_kg'] . ' kg > real ' . $q['real_weight'] . ' kg)*'
                     : ''),
-            '- **Preço estimado:** **' . number_format($q['price_excl_vat'], 2, ',', ' ') . ' €** (excl. IVA)',
+            $priceLine,
         ];
 
         if ($q['overflow_kg'] > 0) {
