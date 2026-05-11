@@ -36,22 +36,27 @@ class FedExRates
     public const RII_FACTOR      = 1.06;           // Rate Increase 2026 (+6%)
 
     /**
-     * Contract discount applied to PUBLIC tariff prices.
-     *   1.0   = sem desconto (tabela pública)
-     *   < 1.0 = desconto PartYard contratado (ex: 0.75 = -25%)
+     * Contract status — confirmed by user 2026-05-11.
      *
-     * 2026-05-11: contrato PartYard ASSINADO mas % ainda não introduzida —
-     * deixar a 1.0 até o utilizador confirmar valor. Quando aplicado,
-     * actualizar HAS_CONTRACT_DISCOUNT para true.
+     * Os valores das tabelas TARIFFS abaixo SÃO os preços contratados
+     * pela PartYard sob o acordo comercial TNT/FedEx PTDF6 (código
+     * interno TNT). Não há percentagem de desconto adicional a aplicar
+     * — `CONTRACT_DISCOUNT = 1.0` reflecte que o que está nas tabelas
+     * é o que a TNT factura.
+     *
+     * Se a TNT publicar mais tarde um aumento intermédio (RIA, etc.)
+     * ou se a PartYard renegociar com nova grelha, actualizar os
+     * arrays TARIFFS directamente.
      */
     public const CONTRACT_DISCOUNT     = 1.0;
-    public const HAS_CONTRACT_DISCOUNT = false;
-    public const CONTRACT_SIGNED_AT    = '2026-05-11';  // data assinatura PartYard
+    public const HAS_CONTRACT_DISCOUNT = true;
+    public const CONTRACT_SIGNED_AT    = '2026-05-11';
+    public const CONTRACT_CODE         = 'PTDF6';
 
     public const CONTRACT_LABEL_PUBLIC = '⚠ Tabela pública 2026 — sem desconto PartYard aplicado';
-    public const CONTRACT_LABEL_PARTYARD = '✓ Tabela PartYard 2026 — desconto contratado aplicado';
+    public const CONTRACT_LABEL_PARTYARD = '✓ Tarifa PartYard PTDF6 — contratada';
 
-    public const CONTRACT        = 'TNT/FedEx — PartYard contract (signed 2026-05-11)';
+    public const CONTRACT        = 'TNT/FedEx — Acordo Comercial PartYard PTDF6 (signed 2026-05-11)';
     public const CLIENT          = 'PartYard, Lda';
 
     /** Volumetric divisor — different for continent vs ilhas */

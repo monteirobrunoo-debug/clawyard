@@ -437,13 +437,23 @@ class ShippingRateService
         string $service, float $weight, float $volumetric, float $billing,
         float $price, array $priced,
     ): array {
-        // Discount status — visible in every quote so user sabe se o
-        // preço é tabela pública (= a melhorar quando confirmar %) ou
-        // já tem o desconto PartYard aplicado.
         $hasDiscount = FedExRates::HAS_CONTRACT_DISCOUNT;
-        $discountPct = $hasDiscount
-            ? round((1 - FedExRates::CONTRACT_DISCOUNT) * 100, 1)
+        $multiplier  = FedExRates::CONTRACT_DISCOUNT;
+        // Discount % só faz sentido reportar quando aplicamos um multiplier
+        // sobre tabela pública (= multiplier < 1.0). Quando o contrato é
+        // de "preços fixos contratados" (multiplier == 1.0 + has_discount),
+        // mostramos "preços contratados" sem percentagem inventada.
+        $discountPct = ($hasDiscount && $multiplier < 1.0)
+            ? round((1 - $multiplier) * 100, 1)
             : 0;
+
+        if ($hasDiscount) {
+            $disclaimer = $multiplier < 1.0
+                ? "Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. Desconto PartYard {$discountPct}% aplicado sobre tabela pública."
+                : 'Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. Preços já contratados PartYard (Acordo Comercial PTDF6).';
+        } else {
+            $disclaimer = 'Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. **Tabela pública** — desconto PartYard ainda não configurado.';
+        }
 
         return [
             'ok'             => true,
@@ -466,14 +476,13 @@ class ShippingRateService
             'overflow_rate'  => $priced['overflow_rate'],
             'effective_to'   => FedExRates::EFFECTIVE_TO,
             'contract'       => FedExRates::CONTRACT,
+            'contract_code'  => FedExRates::CONTRACT_CODE,
             'has_discount'   => $hasDiscount,
             'discount_pct'   => $discountPct,
             'discount_label' => $hasDiscount
                 ? FedExRates::CONTRACT_LABEL_PARTYARD
                 : FedExRates::CONTRACT_LABEL_PUBLIC,
-            'disclaimer'     => $hasDiscount
-                ? "Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. Desconto PartYard {$discountPct}% já aplicado."
-                : 'Valor indicativo — exclui IVA, sobretaxa combustível e despesas adicionais. **Tabela pública** — desconto PartYard ainda não introduzido na configuração (FedExRates::CONTRACT_DISCOUNT = 1.0).',
+            'disclaimer'     => $disclaimer,
         ];
     }
 
@@ -485,11 +494,13 @@ class ShippingRateService
             return $msg;
         }
 
-        // Discount badge sempre visível — line 2 da estimativa
+        // Discount badge sempre visível — line da estimativa
         $priceLine = '- **Preço estimado:** **'
             . number_format($q['price_excl_vat'], 2, ',', ' ') . ' €** (excl. IVA)';
         if ($q['has_discount']) {
-            $priceLine .= ' · *com desconto PartYard ' . $q['discount_pct'] . '%*';
+            $priceLine .= $q['discount_pct'] > 0
+                ? ' · *com desconto PartYard ' . $q['discount_pct'] . '%*'
+                : ' · *tarifa contratada PartYard ' . $q['contract_code'] . '*';
         } else {
             $priceLine .= ' · *⚠ sem desconto PartYard (tabela pública)*';
         }
