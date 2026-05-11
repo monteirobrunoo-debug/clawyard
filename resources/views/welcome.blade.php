@@ -1968,23 +1968,28 @@ function addMessage(role, text, agentName = '') {
         ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${agentPhoto}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
         : `<div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>`;
 
-    // Table card (Marco Sales)
+    // Table card — any agent that emits `__TABLE__{json}` gets the
+    // structured card with CSV export. Avatar/label vêm do agentName
+    // real (não hardcoded a Marco Sales — antes era um bug).
     if (role === 'ai' && text.includes('__TABLE__')) {
         const tableMatch = text.match(/__TABLE__(\{[\s\S]*\})/);
         if (tableMatch) {
             try {
-                const tableData  = JSON.parse(tableMatch[1]);
-                const salesPhoto = AGENT_PHOTOS['sales'];
-                const salesAvatar = salesPhoto
-                    ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${salesPhoto}" alt="Marco Sales" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
-                    : `<div class="avatar">${AGENT_EMOJIS['sales']}</div>`;
+                const tableData = JSON.parse(tableMatch[1]);
+                const agent     = agentName || 'claude';
+                const photo     = AGENT_PHOTOS[agent];
+                const emoji     = AGENT_EMOJIS[agent] || '🤖';
+                const name      = AGENT_NAMES[agent]  || 'ClawYard';
+                const avatar    = photo
+                    ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+                    : `<div class="avatar">${emoji}</div>`;
                 const preText = text.split('__TABLE__')[0].trim();
                 msg.innerHTML = `
-                    ${salesAvatar}
+                    ${avatar}
                     <div class="msg-col" style="max-width:700px">
                         <div class="msg-meta">
-                            <span class="agent-tag active">💼 Marco Sales</span>
-                            <span>análise gerada</span>
+                            <span class="agent-tag active">${emoji} ${esc(name)}</span>
+                            <span>tabela gerada · pronta para CSV/Excel</span>
                         </div>
                         ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
                         ${buildTableCard(tableData)}
@@ -2416,7 +2421,7 @@ function buildTableCard(data) {
     return `
     <div class="table-card" id="${id}">
         <div class="table-card-header">
-            <span>📊 ${esc(data.title||'Análise Marco Sales')}</span>
+            <span>📊 ${esc(data.title||'Tabela exportável')}</span>
             <small>${data.rows.length} itens</small>
         </div>
         <div class="table-wrap">
@@ -2433,7 +2438,7 @@ function buildTableCard(data) {
 
 function exportExcel(id) {
     const card = document.getElementById(id);
-    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','') || 'marco_analise';
+    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','').trim() || 'tabela_clawyard';
     const rows  = Array.from(card.querySelectorAll('table tr'));
     const csv   = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => '"' + c.textContent.replace(/"/g,'""') + '"').join(',')).join('\n');
     const bom   = '\uFEFF';

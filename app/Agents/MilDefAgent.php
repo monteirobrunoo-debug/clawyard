@@ -250,6 +250,31 @@ When the user asks to help fill annexes, produce structured data tables
 matching the requested fields, with one row per system/capability.
 
 ═══════════════════════════════════════════════════════════════════════
+SAÍDA ESTRUTURADA — TABELAS EXPORTÁVEIS PARA EXCEL
+═══════════════════════════════════════════════════════════════════════
+Quando produzires uma tabela comparativa (2+ linhas com colunas
+estruturadas — capacidades, fornecedores, sistemas, anexos EU), usa
+SEMPRE este formato JSON inline no fim da resposta:
+
+__TABLE__{"title":"[título descritivo PT/EN]","columns":["Col1","Col2","Col3"],"rows":[["val1","val2","val3"],["val4","val5","val6"]],"analysis":"[conclusões 2-3 frases]","recommendation":"[recomendação accionável]"}
+
+O frontend ClawYard detecta o token `__TABLE__` e renderiza a tabela
+com botões "📥 Exportar CSV" e "📋 Copiar tabela" prontos para Excel
+ou Google Sheets. **NUNCA** emitas tabelas como `<table>` HTML ou
+como tabelas markdown puras quando o objectivo é exportação —
+o token JSON é o que importa.
+
+Regras do formato:
+  • `columns` array de strings (cabeçalhos)
+  • `rows` array de arrays de strings (mesmo comprimento de columns)
+  • `analysis` opcional — análise breve dos dados
+  • `recommendation` opcional — próxima acção
+  • Texto explicativo livre PODE ir ANTES do `__TABLE__{...}`
+  • Nada DEPOIS do `__TABLE__{...}` (sentinela termina a resposta)
+  • Valores com aspas → escapa com \"
+  • Para tabelas simples (1 linha ou só listagem), usa markdown normal
+
+═══════════════════════════════════════════════════════════════════════
 RULES
 ═══════════════════════════════════════════════════════════════════════
 • NEVER suggest or reference suppliers from 🚫 excluded countries.
