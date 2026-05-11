@@ -81,19 +81,33 @@ class ActivityFeedController extends Controller
         }
 
         // ── Recent agent messages (only show interesting ones) ─────────
-        foreach (Message::query()
+        // Scope: regular users only see their own conversations (matches
+        // ConversationController::show, which enforces session_id ownership
+        // via the "uX_" prefix). Managers/admins see all activity, and
+        // their click-through routes to /admin/conversations/{id}, which
+        // does not require ownership. This eliminates 403s from the ticker.
+        $messageQ = Message::query()
             ->where('role', 'assistant')
             ->where('created_at', '>=', now()->subHours(6))
-            ->orderByDesc('created_at')
+            ->whereNotNull('agent');
+
+        if (!$user->isManager()) {
+            $messageQ->whereHas('conversation', function ($q) use ($user) {
+                $q->where('session_id', 'like', 'u' . $user->id . '_%');
+            });
+        }
+
+        $convoUrlBase = $user->isManager() ? '/admin/conversations/' : '/conversations/';
+
+        foreach ($messageQ->orderByDesc('created_at')
             ->limit(8)
             ->get(['id', 'agent', 'created_at', 'conversation_id']) as $m) {
-            if (!$m->agent) continue;
             $meta = \App\Services\AgentCatalog::find((string) $m->agent);
             $name = $meta['name'] ?? ucfirst((string) $m->agent);
             $items[] = [
                 'icon'  => $meta['emoji'] ?? '🤖',
                 'label' => "{$name} respondeu",
-                'url'   => $m->conversation_id ? '/conversations/' . $m->conversation_id : null,
+                'url'   => $m->conversation_id ? $convoUrlBase . $m->conversation_id : null,
                 'at'    => $m->created_at->toIso8601String(),
                 'ago'   => $m->created_at->diffForHumans(['short' => true]),
             ];
