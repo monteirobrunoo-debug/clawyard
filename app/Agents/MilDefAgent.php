@@ -254,23 +254,43 @@ SAÍDA ESTRUTURADA — TABELAS EXPORTÁVEIS PARA EXCEL
 ═══════════════════════════════════════════════════════════════════════
 Quando produzires uma tabela comparativa (2+ linhas com colunas
 estruturadas — capacidades, fornecedores, sistemas, anexos EU), usa
-SEMPRE este formato JSON inline no fim da resposta:
+SEMPRE este formato JSON inline:
 
 __TABLE__{"title":"[título descritivo PT/EN]","columns":["Col1","Col2","Col3"],"rows":[["val1","val2","val3"],["val4","val5","val6"]],"analysis":"[conclusões 2-3 frases]","recommendation":"[recomendação accionável]"}
 
 O frontend ClawYard detecta o token `__TABLE__` e renderiza a tabela
-com botões "📥 Exportar CSV" e "📋 Copiar tabela" prontos para Excel
-ou Google Sheets. **NUNCA** emitas tabelas como `<table>` HTML ou
-como tabelas markdown puras quando o objectivo é exportação —
-o token JSON é o que importa.
+com botões "📥 Excel (.xlsx)", "📄 CSV", "📑 PDF" e "📋 Copiar".
+**NUNCA** emitas tabelas como `<table>` HTML ou markdown puras
+quando o objectivo é exportação — o token JSON é o que importa.
+
+══ MULTI-LOTE / MULTI-CATEGORIA ══
+Para concursos com **múltiplos lotes** ou **categorias separadas**
+(ex: "Lote 1: aeronaves, Lote 2: viaturas, Lote 3: simulação"),
+emite UM `__TABLE__{...}` POR LOTE em sequência — cada um é uma
+card independente exportável.
+
+Exemplo correcto para concurso 3 lotes:
+
+  Aqui estão os fornecedores propostos por lote:
+
+  __TABLE__{"title":"Lote 1 — Aeronaves F-16 spares","columns":[...],"rows":[[...]],"analysis":"...","recommendation":"..."}
+
+  __TABLE__{"title":"Lote 2 — Viaturas blindadas","columns":[...],"rows":[[...]],"analysis":"...","recommendation":"..."}
+
+  __TABLE__{"title":"Lote 3 — Simulação táctica","columns":[...],"rows":[[...]],"analysis":"...","recommendation":"..."}
+
+Resultado no chat: 3 cards independentes, cada uma com os 4 botões
+de export (Excel/CSV/PDF/Copy). User pode descarregar o Excel de
+cada lote separadamente OU copiar tudo para um workbook.
 
 Regras do formato:
   • `columns` array de strings (cabeçalhos)
   • `rows` array de arrays de strings (mesmo comprimento de columns)
   • `analysis` opcional — análise breve dos dados
   • `recommendation` opcional — próxima acção
-  • Texto explicativo livre PODE ir ANTES do `__TABLE__{...}`
-  • Nada DEPOIS do `__TABLE__{...}` (sentinela termina a resposta)
+  • `title` recomendado começar com "Lote N — ..." quando aplicável
+  • Texto explicativo PODE ir ANTES do primeiro `__TABLE__{...}`
+  • Texto entre tabelas PODE existir (e.g. "Próximo lote:")
   • Valores com aspas → escapa com \"
   • Para tabelas simples (1 linha ou só listagem), usa markdown normal
 

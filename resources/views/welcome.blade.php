@@ -1970,37 +1970,50 @@ function addMessage(role, text, agentName = '') {
         ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${agentPhoto}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
         : `<div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>`;
 
-    // Table card — any agent that emits `__TABLE__{json}` gets the
-    // structured card with CSV export. Avatar/label vêm do agentName
-    // real (não hardcoded a Marco Sales — antes era um bug).
+    // Table card(s) — any agent that emits `__TABLE__{json}` gets a
+    // structured card per JSON block. Supports MULTIPLE __TABLE__ in
+    // one response (use case: concurso com vários lotes, cada lote
+    // sai como Excel/CSV/PDF independente).
+    //
+    // Avatar/label vêm do agentName real — não hardcoded.
     if (role === 'ai' && text.includes('__TABLE__')) {
-        const tableMatch = text.match(/__TABLE__(\{[\s\S]*\})/);
-        if (tableMatch) {
-            try {
-                const tableData = JSON.parse(tableMatch[1]);
-                const agent     = agentName || 'claude';
-                const photo     = AGENT_PHOTOS[agent];
-                const emoji     = AGENT_EMOJIS[agent] || '🤖';
-                const name      = AGENT_NAMES[agent]  || 'ClawYard';
-                const avatar    = photo
-                    ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
-                    : `<div class="avatar">${emoji}</div>`;
-                const preText = text.split('__TABLE__')[0].trim();
-                msg.innerHTML = `
-                    ${avatar}
-                    <div class="msg-col" style="max-width:700px">
-                        <div class="msg-meta">
-                            <span class="agent-tag active">${emoji} ${esc(name)}</span>
-                            <span>tabela gerada · pronta para CSV/Excel</span>
-                        </div>
-                        ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
-                        ${buildTableCard(tableData)}
-                    </div>`;
-                chat.appendChild(msg);
-                chat.scrollTop = chat.scrollHeight;
-                return msg;
-            } catch(e) { /* fall through to normal render */ }
+        const tables = parseMultiTables(text);
+        if (tables.length > 0) {
+            const agent  = agentName || 'claude';
+            const photo  = AGENT_PHOTOS[agent];
+            const emoji  = AGENT_EMOJIS[agent] || '🤖';
+            const name   = AGENT_NAMES[agent]  || 'ClawYard';
+            const avatar = photo
+                ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+                : `<div class="avatar">${emoji}</div>`;
+
+            const preText = tables[0].preText.trim();
+            const cardsHtml = tables.map((t, i) => {
+                const between = i > 0 && t.preText.trim()
+                    ? `<div class="bubble" style="margin-top:14px;">${markdownToHtml(t.preText.trim())}</div>`
+                    : '';
+                return between + buildTableCard(t.data);
+            }).join('');
+
+            const subMeta = tables.length === 1
+                ? 'tabela gerada · pronta para CSV/Excel/PDF'
+                : `${tables.length} tabelas geradas · 1 export por lote (CSV/Excel/PDF)`;
+
+            msg.innerHTML = `
+                ${avatar}
+                <div class="msg-col" style="max-width:760px">
+                    <div class="msg-meta">
+                        <span class="agent-tag active">${emoji} ${esc(name)}</span>
+                        <span>${subMeta}</span>
+                    </div>
+                    ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
+                    ${cardsHtml}
+                </div>`;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+            return msg;
         }
+        /* fall through to normal markdown render if parsing failed */
     }
 
     // Kyber keys card
@@ -2416,6 +2429,58 @@ function rejectAction(id) {
 // ═══════════════════════════════
 //  EMAIL CARD
 // ═══════════════════════════════
+/**
+ * Parse multiple __TABLE__{json} occurrences from a single AI response.
+ *
+ * MilDef (Cor. Rodrigues) e Marco Sales podem emitir vários blocos
+ * quando o concurso tem múltiplos lotes ou categorias. Cada bloco
+ * vira uma card independente com botões de export próprios.
+ *
+ * Returns array of {data: <parsedJson>, preText: <text before this block>}.
+ * Empty array if no valid __TABLE__ JSON found.
+ *
+ * Brace-balanced parser (regex naive não funciona com nested {} dentro
+ * de strings JSON; este percorre char a char respeitando strings).
+ */
+function parseMultiTables(text) {
+    const results = [];
+    let cursor = 0;
+    while (true) {
+        const marker = text.indexOf('__TABLE__', cursor);
+        if (marker === -1) break;
+        const preText = text.slice(cursor, marker);
+        // Find the opening { after the marker
+        let i = marker + 9;
+        while (i < text.length && text[i] !== '{') i++;
+        if (i >= text.length) break;
+        // Brace-balanced scan, respecting JSON strings + escapes
+        let depth = 0, inString = false, escape = false;
+        const start = i;
+        for (; i < text.length; i++) {
+            const ch = text[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\') { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') depth++;
+            else if (ch === '}') {
+                depth--;
+                if (depth === 0) { i++; break; }
+            }
+        }
+        if (depth !== 0) break;   // unbalanced — skip
+        const json = text.slice(start, i);
+        try {
+            const data = JSON.parse(json);
+            if (data && Array.isArray(data.columns) && Array.isArray(data.rows)) {
+                results.push({ data, preText });
+            }
+        } catch (_) { /* malformed JSON — skip this block */ }
+        cursor = i;
+    }
+    return results;
+}
+
 function buildTableCard(data) {
     const id = 'tbl_' + Date.now();
     const headers = data.columns.map(c => `<th>${esc(c)}</th>`).join('');
