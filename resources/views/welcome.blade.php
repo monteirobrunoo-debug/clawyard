@@ -2481,8 +2481,13 @@ function parseMultiTables(text) {
     return results;
 }
 
+// Counter para garantir IDs únicos quando várias tabelas são geradas no
+// mesmo milissegundo (caso típico: MilDef com 3 lotes — Date.now() colide
+// e os 3 cards ficavam com o mesmo id, fazendo todos os botões exportarem
+// só o primeiro lote).
+let _tableCardCounter = 0;
 function buildTableCard(data) {
-    const id = 'tbl_' + Date.now();
+    const id = 'tbl_' + Date.now() + '_' + (++_tableCardCounter);
     const headers = data.columns.map(c => `<th>${esc(c)}</th>`).join('');
     const rows = data.rows.map(r => `<tr>${r.map(c => `<td>${esc(String(c))}</td>`).join('')}</tr>`).join('');
     return `
