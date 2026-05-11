@@ -69,19 +69,35 @@ CONTRATOS / TARIFAS ACTIVAS — 2 transportadoras:
    Volumetric divisor: L×W×H (cm) / 5000.
    Endpoint: `ShippingRateService::quote()`.
 
- · **FedEx / TNT** — tarifa pública 2026 (válida 5/Jan/2026 → 31/Dez/2026).
-   Serviços disponíveis:
-     · `pt_domestic` — PT nacional (até 5kg base + adc/kg), 4 destinos:
+ · **FedEx / TNT** — Acordo Comercial PartYard PTDF6 (assinado 2026-05-11).
+   **7 serviços** com tabelas completas (preços CONTRATADOS, sem desconto adicional):
+
+     · `pt_domestic` — PT nacional, 4 destinos:
         pt1 (continental Z1, default), pt2 (continental Z2 = códigos
         5000-5999, 6050, 7000-8999), pt_m (Madeira), pt_a (Açores).
         Z1 até 5kg = 5.92€; Madeira até 5kg = 44.95€; Açores até 5kg = 52.24€.
-     · `int_express` — internacional end-of-next-day, 9 zonas.
-        Espanha Z1 5kg ≈ 31€; Z3 (DE/FR/IT/GB) 5kg ≈ 41€; Z6 (US/CA/BR) 5kg ≈ 74€.
-     · `int_economy` — internacional ~30% mais barato (slower).
-   Premium tiers (com surcharge fixo por envio):
-     · 9:00 Express  +8€ (<70kg) / +12€ (>70kg) — DE/AT/BE/NL/IT (Z3 só)
-     · 10:00 Express +5€ / +8€ — 45+ países
-     · 12:00 Express +2€ / +4€ — 65+ países
+
+     · `int_express` — internacional end-of-next-day, 9 zonas (default intl).
+        Z1 (ES cidades) 5kg ≈ 31€; Z3 (DE/FR/IT/GB) 5kg ≈ 41€; Z6 (US/CA/BR) 5kg ≈ 74€.
+
+     · `int_economy` — internacional slower (~7-30% mais barato vs Express).
+
+     · `int_express_12` — entrega antes do meio-dia (~65 países). 5kg DE ≈ 62€ (+52% vs Express).
+
+     · `int_express_10` — entrega antes 10:00 (~45 países). 5kg DE ≈ 72€ (+78%).
+
+     · `int_express_09` — entrega antes 9:00 (~40 países, principalmente Z3 + Z6).
+        5kg DE ≈ 94€ (+130% vs Express). Premium absoluto.
+
+     · `int_economy_12` — entrega antes do meio-dia mais barata (~25 países UE, freight ≥5kg).
+        Ideal para paletes de spares sem urgência horária.
+
+   QUANDO ESCOLHER PREMIUM (12:00/10:00/9:00):
+     - AOG (Aircraft on Ground) / vessel ETA crítico
+     - SLA contratual com cliente exige hora fixa
+     - Documentação alfândega tem deadline cedo (ex: declarations antes 12h)
+     - Caso contrário → `int_express` (end-of-day chega na mesma)
+
    Limite continente: 40 kg/item, 3000 kg/envio. Ilhas: 150 kg/envio.
    Volumetric: continente L×W×H (m) × 150; ilhas × 250; internacional / 5000.
    Endpoint: `ShippingRateService::quoteFedEx()`.
