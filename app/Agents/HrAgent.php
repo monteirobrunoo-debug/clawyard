@@ -329,6 +329,38 @@ Fase 2 — Mapear categorias profissionais para HEM5 (CCT lookup, 2 dias)
 Fase 3 — Lançar campos custom: KPI_Anual, OKR_Q1..Q4 em OHEM user fields
 Fase 4 — Integrar com agente CrmAgent (Marta) para owner-based reporting
 Fase 5 — Auto-gerar Relatório Único anual a partir do SAP (Abril)
+
+═══════════════════════════════════════════════════════════════════════
+BIBLIOTECA DE CONHECIMENTO DISPONÍVEL (acedida automaticamente via RAG):
+
+📕 LABORAL / FOLHA DE SALÁRIOS PT (11 livros, ~720 páginas):
+• PROCESSAMENTO DE SALÁRIOS — Legislação Laboral + Código Contributivo (269p + 111p manual)
+• Guia Prático Contrato Trabalho a Termo (37p)
+• Guia Prático Remunerações (a1 41p + a2 41p)
+• Férias, Feriados e Faltas (40p + 110p apresentação)
+• Declaração de Remunerações — Guia Prático (26p)
+• Prestações Compensatórias, Subsídios Férias/Natal (15p)
+• Faltas por motivo de falecimento (7p + 1p NT)
+
+📗 LIDERANÇA E ESTRATÉGIA (3 livros, ~825 páginas):
+• Blue Ocean Strategy — How to Create Uncontested Market Space (362p)
+• Extreme Ownership — Responsabilização Total (Jocko Willink, 341p)
+• Manual do Líder — Carlos Alexandre Dohler (122p)
+
+📘 APRENDIZAGEM E DESENVOLVIMENTO (1 livro, 200p):
+• Nelson Dellis — Everyday Genius (técnicas de memória e aprendizagem,
+  base para programas de formação interna eficazes)
+
+📙 GESTÃO ORGANIZACIONAL (2 livros, ~1.160 páginas):
+• Introduction to Business (742p — gestão geral, processos, departamentos)
+• Customer Relationship Management 3rd Ed. (421p — princípios também
+  aplicáveis a relacionamento interno colaborador/empresa)
+
+Quando o utilizador faz uma pergunta de RH/laboral, o sistema faz pesquisa
+semântica nestes 17+ livros e injecta as 3-5 passagens mais relevantes ANTES
+da minha resposta. Cito sempre a fonte (título + página) quando uso o
+conteúdo. Se a informação não vier nas passagens injectadas, digo que
+não encontrei e proponho alternativa (consultar Decreto-Lei, ACT, etc).
 SAP;
 
         // Compose specialty + PartYard context + KPI catalog + SAP roadmap
@@ -406,7 +438,7 @@ SAP;
 
         // TechnicalBookSkillTrait dá acesso a livros de strategy, finance,
         // commercial, learning — útil para metodologias OKR/KPI/talent.
-        $bookCtx = $this->augmentWithTechnicalBooks($message, 4);
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 6);
         $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
         $response = $this->client->post('/v1/messages', [
@@ -437,7 +469,7 @@ SAP;
 
         if ($heartbeat) $heartbeat('a activar análise de pessoas 👥');
 
-        $bookCtx = $this->augmentWithTechnicalBooks($message, 4);
+        $bookCtx = $this->augmentWithTechnicalBooks($message, 6);
         $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
         $response = $this->client->post('/v1/messages', [
