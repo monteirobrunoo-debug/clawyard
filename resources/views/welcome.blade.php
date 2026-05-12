@@ -1992,15 +1992,17 @@ function addMessage(role, text, agentName = '') {
         ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${agentPhoto}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
         : `<div class="avatar">${role === 'user' ? emoji.charAt(0).toUpperCase() : emoji}</div>`;
 
-    // Table card(s) — any agent that emits `__TABLE__{json}` gets a
-    // structured card per JSON block. Supports MULTIPLE __TABLE__ in
-    // one response (use case: concurso com vários lotes, cada lote
-    // sai como Excel/CSV/PDF independente).
+    // ─── Unified structured-token renderer ──────────────────────────────
     //
-    // Avatar/label vêm do agentName real — não hardcoded.
-    if (role === 'ai' && text.includes('__TABLE__')) {
-        const tables = parseMultiTables(text);
-        if (tables.length > 0) {
+    // Parses TABLE / CHART / PPT tokens in document order and renders each
+    // as its own card, interleaved with markdown text blocks. Resolves the
+    // bug onde respostas com BOTH __TABLE__ AND __CHART__ só renderizavam
+    // o primeiro tipo e deixavam o outro em JSON raw.
+    if (role === 'ai' && (text.includes('__TABLE__') || text.includes('__CHART__') || text.includes('__PPT__'))) {
+        const blocks = parseStructuredBlocks(text);
+        const cardCount = blocks.filter(b => b.type !== 'text').length;
+
+        if (cardCount > 0) {
             const agent  = agentName || 'claude';
             const photo  = AGENT_PHOTOS[agent];
             const emoji  = AGENT_EMOJIS[agent] || '🤖';
@@ -2009,39 +2011,52 @@ function addMessage(role, text, agentName = '') {
                 ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
                 : `<div class="avatar">${emoji}</div>`;
 
-            const preText = tables[0].preText.trim();
-            const cardsHtml = tables.map((t, i) => {
-                const between = i > 0 && t.preText.trim()
-                    ? `<div class="bubble" style="margin-top:14px;">${markdownToHtml(t.preText.trim())}</div>`
-                    : '';
-                return between + buildTableCard(t.data);
+            // Render blocks in order — text between cards stays as markdown bubble.
+            const chartsToInit = []; // canvas IDs to instantiate after DOM is live
+            const tablesInResponse = blocks.filter(b => b.type === 'table');
+            const bodyHtml = blocks.map(b => {
+                if (b.type === 'text') {
+                    const t = b.content.trim();
+                    return t ? `<div class="bubble" style="margin-top:10px">${markdownToHtml(t)}</div>` : '';
+                }
+                if (b.type === 'table') return buildTableCard(b.data);
+                if (b.type === 'chart') {
+                    chartsToInit.push({ data: b.data, canvasId: b.canvasId });
+                    return buildChartCard(b.data, b.canvasId);
+                }
+                if (b.type === 'ppt') return buildPptCard(b.data);
+                return '';
             }).join('');
 
-            // #11 — Detect partial __TABLE__ JSON (e.g. user closed tab
-            // mid-stream and the persisted reply has `__TABLE__{` without
-            // matching `}`). Show a friendly "resposta interrompida" hint
-            // instead of silently letting the markdown fall-through show
-            // garbled JSON. We trigger this when there's a __TABLE__ marker
-            // in text but parser found ZERO tables AND text has an unclosed
-            // brace count.
-            const lastMarker = text.lastIndexOf('__TABLE__');
+            // Truncation detection: any token marker without matching closing brace.
+            const lastMarker = Math.max(
+                text.lastIndexOf('__TABLE__'),
+                text.lastIndexOf('__CHART__'),
+                text.lastIndexOf('__PPT__')
+            );
             const tail = lastMarker >= 0 ? text.slice(lastMarker) : '';
             const openCnt  = (tail.match(/\{/g) || []).length;
             const closeCnt = (tail.match(/\}/g) || []).length;
             const isTruncated = openCnt > closeCnt;
 
-            // #14 — Workbook combinado: only useful when 2+ tables came in.
-            const workbookBtn = tables.length >= 2
-                ? `<div style="margin:8px 0 0 0"><button class="table-excel-btn" onclick="exportAllTablesAsWorkbook(this)" style="background:#1e7a3d;border:1px solid #2c9a4f">📊 Workbook combinado (1 .xlsx com ${tables.length} tabs)</button></div>`
+            // Workbook combinado: só faz sentido com 2+ tabelas.
+            const workbookBtn = tablesInResponse.length >= 2
+                ? `<div style="margin:8px 0 0 0"><button class="table-excel-btn" onclick="exportAllTablesAsWorkbook(this)" style="background:#1e7a3d;border:1px solid #2c9a4f">📊 Workbook combinado (1 .xlsx com ${tablesInResponse.length} tabs)</button></div>`
                 : '';
-
-            const subMeta = tables.length === 1
-                ? 'tabela gerada · pronta para CSV/Excel/PDF'
-                : `${tables.length} tabelas geradas · 1 export por lote (CSV/Excel/PDF)`;
 
             const truncatedNotice = isTruncated
-                ? `<div class="bubble" style="background:#3a2a14;border:1px solid #6a4a1e;margin-top:10px">⚠️ Esta resposta foi interrompida a meio (provavelmente fechaste o separador antes de terminar). Os ${tables.length} lotes acima estão completos, mas pode haver mais que ficaram por gerar. Para obter a versão completa, faz a pergunta novamente.</div>`
+                ? `<div class="bubble" style="background:#3a2a14;border:1px solid #6a4a1e;margin-top:10px">⚠️ Resposta interrompida a meio. Os cards acima estão completos, mas pode haver mais que ficaram por gerar. Faz a pergunta novamente para obter a versão completa.</div>`
                 : '';
+
+            // Sub-meta resume the content (e.g. "1 tabela · 1 gráfico · pronto a exportar")
+            const tCount = blocks.filter(b => b.type === 'table').length;
+            const cCount = blocks.filter(b => b.type === 'chart').length;
+            const pCount = blocks.filter(b => b.type === 'ppt').length;
+            const parts = [];
+            if (tCount) parts.push(`${tCount} tabela${tCount===1?'':'s'}`);
+            if (cCount) parts.push(`${cCount} gráfico${cCount===1?'':'s'}`);
+            if (pCount) parts.push(`${pCount} PPT`);
+            const subMeta = parts.join(' · ') + ' · pronto a exportar';
 
             msg.innerHTML = `
                 ${avatar}
@@ -2050,86 +2065,17 @@ function addMessage(role, text, agentName = '') {
                         <span class="agent-tag active">${emoji} ${esc(name)}</span>
                         <span>${subMeta}</span>
                     </div>
-                    ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
-                    ${cardsHtml}
+                    ${bodyHtml}
                     ${workbookBtn}
                     ${truncatedNotice}
                 </div>`;
             chat.appendChild(msg);
             chat.scrollTop = chat.scrollHeight;
+            // Instantiate any Chart.js canvases AFTER they're attached to DOM.
+            chartsToInit.forEach(c => renderChart(c.data, c.canvasId));
             return msg;
         }
-        /* fall through to normal markdown render if parsing failed */
-    }
-
-    // ─── Chart card(s) — agent emits `__CHART__{json}` ───────────────────
-    // Format JSON:
-    //   {
-    //     "type": "bar"|"line"|"pie"|"doughnut"|"radar",
-    //     "title": "Turnover PartYard 2026 por mês",
-    //     "labels": ["Jan","Feb",...],
-    //     "datasets": [{"label":"Saídas","data":[2,1,3,...],"color":"#ec4899"}],
-    //     "analysis": "opcional — 2-3 frases",
-    //   }
-    // Permite múltiplos __CHART__ por resposta (mesmo padrão que multi-tabelas).
-    if (role === 'ai' && text.includes('__CHART__')) {
-        const charts = parseMultiCharts(text);
-        if (charts.length > 0) {
-            const agent  = agentName || 'claude';
-            const photo  = AGENT_PHOTOS[agent];
-            const emoji  = AGENT_EMOJIS[agent] || '🤖';
-            const name   = AGENT_NAMES[agent]  || 'ClawYard';
-            const avatar = photo
-                ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
-                : `<div class="avatar">${emoji}</div>`;
-            const preText = charts[0].preText.trim();
-            const cardsHtml = charts.map((c, i) => buildChartCard(c.data, i)).join('');
-            msg.innerHTML = `
-                ${avatar}
-                <div class="msg-col" style="max-width:760px">
-                    <div class="msg-meta">
-                        <span class="agent-tag active">${emoji} ${esc(name)}</span>
-                        <span>${charts.length} gráfico${charts.length===1?'':'s'} · clica em ⬇ para PNG</span>
-                    </div>
-                    ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
-                    ${cardsHtml}
-                </div>`;
-            chat.appendChild(msg);
-            chat.scrollTop = chat.scrollHeight;
-            // Render charts AFTER they're in the DOM (Chart.js needs canvas elements live)
-            charts.forEach((c, i) => renderChart(c.data, c.canvasId));
-            return msg;
-        }
-    }
-
-    // ─── PowerPoint card — agent emits `__PPT__{json}` ───────────────────
-    // Format JSON:
-    //   {
-    //     "title":"KPIs Q2 2026 - Bruno Monteiro",
-    //     "author":"Dr.ª Ana Sobral RH",
-    //     "slides":[
-    //       {"title":"Slide 1","bullets":["a","b"], "image": "data:image/png;base64,..."},
-    //       {"title":"KPI", "kpi":{"label":"Vendas","value":"150k€","delta":"+12%"}}
-    //     ]
-    //   }
-    if (role === 'ai' && text.startsWith('__PPT__')) {
-        try {
-            const pd = JSON.parse(text.replace('__PPT__', ''));
-            const agent  = agentName || 'claude';
-            const photo  = AGENT_PHOTOS[agent];
-            const emoji  = AGENT_EMOJIS[agent] || '🤖';
-            const name   = AGENT_NAMES[agent]  || 'ClawYard';
-            const avatar = photo
-                ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
-                : `<div class="avatar">${emoji}</div>`;
-            msg.innerHTML = `
-                ${avatar}
-                <div class="msg-col" style="max-width:560px">
-                    <div class="msg-meta"><span class="agent-tag active">${emoji} ${esc(name)}</span><span>${pd.slides?.length || 0} slides · pronto para descarregar</span></div>
-                    ${buildPptCard(pd)}
-                </div>`;
-            chat.appendChild(msg); chat.scrollTop = chat.scrollHeight; return msg;
-        } catch(e) { /* fall through */ }
+        /* fall through to normal markdown render if all tokens malformed */
     }
 
     // Kyber keys card
@@ -2597,6 +2543,94 @@ function parseMultiTables(text) {
     return results;
 }
 
+// ─── Unified token parser ───────────────────────────────────────────────
+//
+// Walks the AI response from left to right, finding __TABLE__, __CHART__
+// and __PPT__ markers in document order. Returns an interleaved list of
+// blocks: text segments between markers + parsed JSON for each marker.
+//
+// This is what lets a single response mix "explanation paragraph →
+// __TABLE__ → analysis paragraph → __CHART__ → final remark" and have
+// every part render correctly. Previously each token type had its own
+// handler that owned the whole message, so co-occurring tokens were
+// rendered as raw JSON.
+function parseStructuredBlocks(text) {
+    const TOKENS = ['__TABLE__', '__CHART__', '__PPT__'];
+    const blocks = [];
+    let cursor   = 0;
+
+    while (cursor < text.length) {
+        // Earliest next marker.
+        let earliest = -1;
+        let earliestToken = null;
+        for (const tok of TOKENS) {
+            const i = text.indexOf(tok, cursor);
+            if (i !== -1 && (earliest === -1 || i < earliest)) {
+                earliest = i;
+                earliestToken = tok;
+            }
+        }
+        if (earliest === -1) {
+            const rest = text.slice(cursor);
+            if (rest.trim()) blocks.push({ type: 'text', content: rest });
+            break;
+        }
+
+        // Text before the marker.
+        if (earliest > cursor) {
+            const pre = text.slice(cursor, earliest);
+            if (pre.trim()) blocks.push({ type: 'text', content: pre });
+        }
+
+        // Skip past marker, then scan brace-balanced JSON.
+        let i = earliest + earliestToken.length;
+        while (i < text.length && text[i] !== '{') i++;
+        if (i >= text.length) break;
+        let depth = 0, inString = false, escape = false;
+        const start = i;
+        for (; i < text.length; i++) {
+            const ch = text[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\') { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') depth++;
+            else if (ch === '}') { depth--; if (depth === 0) { i++; break; } }
+        }
+        if (depth !== 0) {
+            // Unbalanced: dump remainder as text and stop. Truncation notice
+            // is shown separately by the renderer.
+            blocks.push({ type: 'text', content: text.slice(earliest) });
+            break;
+        }
+        const json = text.slice(start, i);
+        try {
+            const data = JSON.parse(json);
+            const valid =
+                (earliestToken === '__TABLE__' && Array.isArray(data.columns) && Array.isArray(data.rows)) ||
+                (earliestToken === '__CHART__' && Array.isArray(data.labels)  && Array.isArray(data.datasets)) ||
+                (earliestToken === '__PPT__'   && Array.isArray(data.slides));
+            if (valid) {
+                if (earliestToken === '__TABLE__') {
+                    blocks.push({ type: 'table', data });
+                } else if (earliestToken === '__CHART__') {
+                    const canvasId = 'chart_' + Date.now() + '_' + (++_chartCardCounter);
+                    blocks.push({ type: 'chart', data, canvasId });
+                } else {
+                    blocks.push({ type: 'ppt', data });
+                }
+            } else {
+                // Structurally invalid — render as text so user sees what came back.
+                blocks.push({ type: 'text', content: text.slice(earliest, i) });
+            }
+        } catch (e) {
+            blocks.push({ type: 'text', content: text.slice(earliest, i) });
+        }
+        cursor = i;
+    }
+    return blocks;
+}
+
 // ─── CHART helpers (Chart.js — __CHART__{json}) ─────────────────────────
 let _chartCardCounter = 0;
 function parseMultiCharts(text) {
@@ -2636,9 +2670,11 @@ function parseMultiCharts(text) {
     return results;
 }
 
-function buildChartCard(data, _i) {
-    // canvasId already assigned by parseMultiCharts; pull last from counter
-    const id = 'chart_' + Date.now() + '_' + _chartCardCounter;
+function buildChartCard(data, canvasId) {
+    // canvasId is now passed explicitly by parseStructuredBlocks (one id per
+    // chart). Falling back to the counter is only for backward compat with
+    // any caller that still relies on implicit assignment.
+    const id = canvasId || ('chart_' + Date.now() + '_' + _chartCardCounter);
     return `
     <div class="table-card" data-chart-card style="margin-top:12px">
         <div class="table-card-header">
