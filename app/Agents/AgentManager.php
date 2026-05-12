@@ -22,6 +22,7 @@ class AgentManager
             'quantum'   => new QuantumAgent(),
             'research'  => new ResearchAgent(),
             'finance'   => new FinanceAgent(),
+            'hr'        => new HrAgent(),
             'capitao'   => new CapitaoAgent(),
             'acingov'   => new AcingovAgent(),
             'engineer'  => new EngineerAgent(),
@@ -171,6 +172,37 @@ class AgentManager
         ];
         foreach ($financeKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['finance'];
+        }
+
+        // HR / People / Performance / OKR keywords — Dr.ª Ana Sobral
+        $hrKeywords = [
+            'rh', 'recursos humanos', 'human resources', 'hr',
+            'ana sobral', 'dr.ª ana', 'dra ana sobral', 'dr ana sobral',
+            'avaliação de desempenho', 'avaliacao de desempenho', 'performance review',
+            'kpi', 'kpis', 'okr', 'okrs', 'objectivos e resultados', 'objetivos e resultados',
+            'avaliação anual', 'avaliacao anual', 'avaliação trimestral', 'avaliacao trimestral',
+            'colaborador', 'colaboradores', 'colaboradora', 'staff', 'employee',
+            'recrutamento', 'selecção', 'selecao', 'onboarding', 'integração',
+            'formação', 'formacao', 'training', 'dgert', 'ccp-dgert', 'iefp',
+            'organigrama', 'organograma', 'org chart', 'estrutura empresa',
+            'salário', 'salario', 'wage', 'vencimento', 'remuneração', 'remuneracao',
+            'subsídio de férias', 'subsidio de ferias', 'subsídio de natal', 'subsidio de natal',
+            'subsídio de refeição', 'subsidio de refeicao',
+            'férias', 'feriados', 'baixa médica', 'baixa medica', 'maternidade', 'paternidade',
+            'rescisão', 'rescisao', 'denúncia contrato', 'aviso prévio', 'aviso previo',
+            'código do trabalho', 'codigo do trabalho', 'cct', 'contrato colectivo',
+            'segurança social', 'seguranca social', 'iss', 'modelo 1 ss',
+            'dmr', 'declaração mensal de remunerações', 'relatório único', 'relatorio unico',
+            'gep', 'inquérito empregos vagos', 'inquerito empregos vagos',
+            'medicina do trabalho', 'sst', 'segurança no trabalho', 'seguranca no trabalho',
+            'turnover', 'absentismo', 'time-to-hire', 'headcount',
+            'talent', 'sucessão', 'sucessao', '9-box', 'talent mapping',
+            'mapa de férias', 'mapa de ferias', 'horário de trabalho', 'horario de trabalho',
+            'banco de horas', 'horas extra', 'horas suplementares',
+            'assédio', 'assedio', 'rgpd colaboradores',
+        ];
+        foreach ($hrKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['hr'];
         }
 
         // Energy advisory / decarbonisation keywords

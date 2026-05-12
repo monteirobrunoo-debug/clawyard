@@ -113,6 +113,13 @@ class User extends Authenticatable
         'read_only' => [
             'research', 'briefing', 'document',
         ],
+        // HR team preset — Ana Sobral, Ana Costa, Beatriz Rodrigues.
+        // Inclui Dr.ª Ana Sobral (RH), Dr. Luís (Finance) para folha de
+        // salários, Document para análise contratos, e Research para
+        // benchmarks de mercado salarial.
+        'hr_team' => [
+            'hr', 'finance', 'document', 'research', 'briefing',
+        ],
     ];
 
     /**
