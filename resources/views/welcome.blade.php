@@ -706,6 +706,7 @@
         <option value="aria">🔐 ARIA Security</option>
         <option value="quantum">⚛️ Prof. Quantum Leap</option>
         <option value="finance">💰 Dr. Luís Financeiro</option>
+        <option value="hr">👥 Dr.ª Ana Sobral RH</option>
         <option value="research">🔍 Marina Research</option>
         <option value="capitao">⚓ Capitão Porto</option>
         <option value="acingov">🏛️ Dra. Ana Contratos</option>

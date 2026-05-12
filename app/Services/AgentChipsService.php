@@ -120,6 +120,20 @@ class AgentChipsService
                 '💰 Perdas por imparidade vs créditos incobráveis — tratamento IVA e IRC',
                 '💰 Análise OE2025 — impactos para empresas com actividade defesa/naval',
             ],
+            // ── Dr.ª Ana Sobral RH ─────────────────────────────────────────
+            // PartYard-specific: 53 colaboradores, 9 departamentos, nomes reais
+            'hr' => [
+                '👥 Mapa de KPIs e OKRs Q2 2026 para os 9 departamentos PartYard (Comercial, Procurement, Reparação, Marketing, Logística, IT, Qualidade, RH, Admin)',
+                '📋 Template avaliação trimestral PartYard — escala 1-5, 5 competências core, modelo SBI feedback',
+                '🎓 Plano de formação 2026 por colaborador — 40h/ano obrigatórias DGERT/IEFP, prioridades por departamento',
+                '📅 Calendário obrigações RH 2026 — DMR, IES, Relatório Único (15 Abril), GEP trimestral, Mapa Férias',
+                '⚖️ Cálculo subsídio de férias para contrato a termo certo — exemplo CCT comércio com fórmula',
+                '🎯 OKRs Q1 2026 para o Departamento Comercial (Bruno Monteiro e Daniel Jordão)',
+                '👤 Plano de sucessão para funções críticas — quem substitui o Luís Gomes (CFO) se necessário?',
+                '📊 Análise de turnover PartYard últimos 12 meses — drilldown por departamento',
+                '🚨 Banco de horas — limites legais e como compensar horas suplementares no fecho Q1',
+                '🛡️ Política de assédio + canal de denúncia interno — obrigações 2024+ e como comunicar à equipa',
+            ],
             // ── Marina Research ───────────────────────────────────────────
             'research' => [
                 '🔍 Auditoria completa ao partyard.eu — SEO, velocidade, UX e 10 melhorias urgentes',
