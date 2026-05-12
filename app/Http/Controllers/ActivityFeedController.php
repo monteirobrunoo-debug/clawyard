@@ -89,8 +89,15 @@ class ActivityFeedController extends Controller
         $messageQ = Message::query()
             ->where('role', 'assistant')
             ->where('created_at', '>=', now()->subHours(6))
-            ->whereNotNull('agent');
+            ->whereNotNull('agent')
+            // PRIVACIDADE RH — Dr.ª Ana Sobral nunca aparece no ticker
+            // global. Cada user só sabe das SUAS conversas RH na sua
+            // própria lista /conversations.
+            ->where('agent', '!=', 'hr');
 
+        // Scope: regular users see only their own conversations. Managers
+        // see all (except hr, filtered above). This is consistent with the
+        // session_id ownership pattern used by ConversationController.
         if (!$user->isManager()) {
             $messageQ->whereHas('conversation', function ($q) use ($user) {
                 $q->where('session_id', 'like', 'u' . $user->id . '_%');

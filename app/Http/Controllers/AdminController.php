@@ -191,19 +191,42 @@ class AdminController extends Controller
         return back()->with('success', 'Utilizador removido!');
     }
 
-    // View conversations
+    // View conversations.
+    //
+    // PRIVACIDADE RH (2026-05-12): conversas com o agente "hr"
+    // (Dr.ª Ana Sobral) NUNCA aparecem na listagem admin. Mesmo o admin
+    // não pode ler conversas RH de outro user — contêm avaliações de
+    // desempenho, queixas, despedimentos, planos sucessão, info salarial.
+    // Cada user só vê as SUAS conversas RH em /conversations (gate por
+    // session_id 'uX_' no ConversationController).
     public function conversations(Request $request)
     {
         $conversations = Conversation::with(['messages'])
+            ->where(function ($q) {
+                $q->whereNull('agent')->orWhere('agent', '!=', 'hr');
+            })
+            ->whereDoesntHave('messages', function ($q) {
+                $q->where('role', 'assistant')->where('agent', 'hr');
+            })
             ->latest()
             ->paginate(30);
 
         return view('admin.conversations', compact('conversations'));
     }
 
-    // View single conversation
+    // View single conversation.
+    // PRIVACIDADE RH: bloqueia conversas com agent='hr' OU que tenham
+    // pelo menos uma message do agente hr. Admin recebe 403, é redireccionado
+    // a explicar porque é restrito (mensagem explícita no abort).
     public function conversation(Conversation $conversation)
     {
+        if ($conversation->agent === 'hr'
+            || $conversation->messages()->where('agent', 'hr')->exists()) {
+            abort(403, 'Conversas com a Dr.ª Ana Sobral (RH) são confidenciais — '
+                     . 'mesmo administradores não podem aceder. Apenas o autor da '
+                     . 'conversa pode revê-la em /conversations.');
+        }
+
         $conversation->load('messages');
         return view('admin.conversation', compact('conversation'));
     }
