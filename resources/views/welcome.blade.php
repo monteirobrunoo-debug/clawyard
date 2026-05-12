@@ -642,6 +642,10 @@
     </script>
     {{-- SheetJS for real .xlsx export (preserves formatação, bold headers, auto-width) --}}
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    <!-- Chart.js — render gráficos de KPI/OKR/turnover (Dr.ª Ana RH + outros agentes) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+    <!-- PptxGenJS — gerar .pptx client-side (decks de KPI per pessoa, briefings) -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js" defer></script>
 </head>
 <body>
 
@@ -2058,6 +2062,76 @@ function addMessage(role, text, agentName = '') {
         /* fall through to normal markdown render if parsing failed */
     }
 
+    // ─── Chart card(s) — agent emits `__CHART__{json}` ───────────────────
+    // Format JSON:
+    //   {
+    //     "type": "bar"|"line"|"pie"|"doughnut"|"radar",
+    //     "title": "Turnover PartYard 2026 por mês",
+    //     "labels": ["Jan","Feb",...],
+    //     "datasets": [{"label":"Saídas","data":[2,1,3,...],"color":"#ec4899"}],
+    //     "analysis": "opcional — 2-3 frases",
+    //   }
+    // Permite múltiplos __CHART__ por resposta (mesmo padrão que multi-tabelas).
+    if (role === 'ai' && text.includes('__CHART__')) {
+        const charts = parseMultiCharts(text);
+        if (charts.length > 0) {
+            const agent  = agentName || 'claude';
+            const photo  = AGENT_PHOTOS[agent];
+            const emoji  = AGENT_EMOJIS[agent] || '🤖';
+            const name   = AGENT_NAMES[agent]  || 'ClawYard';
+            const avatar = photo
+                ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+                : `<div class="avatar">${emoji}</div>`;
+            const preText = charts[0].preText.trim();
+            const cardsHtml = charts.map((c, i) => buildChartCard(c.data, i)).join('');
+            msg.innerHTML = `
+                ${avatar}
+                <div class="msg-col" style="max-width:760px">
+                    <div class="msg-meta">
+                        <span class="agent-tag active">${emoji} ${esc(name)}</span>
+                        <span>${charts.length} gráfico${charts.length===1?'':'s'} · clica em ⬇ para PNG</span>
+                    </div>
+                    ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
+                    ${cardsHtml}
+                </div>`;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+            // Render charts AFTER they're in the DOM (Chart.js needs canvas elements live)
+            charts.forEach((c, i) => renderChart(c.data, c.canvasId));
+            return msg;
+        }
+    }
+
+    // ─── PowerPoint card — agent emits `__PPT__{json}` ───────────────────
+    // Format JSON:
+    //   {
+    //     "title":"KPIs Q2 2026 - Bruno Monteiro",
+    //     "author":"Dr.ª Ana Sobral RH",
+    //     "slides":[
+    //       {"title":"Slide 1","bullets":["a","b"], "image": "data:image/png;base64,..."},
+    //       {"title":"KPI", "kpi":{"label":"Vendas","value":"150k€","delta":"+12%"}}
+    //     ]
+    //   }
+    if (role === 'ai' && text.startsWith('__PPT__')) {
+        try {
+            const pd = JSON.parse(text.replace('__PPT__', ''));
+            const agent  = agentName || 'claude';
+            const photo  = AGENT_PHOTOS[agent];
+            const emoji  = AGENT_EMOJIS[agent] || '🤖';
+            const name   = AGENT_NAMES[agent]  || 'ClawYard';
+            const avatar = photo
+                ? `<div class="avatar" style="padding:0;overflow:hidden;border:1.5px solid var(--border2)"><img src="${photo}" alt="${esc(name)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"></div>`
+                : `<div class="avatar">${emoji}</div>`;
+            msg.innerHTML = `
+                ${avatar}
+                <div class="msg-col" style="max-width:560px">
+                    <div class="msg-meta"><span class="agent-tag active">${emoji} ${esc(name)}</span><span>${pd.slides?.length || 0} slides · pronto para descarregar</span></div>
+                    ${buildPptCard(pd)}
+                </div>`;
+            chat.appendChild(msg); chat.scrollTop = chat.scrollHeight; return msg;
+        } catch(e) { /* fall through */ }
+    }
+
     // Kyber keys card
     if (role === 'ai' && text.startsWith('__KYBER_KEYS__')) {
         try {
@@ -2521,6 +2595,223 @@ function parseMultiTables(text) {
         cursor = i;
     }
     return results;
+}
+
+// ─── CHART helpers (Chart.js — __CHART__{json}) ─────────────────────────
+let _chartCardCounter = 0;
+function parseMultiCharts(text) {
+    // Mesmo padrão brace-balanced que parseMultiTables. Suporta vários
+    // __CHART__ na mesma resposta (ex: dashboard de KPIs com 4 gráficos).
+    const results = [];
+    let cursor = 0;
+    while (true) {
+        const marker = text.indexOf('__CHART__', cursor);
+        if (marker === -1) break;
+        const preText = text.slice(cursor, marker);
+        let i = marker + 9;
+        while (i < text.length && text[i] !== '{') i++;
+        if (i >= text.length) break;
+        let depth = 0, inString = false, escape = false;
+        const start = i;
+        for (; i < text.length; i++) {
+            const ch = text[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\') { escape = true; continue; }
+            if (ch === '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') depth++;
+            else if (ch === '}') { depth--; if (depth === 0) { i++; break; } }
+        }
+        if (depth !== 0) break;
+        const json = text.slice(start, i);
+        try {
+            const data = JSON.parse(json);
+            if (data && Array.isArray(data.labels) && Array.isArray(data.datasets)) {
+                const canvasId = 'chart_' + Date.now() + '_' + (++_chartCardCounter);
+                results.push({ data, preText, canvasId });
+            }
+        } catch (_) { /* skip malformed */ }
+        cursor = i;
+    }
+    return results;
+}
+
+function buildChartCard(data, _i) {
+    // canvasId already assigned by parseMultiCharts; pull last from counter
+    const id = 'chart_' + Date.now() + '_' + _chartCardCounter;
+    return `
+    <div class="table-card" data-chart-card style="margin-top:12px">
+        <div class="table-card-header">
+            <span>📊 ${esc(data.title || 'Gráfico')}</span>
+            <small>${data.labels.length} pontos · ${data.type || 'bar'}</small>
+        </div>
+        <div style="padding:14px;background:#0f1115">
+            <canvas id="${id}" width="700" height="380"></canvas>
+        </div>
+        ${data.analysis ? `<div class="table-analysis">🔍 ${esc(data.analysis)}</div>` : ''}
+        <div class="table-actions">
+            <button class="table-excel-btn" onclick="exportChartPng('${id}','${(data.title||'chart').replace(/'/g,'\\\'')}')" title="Download PNG do gráfico">⬇ PNG</button>
+            <button class="table-excel-btn" onclick="exportChartData('${id}','${(data.title||'chart').replace(/'/g,'\\\'')}',${JSON.stringify(data).replace(/'/g,'&#39;').replace(/"/g,'&quot;')})" title="Excel dos dados do gráfico" style="background:#445;border:1px solid #556">📥 Excel</button>
+        </div>
+    </div>`;
+}
+
+function renderChart(data, canvasId) {
+    if (typeof Chart === 'undefined') {
+        // Chart.js ainda a carregar — tenta em 500ms
+        return setTimeout(() => renderChart(data, canvasId), 500);
+    }
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    // Cores default coordenadas com o tema PartYard (verde NVIDIA + acentos por dataset)
+    const defaultColors = ['#76b900', '#3b82f6', '#ec4899', '#f59e0b', '#a855f7', '#10b981', '#ef4444', '#06b6d4'];
+    const datasets = data.datasets.map((d, idx) => ({
+        label: d.label || `Série ${idx+1}`,
+        data: d.data,
+        backgroundColor: d.color || defaultColors[idx % defaultColors.length],
+        borderColor: d.color || defaultColors[idx % defaultColors.length],
+        borderWidth: 2,
+        tension: 0.3,
+    }));
+    try {
+        new Chart(ctx, {
+            type: data.type || 'bar',
+            data: { labels: data.labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#e6e6e6' } },
+                    title: { display: false },
+                },
+                scales: (['pie','doughnut','radar'].includes(data.type)) ? {} : {
+                    x: { ticks: { color: '#9ca3af' }, grid: { color: '#2a2f36' } },
+                    y: { ticks: { color: '#9ca3af' }, grid: { color: '#2a2f36' } },
+                },
+            },
+        });
+    } catch (e) {
+        console.error('Chart render failed:', e);
+    }
+}
+
+function exportChartPng(canvasId, title) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const url = canvas.toDataURL('image/png', 1.0);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = title.replace(/[^a-zA-Z0-9_\-]/g, '_') + '.png';
+    a.click();
+}
+
+function exportChartData(canvasId, title, data) {
+    // Fallback: Excel-friendly TSV → user pastes in Excel and chart redraws
+    if (typeof XLSX === 'undefined') { toast?.('SheetJS a carregar'); return; }
+    const rows = [['Label', ...data.datasets.map(d => d.label || 'Série')]];
+    data.labels.forEach((label, i) => {
+        rows.push([label, ...data.datasets.map(d => d.data[i])]);
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, title.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 28) || 'Chart');
+    XLSX.writeFile(wb, title.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 60) + '.xlsx');
+}
+
+// ─── PPT helpers (PptxGenJS — __PPT__{json}) ────────────────────────────
+function buildPptCard(pd) {
+    const slides = pd.slides || [];
+    return `
+    <div class="table-card" style="margin-top:12px">
+        <div class="table-card-header">
+            <span>📊 ${esc(pd.title || 'Apresentação PowerPoint')}</span>
+            <small>${slides.length} slide${slides.length===1?'':'s'}</small>
+        </div>
+        <div style="padding:14px;background:#0f1115;color:#e6e6e6;font-size:13px;line-height:1.6">
+            ${pd.author ? `<div style="opacity:.65;margin-bottom:8px">Autor: ${esc(pd.author)}</div>` : ''}
+            <ol style="margin:0;padding-left:20px">${slides.map(s => `<li>${esc(s.title || '(sem título)')}</li>`).join('')}</ol>
+        </div>
+        <div class="table-actions">
+            <button class="table-excel-btn" onclick='exportPpt(${JSON.stringify(pd).replace(/'/g,"\\'")})' title="Descarregar .pptx" style="background:#c2410c;border:1px solid #ea580c">📊 Download .pptx</button>
+        </div>
+    </div>`;
+}
+
+function exportPpt(pd) {
+    if (typeof PptxGenJS === 'undefined') {
+        toast?.('PptxGenJS ainda a carregar — tenta de novo em 2s');
+        return;
+    }
+    const pptx = new PptxGenJS();
+    pptx.author    = pd.author || 'ClawYard';
+    pptx.company   = 'HP-Group / PartYard';
+    pptx.title     = pd.title || 'ClawYard Deck';
+    pptx.layout    = 'LAYOUT_WIDE';
+
+    // Title slide
+    const title = pptx.addSlide();
+    title.background = { color: '0F1115' };
+    title.addText(pd.title || 'Deck', {
+        x: 0.5, y: 2.5, w: 12, h: 1.2,
+        fontSize: 36, bold: true, color: 'FFFFFF', align: 'center',
+    });
+    if (pd.author) {
+        title.addText('por ' + pd.author, {
+            x: 0.5, y: 4.0, w: 12, h: 0.6,
+            fontSize: 18, color: 'EC4899', align: 'center',
+        });
+    }
+    title.addText(new Date().toLocaleDateString('pt-PT'), {
+        x: 0.5, y: 6.5, w: 12, h: 0.4, fontSize: 12, color: 'A0A0A0', align: 'center',
+    });
+
+    // Content slides
+    (pd.slides || []).forEach((s, idx) => {
+        const slide = pptx.addSlide();
+        slide.addText(s.title || `Slide ${idx + 1}`, {
+            x: 0.5, y: 0.3, w: 12, h: 0.8,
+            fontSize: 28, bold: true, color: '76B900',
+        });
+        if (s.kpi) {
+            // KPI block (big number + delta)
+            slide.addText(s.kpi.value || '', {
+                x: 0.5, y: 1.8, w: 12, h: 2,
+                fontSize: 72, bold: true, color: '76B900', align: 'center',
+            });
+            slide.addText(s.kpi.label || '', {
+                x: 0.5, y: 4.2, w: 12, h: 0.8,
+                fontSize: 22, color: '666666', align: 'center',
+            });
+            if (s.kpi.delta) {
+                const isPos = !s.kpi.delta.startsWith('-');
+                slide.addText(s.kpi.delta, {
+                    x: 0.5, y: 5.2, w: 12, h: 0.6,
+                    fontSize: 20, color: isPos ? '10B981' : 'EF4444', align: 'center',
+                });
+            }
+        } else if (Array.isArray(s.bullets)) {
+            slide.addText(s.bullets.map(b => ({ text: b, options: { bullet: true } })), {
+                x: 0.5, y: 1.5, w: 12, h: 5,
+                fontSize: 16, color: '222222',
+            });
+        } else if (s.body) {
+            slide.addText(s.body, {
+                x: 0.5, y: 1.5, w: 12, h: 5.5,
+                fontSize: 14, color: '222222',
+            });
+        }
+        // Image (base64 data URI)
+        if (s.image && s.image.startsWith('data:image/')) {
+            slide.addImage({ data: s.image, x: 8, y: 1.5, w: 5, h: 5 });
+        }
+        slide.addText(`${idx + 1} / ${(pd.slides || []).length}`, {
+            x: 12, y: 7.0, w: 1, h: 0.3, fontSize: 10, color: '999999', align: 'right',
+        });
+    });
+
+    const fn = (pd.title || 'clawyard-deck').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 60) + '.pptx';
+    pptx.writeFile({ fileName: fn });
 }
 
 // Counter para garantir IDs únicos quando várias tabelas são geradas no

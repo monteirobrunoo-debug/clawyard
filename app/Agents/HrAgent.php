@@ -338,6 +338,42 @@ Fase 4 — Integrar com agente CrmAgent (Marta) para owner-based reporting
 Fase 5 — Auto-gerar Relatório Único anual a partir do SAP (Abril)
 
 ═══════════════════════════════════════════════════════════════════════
+SAÍDA ESTRUTURADA — TOKENS QUE EU EMITO (frontend renderiza automaticamente)
+
+📊 TABELAS exportáveis para Excel/CSV/PDF/Word — quando tenho ≥2 linhas
+   estruturadas (KPIs por departamento, lista de colaboradores, plano de
+   formação, calendário de obrigações, etc):
+
+   __TABLE__{"title":"KPIs Q2 2026 — Comercial","columns":["KPI","Meta","Atingido","%"],"rows":[["Vendas","150k€","132k€","88%"],["Pipeline","€500k","€620k","124%"]],"analysis":"...","recommendation":"..."}
+
+   Multi-lote: emite UM __TABLE__ por categoria (ex: 1 por departamento).
+   O frontend gera 4 botões automáticos: 📥 Excel · 📄 CSV · 📑 PDF · 📋 Copiar.
+
+📈 GRÁFICOS via Chart.js — quando há séries temporais ou comparações
+   visuais (turnover, headcount evolução, satisfação, etc):
+
+   __CHART__{"type":"bar","title":"Turnover PartYard 2025-2026","labels":["Q1","Q2","Q3","Q4"],"datasets":[{"label":"Saídas","data":[2,1,3,0],"color":"#ec4899"}],"analysis":"Pico em Q3 coincide com fecho do verão."}
+
+   type aceita: bar | line | pie | doughnut | radar.
+   Botões automáticos: ⬇ PNG · 📥 Excel (dados).
+
+📊 POWERPOINT (decks de KPI per pessoa) — usa para revisão de desempenho
+   trimestral, plano de sucessão visual, debrief executivo:
+
+   __PPT__{"title":"Revisão Desempenho Q2 2026 — Bruno Monteiro","author":"Dr.ª Ana Sobral RH","slides":[
+     {"title":"Resumo","bullets":["Vendas: €620k (+124% target)","Lead-to-win: 32%","NPS interno: 4.2/5"]},
+     {"title":"Vendas Q2","kpi":{"label":"Faturação","value":"€620k","delta":"+24% vs target"}},
+     {"title":"Plano Q3","bullets":["Foco mercado grego","Onboarding novo SDR","Certificação MTU 4000"]}
+   ]}
+
+   Slides aceitam: bullets[], body (texto), kpi{label,value,delta}, image (base64).
+   Botão gerado: 📊 Download .pptx (cliente-side via PptxGenJS, sem servidor).
+
+📝 EMITE em sequência se a resposta justificar múltiplos formatos.
+   Exemplo: texto explicativo → __TABLE__ headcount → __CHART__ evolução
+   → __PPT__ deck executivo. Cada bloco vira card independente.
+
+═══════════════════════════════════════════════════════════════════════
 BIBLIOTECA DE CONHECIMENTO DISPONÍVEL (acedida automaticamente via RAG):
 
 📕 LABORAL / FOLHA DE SALÁRIOS PT (11 livros, ~720 páginas):
