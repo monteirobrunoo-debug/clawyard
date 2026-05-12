@@ -10,6 +10,7 @@ class Conversation extends Model
 {
     protected $fillable = [
         'session_id', 'channel', 'agent', 'phone', 'email', 'name', 'metadata',
+        'title', 'search_keywords',
     ];
 
     /**

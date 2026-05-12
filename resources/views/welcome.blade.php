@@ -1995,9 +1995,31 @@ function addMessage(role, text, agentName = '') {
                 return between + buildTableCard(t.data);
             }).join('');
 
+            // #11 — Detect partial __TABLE__ JSON (e.g. user closed tab
+            // mid-stream and the persisted reply has `__TABLE__{` without
+            // matching `}`). Show a friendly "resposta interrompida" hint
+            // instead of silently letting the markdown fall-through show
+            // garbled JSON. We trigger this when there's a __TABLE__ marker
+            // in text but parser found ZERO tables AND text has an unclosed
+            // brace count.
+            const lastMarker = text.lastIndexOf('__TABLE__');
+            const tail = lastMarker >= 0 ? text.slice(lastMarker) : '';
+            const openCnt  = (tail.match(/\{/g) || []).length;
+            const closeCnt = (tail.match(/\}/g) || []).length;
+            const isTruncated = openCnt > closeCnt;
+
+            // #14 — Workbook combinado: only useful when 2+ tables came in.
+            const workbookBtn = tables.length >= 2
+                ? `<div style="margin:8px 0 0 0"><button class="table-excel-btn" onclick="exportAllTablesAsWorkbook(this)" style="background:#1e7a3d;border:1px solid #2c9a4f">📊 Workbook combinado (1 .xlsx com ${tables.length} tabs)</button></div>`
+                : '';
+
             const subMeta = tables.length === 1
                 ? 'tabela gerada · pronta para CSV/Excel/PDF'
                 : `${tables.length} tabelas geradas · 1 export por lote (CSV/Excel/PDF)`;
+
+            const truncatedNotice = isTruncated
+                ? `<div class="bubble" style="background:#3a2a14;border:1px solid #6a4a1e;margin-top:10px">⚠️ Esta resposta foi interrompida a meio (provavelmente fechaste o separador antes de terminar). Os ${tables.length} lotes acima estão completos, mas pode haver mais que ficaram por gerar. Para obter a versão completa, faz a pergunta novamente.</div>`
+                : '';
 
             msg.innerHTML = `
                 ${avatar}
@@ -2008,6 +2030,8 @@ function addMessage(role, text, agentName = '') {
                     </div>
                     ${preText ? `<div class="bubble">${markdownToHtml(preText)}</div>` : ''}
                     ${cardsHtml}
+                    ${workbookBtn}
+                    ${truncatedNotice}
                 </div>`;
             chat.appendChild(msg);
             chat.scrollTop = chat.scrollHeight;
@@ -2569,6 +2593,63 @@ function exportXlsx(id) {
 
     const safeFn = title.replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 80) || 'tabela_clawyard';
     XLSX.writeFile(wb, safeFn + '.xlsx');
+}
+
+/**
+ * #14 — Export ALL table cards from the same AI message into one .xlsx
+ * with one sheet per lote. Useful for concursos multi-lote where the
+ * user wants a single workbook to forward to procurement.
+ *
+ * The button is rendered INSIDE the .msg div, so we walk up to find
+ * the parent msg, then collect every .table-card inside it.
+ */
+function exportAllTablesAsWorkbook(btnEl) {
+    if (typeof XLSX === 'undefined') {
+        toast?.('SheetJS a carregar — tenta de novo em 2s');
+        return;
+    }
+    const msg = btnEl.closest('.msg');
+    if (!msg) return;
+    const cards = msg.querySelectorAll('.table-card');
+    if (!cards.length) return;
+
+    const wb = XLSX.utils.book_new();
+    const usedNames = new Set();
+    cards.forEach((card, idx) => {
+        const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','').trim() || `Lote ${idx+1}`;
+        const rows = Array.from(card.querySelectorAll('table tr')).map(tr =>
+            Array.from(tr.querySelectorAll('th,td')).map(c => {
+                const v = c.textContent.trim();
+                if (/^-?\d+([.,]\d+)?$/.test(v)) return parseFloat(v.replace(',', '.'));
+                return v;
+            })
+        );
+        if (!rows.length) return;
+
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const colCount = rows[0].length;
+        ws['!cols'] = Array(colCount).fill(0).map((_, i) => {
+            const maxLen = Math.max(...rows.map(r => String(r[i] ?? '').length));
+            return { wch: Math.min(Math.max(maxLen + 2, 10), 60) };
+        });
+        const range = XLSX.utils.decode_range(ws['!ref']);
+        for (let c = range.s.c; c <= range.e.c; c++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
+            if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'E8E8E8' } } };
+        }
+        ws['!autofilter'] = { ref: ws['!ref'] };
+        ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+
+        // Sheet name: Excel cap is 31 chars + must be unique. Sanitise and dedupe.
+        let name = (title.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0, 28) || `Lote_${idx+1}`);
+        let base = name; let n = 2;
+        while (usedNames.has(name)) name = (base + '_' + (n++)).slice(0, 31);
+        usedNames.add(name);
+        XLSX.utils.book_append_sheet(wb, ws, name);
+    });
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `clawyard-workbook-${stamp}.xlsx`);
 }
 
 function exportExcel(id) {

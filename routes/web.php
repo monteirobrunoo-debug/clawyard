@@ -507,7 +507,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // #10 — 2FA self-service (TOTP)
+    Route::get ('/profile/2fa',         [\App\Http\Controllers\TwoFactorController::class, 'setup'])->name('profile.2fa');
+    Route::post('/profile/2fa/enable',  [\App\Http\Controllers\TwoFactorController::class, 'enable'])->name('profile.2fa.enable');
+    Route::post('/profile/2fa/disable', [\App\Http\Controllers\TwoFactorController::class, 'disable'])->name('profile.2fa.disable');
 });
+
+// #10 — 2FA challenge during login (no auth middleware: session holds 2fa_user_id)
+Route::get ('/login/2fa-challenge', [\App\Http\Controllers\TwoFactorController::class, 'challengeForm'])->name('login.2fa');
+Route::post('/login/2fa-challenge', [\App\Http\Controllers\TwoFactorController::class, 'challenge'])->name('login.2fa.verify');
 
 // Reports — visible to all authenticated users
 Route::middleware(['auth'])->group(function () {
@@ -762,6 +771,18 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get('/conversations', [AdminController::class, 'conversations'])->name('admin.conversations');
     Route::get('/conversations/{conversation}', [AdminController::class, 'conversation'])->name('admin.conversation');
     Route::get('/schedules', function () { return view('admin.schedules'); })->name('admin.schedules');
+
+    // #7 — Standalone health dashboard (lightweight; no DB writes, 30s cache).
+    Route::get('/health', [\App\Http\Controllers\HealthDashboardController::class, 'index'])->name('admin.health');
+
+    // #8 — Audit log viewer (paginated, append-only).
+    Route::get('/audit', function (\Illuminate\Http\Request $r) {
+        abort_unless(auth()->user()?->isAdmin(), 403);
+        $q = \App\Models\AuditLog::query()->with('user')->latest('id');
+        if ($action = $r->query('action')) $q->where('action', $action);
+        if ($u = $r->integer('user_id'))   $q->where('user_id', $u);
+        return view('admin.audit', ['logs' => $q->paginate(50)->withQueryString()]);
+    })->name('admin.audit');
 
     // Unified admin panel — health + secrets + cron + flags + integrations
     Route::get ('/panel',                    [\App\Http\Controllers\AdminPanelController::class, 'index'])->name('admin.panel');

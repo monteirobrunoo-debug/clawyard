@@ -598,6 +598,33 @@ class NvidiaController extends Controller
                         'content' => $fullReplyPersisted,
                     ]);
                 }
+
+                // #3 — Update conversation.updated_at so the conversations list
+                // sorts by latest activity (was stale: only changed on create).
+                // touch() is a no-op write on the conversation row.
+                $conversationRef->touch();
+
+                // #4 — Auto-title: if this is the FIRST round-trip and the
+                // conversation still has no title, ask Haiku for a 3-6 word
+                // descriptor. Async-ish: gated by message count so we only
+                // pay the call once per conversation.
+                if (empty($conversationRef->title)) {
+                    try {
+                        $userMsg = $conversationRef->messages()
+                            ->where('role', 'user')
+                            ->oldest('id')
+                            ->value('content');
+                        if ($userMsg) {
+                            $title = app(\App\Services\ConversationTitleService::class)
+                                ->generate((string) $userMsg, $fullReplyPersisted);
+                            if ($title) {
+                                $conversationRef->update(['title' => $title]);
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                        \Log::debug('Auto-title skipped: ' . $e->getMessage());
+                    }
+                }
             } catch (\Throwable $e) {
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
             }

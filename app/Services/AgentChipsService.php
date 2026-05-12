@@ -112,12 +112,13 @@ class AgentChipsService
             ],
             // ── Dr. Luís Financeiro ───────────────────────────────────────
             'finance' => [
-                '💰 Rentabilidade por linha de produto: marine vs defense vs aftermarket — Q1 2026',
-                '💰 Benefícios fiscais RFAI + SIFIDE disponíveis para a PartYard em 2026',
-                '💰 Análise de rácios financeiros: liquidez, endividamento e EBITDA da empresa',
-                '💰 Estrutura de carta de crédito documentário para importação de peças MTU',
-                '💰 Impacto fiscal de abrir subsidiária em Noruega vs Brasil vs Grécia',
-                '💰 Análise de cash flow Q2 2026 — riscos de tesouraria e medidas preventivas',
+                // Refreshed 2026-05-12 — agora com 63 livros PT-fiscais na lib
+                '💰 Tributação autónoma de despesas com viaturas passageiros (CIRC 88.º)',
+                '💰 Como preencher Modelo 22 IRC 2026 — campos críticos e validações',
+                '💰 Consolidação de contas pelo método da equivalência patrimonial',
+                '💰 Benefícios fiscais RFAI + SIFIDE 2026 — exemplos práticos',
+                '💰 Perdas por imparidade vs créditos incobráveis — tratamento IVA e IRC',
+                '💰 Análise OE2025 — impactos para empresas com actividade defesa/naval',
             ],
             // ── Marina Research ───────────────────────────────────────────
             'research' => [

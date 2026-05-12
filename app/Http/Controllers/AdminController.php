@@ -75,7 +75,15 @@ class AdminController extends Controller
             $data['password'] = Hash::make($request->password);
         }
 
+        $before = $user->only(['name', 'email', 'role', 'is_active']);
         $user->update($data);
+
+        // #8 — Audit user updates (role/email changes are sensitive).
+        \App\Models\AuditLog::record('user.update', $user, [
+            'before' => $before,
+            'after'  => $user->only(['name', 'email', 'role', 'is_active']),
+            'password_changed' => $request->filled('password'),
+        ]);
 
         return back()->with('success', 'Utilizador atualizado!');
     }

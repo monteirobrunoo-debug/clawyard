@@ -668,6 +668,14 @@ class TenderController extends Controller
             : null;
         $label = $collaborator?->name ?? ($collaboratorId ? 'colaborador' : '(sem atribuição)');
 
+        // #8 — Audit assignment for compliance
+        \App\Models\AuditLog::record('tender.assign', null, [
+            'tender_ids'      => $ids,
+            'count'           => $updated,
+            'collaborator_id' => $collaboratorId,
+            'collaborator'    => $label,
+        ]);
+
         // ── Assignment notification email ──────────────────────────────────
         //
         // User flagged: "os users do dashboard com os processos atribuídos
