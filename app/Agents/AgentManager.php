@@ -179,6 +179,7 @@ class AgentManager
             'rh', 'recursos humanos', 'human resources', 'hr',
             'ana sobral', 'dr.ª ana', 'dra ana sobral', 'dr ana sobral',
             'avaliação de desempenho', 'avaliacao de desempenho', 'performance review',
+            'avaliar desempenho', 'avaliações', 'avaliacoes', 'avalia desempenho',
             'kpi', 'kpis', 'okr', 'okrs', 'objectivos e resultados', 'objetivos e resultados',
             'avaliação anual', 'avaliacao anual', 'avaliação trimestral', 'avaliacao trimestral',
             'colaborador', 'colaboradores', 'colaboradora', 'staff', 'employee',
