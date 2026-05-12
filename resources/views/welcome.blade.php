@@ -1043,6 +1043,7 @@ const AGENT_DESCRIPTIONS = {
     aria: 'Cibersegurança, STRIDE, OWASP e monitorização de sites',
     quantum: 'Digest científico diário: papers arXiv + patentes USPTO',
     finance: 'Contabilidade, fiscalidade, SAP financeiro e análise ROI',
+    hr: 'Recursos Humanos PartYard — avaliação de desempenho, KPI/OKR, formação, organigrama e código do trabalho PT',
     research: 'Pesquisa de mercado, concorrência e análise de websites',
     capitao: 'Operações portuárias, escalas, documentação e logística marítima',
     acingov: 'SAM.gov · base.gov.pt · Vortal · UNIDO · UNGM — contratos públicos para PartYard',
@@ -1185,6 +1186,20 @@ const AGENT_CHIPS = {
         '💰 Estrutura de carta de crédito documentário para importação de peças MTU',
         '💰 Impacto fiscal de abrir subsidiária em Noruega vs Brasil vs Grécia',
         '💰 Análise de cash flow Q2 2026 — riscos de tesouraria e medidas preventivas',
+    ],
+    // ── Dr.ª Ana Sobral RH ────────────────────────────────────────────────
+    // PartYard-specific: 53 colaboradores, 9 departamentos, nomes reais
+    hr: [
+        '👥 Mapa de KPIs e OKRs Q2 2026 para os 9 departamentos PartYard (Comercial, Procurement, Reparação, Marketing, Logística, IT, Qualidade, RH, Admin)',
+        '📋 Template avaliação trimestral PartYard — escala 1-5, 5 competências core, modelo SBI feedback',
+        '🎓 Plano de formação 2026 por colaborador — 40h/ano obrigatórias DGERT/IEFP, prioridades por departamento',
+        '📅 Calendário obrigações RH 2026 — DMR, IES, Relatório Único (15 Abril), GEP trimestral, Mapa Férias',
+        '⚖️ Cálculo subsídio de férias para contrato a termo certo — exemplo CCT comércio com fórmula',
+        '🎯 OKRs Q1 2026 para o Departamento Comercial (Bruno Monteiro e Daniel Jordão)',
+        '👤 Plano de sucessão para funções críticas — quem substitui o Luís Gomes (CFO)?',
+        '📊 Análise de turnover PartYard últimos 12 meses — drilldown por departamento',
+        '🚨 Banco de horas — limites legais e como compensar horas suplementares no fecho Q1',
+        '🛡️ Política de assédio + canal de denúncia interno — obrigações 2024+ e como comunicar à equipa',
     ],
     // ── Marina Research ───────────────────────────────────────────────────
     research: [
