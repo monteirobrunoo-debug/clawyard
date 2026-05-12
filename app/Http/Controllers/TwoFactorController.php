@@ -103,7 +103,12 @@ class TwoFactorController extends Controller
 
     public function challengeForm(Request $request)
     {
-        abort_unless($request->session()->has('2fa_user_id'), 410, '2FA challenge expired.');
+        if (!$request->session()->has('2fa_user_id')) {
+            // Session expired / direct hit / refreshed — send them back to
+            // login (don't 410, which renders the auth nav layout and 500s
+            // because the user is intentionally logged out at this stage).
+            return redirect()->route('login')->with('error', 'Sessão OTP expirou. Faz login novamente.');
+        }
         $mode = $request->session()->get('2fa_mode', 'totp');
         $user = \App\Models\User::find($request->session()->get('2fa_user_id'));
         return view('auth.2fa-challenge', [

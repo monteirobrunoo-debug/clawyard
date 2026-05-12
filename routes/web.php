@@ -514,7 +514,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/2fa/disable', [\App\Http\Controllers\TwoFactorController::class, 'disable'])->name('profile.2fa.disable');
 });
 
-// #10 — 2FA challenge during login (no auth middleware: session holds 2fa_user_id)
+// OTP challenge during login (no auth middleware: session holds 2fa_user_id).
 // Suporta 2 modos:
 //   - 'totp'  → user com authenticator app (Google Authenticator, 1Password, etc)
 //   - 'email' → fallback automático: código de 6 dígitos enviado por email
