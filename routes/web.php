@@ -515,8 +515,12 @@ Route::middleware('auth')->group(function () {
 });
 
 // #10 — 2FA challenge during login (no auth middleware: session holds 2fa_user_id)
+// Suporta 2 modos:
+//   - 'totp'  → user com authenticator app (Google Authenticator, 1Password, etc)
+//   - 'email' → fallback automático: código de 6 dígitos enviado por email
 Route::get ('/login/2fa-challenge', [\App\Http\Controllers\TwoFactorController::class, 'challengeForm'])->name('login.2fa');
 Route::post('/login/2fa-challenge', [\App\Http\Controllers\TwoFactorController::class, 'challenge'])->name('login.2fa.verify');
+Route::post('/login/2fa-resend',    [\App\Http\Controllers\TwoFactorController::class, 'resend'])->name('login.2fa.resend');
 
 // Reports — visible to all authenticated users
 Route::middleware(['auth'])->group(function () {

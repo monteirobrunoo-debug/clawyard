@@ -21,39 +21,44 @@ class AuthenticatedSessionController extends Controller
 
     /**
      * Handle an incoming authentication request.
+     *
+     * Política 2FA (2026-05-12 — segurança pós-incidente setq):
+     *
+     *   • TODOS os utilizadores fazem OTP após password.
+     *   • Quem tem TOTP authenticator app activado (two_factor_confirmed_at)
+     *     → introduz código do Google Authenticator / 1Password / etc.
+     *   • Quem NÃO tem TOTP setup → recebe código de 6 dígitos por email
+     *     (válido 10 min, uso único, rate-limited a 3 envios / 15 min).
+     *
+     * Password sozinha NUNCA é suficiente. OTP é sempre exigido.
      */
     public function store(LoginRequest $request): RedirectResponse
     {
         $request->authenticate();
 
-        // #10 — 2FA challenge gate.
-        //
-        // If the user has confirmed 2FA, we intercept BEFORE finalising the
-        // session. The credentials were already validated by ->authenticate();
-        // we now immediately log them back out, stash their id + remember
-        // flag in the session, and redirect to /login/2fa-challenge where
-        // they must provide a valid TOTP code (or a one-time recovery code)
-        // before TwoFactorController::challenge() calls Auth::loginUsingId().
-        //
-        // Users WITHOUT 2FA enabled (two_factor_confirmed_at = NULL) fall
-        // through and finish the login normally — same UX as before.
         $user = Auth::user();
-        if ($user && $user->two_factor_confirmed_at && $user->two_factor_secret) {
-            $remember = $request->boolean('remember');
-
-            Auth::guard('web')->logout();
-            // Don't invalidate the full session here — we need to carry
-            // 2fa_user_id across the redirect. Regenerate the token only.
-            $request->session()->regenerateToken();
-            $request->session()->put('2fa_user_id', $user->id);
-            $request->session()->put('2fa_remember', $remember);
-
-            return redirect()->route('login.2fa');
+        if (!$user) {
+            return redirect()->route('login');
         }
 
-        $request->session()->regenerate();
+        $remember   = $request->boolean('remember');
+        $hasTotpApp = $user->two_factor_confirmed_at && $user->two_factor_secret;
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // Drop the just-authenticated session immediately. The credentials
+        // pass, but we don't grant the session until OTP is verified.
+        Auth::guard('web')->logout();
+        $request->session()->regenerateToken();
+        $request->session()->put('2fa_user_id',   $user->id);
+        $request->session()->put('2fa_remember',  $remember);
+        $request->session()->put('2fa_mode',      $hasTotpApp ? 'totp' : 'email');
+
+        // For email-OTP users, generate + send the code now. The challenge
+        // view will display "código enviado para email@xxx" and accept it.
+        if (!$hasTotpApp) {
+            app(\App\Services\LoginOtpService::class)->issueAndMail($user, $request->ip());
+        }
+
+        return redirect()->route('login.2fa');
     }
 
     /**

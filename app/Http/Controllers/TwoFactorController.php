@@ -104,9 +104,22 @@ class TwoFactorController extends Controller
     public function challengeForm(Request $request)
     {
         abort_unless($request->session()->has('2fa_user_id'), 410, '2FA challenge expired.');
-        return view('auth.2fa-challenge');
+        $mode = $request->session()->get('2fa_mode', 'totp');
+        $user = \App\Models\User::find($request->session()->get('2fa_user_id'));
+        return view('auth.2fa-challenge', [
+            'mode'         => $mode,
+            'maskedEmail'  => $this->maskEmail($user?->email),
+        ]);
     }
 
+    /**
+     * Handles both TOTP (authenticator app) and email-OTP modes.
+     *
+     * Mode is decided at login time by AuthenticatedSessionController and
+     * stashed in session ('2fa_mode' = 'totp' | 'email'). Recovery codes
+     * are only meaningful in TOTP mode — users without an app rely on the
+     * email channel + "resend" flow instead.
+     */
     public function challenge(Request $request)
     {
         $request->validate(['code' => 'required|string|max:8']);
@@ -114,35 +127,68 @@ class TwoFactorController extends Controller
         abort_unless($userId, 410);
 
         $user = \App\Models\User::findOrFail($userId);
+        $mode = $request->session()->get('2fa_mode', 'totp');
+        $code = trim((string) $request->input('code'));
 
-        // Try TOTP first.
-        $g     = new Google2FA();
-        $secret = Crypt::decryptString($user->two_factor_secret);
-        $code   = $request->input('code');
-
-        $ok = $g->verifyKey($secret, $code, 2);
-        if (!$ok) {
-            // Try recovery codes (one-time).
-            $codes = json_decode(Crypt::decryptString($user->two_factor_recovery_codes), true) ?: [];
-            if (in_array(strtoupper($code), array_map('strtoupper', $codes), true)) {
-                $remaining = array_values(array_filter($codes, fn($c) => strtoupper($c) !== strtoupper($code)));
-                $user->forceFill([
-                    'two_factor_recovery_codes' => Crypt::encryptString(json_encode($remaining)),
-                ])->save();
-                $ok = true;
-                \App\Models\AuditLog::record('user.2fa_recovery_used', $user, ['remaining' => count($remaining)]);
+        $ok = false;
+        if ($mode === 'email') {
+            $ok = app(\App\Services\LoginOtpService::class)->verify($user, $code);
+        } else {
+            // TOTP mode
+            $g      = new Google2FA();
+            $secret = Crypt::decryptString($user->two_factor_secret);
+            $ok     = $g->verifyKey($secret, $code, 2);
+            if (!$ok && $user->two_factor_recovery_codes) {
+                $codes = json_decode(Crypt::decryptString($user->two_factor_recovery_codes), true) ?: [];
+                if (in_array(strtoupper($code), array_map('strtoupper', $codes), true)) {
+                    $remaining = array_values(array_filter($codes, fn($c) => strtoupper($c) !== strtoupper($code)));
+                    $user->forceFill([
+                        'two_factor_recovery_codes' => Crypt::encryptString(json_encode($remaining)),
+                    ])->save();
+                    $ok = true;
+                    \App\Models\AuditLog::record('user.2fa_recovery_used', $user, ['remaining' => count($remaining)]);
+                }
             }
         }
 
         if (!$ok) {
-            \App\Models\AuditLog::record('user.2fa_failed', $user);
-            return back()->withErrors(['code' => 'Código incorrecto.']);
+            \App\Models\AuditLog::record('user.2fa_failed', $user, ['mode' => $mode]);
+            return back()->withErrors(['code' => 'Código incorrecto ou expirado.']);
         }
 
-        $request->session()->forget('2fa_user_id');
-        \Auth::loginUsingId($userId, $request->session()->get('2fa_remember', false));
+        $remember = (bool) $request->session()->get('2fa_remember', false);
+        $request->session()->forget(['2fa_user_id', '2fa_mode', '2fa_remember']);
+        \Auth::loginUsingId($userId, $remember);
         $request->session()->regenerate();
 
+        \App\Models\AuditLog::record('user.login', $user, ['mode' => $mode]);
+
         return redirect()->intended('/dashboard');
+    }
+
+    /**
+     * POST /login/2fa-resend — resend email OTP (rate-limited inside the service).
+     */
+    public function resend(Request $request)
+    {
+        $userId = $request->session()->get('2fa_user_id');
+        $mode   = $request->session()->get('2fa_mode', 'totp');
+        abort_unless($userId && $mode === 'email', 410);
+
+        $user = \App\Models\User::findOrFail($userId);
+        $sent = app(\App\Services\LoginOtpService::class)->issueAndMail($user, $request->ip());
+
+        return back()->with($sent ? 'success' : 'error',
+            $sent ? 'Novo código enviado para o teu email.' :
+                    'Limite de envios atingido — espera alguns minutos.');
+    }
+
+    private function maskEmail(?string $email): string
+    {
+        if (!$email) return '';
+        [$local, $domain] = array_pad(explode('@', $email, 2), 2, '');
+        if (!$domain) return $email;
+        $maskedLocal = mb_substr($local, 0, 2) . str_repeat('•', max(1, mb_strlen($local) - 2));
+        return "{$maskedLocal}@{$domain}";
     }
 }
