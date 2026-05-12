@@ -173,7 +173,7 @@ SPECIALTY;
             'connect_timeout' => 10,
         ]);
 
-        $this->sap = new SapService();
+        $this->sap = app(SapService::class);  // Singleton partilhado
     }
 
     protected function needsSap(string|array $message): bool

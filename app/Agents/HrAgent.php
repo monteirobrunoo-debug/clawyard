@@ -402,7 +402,9 @@ SAP;
             'connect_timeout' => 10,
         ]);
 
-        $this->sap = new SapService();
+        // Singleton partilhado com Richard SAP, Marta CRM, Dr. Luís Finance, etc.
+        // Resolvido via container — mesma instância dentro do mesmo request.
+        $this->sap = app(SapService::class);
     }
 
     protected function needsSap(string|array $message): bool

@@ -15,7 +15,23 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // SapService como singleton — todos os agentes que falam com o SAP B1
+        // (Richard SapAgent, Marta CrmAgent, Dr. Luís FinanceAgent, Dr.ª Ana
+        // HrAgent, etc.) partilham a MESMA instância dentro do mesmo request.
         //
+        // Benefícios:
+        //   • Sessão B1 (token JSESSIONID/B1SESSION) é negociada uma vez por
+        //     request — múltiplos agentes não fazem múltiplos /Login.
+        //   • Cache HTTP local de cada response sobrevive entre chamadas
+        //     do mesmo request, evitando double-fetch de overview SAP.
+        //   • A queue de Guzzle (timeouts, retries) é configurada uma vez.
+        //
+        // O token de sessão JÁ era partilhado via Laravel Cache (Redis/file)
+        // entre requests; este singleton complementa partilhando estado
+        // in-memory DENTRO de um request.
+        $this->app->singleton(\App\Services\SapService::class, function () {
+            return new \App\Services\SapService();
+        });
     }
 
     /**

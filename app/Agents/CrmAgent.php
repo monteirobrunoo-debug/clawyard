@@ -363,7 +363,7 @@ SPECIALTY;
             'connect_timeout' => 10,
         ]);
 
-        $this->sap = new SapService();
+        $this->sap = app(SapService::class);  // Singleton partilhado com todos os agentes SAP
     }
 
     // ─── Opportunity detection helpers ───────────────────────────────────────

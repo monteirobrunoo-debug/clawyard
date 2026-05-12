@@ -101,7 +101,10 @@ SPECIALTY;
             'connect_timeout' => 10,
         ]);
 
-        $this->sap = new SapService();
+        // Singleton partilhado com Dr.ª Ana RH, Marta CRM, Dr. Luís Finance.
+        // Container resolve a mesma instância em todo o request → sessão
+        // SAP B1 e overview cache reutilizados entre agentes.
+        $this->sap = app(SapService::class);
     }
 
     protected function needsWebSearch(string|array $message): bool
