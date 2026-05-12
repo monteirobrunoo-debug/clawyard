@@ -277,10 +277,17 @@ KPI;
 INTEGRAÇÃO SAP B1 (módulo HR — caminho proposto):
 
 ESTADO ACTUAL: PartYard usa SAP Business One para vendas/compras/stock.
-O módulo HR do B1 está disponível mas **não está totalmente populado**.
-Quando um utilizador pergunta dados de colaboradores, sugere primeiro
-a tabela SAP onde a info viveria, e depois pergunta se a queremos
-popular agora ou pedir export ao Luís Finance.
+O módulo HR do B1 está parcialmente populado.
+
+LIVE FETCH (Richard SAP via SapService::buildHrContext):
+Quando o utilizador pergunta sobre colaboradores, headcount, departamentos
+ou nomes específicos, eu chamo automaticamente o ServiceLayer do SAP B1
+e injecto dados frescos antes da resposta. Endpoints usados:
+  • EmployeesInfo  → OHEM (lista activos + filtro por nome)
+  • Departments    → OUDP (mapeia DepartmentID → nome)
+
+Se SAP estiver offline ou o módulo estiver vazio, a query falha
+silenciosamente e respondo apenas com o conhecimento embebido + livros.
 
 TABELAS B1 RELEVANTES PARA RH:
 - **OHEM** — Employee Master Data (nome, cargo, datas, salário)
@@ -419,9 +426,21 @@ SAP;
 
     protected function augmentMessage(string|array $message, ?callable $heartbeat = null): string|array
     {
-        // SAP HR ainda não está populado em B1. Quando estiver, podemos chamar
-        // $this->sap->buildHrContext($txt). Por agora deixamos o prompt
-        // explicar ao user que o módulo precisa de fase 1 do roadmap.
+        // SAP HR context — só dispara se houver keywords de RH/colaboradores
+        // no prompt. buildHrContext() é graceful: se SAP estiver offline ou
+        // EmployeesInfo não existir, devolve string vazia e a Ana cai nos
+        // livros + info embebida no system prompt.
+        if ($this->needsSap($message)) {
+            try {
+                $sapCtx = $this->sap->buildHrContext($this->messageText($message), $heartbeat);
+                if ($sapCtx) {
+                    $message = $this->appendToMessage($message, $sapCtx);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('HrAgent: SAP HR context failed — ' . $e->getMessage());
+            }
+        }
+
         if (is_string($message) && $this->needsWebSearch($message)) {
             if ($heartbeat) $heartbeat('a consultar legislação laboral');
             $message = $this->augmentWithWebSearch($message, $heartbeat);

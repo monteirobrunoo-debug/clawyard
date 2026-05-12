@@ -489,6 +489,163 @@ class SapService
         return $data['value'] ?? [];
     }
 
+    // ─── HR / Employees (Dr.ª Ana Sobral) ──────────────────────────────────────
+    //
+    // SAP B1 ServiceLayer expõe employees via o endpoint EmployeesInfo (backed
+    // por OHEM). Estes métodos são uma camada minimalista para a HrAgent —
+    // retornam campos que NÃO são PII sensíveis (nomes, departamento, função,
+    // contactos work). Salário e dados de baixa não são fetched aqui — esses
+    // ficam reservados a queries explicitas com permissão admin.
+
+    /**
+     * Lista colaboradores activos (campos seguros — sem salário).
+     * Útil para "quantos colaboradores temos?", "lista do departamento X".
+     */
+    public function getEmployees(int $top = 100): array
+    {
+        $data = $this->get('EmployeesInfo', [
+            '$select'  => 'EmployeeID,FirstName,LastName,Position,DepartmentID,JobTitle,'
+                        . 'Active,StartDate,WorkPhone,Email,Manager,Branch,Salary',
+            '$filter'  => 'Active eq \'tYES\'',
+            '$top'     => $top,
+            '$orderby' => 'LastName asc,FirstName asc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    /**
+     * Procura colaborador por nome (substring case-insensitive).
+     */
+    public function searchEmployees(string $name, int $top = 10): array
+    {
+        $safe = addslashes($name);
+        $data = $this->get('EmployeesInfo', [
+            '$select'  => 'EmployeeID,FirstName,LastName,Position,DepartmentID,JobTitle,'
+                        . 'Active,WorkPhone,Email,Manager,StartDate',
+            '$filter'  => "substringof(tolower('{$safe}'),tolower(FirstName)) "
+                        . "or substringof(tolower('{$safe}'),tolower(LastName))",
+            '$top'     => $top,
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    /**
+     * Fetch um colaborador específico por EmployeeID.
+     */
+    public function getEmployeeById(int $employeeId): ?array
+    {
+        $data = $this->get("EmployeesInfo({$employeeId})", [
+            '$select' => 'EmployeeID,FirstName,LastName,Position,DepartmentID,JobTitle,'
+                       . 'Active,StartDate,EndDate,WorkPhone,Email,Manager,Branch,Salary',
+        ]);
+        return $data ?: null;
+    }
+
+    /**
+     * Lista departamentos (OUDP via Departments endpoint).
+     */
+    public function getDepartments(): array
+    {
+        $data = $this->get('Departments', [
+            '$select'  => 'Code,Name',
+            '$top'     => 50,
+            '$orderby' => 'Name asc',
+        ]);
+        return $data['value'] ?? [];
+    }
+
+    /**
+     * Constrói bloco de contexto SAP HR baseado em keywords no prompt.
+     * Detecta automaticamente que dados fetch para evitar chamadas
+     * SAP desnecessárias em queries que não precisam.
+     *
+     * Failure-safe: se SAP estiver offline, devolve string vazia (o agente
+     * cai na info embebida no system prompt + livros).
+     */
+    public function buildHrContext(string $message, ?callable $heartbeat = null): string
+    {
+        $hb = function (string $status) use ($heartbeat) {
+            if ($heartbeat) $heartbeat($status);
+        };
+
+        if (!$this->username || !$this->password) {
+            return "\n\n--- SAP B1 ---\nCredenciais SAP não configuradas — uso só fontes documentais.\n--- FIM ---\n";
+        }
+        if (!$this->ensureSession()) {
+            return "\n\n--- SAP B1 ---\nLogin SAP recusado — uso só fontes documentais. Avisa o admin para verificar credenciais.\n--- FIM ---\n";
+        }
+
+        $lower    = mb_strtolower($message);
+        $context  = [];
+
+        $wantsList = preg_match(
+            '/\b(colaboradores|funcionarios|funcionários|headcount|equipa|equipas|'
+            . 'staff|lista|quantos|quantas|total|efectivos|empregados)\b/u',
+            $lower
+        );
+
+        if ($wantsList) {
+            $hb('a buscar colaboradores SAP');
+            try {
+                $emps = $this->getEmployees(120);
+                if (!empty($emps)) {
+                    // Group by department for a useful overview
+                    $byDept = [];
+                    foreach ($emps as $e) {
+                        $d = $e['DepartmentID'] ?? 0;
+                        $byDept[$d] = ($byDept[$d] ?? 0) + 1;
+                    }
+                    $depts = $this->getDepartments();
+                    $deptNames = [];
+                    foreach ($depts as $d) {
+                        $deptNames[$d['Code'] ?? ''] = $d['Name'] ?? '(s/n)';
+                    }
+                    $rows = [];
+                    foreach ($byDept as $code => $count) {
+                        $name = $deptNames[$code] ?? "Dept #{$code}";
+                        $rows[] = "  • {$name}: {$count}";
+                    }
+                    $context[] = "👥 HEADCOUNT SAP (OHEM/EmployeesInfo, " . count($emps) . " activos):\n"
+                               . implode("\n", $rows);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SAP HR list failed: ' . $e->getMessage());
+            }
+        }
+
+        // Detect a person name like "do Bruno", "da Mónica", "do Daniel"
+        if (preg_match(
+            '/\b(?:d[oae]s?|sobre|info|informa[çc][ãa]o|dados)\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-záéíóúâêôãõç]+)?)/u',
+            $message,
+            $m
+        )) {
+            $name = trim($m[1]);
+            $hb("a procurar SAP: {$name}");
+            try {
+                $hits = $this->searchEmployees($name, 5);
+                if (!empty($hits)) {
+                    $rows = array_map(function ($e) {
+                        $fn = trim(($e['FirstName'] ?? '') . ' ' . ($e['LastName'] ?? ''));
+                        $jt = $e['JobTitle']  ?? ($e['Position'] ?? '?');
+                        $st = $e['StartDate'] ?? '';
+                        return "  • {$fn} — {$jt}" . ($st ? " (desde {$st})" : '');
+                    }, $hits);
+                    $context[] = "🔎 SAP — colaboradores que correspondem a '{$name}':\n"
+                               . implode("\n", $rows);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SAP HR search failed: ' . $e->getMessage());
+            }
+        }
+
+        if (empty($context)) return '';
+
+        return "\n\n--- DADOS SAP B1 (HR) ---\n" . implode("\n\n", $context)
+             . "\n\nPRIVACIDADE: nunca reveles salário individual sem autorização explícita. "
+             . "Quando perguntarem 'quanto ganha X', responde com a média do departamento.\n"
+             . "--- FIM ---\n";
+    }
+
     // ─── CRM / Sales Opportunities (Pipeline) ──────────────────────────────────
 
     /** Translate PartYard CRM stage ID to human label */
