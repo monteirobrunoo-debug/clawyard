@@ -826,6 +826,7 @@
                 <div class="ag-section-hdr">📋 Operações</div>
                 <div class="agent-grid-item" data-agent="document"   title="Commander Doc"><span class="ag-icon"><img src="/images/agents/document.png" class="ag-photo" alt="Doc"></span><span class="ag-name">Doc</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="finance"    title="Dr. Luís Finance"><span class="ag-icon"><img src="/images/agents/finance.png" class="ag-photo" alt="Luís"></span><span class="ag-name">Luís</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="hr"         title="Dr.ª Ana Sobral — RH, KPI/OKR, Avaliação de Desempenho"><span class="ag-icon"><img src="/images/agents/hr.png" class="ag-photo" alt="Ana Sobral"></span><span class="ag-name">Ana Sobral</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="acingov"    title="Dr. Ana Contracts"><span class="ag-icon"><img src="/images/agents/acingov.png" class="ag-photo" alt="Ana"></span><span class="ag-name">Ana</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="batch"      title="Max Batch — Bulk Processing"><span class="ag-icon">📦</span><span class="ag-name">Max Batch</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
 
@@ -956,7 +957,7 @@ let SESSION_ID    = getSessionId(selectedAgent);
 const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', crm:'🎯', document:'📄', claude:'🧠', nvidia:'⚡',
-    aria:'🔐', quantum:'⚛️', finance:'💰', research:'🔍',
+    aria:'🔐', quantum:'⚛️', finance:'💰', hr:'👥', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
     thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓', mildef:'🎖️',
     shipping:'🚚', workreport:'🛠️'
@@ -977,6 +978,7 @@ const AGENT_PHOTOS = {
     aria:         '/images/agents/aria.png',
     quantum:      '/images/agents/quantum.png',
     finance:      '/images/agents/finance.png',
+    hr:           '/images/agents/hr.png',
     research:     '/images/agents/research.png',
     capitao:      '/images/agents/maritime.png',
     acingov:      '/images/agents/acingov.png',
@@ -989,7 +991,7 @@ const AGENT_PHOTOS = {
 const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
     email:'Daniel Email', sap:'Richard SAP', crm:'Marta CRM', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
-    aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', research:'Marina Research',
+    aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', hr:'Dr.ª Ana Sobral RH', research:'Marina Research',
     capitao:'Capitão Porto',
     acingov:'Dra. Ana Contratos',
     engineer:'Eng. Victor I&D',
@@ -1011,7 +1013,7 @@ const AGENT_COLORS = {
     sales:'#3b82f6', support:'#f59e0b', email:'#8b5cf6',
     sap:'#06b6d4', document:'#94a3b8', claude:'#a855f7',
     nvidia:'#76b900', aria:'#ef4444', quantum:'#22d3ee',
-    finance:'#10b981', research:'#f97316',
+    finance:'#10b981', hr:'#ec4899', research:'#f97316',
     capitao:'#0ea5e9',
     acingov:'#f59e0b',
     engineer:'#f97316',
