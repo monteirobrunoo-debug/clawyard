@@ -31,7 +31,9 @@ class IngestTechnicalBooksCommand extends Command
     protected $signature = 'books:ingest
                             {path : Caminho para a biblioteca-tecnica/}
                             {--domain= : forçar domain (soldadura|naval|outros)}
-                            {--refresh : truncar tabela antes de ingerir}';
+                            {--refresh : truncar tabela antes de ingerir}
+                            {--use-pdftotext : usar Poppler/pdftotext em vez de smalot (mais tolerante para PDFs corruptos ou >100MB)}
+                            {--pdftotext-fallback : tenta smalot primeiro; se falhar, cai para pdftotext}';
 
     protected $description = 'Ingere PDFs técnicos (soldadura/naval) em chunks por página';
 
@@ -70,10 +72,29 @@ class IngestTechnicalBooksCommand extends Command
 
             $bookTitle = ucwords(str_replace(['-', '_'], ' ', preg_replace('/^\d+-/', '', $bookKey)));
 
+            $usePopplerFirst = (bool) $this->option('use-pdftotext');
+            $popplerFallback = (bool) $this->option('pdftotext-fallback');
+
             try {
-                $parser = new Parser();
-                $pdf    = $parser->parseFile($file->getRealPath());
-                $pages  = $pdf->getPages();
+                if ($usePopplerFirst) {
+                    $pages = $this->extractWithPdftotext($file->getRealPath());
+                    $engine = 'pdftotext';
+                } else {
+                    try {
+                        $parser = new Parser();
+                        $pdf    = $parser->parseFile($file->getRealPath());
+                        $pages  = array_map(
+                            fn($p) => trim((string) $p->getText()),
+                            $pdf->getPages()
+                        );
+                        $engine = 'smalot';
+                    } catch (\Throwable $e) {
+                        if (!$popplerFallback) throw $e;
+                        $this->warn("  · {$file->getFilename()} — smalot falhou ({$e->getMessage()}), a tentar pdftotext…");
+                        $pages = $this->extractWithPdftotext($file->getRealPath());
+                        $engine = 'pdftotext (fallback)';
+                    }
+                }
 
                 if (empty($pages)) {
                     $this->warn("  · {$file->getFilename()} — sem texto extraído (PDF imagem?)");
@@ -83,8 +104,8 @@ class IngestTechnicalBooksCommand extends Command
                 $bar = $this->output->createProgressBar(count($pages));
                 $bar->start();
 
-                foreach ($pages as $i => $page) {
-                    $clean = trim((string) $page->getText());
+                foreach ($pages as $i => $pageText) {
+                    $clean = trim((string) $pageText);
                     if (mb_strlen($clean) < 50) { $bar->advance(); continue; }
                     $clean = mb_substr($clean, 0, 8000);
 
@@ -104,7 +125,7 @@ class IngestTechnicalBooksCommand extends Command
                 $bar->finish();
                 $this->newLine();
                 $totalBooks++;
-                $this->info("  ✓ {$file->getFilename()} — " . count($pages) . " páginas");
+                $this->info("  ✓ {$file->getFilename()} — " . count($pages) . " páginas [{$engine}]");
             } catch (\Throwable $e) {
                 $errors++;
                 $this->error("  ✗ {$file->getFilename()} — " . $e->getMessage());
@@ -114,6 +135,61 @@ class IngestTechnicalBooksCommand extends Command
         $this->newLine();
         $this->info("📊 Ingestão completa: {$totalBooks} livros · {$totalChunks} chunks · {$errors} erros");
         return self::SUCCESS;
+    }
+
+    /**
+     * Extracção via Poppler/pdftotext (binário de sistema).
+     *
+     * Razões para existir como alternativa ao smalot/pdfparser:
+     *   • Smalot mantém todo o object graph do PDF em memória →
+     *     PDFs >100MB rebentam mesmo com memory_limit=2G.
+     *   • Smalot é estrito com PDFs malformados (xref partido,
+     *     streams inválidos, encriptação trivial) → erros como
+     *     "Trying to access array offset on null".
+     *   • Poppler streams page-by-page, ignora erros menores, e
+     *     suporta PDFs com encriptação owner-only (sem password).
+     *
+     * Pages são separadas por \f (form feed) no output do
+     * pdftotext, que é o standard.
+     *
+     * @return array<int, string>  index 0-based = página 1
+     */
+    private function extractWithPdftotext(string $absPath): array
+    {
+        $tmp  = tempnam(sys_get_temp_dir(), 'pdftotext_');
+        $cmd  = sprintf(
+            '/usr/bin/pdftotext -layout -enc UTF-8 -nopgbrk %s %s 2>&1',
+            escapeshellarg($absPath),
+            escapeshellarg($tmp)
+        );
+        // Note: -nopgbrk would strip form-feed; we WANT \f as page sep,
+        // so we re-issue without it:
+        $cmd  = sprintf(
+            '/usr/bin/pdftotext -layout -enc UTF-8 %s %s 2>&1',
+            escapeshellarg($absPath),
+            escapeshellarg($tmp)
+        );
+        $out  = [];
+        $code = 0;
+        exec($cmd, $out, $code);
+        if ($code !== 0) {
+            @unlink($tmp);
+            throw new \RuntimeException(
+                'pdftotext exit ' . $code . ': ' . implode(' | ', array_slice($out, 0, 3))
+            );
+        }
+        $raw = @file_get_contents($tmp) ?: '';
+        @unlink($tmp);
+
+        if ($raw === '') return [];
+
+        // Split por form-feed (page break standard do Poppler)
+        $pages = explode("\x0c", $raw);
+        // Remove última página vazia (\f no fim do ficheiro)
+        if (end($pages) === '' || trim((string) end($pages)) === '') {
+            array_pop($pages);
+        }
+        return array_values($pages);
     }
 
     /**
