@@ -75,6 +75,19 @@ trait TechnicalBookSkillTrait
         'audit','auditoria','due diligence','toc','roc','clc',
         'budget','orçamento','forecast','projecção','projection','variance',
         'roi','payback','cost-benefit','tco','capex','opex',
+        // PT-specific tax codes (Códigos fiscais portugueses — 2026-05-12)
+        'circ','civa','cirs','cimi','cimt','cfi','cis','cppt','cpc',
+        'código do irc','código do iva','código do irs','código do imposto',
+        'tributação autónoma','tributações autónomas','beneficios fiscais',
+        'benefícios fiscais','consolidação de contas','equivalência patrimonial',
+        'oe2025','orçamento do estado','ies','modelo 22','modelo 3','modelo 30',
+        'segurança social','subsídio','subsidio','férias','natal','remunerações',
+        'remuneracoes','prestações compensatórias','amortização','confirming',
+        'novo estatuto','contabilidade financeira','demonstração de resultados',
+        'demonstrações financeiras','snc-ap','gestão fiscal','planeamento fiscal',
+        'optimização fiscal','derrama','retenção na fonte','liquidação',
+        'autoridade tributária','spend analysis','category management',
+        'negotiation','negociação','negociacao',
 
         // ── Commercial / CRM / Sales ──
         'crm','customer relationship','lead','prospect','pipeline','funnel','outreach',
