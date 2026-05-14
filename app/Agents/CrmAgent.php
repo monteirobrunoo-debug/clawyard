@@ -627,10 +627,20 @@ SPECIALTY;
 
     // ─── Confirmation execution ───────────────────────────────────────────────
 
-    /** Public wrapper used by NvidiaController's metadata-based shortcut */
+    /**
+     * Public wrapper used by NvidiaController's metadata-based shortcut.
+     *
+     * Auto-detecta entre criação e actualização pela presença de SequentialNo:
+     *   • $oppData['SequentialNo'] presente → UPDATE (Richard SAP ou Marta)
+     *   • sem SequentialNo → CREATE (fluxo original)
+     *
+     * Permite que Richard SAP emita json_opp_update e o backend execute
+     * exactamente o mesmo fluxo de confirmação.
+     */
     public function executePendingOpp(array $oppData): string
     {
-        return $this->executeConfirmation(['type' => 'create', 'data' => $oppData]);
+        $type = !empty($oppData['SequentialNo']) ? 'update' : 'create';
+        return $this->executeConfirmation(['type' => $type, 'data' => $oppData]);
     }
 
     protected function executeConfirmation(array $pending): string

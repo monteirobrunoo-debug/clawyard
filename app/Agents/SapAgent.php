@@ -91,6 +91,79 @@ Format: 13 digits (e.g. 1290997479873) or XXXX-XX-XXX-XXXX (e.g. 1290-99-747-987
 - **Pipeline**: When SalesPerson shows a number (e.g. "Vend#3"), explain it is the SAP employee code and present the data clearly grouped by code. Use the injected aggregated pipeline data
 - **Large datasets**: summarize intelligently — top customers by value, biggest pipeline opportunities, critical low-stock items
 - **Accuracy**: if no SAP data is injected for a specific query, say so clearly and ask the user to rephrase or provide more detail
+
+## Acções CRM disponíveis (criação / actualização de oportunidades)
+
+Para além de LER o pipeline SAP B1, podes propor ALTERAÇÕES ao CRM
+usando os mesmos blocos confirmáveis que a Marta CRM usa. O backend
+ClawYard intercepta a confirmação "SIM" do utilizador e executa via
+SapService — tu emites o bloco JSON, esperas confirmação, e o sistema
+trata do resto.
+
+### A) CRIAR nova oportunidade
+
+Emite no fim da tua resposta:
+
+```
+```json_opp
+{
+  "CardCode": "C000279",
+  "CardName": "OCEANPACT SERVIÇOS MARITIMOS S.A. - R.J.",
+  "OpportunityName": "Cotação MTU 4000 — proa 2026-Q3",
+  "StageId": 5,
+  "SalesPerson": 3,
+  "MaxLocalTotal": 65000,
+  "ClosingDays": 60,
+  "Remarks": "Pedido directo via email do João Silva, OceanPact Niterói"
+}
+```
+```
+
+Termina sempre com:
+> **Confirma com SIM para criar esta oportunidade no SAP B1.**
+
+### B) ACTUALIZAR oportunidade existente (mudar fase, owner, prazo)
+
+Quando o utilizador pedir para **avançar fase, mudar vendedor, alterar
+prazo ou anotar uma observação** numa opportunity existente:
+
+```
+```json_opp_update
+{
+  "SequentialNo": 1247,
+  "StageId": 9,
+  "SalesPerson": 5,
+  "ExpectedClosingDate": "2026-07-15",
+  "Remarks": "Cliente confirmou PO via email 2026-05-14 — avançar para Ordem de Compra"
+}
+```
+```
+
+Campos suportados: `SequentialNo` (obrigatório), `StageId`, `SalesPerson`,
+`ExpectedClosingDate` (Y-m-d), `Remarks`.
+
+Termina com:
+> **Confirma com SIM para aplicar a alteração à opportunity #N.**
+
+### Regras importantes
+
+1. **Nunca** chames a API SAP directamente — o backend executa só com
+   confirmação SIM do utilizador (anti-mistake-clicks).
+2. **Antes de propor** uma criação/actualização, MOSTRA o estado actual
+   da opportunity (fase, valor, vendedor) extraído do contexto SAP
+   injectado — para o user ver o que muda.
+3. **Após a confirmação**, o backend devolve resultado real do SAP B1
+   (sucesso ou erro técnico). A tua resposta com `json_opp[_update]`
+   é apenas a proposta; a execução é separada e tu não vês o resultado.
+4. **Marta CRM** é a especialista em criar opportunities a partir de
+   emails. Para emails completos, sugere "transferir para a Marta CRM"
+   em vez de criares tu — ela tem parsing especializado de attachments.
+5. **`__TABLE__` token**: para queries de pipeline com >5 opportunities,
+   emite tabela exportável (Excel/CSV/PDF) — o frontend ClawYard
+   renderiza automaticamente:
+   ```
+   __TABLE__{"title":"Pipeline aberto Q2 2026","columns":["Seq","Cliente","Fase","€","Vend"],"rows":[[1247,"OceanPact","Cotação Venda","85000","Vend#3"]],"analysis":"...","recommendation":"..."}
+   ```
 SPECIALTY;
 
         $this->systemPrompt = str_replace(

@@ -221,11 +221,14 @@ class NvidiaController extends Controller
 
         $history = $conversation->history;
 
-        // CRM shortcut: if user confirms with SIM and we have a cached pending_opp
-        // in metadata, bypass the agent entirely and execute the SAP call directly.
-        // This is a safeguard for cases where findPendingInHistory() can't re-parse
-        // the json_opp block from history (encoding issues, complex JSON, etc.)
-        if ($agentName === 'crm' && preg_match('/^\s*(sim|s|yes|y|confirmo|ok|criar|cria|confirmar)\s*\.?$/i', trim($message))) {
+        // CRM/SAP shortcut: if user confirms with SIM and we have a cached
+        // pending_opp in metadata, bypass the agent entirely and execute the
+        // SAP call directly. Aplica-se a Marta CRM E Richard SAP — ambos
+        // podem emitir json_opp/json_opp_update blocks, e o backend executa
+        // via CrmAgent::executePendingOpp() independentemente do agente que
+        // gerou a proposta.
+        if (in_array($agentName, ['crm', 'sap'], true)
+            && preg_match('/^\s*(sim|s|yes|y|confirmo|ok|criar|cria|confirmar|aplicar|executar)\s*\.?$/i', trim($message))) {
             $meta       = $conversation->metadata ?? [];
             $pendingOpp = $meta['pending_opp'] ?? null;
             if ($pendingOpp && is_array($pendingOpp)) {
@@ -236,12 +239,13 @@ class NvidiaController extends Controller
                 unset($meta['pending_opp']);
                 $conversation->update(['metadata' => $meta]);
 
-                // Save messages
+                // Save messages — preserva o agente que iniciou (sap ou crm)
                 $conversation->messages()->create(['role' => 'user',      'content' => $message]);
-                $conversation->messages()->create(['role' => 'assistant', 'agent' => 'crm', 'content' => $result]);
+                $conversation->messages()->create(['role' => 'assistant', 'agent' => $agentName, 'content' => $result]);
 
-                return response()->stream(function () use ($result, $sessionId) {
-                    $meta = ['type' => 'meta', 'mode' => 'single', 'agent' => 'crm', 'session_id' => $sessionId, 'agent_log' => [], 'suggestions' => []];
+                $localAgentName = $agentName;
+                return response()->stream(function () use ($result, $sessionId, $localAgentName) {
+                    $meta = ['type' => 'meta', 'mode' => 'single', 'agent' => $localAgentName, 'session_id' => $sessionId, 'agent_log' => [], 'suggestions' => []];
                     echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE) . "\n\n"; flush();
                     echo 'data: ' . json_encode(['chunk' => $result], JSON_UNESCAPED_UNICODE) . "\n\n"; flush();
                     echo "data: [DONE]\n\n"; flush();
@@ -629,20 +633,28 @@ class NvidiaController extends Controller
                 \Log::warning('ClawYard: could not save assistant message — ' . $e->getMessage());
             }
 
-            // CRM: cache json_opp block in conversation metadata so SIM confirmation
-            // never has to re-parse history (safeguard against regex edge-cases)
-            // Use the redacted copy downstream — CRM never contains Kyber
-            // payloads in practice, but this keeps the invariant that
-            // $fullReply (raw) stops being touched after line ~454.
-            if ($agentName_final === 'crm' && preg_match('/```json_opp\s*([\s\S]*?)\s*```/i', $fullReplyPersisted, $oppMatch)) {
-                $oppData = json_decode(trim($oppMatch[1]), true);
+            // CRM/SAP: cache json_opp e json_opp_update blocks na conversation
+            // metadata para que o intercept SIM execute mesmo se o regex
+            // re-parser falhar com history encoding edge-cases.
+            //
+            // Marta CRM e Richard SAP partilham este cache — ambos podem
+            // emitir json_opp (create) ou json_opp_update (update). A
+            // distinção é feita pela presença de SequentialNo no payload
+            // (ver CrmAgent::executePendingOpp).
+            if (in_array($agentName_final, ['crm', 'sap'], true)) {
+                $oppData = null;
+                if (preg_match('/```json_opp_update\s*([\s\S]*?)\s*```/i', $fullReplyPersisted, $upd)) {
+                    $oppData = json_decode(trim($upd[1]), true);
+                } elseif (preg_match('/```json_opp\s*([\s\S]*?)\s*```/i', $fullReplyPersisted, $opp)) {
+                    $oppData = json_decode(trim($opp[1]), true);
+                }
                 if (is_array($oppData)) {
                     try {
                         $meta = $conversationRef->metadata ?? [];
                         $meta['pending_opp'] = $oppData;
                         $conversationRef->update(['metadata' => $meta]);
                     } catch (\Throwable $e) {
-                        \Log::warning('ClawYard CRM: could not cache pending_opp — ' . $e->getMessage());
+                        \Log::warning("ClawYard {$agentName_final}: could not cache pending_opp — " . $e->getMessage());
                     }
                 }
             }
