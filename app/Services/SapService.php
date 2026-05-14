@@ -882,6 +882,171 @@ class SapService
         return implode("\n", $lines);
     }
 
+    // ─── Pipeline Margins (Cotação de Venda vs Compra) ─────────────────────
+    //
+    // Para cada oportunidade aberta, extrai:
+    //   • Cotação de Venda (StageKey 6) — máximo das linhas StageKey 6/7/8/10
+    //   • Cotação de Compra (StageKey 5) — máximo das linhas StageKey 5/9
+    //   • Diff = Venda - Compra (margem absoluta)
+    //   • Margin% = Diff / Compra × 100 (% sobre custo)
+    //
+    // Caso o $expand=SalesOpportunitiesLines não devolva linhas (alguns
+    // tenants do B1 falham este expand silenciosamente), fallback: o
+    // header MaxLocalTotal é tratado como o lado de Compra e Venda fica 0
+    // → flag "estimativa" no output.
+    //
+    // Performance: 1 chamada para listar opps + N chamadas para detalhe.
+    // Top default 30 (≤30s típico). Para histórico, usa stage filter.
+
+    /**
+     * @param int|null $stageFilter  Opcional: filtra a uma fase (ex: 6 = só
+     *                               Cotação de Venda). null = todas as
+     *                               oportunidades abertas.
+     * @param int      $top          Max opportunidades a analisar (default 30)
+     * @return array<array{seq:int,name:string,opportunity:string,
+     *                     sale_total:float,purchase_total:float,
+     *                     diff:float,margin_pct:?float,stage:string,
+     *                     estimated:bool}>
+     */
+    public function getPipelineMargins(?int $stageFilter = null, int $top = 30): array
+    {
+        $opps = $this->getSalesOpportunities($stageFilter, null, $top, 'sos_Open');
+        if (empty($opps)) return [];
+
+        $rows = [];
+        foreach ($opps as $opp) {
+            $seqNo = (int) ($opp['SequentialNo'] ?? 0);
+            if ($seqNo <= 0) continue;
+
+            $sale     = 0.0;
+            $purchase = 0.0;
+            $estimated = false;
+
+            try {
+                // Try $expand first — works on most tenants.
+                $detail = $this->get("SalesOpportunities({$seqNo})", [
+                    '$select' => 'SequentialNo,SalesOpportunitiesLines',
+                    '$expand' => 'SalesOpportunitiesLines',
+                ]);
+                $lines = $detail['SalesOpportunitiesLines'] ?? [];
+
+                foreach ($lines as $l) {
+                    $sk    = (int) ($l['StageKey'] ?? 0);
+                    $total = (float) ($l['MaxLocalTotal'] ?? 0);
+                    // Sales-side stages: Cotação Venda (6), Follow Up (7),
+                    // Possível Venda (8), Ordem de Venda (10).
+                    if (in_array($sk, [6, 7, 8, 10], true)) {
+                        $sale = max($sale, $total);
+                    }
+                    // Purchase-side: Cotação Compra (5), Ordem Compra (9).
+                    if (in_array($sk, [5, 9], true)) {
+                        $purchase = max($purchase, $total);
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::debug("getPipelineMargins: line fetch failed #{$seqNo} — " . $e->getMessage());
+            }
+
+            // Fallback se expand falhar ou sem dados: header MaxLocalTotal
+            // representa o valor da oportunidade — assumir Compra (conforme
+            // pedido do utilizador: "total na oportunidade supostamente de
+            // ordem de compra").
+            if ($sale === 0.0 && $purchase === 0.0) {
+                $purchase = (float) ($opp['MaxLocalTotal'] ?? 0);
+                $estimated = true;
+            }
+
+            $diff = $sale - $purchase;
+            $marginPct = $purchase > 0 ? round($diff / $purchase * 100, 1) : null;
+
+            $rows[] = [
+                'seq'            => $seqNo,
+                'name'           => (string) ($opp['CardName'] ?? '?'),
+                'opportunity'    => (string) ($opp['OpportunityName'] ?? ''),
+                'sale_total'     => $sale,
+                'purchase_total' => $purchase,
+                'diff'           => $diff,
+                'margin_pct'     => $marginPct,
+                'stage'          => $this->getStageLabel((int) ($opp['CurrentStageNo'] ?? 0)),
+                'sales_person'   => (string) ($opp['SalesPerson'] ?? '?'),
+                'closing_date'   => substr((string) ($opp['PredictedClosingDate'] ?? ''), 0, 10),
+                'estimated'      => $estimated,
+            ];
+        }
+
+        // Ordena por margem absoluta descendente (maior oportunidade no topo).
+        usort($rows, fn($a, $b) => $b['diff'] <=> $a['diff']);
+        return $rows;
+    }
+
+    /**
+     * Formata os resultados de getPipelineMargins() em bloco texto pronto a
+     * injectar no prompt do Richard SAP. Sumário no fim com totais agregados.
+     */
+    public function formatPipelineMargins(array $margins): string
+    {
+        if (empty($margins)) {
+            return "💰 ANÁLISE DE MARGENS — pipeline vazio ou sem dados.";
+        }
+
+        $rows = ["💰 MARGENS POR OPORTUNIDADE (Cotação Venda - Compra)\n"];
+        $rows[] = sprintf(
+            "  %-6s %-30s %-12s %12s %12s %12s %7s  %s",
+            'SeqNo', 'Cliente', 'Fase', 'Venda €', 'Compra €', 'Margem €', 'Margem%', 'Fecho'
+        );
+        $rows[] = str_repeat('─', 130);
+
+        $totalSale = 0.0;
+        $totalPurchase = 0.0;
+        $countEstimated = 0;
+
+        foreach ($margins as $m) {
+            $totalSale     += $m['sale_total'];
+            $totalPurchase += $m['purchase_total'];
+            if ($m['estimated']) $countEstimated++;
+
+            $marginPctStr = $m['margin_pct'] !== null
+                ? number_format($m['margin_pct'], 1) . '%'
+                : '—';
+            $estimTag = $m['estimated'] ? ' ⚠️' : '';
+
+            $rows[] = sprintf(
+                "  #%-5d %-30s %-12s %12s %12s %12s %7s  %s%s",
+                $m['seq'],
+                mb_strimwidth($m['name'], 0, 30, '…'),
+                mb_strimwidth($m['stage'], 0, 12, '…'),
+                number_format($m['sale_total'], 0, '.', ','),
+                number_format($m['purchase_total'], 0, '.', ','),
+                number_format($m['diff'], 0, '.', ','),
+                $marginPctStr,
+                $m['closing_date'] ?: '—',
+                $estimTag
+            );
+        }
+
+        $totalDiff = $totalSale - $totalPurchase;
+        $totalMarginPct = $totalPurchase > 0
+            ? round($totalDiff / $totalPurchase * 100, 1)
+            : 0;
+
+        $rows[] = str_repeat('─', 130);
+        $rows[] = sprintf(
+            "  TOTAIS (%d opps): Venda €%s | Compra €%s | Margem €%s (%s%%)",
+            count($margins),
+            number_format($totalSale, 0, '.', ','),
+            number_format($totalPurchase, 0, '.', ','),
+            number_format($totalDiff, 0, '.', ','),
+            number_format($totalMarginPct, 1)
+        );
+
+        if ($countEstimated > 0) {
+            $rows[] = "\n  ⚠️ {$countEstimated} opp(s) sem detalhe de fases — usado MaxLocalTotal como Compra (Venda=0).";
+            $rows[] = "      Para análise completa, expandir SalesOpportunitiesLines em SAP.";
+        }
+
+        return implode("\n", $rows);
+    }
+
     /**
      * Create a new Sales Opportunity in SAP B1 CRM.
      *
@@ -1996,6 +2161,20 @@ class SapService
                             $opps
                         );
                         $context[] = "💼 COTAÇÕES DE VENDA (StageId=6) — " . count($opps) . " abertas:\n" . implode("\n", $rows);
+                    }
+                }
+
+                // Margin analysis per opportunity: Cotação Venda vs Compra.
+                // Dispara em keywords explícitas — caro porque faz N+1 calls
+                // (uma por opportunity para expandir SalesOpportunitiesLines).
+                if (preg_match(
+                    '/(margem|margens|diferen[çc]a|venda.{0,4}vs.{0,4}compra|compra.{0,4}vs.{0,4}venda|lucro|margin|profit|pricing.gap)/i',
+                    $message
+                )) {
+                    if ($heartbeat) $heartbeat('a calcular margens por oportunidade');
+                    $margins = $this->getPipelineMargins(null, 50);
+                    if ($margins) {
+                        $context[] = $this->formatPipelineMargins($margins);
                     }
                 }
 
