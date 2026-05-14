@@ -23,6 +23,7 @@ class AgentManager
             'research'  => new ResearchAgent(),
             'finance'   => new FinanceAgent(),
             'hr'        => new HrAgent(),
+            'marketing' => new MarketingAgent(),
             'capitao'   => new CapitaoAgent(),
             'acingov'   => new AcingovAgent(),
             'engineer'  => new EngineerAgent(),
@@ -204,6 +205,50 @@ class AgentManager
         ];
         foreach ($hrKeywords as $kw) {
             if (str_contains($lower, $kw)) return $this->agents['hr'];
+        }
+
+        // Marketing keywords — Ana Monteiro (B2C + B2B)
+        $marketingKeywords = [
+            'ana monteiro', 'marketing', 'marketing director', 'cmo',
+            'campanha', 'campanhas', 'campaign', 'campaigns', 'go-to-market', 'gtm',
+            'content calendar', 'calendário editorial', 'calendario editorial',
+            'editorial calendar', 'content strategy', 'estratégia de conteúdo',
+            'social media', 'redes sociais', 'instagram', 'tiktok', 'pinterest',
+            'linkedin marketing', 'linkedin organic', 'youtube marketing',
+            'meta ads', 'facebook ads', 'instagram ads', 'tiktok ads',
+            'google ads', 'performance ads', 'paid ads', 'paid social',
+            'performance max', 'pmax', 'display ads', 'youtube ads',
+            'seo', 'search engine optimization', 'seo on-page', 'seo técnico',
+            'core web vitals', 'sitemap', 'schema markup', 'meta description',
+            'backlink', 'link building', 'guest post', 'pr digital',
+            'influencer', 'influenciador', 'influenciadora', 'creator',
+            'ugc', 'user generated content', 'spark ad', 'spark ads',
+            'micro influencer', 'macro influencer', 'nano influencer',
+            'email marketing', 'newsletter', 'welcome flow', 'abandoned cart',
+            'browse abandonment', 'post-purchase', 'win-back', 'rfm',
+            'klaviyo', 'mailchimp', 'activecampaign', 'brevo', 'hubspot marketing',
+            'automation', 'automação de marketing', 'automacao de marketing',
+            'brand voice', 'tom de marca', 'archetype', 'arquétipo', 'arquetipo',
+            'positioning', 'posicionamento', 'value proposition', 'proposta de valor',
+            'brand book', 'brand guidelines', 'guidelines de marca',
+            'cac', 'ltv', 'ltv:cac', 'roas', 'aov', 'ticket médio',
+            'ctr', 'cpm', 'cpc', 'conversion rate', 'taxa de conversão',
+            'funnel', 'funil', 'tofu', 'mofu', 'bofu',
+            'lookalike', 'retargeting', 'remarketing', 'custom audience',
+            'attribution', 'atribuição', 'atribuicao', 'ga4', 'google analytics',
+            'hotjar', 'mixpanel', 'looker studio', 'posthog',
+            'pr', 'press release', 'comunicado de imprensa', 'media kit',
+            'media outreach', 'pitch jornalista', 'briefing jornalista',
+            'event activation', 'lançamento', 'lancamento', 'launch',
+            'awareness', 'consideration', 'decision', 'retention',
+            'd2c', 'b2c', 'direct-to-consumer', 'ecommerce', 'e-commerce',
+            'activewear', 'athleisure', 'fashion marketing', 'beauty marketing',
+            'dloren', 'dlorenwfit', 'd. loren', 'd loren',
+            'thought leadership', 'thought-leadership', 'white paper marketing',
+            'case study marketing', 'webinar marketing',
+        ];
+        foreach ($marketingKeywords as $kw) {
+            if (str_contains($lower, $kw)) return $this->agents['marketing'];
         }
 
         // Energy advisory / decarbonisation keywords

@@ -711,6 +711,7 @@
         <option value="quantum">⚛️ Prof. Quantum Leap</option>
         <option value="finance">💰 Dr. Luís Financeiro</option>
         <option value="hr">👥 Dr.ª Ana Sobral RH</option>
+        <option value="marketing">🎨 Ana Monteiro Marketing</option>
         <option value="research">🔍 Marina Research</option>
         <option value="capitao">⚓ Capitão Porto</option>
         <option value="acingov">🏛️ Dra. Ana Contratos</option>
@@ -822,6 +823,7 @@
                 <div class="agent-grid-item" data-agent="support"    title="Marcus Support"><span class="ag-icon"><img src="/images/agents/support.png" class="ag-photo" alt="Marcus"></span><span class="ag-name">Marcus</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="email"      title="Daniel Email"><span class="ag-icon"><img src="/images/agents/email.png" class="ag-photo" alt="Daniel"></span><span class="ag-name">Daniel</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
                 <div class="agent-grid-item" data-agent="crm"        title="Marta CRM — Criar Oportunidades SAP"><span class="ag-icon"><img src="/images/agents/crm.png" class="ag-photo" alt="Marta"></span><span class="ag-name">Marta CRM</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
+                <div class="agent-grid-item" data-agent="marketing"  title="Ana Monteiro Marketing — Campanhas B2C/B2B, Content, Ads, Influencers"><span class="ag-icon"><img src="/images/agents/marketing.png" class="ag-photo" alt="Ana M."></span><span class="ag-name">Ana Marketing</span><span class="ag-status">ready</span><span class="ag-dot"></span></div>
 
                 <!-- ── SAP & DADOS ── -->
                 <div class="ag-section-hdr">📊 SAP &amp; Dados</div>
@@ -962,7 +964,7 @@ let SESSION_ID    = getSessionId(selectedAgent);
 const AGENT_EMOJIS = {
     auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', crm:'🎯', document:'📄', claude:'🧠', nvidia:'⚡',
-    aria:'🔐', quantum:'⚛️', finance:'💰', hr:'👥', research:'🔍',
+    aria:'🔐', quantum:'⚛️', finance:'💰', hr:'👥', marketing:'🎨', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
     thinking:'🧠', batch:'📦', computer:'🖥️', vessel:'⚓', mildef:'🎖️',
     shipping:'🚚', workreport:'🛠️'
@@ -984,6 +986,7 @@ const AGENT_PHOTOS = {
     quantum:      '/images/agents/quantum.png',
     finance:      '/images/agents/finance.png',
     hr:           '/images/agents/hr.png',
+    marketing:    '/images/agents/marketing.png',
     research:     '/images/agents/research.png',
     capitao:      '/images/agents/maritime.png',
     acingov:      '/images/agents/acingov.png',
@@ -996,7 +999,7 @@ const AGENT_PHOTOS = {
 const AGENT_NAMES = {
     auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
     email:'Daniel Email', sap:'Richard SAP', crm:'Marta CRM', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
-    aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', hr:'Dr.ª Ana Sobral RH', research:'Marina Research',
+    aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', hr:'Dr.ª Ana Sobral RH', marketing:'Ana Monteiro Marketing', research:'Marina Research',
     capitao:'Capitão Porto',
     acingov:'Dra. Ana Contratos',
     engineer:'Eng. Victor I&D',
@@ -1018,7 +1021,7 @@ const AGENT_COLORS = {
     sales:'#3b82f6', support:'#f59e0b', email:'#8b5cf6',
     sap:'#06b6d4', document:'#94a3b8', claude:'#a855f7',
     nvidia:'#76b900', aria:'#ef4444', quantum:'#22d3ee',
-    finance:'#10b981', hr:'#ec4899', research:'#f97316',
+    finance:'#10b981', hr:'#ec4899', marketing:'#f97316', research:'#f97316',
     capitao:'#0ea5e9',
     acingov:'#f59e0b',
     engineer:'#f97316',
@@ -1048,6 +1051,7 @@ const AGENT_DESCRIPTIONS = {
     quantum: 'Digest científico diário: papers arXiv + patentes USPTO',
     finance: 'Contabilidade, fiscalidade, SAP financeiro e análise ROI',
     hr: 'Recursos Humanos PartYard — avaliação de desempenho, KPI/OKR, formação, organigrama e código do trabalho PT',
+    marketing: 'Marketing Director — campanhas B2C/D2C (Meta/Google/TikTok ads, content calendars, influencers) + B2B PartYard (LinkedIn, white papers, PR procurement)',
     research: 'Pesquisa de mercado, concorrência e análise de websites',
     capitao: 'Operações portuárias, escalas, documentação e logística marítima',
     acingov: 'SAM.gov · base.gov.pt · Vortal · UNIDO · UNGM — contratos públicos para PartYard',
@@ -1190,6 +1194,20 @@ const AGENT_CHIPS = {
         '💰 Estrutura de carta de crédito documentário para importação de peças MTU',
         '💰 Impacto fiscal de abrir subsidiária em Noruega vs Brasil vs Grécia',
         '💰 Análise de cash flow Q2 2026 — riscos de tesouraria e medidas preventivas',
+    ],
+    // ── Ana Monteiro Marketing ────────────────────────────────────────────
+    // Dual focus: B2C/D2C (DLoren-style) + B2B PartYard
+    marketing: [
+        '🎨 Content calendar Setembro 2026 para a DLoren Wfit — Instagram + TikTok + Pinterest',
+        '🎯 Plano de campanha lançamento nova colecção Naturae — Meta + Google + influencers PT',
+        '📊 Brand voice guidelines da DLoren — tom, vocabulário, archetype, dos & don\'ts',
+        '✉️ 5 emails do welcome flow para D2C activewear (Klaviyo) — copy + assunto + segmentação',
+        '🤝 Shortlist 10 micro-influencers PT fitness/yoga/pilates — engagement + audiência',
+        '💼 Estratégia LinkedIn B2B PartYard Q4 2026 — thought-leadership do CEO + case studies',
+        '📈 Auditoria SEO + competitive content para dlorenwfit.com — gaps e topic clusters',
+        '🔍 Benchmark CAC e ROAS realistas para activewear D2C PT (€30-50 ticket)',
+        '🎭 Press release para lançamento PartYard Defense em Euronaval Paris 2026',
+        '📊 Plano performance ads PME D2C com €5k/mês — split por canal e funnel',
     ],
     // ── Dr.ª Ana Sobral RH ────────────────────────────────────────────────
     // PartYard-specific: 53 colaboradores, 9 departamentos, nomes reais

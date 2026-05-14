@@ -120,6 +120,13 @@ class User extends Authenticatable
         'hr_team' => [
             'hr', 'finance', 'document', 'research', 'briefing',
         ],
+        // PME D2C Portugal — pacote para clientes B2C como a DLoren Wfit.
+        // 9 agentes que entregam valor a qualquer e-commerce/fashion PT
+        // sem ter de re-treinar contexto PartYard-específico.
+        'd2c_pme_pt' => [
+            'marketing', 'finance', 'hr', 'email', 'research',
+            'shipping', 'aria', 'document', 'briefing', 'claude',
+        ],
     ];
 
     /**

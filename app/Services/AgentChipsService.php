@@ -120,6 +120,16 @@ class AgentChipsService
                 '💰 Perdas por imparidade vs créditos incobráveis — tratamento IVA e IRC',
                 '💰 Análise OE2025 — impactos para empresas com actividade defesa/naval',
             ],
+            // ── Ana Monteiro Marketing ─────────────────────────────────────
+            // Dual focus: B2C/D2C (DLoren-style) + B2B PartYard
+            'marketing' => [
+                '🎨 Content calendar mensal para D2C activewear — Instagram + TikTok + Pinterest',
+                '🎯 Plano de campanha lançamento de colecção — Meta + Google + influencers',
+                '✉️ Welcome flow Klaviyo (5 emails) para nova marca D2C activewear',
+                '📊 Brand voice guidelines — archetype, tom, vocabulário, dos & don\'ts',
+                '💼 Estratégia LinkedIn B2B PartYard Q4 2026 — thought-leadership CEO',
+                '🤝 Shortlist 10 micro-influencers PT fitness/yoga/pilates com engagement >5%',
+            ],
             // ── Dr.ª Ana Sobral RH ─────────────────────────────────────────
             // PartYard-specific: 53 colaboradores, 9 departamentos, nomes reais
             'hr' => [

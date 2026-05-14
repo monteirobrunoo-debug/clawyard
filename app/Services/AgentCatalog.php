@@ -40,6 +40,7 @@ class AgentCatalog
             ['key' => 'qnap',        'category' => 'operations', 'name' => 'PartYard Archive',       'emoji' => '🗄️', 'role' => 'Document archive — search prices, codes, invoices, licences and contracts on QNAP',       'color' => '#f59e0b'],
             ['key' => 'finance',     'category' => 'operations', 'name' => 'Dr. Luís Finance',       'emoji' => '💰', 'role' => 'ROC · TOC · PhD Banking Management — Accounting, Audit and Taxation',                    'color' => '#10b981'],
             ['key' => 'hr',          'category' => 'operations', 'name' => 'Dr.ª Ana Sobral RH',     'emoji' => '👥', 'role' => 'Recursos Humanos PartYard — avaliação de desempenho, KPI/OKR, formação, organigrama, código do trabalho PT', 'color' => '#ec4899'],
+            ['key' => 'marketing',   'category' => 'commercial', 'name' => 'Ana Monteiro Marketing', 'emoji' => '🎨', 'role' => 'Marketing Director — campanhas B2C/D2C (Meta/Google/TikTok ads, content calendars, influencers) + B2B (LinkedIn, white papers, PR procurement)', 'color' => '#f97316'],
             ['key' => 'acingov',     'category' => 'operations', 'name' => 'Dr. Ana Contracts',      'emoji' => '🏛️', 'role' => 'Public procurement — Acingov tenders ranked by relevance for PartYard',                  'color' => '#f59e0b'],
             ['key' => 'vessel',      'category' => 'operations', 'name' => 'Capitão Vasco',          'emoji' => '⚓', 'role' => 'Vessel search + naval repair — ship brokers, drydocks, IACS class, inland waterways',     'color' => '#0ea5e9'],
             ['key' => 'workreport',  'category' => 'operations', 'name' => 'Eng. Repair',            'emoji' => '🛠️', 'role' => 'Marine/Shipping/Repairs Work Reports — soldadura naval, WPS, NDT/UTM, PartYard Job Reports',  'color' => '#0891b2'],
@@ -118,6 +119,19 @@ class AgentCatalog
             'document'  => ['Resume este contrato PDF', 'Valida este certificado técnico', 'Extrai cláusulas críticas deste NDA'],
             'qnap'      => ['Procura contrato OceanPact 2024', 'Faturas do fornecedor Raytheon', 'Licenças expiradas este trimestre'],
             'finance'   => ['Análise de tesouraria Q1 2026', 'Impacto fiscal compra intracomunitária', 'Cálculo IRC estimado 2025'],
+            'marketing' => [
+                // Ana Monteiro Marketing — dual focus B2C (DLoren-style) + B2B PartYard
+                '🎨 Content calendar Setembro 2026 para a DLoren Wfit — Instagram + TikTok + Pinterest',
+                '🎯 Plano de campanha lançamento nova colecção Naturae — Meta + Google + influencers PT',
+                '📊 Brand voice guidelines da DLoren — tom, vocabulário, archetype, dos & don\'ts',
+                '✉️ 5 emails do welcome flow para D2C activewear (Klaviyo) — copy + assunto + segmentação',
+                '🤝 Shortlist 10 micro-influencers PT fitness/yoga/pilates para a DLoren — engagement + audiência',
+                '💼 Estratégia LinkedIn B2B PartYard Q4 2026 — thought-leadership do CEO + case studies',
+                '📈 Auditoria SEO + competitive content para dlorenwfit.com — gaps e topic clusters',
+                '🔍 Benchmark CAC e ROAS realistas para activewear D2C PT (€30-50 ticket)',
+                '🎭 Press release para lançamento PartYard Defense em Euronaval Paris 2026',
+                '📊 Plano performance ads PME D2C com €5k/mês — split por canal e funnel',
+            ],
             'hr'        => [
                 // PartYard-specific — nomes reais, departamentos reais, obrigações actuais 2026
                 '👥 Mapa de KPIs e OKRs Q2 2026 para os 9 departamentos PartYard (Comercial, Procurement, Reparação, Marketing, Logística, IT, Qualidade, RH, Admin/Financeiro)',

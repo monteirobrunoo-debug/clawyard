@@ -25,7 +25,7 @@ class NvidiaController extends Controller
     {
         $request->validate([
             'message'    => 'required|string|min:1|max:4096',
-            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,crm,document,maritime,cyber,aria,quantum,finance,hr,research,capitao,acingov,engineer,patent,energy,kyber,qnap,thinking,batch,computer,vessel,workreport',
+            'agent'      => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,crm,document,maritime,cyber,aria,quantum,finance,hr,marketing,research,capitao,acingov,engineer,patent,energy,kyber,qnap,thinking,batch,computer,vessel,workreport',
             'session_id' => 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
             'image'      => 'nullable|string|max:5242880', // max ~4MB base64
         ]);
@@ -174,7 +174,7 @@ class NvidiaController extends Controller
 
         $request->validate([
             'message'   => 'required|string|min:1|max:20000',
-            'agent'     => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,crm,document,maritime,cyber,aria,quantum,finance,hr,research,capitao,acingov,engineer,patent,energy,kyber,qnap,thinking,batch,computer,vessel,mildef,shipping,briefing,workreport',
+            'agent'     => 'nullable|string|in:auto,orchestrator,nvidia,claude,sales,support,email,sap,crm,document,maritime,cyber,aria,quantum,finance,hr,marketing,research,capitao,acingov,engineer,patent,energy,kyber,qnap,thinking,batch,computer,vessel,mildef,shipping,briefing,workreport',
             'session_id'=> 'nullable|string|max:64|regex:/^[a-zA-Z0-9_\-]+$/',
             'image'      => 'nullable|string|max:10485760',  // base64 image ~7.5MB
         'image_type' => 'nullable|string|max:50',
