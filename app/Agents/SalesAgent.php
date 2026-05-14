@@ -259,6 +259,22 @@ SPECIALTY;
             Log::warning('SalesAgent: hp-history lookup failed — ' . $e->getMessage());
         }
 
+        // VesselTracker.com — lead-gen marítimo. Activa quando o user
+        // pergunta sobre armadores, vessels, portos ou motores específicos.
+        // Devolve listings com nomes de armador, vessel + IMO, engine specs
+        // e (quando possível) contactos. Output feed para outreach Daniel
+        // Email + opportunity Marta CRM.
+        try {
+            $vt = app(\App\Services\VesselTrackerService::class);
+            $block = $vt->buildContext($this->messageText($message), $heartbeat);
+            if ($block) {
+                if ($heartbeat) $heartbeat('a consultar VesselTracker (AIS + armadores)');
+                $message = $this->appendToMessage($message, $block);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('SalesAgent: VesselTracker lookup failed — ' . $e->getMessage());
+        }
+
         $message = $this->augmentWithWebSearch($message, $heartbeat);
         return $message;
     }

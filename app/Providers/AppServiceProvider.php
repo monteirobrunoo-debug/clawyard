@@ -32,6 +32,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(\App\Services\SapService::class, function () {
             return new \App\Services\SapService();
         });
+
+        // VesselTrackerService — singleton para reutilizar sessão (cookie jar
+        // + cache) entre Marco Sales, Capitão Vasco, Marta CRM. Evita re-login
+        // por agente quando o user faz queries multi-agente sobre o mesmo
+        // armador/vessel no mesmo request.
+        $this->app->singleton(\App\Services\VesselTrackerService::class, function () {
+            return new \App\Services\VesselTrackerService();
+        });
     }
 
     /**

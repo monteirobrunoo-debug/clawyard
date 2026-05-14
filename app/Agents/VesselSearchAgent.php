@@ -438,6 +438,21 @@ SPECIALTY;
             Log::warning('VesselSearchAgent: hp-history lookup failed — ' . $e->getMessage());
         }
 
+        // VesselTracker.com — AIS realtime + shipowner directory.
+        // Capitão Vasco usa para identificar armadores activos por região
+        // e cross-referenciar especificações (DWT, propulsion, engine make/
+        // model). Output feed para refit/drydock outreach.
+        try {
+            $vt    = app(\App\Services\VesselTrackerService::class);
+            $block = $vt->buildContext($this->messageText($message), $heartbeat);
+            if ($block) {
+                if ($heartbeat) $heartbeat('a consultar VesselTracker (AIS + armadores)');
+                $message = $this->appendToMessage($message, $block);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('VesselSearchAgent: VesselTracker lookup failed — ' . $e->getMessage());
+        }
+
         return $message;
     }
 

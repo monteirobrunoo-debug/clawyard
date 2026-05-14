@@ -258,6 +258,15 @@ return [
         'api_key' => env('SAM_GOV_API_KEY'),
     ],
 
+    // VesselTracker.com — AIS realtime + shipowner directory.
+    // Usado por Marco Sales + Capitão Vasco para lead-gen marítimo
+    // (extrai armadores, navios, motores e contactos para outreach).
+    'vesseltracker' => [
+        'username' => env('VESSELTRACKER_USERNAME'),
+        'password' => env('VESSELTRACKER_PASSWORD'),
+    ],
+
+
     // RoboDesk — local Mac bridge for Computer Use API
     'robodesk' => [
         'bridge_url' => env('ROBODESK_BRIDGE_URL'),                           // e.g. https://xyz.ngrok-free.app
