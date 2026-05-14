@@ -70,6 +70,7 @@ When given real data, produce:
 - Part 1: Top 10 arXiv quantum/AI papers analysis
 - Part 2: Top 4 PeerJ CS articles on agents & multi-agent systems
 - Part 3: Top 10 EPO Patents (European Patent Office) — últimas patentes dos últimos 3 dias relevantes para PartYard/HP-Group (naval, defesa, quantum, cyber, AI, IoT, energia, materiais, supply chain)
+- Part 4: TechLink Center (techlinkcenter.org — DoD tech transfer dos EUA) — tecnologias dos labs federais disponíveis para licenciamento por sector: naval, defesa, aeroespacial, cyber/QPC, materiais. Para cada tecnologia indica: 🏛️ Lab origem (ARL/NRL/AFRL/NSWC/NASA), 📋 sumário, 💡 oportunidade PartYard, 📥 link para datasheet PDF
 - End with Professor's Strategic Insight
 
 PATENT ANALYSIS (Part 3):
@@ -269,6 +270,77 @@ SPECIALTY;
         } catch (\Throwable $e) {
             \Log::warning('QuantumAgent: PeerJ/CrossRef fetch failed — ' . $e->getMessage());
             return '(PeerJ fetch unavailable)';
+        }
+    }
+
+    // ─── TechLink Center (DoD tech transfer) ────────────────────────────
+    //
+    // techlinkcenter.org é o portal oficial de tech-transfer do Department
+    // of Defense dos EUA. Lista patentes/tecnologias dos labs federais
+    // (Army Research Lab, Naval Research Lab, AFRL, NSWC, NASA, etc.)
+    // disponíveis para licenciamento comercial. Sectores cobertos:
+    //   • Naval & maritime (NSWC, NRL marine)
+    //   • Aeroespacial e defesa (AFRL, NASA spinoff)
+    //   • Cibersegurança e quantum
+    //   • Materiais e fabricação aditiva
+    //   • Sensores, IoT, radar
+    //
+    // Cada listagem tem título, lab origem, sector, summary, e tipicamente
+    // um PDF datasheet downloadable.
+    //
+    // Estratégia: 5 queries Tavily com site:techlinkcenter.org cobrindo os
+    // sectores de interesse PartYard. Resultados agregados num bloco.
+    protected function fetchTechLinkPatents(?callable $heartbeat = null): string
+    {
+        try {
+            $searcher = new \App\Services\WebSearchService();
+            if (!$searcher->isAvailable()) {
+                return '(TechLink — Tavily indisponível, TAVILY_API_KEY em falta)';
+            }
+
+            // Sectores alinhados com PartYard / HP-Group business.
+            // Cada query inclui site:techlinkcenter.org para limitar ao portal.
+            $sectorQueries = [
+                'naval'       => 'site:techlinkcenter.org naval maritime ship propulsion sonar',
+                'defesa'      => 'site:techlinkcenter.org defense weapon radar countermeasure',
+                'aeroespacial'=> 'site:techlinkcenter.org aerospace aviation aircraft UAV propulsion',
+                'cyber-qpc'   => 'site:techlinkcenter.org cybersecurity quantum cryptography post-quantum',
+                'materiais'   => 'site:techlinkcenter.org materials additive manufacturing composites coating',
+            ];
+
+            $blocks = [];
+            $totalResults = 0;
+
+            foreach ($sectorQueries as $sector => $query) {
+                if ($heartbeat) $heartbeat("a pesquisar TechLink {$sector}");
+                try {
+                    // 6 results per sector keeps response under ~3k chars
+                    $results = $searcher->search($query, 6, 'basic', 90);
+                    if ($results && !str_starts_with($results, '(')) {
+                        $blocks[] = "### {$sector}\n{$results}";
+                        // Rough count by URL occurrences
+                        $totalResults += substr_count($results, 'techlinkcenter.org');
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning("QuantumAgent: TechLink {$sector} search failed — " . $e->getMessage());
+                }
+            }
+
+            if (empty($blocks)) {
+                return '(TechLink: nenhum resultado nos últimos 90 dias para os 5 sectores PartYard)';
+            }
+
+            $header = "=== TechLink Center (techlinkcenter.org) — DoD Tech Transfer ===\n"
+                    . "Portal oficial de licenciamento de patentes dos labs federais EUA "
+                    . "(Army Research Lab, Naval Research Lab, AFRL, NSWC, NASA spinoff).\n"
+                    . "Tecnologias disponíveis para licença comercial. {$totalResults} resultados em 5 sectores PartYard.\n";
+
+            return $header . "\n" . implode("\n\n", $blocks)
+                 . "\n\n📥 Para descarregar o PDF datasheet de uma tecnologia, abre a URL no browser e procura o link 'Download Datasheet' ou 'Technology Brief PDF'. Alternativamente, cita as URLs específicas e o ClawYard tenta fetch via Tavily extract.";
+
+        } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent: TechLink fetch failed — ' . $e->getMessage());
+            return '(TechLink: erro ao consultar — ' . $e->getMessage() . ')';
         }
     }
 
@@ -538,15 +610,25 @@ SPECIALTY;
     // ─── Build enriched message (pre-fetched data) ─────────────────────────
     protected function buildDigestMessage(string|array $userMessage): string
     {
-        $arxiv = $this->fetchArxivPapers();
-        $peerj = $this->fetchPeerJPapers();
-        $epo   = $this->fetchEpoPatents();
-        return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj, $epo);
+        $arxiv    = $this->fetchArxivPapers();
+        $peerj    = $this->fetchPeerJPapers();
+        $epo      = $this->fetchEpoPatents();
+        $techlink = $this->fetchTechLinkPatents();
+        return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj, $epo, $techlink);
     }
 
-    protected function buildDigestMessageFromData(string|array $userMessage, string $arxiv, string $peerj, string $epo = ''): string
-    {
+    protected function buildDigestMessageFromData(
+        string|array $userMessage,
+        string $arxiv,
+        string $peerj,
+        string $epo = '',
+        string $techlink = ''
+    ): string {
         $today = now()->format('Y-m-d');
+
+        $techlinkBlock = $techlink !== ''
+            ? "\n## TechLink Center (techlinkcenter.org — DoD tech transfer, 5 sectores PartYard):\n{$techlink}\n"
+            : '';
 
         return <<<MSG
 {$userMessage}
@@ -561,10 +643,10 @@ SPECIALTY;
 
 ## EPO Patents (fetched live from European Patent Office OPS API — últimos 3 dias, áreas: naval, defesa, quantum, cyber, AI, IoT, energia, materiais, supply chain):
 {$epo}
-
+{$techlinkBlock}
 --- END REAL DATA ---
 
-Please analyse ALL the above real data from the three sources (arXiv + PeerJ + EPO patents).
+Please analyse ALL the above real data from the FOUR sources (arXiv + PeerJ + EPO patents + TechLink Center).
 CRITICAL RULES — READ EVERY RULE CAREFULLY:
 - Use ONLY the REAL IDs, titles, authors, applicants and dates from the data above — NEVER invent or fabricate
 - For EVERY paper AND patent in your analysis, include the FULL URL (from the data above)
@@ -572,10 +654,11 @@ CRITICAL RULES — READ EVERY RULE CAREFULLY:
 - Format each arXiv paper as: **[Title]** (arXiv:[REAL_ID] | 📅 [Published date from data]) — analysis — 🔗 https://arxiv.org/abs/[REAL_ID]
 - Format each PeerJ paper as: **[Title]** (DOI:[EXACT_DOI_FROM_EXACT_DOI_FIELD] | 📅 [Date from data]) — analysis — 🔗 [FULL_URL_FROM_FULL_URL_FIELD]
 - Format each EPO patent as: **[Title]** (EPO:[EPO_NUMBER_FROM_EPO_NUMBER_FIELD] | Requerente: [APPLICANT]) — analysis — 🔗 [URL from data]
+- TechLink: 1 secção por sector (naval, defesa, aeroespacial, cyber-qpc, materiais). Para cada tecnologia, indicar lab origem (Army Research Lab / NSWC / AFRL / NASA spinoff) e link directo. SEMPRE mencionar "📥 Datasheet PDF: <URL>" se o link de descarregar for visível, OU dizer "Datasheet disponível na página — abrir para descarregar".
 - The PeerJ EXACT_DOI field above IS the real DOI — copy it character-for-character, do NOT substitute or approximate
 - If you cannot find the EXACT_DOI for a PeerJ paper in the data above, DO NOT mention that paper at all
 - If you cannot find the EPO_NUMBER for a patent in the data above, DO NOT mention that patent at all
-- For the DISCOVERIES_JSON block, include entries from all three sources (source: "arxiv", "peerj" or "epo")
+- For the DISCOVERIES_JSON block, include entries from all FOUR sources (source: "arxiv", "peerj", "epo" ou "techlink")
 MSG;
     }
 
@@ -628,16 +711,39 @@ MSG;
             // Send keep-alive heartbeats before/during each slow HTTP fetch
             // to prevent Nginx fastcgi_read_timeout (60s default) from killing the SSE
             if ($heartbeat) $heartbeat('a pesquisar arXiv');
-            $arxiv = $this->fetchArxivPapers();
+            $arxiv    = $this->fetchArxivPapers();
             if ($heartbeat) $heartbeat('a pesquisar PeerJ / CrossRef');
-            $peerj = $this->fetchPeerJPapers();
+            $peerj    = $this->fetchPeerJPapers();
             if ($heartbeat) $heartbeat('a pesquisar patentes EPO');
-            $epo   = $this->fetchEpoPatents();
+            $epo      = $this->fetchEpoPatents();
+            if ($heartbeat) $heartbeat('a pesquisar TechLink Center (DoD tech transfer)');
+            $techlink = $this->fetchTechLinkPatents($heartbeat);
             if ($heartbeat) $heartbeat('a construir análise');
-            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj, $epo);
+            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj, $epo, $techlink);
         } else {
             $finalMessage = $message;
-            $finalMessage = $this->augmentWithWebSearch($finalMessage, $heartbeat);
+            // Detect direct TechLink queries even outside digest mode.
+            // Extrai texto plano de message (string OR Anthropic multi-block array).
+            $msgText = '';
+            if (is_string($message)) {
+                $msgText = $message;
+            } elseif (is_array($message)) {
+                foreach ($message as $block) {
+                    if (is_array($block) && ($block['type'] ?? '') === 'text') {
+                        $msgText .= (string) ($block['text'] ?? '') . ' ';
+                    }
+                }
+            }
+            if (preg_match('/techlink|tech\s*link|dod\s*tech.transfer|navsea.tech|nrl.patent|afrl.patent|nasa.spinoff|sbir.*patent/i', $msgText)) {
+                if ($heartbeat) $heartbeat('a pesquisar TechLink Center');
+                $tl = $this->fetchTechLinkPatents($heartbeat);
+                if ($tl) {
+                    $finalMessage = (is_string($message) ? $message : trim($msgText))
+                                  . "\n\n--- DADOS TECHLINK CENTER ---\n{$tl}\n--- FIM ---\n";
+                }
+            } else {
+                $finalMessage = $this->augmentWithWebSearch($finalMessage, $heartbeat);
+            }
         }
 
         $messages = array_merge($history, [
