@@ -1271,7 +1271,11 @@ MSG;
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
-                'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
+                // Bug fix 2026-05-14: usava $message (undefined nesta função;
+                // a assinatura é $prompt). Causava 500 silencioso em produção
+                // depois do "Recolha concluída" — Dr.ª Ana Contratos
+                // crashava após filtrar/ordenar e antes de redigir relatório.
+                'system'     => $this->buildSystemWithBooks($prompt, $this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
