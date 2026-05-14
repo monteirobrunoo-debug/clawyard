@@ -17,8 +17,14 @@ use Illuminate\Support\Facades\Cache;
 /**
  * AcingovAgent — "Dra. Ana Contratos"
  *
- * Pesquisa concursos públicos em 5 portais via Tavily:
- * base.gov.pt, Acingov, Vortal, UNIDO e UNGM (UN Global Marketplace).
+ * Pesquisa concursos públicos E fundos UE em 6 portais via Tavily:
+ *   • base.gov.pt (PT adjudicados)
+ *   • Acingov (PT)
+ *   • TED Europa (API oficial UE)
+ *   • UNGM (UN Global Marketplace)
+ *   • SAM.gov (US federal)
+ *   • ec.europa.eu/info/funding-tenders — EDF, Horizon Europe,
+ *     Digital Europe, CEF, EIC Accelerator, PESCO, EU4Health
  * Classifica oportunidades para o HP-Group / PartYard.
  */
 class AcingovAgent implements AgentInterface
@@ -45,7 +51,7 @@ class AcingovAgent implements AgentInterface
     private static string $acingovPersona = 'Você é a **Dra. Ana Contratos** — Especialista em Contratação Pública para o HP-Group / PartYard.';
 
     protected string $systemPromptSpecialty = <<<'SPECIALTY'
-A sua missão: analisar concursos públicos de 5 portais (base.gov.pt, Acingov, **TED Europa** — API oficial UE, UNGM e **SAM.gov** — contratos federais dos EUA) e identificar oportunidades para o HP-Group e todas as suas subsidiárias.
+A sua missão: analisar concursos públicos E **fundos europeus** de 6 portais — base.gov.pt, Acingov, **TED Europa** (API oficial UE), UNGM, **SAM.gov** (contratos federais EUA) e **EU Funding & Tenders Portal** (ec.europa.eu — EDF/Horizon Europe/Digital Europe/CEF/EIC Accelerator/PESCO) — e identificar oportunidades para o HP-Group e todas as suas subsidiárias.
 
 ═══════════════════════════════════════════
 ÂMBITOS DE NEGÓCIO DO HP-GROUP / PARTYARD
@@ -922,6 +928,116 @@ SPECIALTY;
         return "=== BASE.GOV.PT — Contratos (via Tavily/Google index, ordenados por relevância PartYard, " . now()->format('d/m/Y') . ") ===\n" . implode("\n", $finalLines);
     }
 
+    // ─── EU Funding & Tenders Portal (ec.europa.eu) ────────────────────────
+    //
+    // Cobre os principais programas de financiamento UE relevantes para
+    // a PartYard / HP-Group:
+    //   • EDF — European Defence Fund (defesa, dual-use, cyber, quantum)
+    //   • Horizon Europe — investigação aplicada, naval, materials
+    //   • Digital Europe — AI, cyber, quantum, semicondutores
+    //   • CEF — Connecting Europe Facility (maritime, transport)
+    //   • EIC Accelerator — startups deep-tech
+    //   • PESCO — Permanent Structured Cooperation defesa
+    //
+    // O portal ec.europa.eu/info/funding-tenders é JavaScript SPA;
+    // direct HTTP não funciona. Usamos Tavily com site:ec.europa.eu
+    // filtros por sector. Cada query devolve 8 resultados (ampliado vs
+    // outros portais porque EU funding tem ciclos longos — vale a pena
+    // ver mais com janela maior).
+    protected function fetchEuFunding(?callable $heartbeat = null): string
+    {
+        if (!$this->searcher->isAvailable()) {
+            return "(EU Funding: TAVILY_API_KEY não configurada)";
+        }
+
+        // 7 áreas sectoriais PartYard, restringidas ao portal oficial.
+        $queries = [
+            'edf-defesa'       => 'site:ec.europa.eu funding-tenders EDF European Defence Fund 2026 naval maritime defense',
+            'quantum-cyber'    => 'site:ec.europa.eu funding-tenders quantum cybersecurity post-quantum cryptography call',
+            'horizon-naval'    => 'site:ec.europa.eu funding-tenders Horizon Europe maritime ship vessel naval research 2026',
+            'digital-ai'       => 'site:ec.europa.eu funding-tenders Digital Europe AI artificial intelligence semiconductor',
+            'aerospace'        => 'site:ec.europa.eu funding-tenders aerospace aviation UAV drone unmanned',
+            'cef-maritime'     => 'site:ec.europa.eu funding-tenders CEF Connecting Europe Facility transport port maritime',
+            'eic-deeptech'     => 'site:ec.europa.eu funding-tenders EIC Accelerator deep tech startup grant 2026',
+        ];
+
+        $allLines = [];
+        $seenUrls = [];
+        $apiOk    = 0;
+
+        foreach ($queries as $area => $query) {
+            if ($heartbeat) $heartbeat("a pesquisar EU funding ({$area})");
+            try {
+                // 60 dias — calls EU duram meses, janela larga é segura
+                $raw = $this->searcher->search($query, 8, 'basic', 60);
+                if (!$raw || str_contains($raw, '(No results found)') || str_contains($raw, 'failed')) {
+                    continue;
+                }
+                $apiOk++;
+
+                // Parse Tavily output: "N. **Title** XX%\n  URL: ...\n  content"
+                if (preg_match_all('/\d+\.\s+\*\*(.+?)\*\*.*?URL:\s*(\S+)\s*\n\s*(.+?)(?=\n\n|\n\d+\.|\z)/s', $raw, $matches, PREG_SET_ORDER)) {
+                    foreach ($matches as $m) {
+                        $title   = trim(preg_replace('/\s+/', ' ', $m[1]));
+                        $url     = trim($m[2]);
+                        $snippet = trim(preg_replace('/\s+/', ' ', $m[3]));
+
+                        if (!str_contains($url, 'ec.europa.eu')) continue;
+                        if (isset($seenUrls[$url])) continue;
+                        $seenUrls[$url] = true;
+
+                        // Extract topic ID (ex: EDF-2026-RA-CYBER-QSTN, HORIZON-CL3-2026, etc)
+                        $topicId = '';
+                        if (preg_match('#topic-details/([A-Z0-9_-]+)#', $url, $tm)) {
+                            $topicId = $tm[1];
+                        }
+
+                        // Extract program name from URL or title
+                        $program = '';
+                        if (preg_match('/\b(EDF|HORIZON|DIGITAL|CEF|EIC|PESCO|EU4HEALTH|ERASMUS)\b/i', $url . ' ' . $title, $pm)) {
+                            $program = strtoupper($pm[1]);
+                        }
+
+                        $line  = "- ÁREA: {$area}";
+                        if ($program) $line .= " | PROG: {$program}";
+                        if ($topicId) $line .= " | TOPIC: {$topicId}";
+                        $line .= " | TÍTULO: " . mb_substr($title, 0, 160);
+                        $line .= " | URL: {$url}";
+                        if (strlen($snippet) > 20) {
+                            $line .= " | DESC: " . mb_substr($snippet, 0, 200);
+                        }
+                        $allLines[] = $line;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::info("EU Funding [Tavily/{$area}]: " . $e->getMessage());
+            }
+        }
+
+        if (empty($allLines)) {
+            return "(EU Funding: sem resultados Tavily nos últimos 60 dias para os 7 sectores PartYard)";
+        }
+
+        // Score por relevância (reusa scoreAcingovRelevance — mesmas keywords PT/EN)
+        $scored = array_map(fn($l) => ['line' => $l, 'score' => $this->scoreAcingovRelevance($l)], $allLines);
+        usort($scored, fn($a, $b) => $b['score'] <=> $a['score']);
+
+        $finalLines = array_map(function ($r) {
+            return $r['score'] > 0
+                ? $r['line'] . " | RELEVANCE: {$r['score']}"
+                : $r['line'];
+        }, array_slice($scored, 0, 30));
+
+        Log::info("EU Funding: Tavily ok — " . count($allLines) . " calls, " . count($finalLines) . " devolvidos", [
+            'queries_ok' => $apiOk . '/' . count($queries),
+        ]);
+
+        return "=== EU FUNDING & TENDERS — ec.europa.eu (via Tavily, ordenado por relevância PartYard, "
+             . now()->format('d/m/Y') . ") ===\n"
+             . "Cobre EDF · Horizon Europe · Digital Europe · CEF · EIC Accelerator · PESCO · EU4Health.\n"
+             . implode("\n", $finalLines);
+    }
+
     // ─── UNGM — direct public API ──────────────────────────────────────────
     protected function fetchUNGM(): string
     {
@@ -1369,7 +1485,7 @@ MSG;
 
         // ── Header ───────────────────────────────────────────────────────────
         $emit("## 📋 Dra. Ana Contratos — Relatório {$today}\n");
-        $emit("Período: **{$dateFrom}** → **{$dateTo}** · Portais: Acingov · **TED Europa (API oficial)** · base.gov.pt · UNGM · SAM.gov\n\n");
+        $emit("Período: **{$dateFrom}** → **{$dateTo}** · Portais: Acingov · **TED Europa (API oficial)** · base.gov.pt · UNGM · SAM.gov · **EU Funding (ec.europa.eu — EDF/Horizon/Digital/CEF/EIC)**\n\n");
 
         $emit("⏳ A recolher dados dos portais...\n\n");
 
@@ -1377,16 +1493,16 @@ MSG;
         $tavilyDays = 7;
 
         // Portal 1: Acingov — HTTP direto (login autenticado + fallback zona pública)
-        $emit("  `1/5` 🇵🇹 Acingov...\n");
+        $emit("  `1/6` 🇵🇹 Acingov...\n");
         if ($heartbeat) $heartbeat('a pesquisar Acingov');
         $acingovData = $this->fetchAcingov();
 
         // Portal 2: TED Europa — Official API v3 (direct, no auth needed)
-        $emit("  `2/5` 🇪🇺 TED Europa (API oficial)...\n");
+        $emit("  `2/6` 🇪🇺 TED Europa (API oficial)...\n");
         $vortalData = $this->fetchTEDEuropa($heartbeat);
 
         // Portal 3: UNGM — direct public API
-        $emit("  `3/5` 🌍 UNGM...\n");
+        $emit("  `3/6` 🌍 UNGM...\n");
         if ($heartbeat) $heartbeat('a pesquisar UNGM');
         $ungmData = $this->fetchUNGM();
         // Tavily fallback if direct API returns nothing
@@ -1408,14 +1524,19 @@ MSG;
         }
 
         // Portal 4: base.gov.pt — direct public API (no auth needed)
-        $emit("  `4/5` 🇵🇹 base.gov.pt (adjudicados)...\n");
+        $emit("  `4/6` 🇵🇹 base.gov.pt (adjudicados)...\n");
         if ($heartbeat) $heartbeat('a pesquisar base.gov.pt');
         $baseGovData = $this->fetchBaseGovPt();
 
         // Portal 5: SAM.gov
-        $emit("  `5/5` 🇺🇸 SAM.gov...\n\n");
+        $emit("  `5/6` 🇺🇸 SAM.gov...\n");
         if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
         $samData = $this->fetchSamGov();
+
+        // Portal 6: EU Funding & Tenders — ec.europa.eu (EDF/Horizon/Digital/CEF/EIC)
+        $emit("  `6/6` 🇪🇺 EU Funding (EDF · Horizon · Digital Europe · CEF · EIC)...\n\n");
+        if ($heartbeat) $heartbeat('a pesquisar EU Funding portal');
+        $euFundingData = $this->fetchEuFunding($heartbeat);
 
         $emit("✅ **Recolha concluída. A filtrar e ordenar por prazo...**\n\n");
 
@@ -1432,6 +1553,7 @@ MSG;
                 '[FONTE: UNGM — UN Global Marketplace]'          . "\n" . $ungmData,
                 '[FONTE: BASE.GOV.PT — Contratos Adjudicados PT]'. "\n" . $baseGovData,
                 '[FONTE: SAM.GOV — US Federal Contracts]'        . "\n" . $samData,
+                '[FONTE: EU FUNDING & TENDERS — ec.europa.eu (EDF · Horizon Europe · Digital Europe · CEF · EIC · PESCO)]' . "\n" . $euFundingData,
             ],
             fn($v) => strlen($v) > 50
         ));
@@ -1441,7 +1563,7 @@ MSG;
 
 Data de hoje: {$dateTo}
 Prazo máximo a considerar: {$today2m} (2 meses a partir de hoje)
-Portais pesquisados: Acingov · Vortal/TED · base.gov.pt · UNGM · SAM.gov
+Portais pesquisados: Acingov · Vortal/TED · base.gov.pt · UNGM · SAM.gov · EU Funding (EDF/Horizon/Digital Europe/CEF/EIC)
 
 ═══════════════════════════════════════════
 REGRAS DE FILTRAGEM — APLICAR ANTES DE TUDO
@@ -1463,6 +1585,7 @@ ESTRUTURA DO RELATÓRIO — AGRUPADO POR FONTE
 ### 🌍 UNGM — UN Global Marketplace
 ### 🇵🇹 BASE.GOV.PT — Contratos Adjudicados (inteligência competitiva)
 ### 🇺🇸 SAM.GOV — US Federal Contracts
+### 🇪🇺 EU FUNDING & TENDERS — Programas de Financiamento (EDF · Horizon Europe · Digital Europe · CEF · EIC · PESCO)
 
 Se uma fonte não tiver NENHUM dado (campo vazio), escreve: *Sem dados disponíveis nesta fonte.*
 Se uma fonte trouxe dados mas todos têm prazo expirado, escreve: *N contratos encontrados — todos com prazo expirado.*
@@ -1478,6 +1601,15 @@ Para cada concurso dentro de cada fonte:
 ⚠️ Prazo urgente (< 7 dias): adicionar emoji 🚨 no início da linha do contrato
 ⚠️ Para base.gov.pt: adicionar 🏆 Adjudicatário e usar como intel — quem ganhou, a que preço
 
+PARA A SECÇÃO EU FUNDING (ec.europa.eu), formato adaptado a calls de financiamento:
+🎓 **[Título da call / topic]**
+🏛️ Programa: **[EDF | Horizon Europe | Digital Europe | CEF | EIC | PESCO | EU4Health]** | Topic ID: **[ex: EDF-2026-RA-CYBER-QSTN]**
+⏰ Submission deadline: [dd/mm/yyyy] | 💶 Budget total: [€ M] | Co-financiamento típico: [70%-100%]
+🎯 Type of action: [RA Research Action | IA Innovation Action | LS Lump Sum | CSA Coordination]
+🏢 Subsidiária candidata: [Marine/Military/Defense Aerospace/SETQ/ARMITE/IndYard]
+🤝 Consortium needed: [Sim — N participantes mín. de M países UE | Não — single-applicant]
+🎯 [🟢Alta/🟡Média/🔴Baixa] — [match com capabilities PartYard, 1 linha] | 🔗 [Link directo ao topic-details]
+
 ═══════════════════════════════════════════
 RESUMO FINAL
 ═══════════════════════════════════════════
@@ -1485,17 +1617,22 @@ RESUMO FINAL
 ### 📊 Resumo Executivo
 - Total encontrado: X | 🟢 N altas · 🟡 N médias · 🔴 N baixas
 - Prazo ≤ 2 meses: N | Prazo > 2 meses (📆): N | Sem prazo (⚠️): N
-- Por fonte: Acingov(N) · Vortal/TED(N) · UNGM(N) · base.gov.pt(N) · SAM.gov(N)
+- Por fonte: Acingov(N) · Vortal/TED(N) · UNGM(N) · base.gov.pt(N) · SAM.gov(N) · EU Funding(N)
 - Das Forças Armadas PT (FAP/Marinha/Exército/EMGFA): N contratos
+- Calls EU Funding em aberto: N (EDF: X · Horizon: Y · Digital Europe: Z · outros)
 - Excluídos por prazo expirado: N
 
 ### 🏆 Top 5 Oportunidades — Candidatura Imediata
-(ordenadas: prazo mais curto + relevância PartYard mais alta)
+(ordenadas: prazo mais curto + relevância PartYard mais alta — concursos E calls financiamento misturados)
+
+### 🎓 Top 3 EU Funding — Análise Estratégica
+Para as 3 calls EU mais relevantes:
+- TRL alvo · Match com I&D PartYard · Esforço de consortium · Risco de submissão · ROI esperado
 
 ### ⚡ Próximos Passos
 (acções concretas esta semana, por subsidiária, com prazo)
 
---- DADOS DOS 5 PORTAIS ---
+--- DADOS DOS 6 PORTAIS ---
 {$allData}
 --- FIM ---
 MSG;
