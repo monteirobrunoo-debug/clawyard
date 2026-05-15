@@ -1,0 +1,314 @@
+<?php
+
+namespace App\Services\TenderImport\Importers;
+
+use App\Models\Tender;
+use App\Services\TenderImport\Contracts\TenderImporterInterface;
+use Carbon\Carbon;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
+
+/**
+ * Acingov / Vortal / PT Concursos importer.
+ *
+ * Acingov é a plataforma; Vortal opera-a. Os utilizadores PartYard
+ * referem-se às duas como "PT Concursos". Aceita ficheiros .xlsx
+ * exportados directamente do portal Acingov ou de pesquisas Vortal.
+ *
+ * AUTO-DETECT de colunas — em vez de exigir nomes exactos como o
+ * NspaImporter, o Acingov tem várias colunas com nomes ligeiramente
+ * diferentes consoante o tipo de export (procedimentos abertos vs
+ * adjudicados vs concursos públicos). Tentamos várias alternativas
+ * por campo. Headers tratados case-insensitive e com trim.
+ *
+ * Layout típico Acingov export:
+ *   Procedimento / Referência | Designação / Objecto | Entidade /
+ *   Adjudicante | Categoria CPV | Tipo Procedimento | Valor Base /
+ *   Preço Base | Prazo Submissão / Data Limite | Data Publicação |
+ *   Estado | Concorrentes | Adjudicatário | Valor Adjudicação |
+ *   URL / Link
+ *
+ * TIMEZONE: Acingov mostra horas em Europe/Lisbon. Excel exports
+ * costumam ter datas naive — interpretamos como Lisboa wall-clock
+ * e convertemos para UTC ao gravar.
+ */
+class AcingovImporter implements TenderImporterInterface
+{
+    private const SOURCE_TZ          = 'Europe/Lisbon';
+    private const MAX_ROWS           = 50_000;
+    private const EMPTY_TAIL_STOP    = 50;
+
+    // Mapeamento canónico → lista de aliases (case-insensitive, trimmed).
+    // Primeira ocorrência ganha. Acomoda múltiplas variantes encontradas
+    // em exports diferentes do Acingov/Vortal.
+    private const COLUMN_ALIASES = [
+        'reference' => [
+            'procedimento', 'referência', 'referencia', 'nº procedimento',
+            'numero procedimento', 'nº referência', 'numero referencia',
+            'id procedimento', 'processo', 'rfp_collectivenumber',
+            'reference', 'ref',
+        ],
+        'title' => [
+            'designação', 'designacao', 'objecto', 'objeto', 'título',
+            'titulo', 'descrição', 'descricao', 'rfp_title', 'name',
+            'concurso', 'tender title',
+        ],
+        'purchasing_org' => [
+            'entidade', 'entidade adjudicante', 'adjudicante', 'comprador',
+            'rfp_purchasingorganisation', 'purchasing org', 'organism',
+            'organismo', 'cliente',
+        ],
+        'type' => [
+            'tipo procedimento', 'tipo', 'tipo de procedimento',
+            'rfp_typedescription', 'procedure type', 'categoria',
+            'cpv', 'categoria cpv',
+        ],
+        'deadline_at' => [
+            'prazo submissão', 'prazo submissao', 'data limite',
+            'data fim', 'fim apresentação', 'fim apresentacao',
+            'rfp_closingdate', 'closing date', 'prazo', 'deadline',
+            'submission deadline',
+        ],
+        'source_modified_at' => [
+            'data publicação', 'data publicacao', 'data publicado',
+            'rfp_lastmodifieddate', 'last modified', 'modified',
+            'data alteração', 'data alteracao',
+        ],
+        'status' => [
+            'estado', 'status', 'situação', 'situacao', 'fase',
+        ],
+        'offer_value' => [
+            'valor base', 'preço base', 'preco base', 'valor estimado',
+            'valor da offer sub', 'valor da proposta', 'preço estimado',
+            'preco estimado', 'base value', 'estimated value',
+        ],
+        'currency' => [
+            'moeda', 'currency', 'divisa',
+        ],
+        'result' => [
+            'resultado', 'adjudicatário', 'adjudicatario', 'vencedor',
+            'winner', 'awarded to',
+        ],
+        'notes' => [
+            'observações', 'observacoes', 'notas', 'notes', 'remarks',
+            'coluna1', 'comentário', 'comentario',
+        ],
+        'priority' => [
+            'nível', 'nivel', 'prioridade', 'priority', 'urgência', 'urgencia',
+        ],
+        'url' => [
+            'url', 'link', 'endereço', 'endereco', 'web', 'permalink',
+        ],
+    ];
+
+    public function source(): string
+    {
+        return 'acingov';
+    }
+
+    public function parse(string $filePath): iterable
+    {
+        // Boost memory like NSPA — Acingov exports são geralmente menores
+        // (<5k linhas) mas ficheiros com formatação completa podem ter
+        // phantom rows também.
+        $currentLimit = $this->memoryLimitBytes((string) ini_get('memory_limit'));
+        if ($currentLimit >= 0 && $currentLimit < 512 * 1024 * 1024) {
+            @ini_set('memory_limit', '512M');
+        }
+
+        $reader = IOFactory::createReaderForFile($filePath);
+        $reader->setReadDataOnly(true);
+        $spreadsheet = $reader->load($filePath);
+        $sheet       = $spreadsheet->getActiveSheet();
+
+        $headers        = [];
+        $headerMap      = []; // canonical_key → column_index
+        $emptyRunLength = 0;
+        $rowIndex       = 0;
+
+        foreach ($sheet->getRowIterator() as $row) {
+            $rowIndex++;
+            if ($rowIndex > self::MAX_ROWS) break;
+
+            $cells        = [];
+            $cellIterator = $row->getCellIterator();
+            $cellIterator->setIterateOnlyExistingCells(false);
+            foreach ($cellIterator as $cell) {
+                $cells[] = $cell->getValue();
+            }
+
+            if ($rowIndex === 1) {
+                $headers   = array_map(fn($h) => is_string($h) ? trim($h) : $h, $cells);
+                $headerMap = $this->mapHeaders($headers);
+                continue;
+            }
+
+            $reference = $this->cellByCanonical($cells, $headerMap, 'reference');
+            $title     = $this->cellByCanonical($cells, $headerMap, 'title');
+
+            if (!$reference && !$title) {
+                if (++$emptyRunLength >= self::EMPTY_TAIL_STOP) break;
+                continue;
+            }
+            $emptyRunLength = 0;
+
+            // Para Acingov, se faltar reference mas houver title, usa um
+            // hash do title como reference para evitar colisões em upserts.
+            if (!$reference && $title) {
+                $reference = 'acingov-' . substr(md5($title), 0, 12);
+            }
+
+            yield [
+                'source'                 => 'acingov',
+                'reference'              => $reference,
+                'title'                  => (string) ($title ?? ''),
+                'type'                   => $this->cellByCanonical($cells, $headerMap, 'type'),
+                'purchasing_org'         => $this->cellByCanonical($cells, $headerMap, 'purchasing_org'),
+                'status'                 => Tender::normaliseStatus(
+                    $this->cellByCanonical($cells, $headerMap, 'status')
+                ),
+                'priority'               => $this->cellByCanonical($cells, $headerMap, 'priority'),
+                'deadline_at'            => $this->toUtc(
+                    $this->cellByCanonicalRaw($cells, $headerMap, 'deadline_at')
+                ),
+                'source_modified_at'     => $this->toUtc(
+                    $this->cellByCanonicalRaw($cells, $headerMap, 'source_modified_at')
+                ),
+                // sap_opportunity_number — Acingov não exporta este campo
+                // (é interno PartYard). Fica null e o user preenche depois.
+                'sap_opportunity_number' => null,
+                'offer_value'            => $this->numeric(
+                    $this->cellByCanonicalRaw($cells, $headerMap, 'offer_value')
+                ),
+                'currency'               => $this->cellByCanonical($cells, $headerMap, 'currency')
+                                            ?? 'EUR', // default PT
+                'notes'                  => $this->cellByCanonical($cells, $headerMap, 'notes'),
+                'result'                 => $this->cellByCanonical($cells, $headerMap, 'result'),
+                'collaborator_name'      => null,
+                'raw_metadata'           => $this->buildRawMetadata($headers, $cells),
+            ];
+        }
+
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+    }
+
+    /**
+     * Build {canonical_key => column_index} from the actual Excel headers,
+     * trying each alias case-insensitive against trimmed header text.
+     */
+    private function mapHeaders(array $headers): array
+    {
+        $normHeaders = [];
+        foreach ($headers as $i => $h) {
+            if (is_string($h)) {
+                $normHeaders[$i] = mb_strtolower(trim($h));
+            }
+        }
+
+        $map = [];
+        foreach (self::COLUMN_ALIASES as $canonical => $aliases) {
+            foreach ($aliases as $alias) {
+                $needle = mb_strtolower($alias);
+                $idx    = array_search($needle, $normHeaders, true);
+                if ($idx !== false) {
+                    $map[$canonical] = $idx;
+                    break;
+                }
+            }
+        }
+        return $map;
+    }
+
+    private function cellByCanonical(array $cells, array $map, string $key): ?string
+    {
+        if (!isset($map[$key])) return null;
+        return $this->trim($cells[$map[$key]] ?? null);
+    }
+
+    private function cellByCanonicalRaw(array $cells, array $map, string $key): mixed
+    {
+        if (!isset($map[$key])) return null;
+        return $cells[$map[$key]] ?? null;
+    }
+
+    private function buildRawMetadata(array $headers, array $cells): array
+    {
+        $out = [];
+        foreach ($cells as $i => $v) {
+            $hdr = $headers[$i] ?? "col_{$i}";
+            if (is_string($hdr) && $hdr === '') continue;
+            $out[(string) $hdr] = $v instanceof \DateTimeInterface
+                ? $v->format(\DateTime::ATOM)
+                : $v;
+        }
+        return $out;
+    }
+
+    private function trim(mixed $v): ?string
+    {
+        if ($v === null) return null;
+        if ($v instanceof \DateTimeInterface) return $v->format('Y-m-d H:i:s');
+        $s = trim((string) $v);
+        return $s === '' ? null : $s;
+    }
+
+    private function numeric(mixed $v): ?float
+    {
+        if ($v === null || $v === '') return null;
+        if (is_numeric($v)) return (float) $v;
+        $s = str_replace([' ', "\xC2\xA0", '€', '$'], '', (string) $v);
+        if (preg_match('/^\-?\d{1,3}(\.\d{3})+,\d+$/', $s)) {
+            $s = str_replace(['.', ','], ['', '.'], $s);
+        } elseif (preg_match('/^\-?\d+,\d+$/', $s)) {
+            $s = str_replace(',', '.', $s);
+        } else {
+            $s = str_replace(',', '', $s);
+        }
+        return is_numeric($s) ? (float) $s : null;
+    }
+
+    private function toUtc(mixed $v): ?Carbon
+    {
+        if ($v === null || $v === '') return null;
+        try {
+            if ($v instanceof \DateTimeInterface) {
+                return $this->wallClockToUtc(Carbon::instance($v));
+            }
+            if (is_numeric($v)) {
+                $num = (float) $v;
+                if ($num < 1 || $num > 100000) return null;
+                $dt = ExcelDate::excelToDateTimeObject($num);
+                return $this->wallClockToUtc(Carbon::instance($dt));
+            }
+            $s = trim((string) $v);
+            if ($s === '') return null;
+            return Carbon::parse($s, self::SOURCE_TZ)->utc();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function wallClockToUtc(Carbon $c): Carbon
+    {
+        return Carbon::create(
+            $c->year, $c->month, $c->day,
+            $c->hour, $c->minute, $c->second,
+            self::SOURCE_TZ
+        )->utc();
+    }
+
+    private function memoryLimitBytes(string $s): int
+    {
+        $s = trim($s);
+        if ($s === '' || $s === '-1') return -1;
+        $unit = strtolower(substr($s, -1));
+        $num  = (int) $s;
+        return match ($unit) {
+            'g'     => $num * 1024 * 1024 * 1024,
+            'm'     => $num * 1024 * 1024,
+            'k'     => $num * 1024,
+            default => $num,
+        };
+    }
+}

@@ -6,6 +6,7 @@ use App\Models\Tender;
 use App\Models\TenderCollaborator;
 use App\Models\TenderImport;
 use App\Services\TenderImport\Contracts\TenderImporterInterface;
+use App\Services\TenderImport\Importers\AcingovImporter;
 use App\Services\TenderImport\Importers\NspaImporter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -30,7 +31,8 @@ class TenderImportService
 {
     /** @var array<string, class-string<TenderImporterInterface>> */
     private const IMPORTERS = [
-        'nspa' => NspaImporter::class,
+        'nspa'    => NspaImporter::class,
+        'acingov' => AcingovImporter::class,  // alias unificado: Acingov/Vortal/PT Concursos
         // future: 'nato' => NatoImporter::class,
         // future: 'sam_gov' => SamGovImporter::class,
     ];

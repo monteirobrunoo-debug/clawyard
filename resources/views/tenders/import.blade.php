@@ -9,13 +9,15 @@
      * parse/create/update counts so the user can see at a glance whether a
      * re-import did anything meaningful.
      */
+    // 2026-05-15: acingov + vortal unificados — utilizadores tratam-nas
+    // como mesma fonte (Acingov é a plataforma; Vortal opera-a). A chave
+    // canónica é 'acingov' (vortal redirige para o mesmo importer).
     $sourceLabels = [
         'nspa'    => 'NSPA — NATO Support and Procurement Agency',
+        'acingov' => 'Acingov/Vortal/PT Concursos',
         'nato'    => 'NATO (directo)',
         'sam_gov' => 'SAM.gov (US Federal)',
         'ncia'    => 'NCIA',
-        'acingov' => 'Acingov (Portugal)',
-        'vortal'  => 'Vortal',
         'ungm'    => 'UNGM (UN Global Marketplace)',
         'unido'   => 'UNIDO',
         'other'   => 'Outra fonte',

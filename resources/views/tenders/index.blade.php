@@ -24,6 +24,20 @@
     $justAssigned      = array_map('intval', session('just_assigned', []));
     $justAssignedLabel = session('just_assigned_label');
 
+    // Source labels — globais (usados em vários blocos da view).
+    // 2026-05-15: acingov + vortal unificados sob "Acingov/Vortal/PT Concursos".
+    $sourceLabels = [
+        'nspa'    => 'NSPA',
+        'nato'    => 'NATO',
+        'sam_gov' => 'SAM.gov',
+        'ncia'    => 'NCIA',
+        'acingov' => 'Acingov/Vortal/PT Concursos',
+        'vortal'  => 'Acingov/Vortal/PT Concursos',
+        'ungm'    => 'UNGM',
+        'unido'   => 'UNIDO',
+        'other'   => 'Outras',
+    ];
+
     $statusLabels = [
         \App\Models\Tender::STATUS_PENDING       => 'Pendente',
         \App\Models\Tender::STATUS_EM_TRATAMENTO => 'Em Tratamento',
@@ -321,11 +335,7 @@
                  no restriction. --}}
             @if($restriction)
                 @php
-                    $sourceLabels = [
-                        'nspa' => 'NSPA', 'nato' => 'NATO', 'sam_gov' => 'SAM.gov',
-                        'ncia' => 'NCIA', 'acingov' => 'Acingov', 'vortal' => 'Vortal',
-                        'ungm' => 'UNGM', 'unido' => 'UNIDO', 'other' => 'Outras',
-                    ];
+                    // $sourceLabels já definido no topo da view (scope global).
                 @endphp
                 @if($restriction['mode'] === 'whitelist')
                     <div class="rounded-md border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm flex items-start gap-3">
@@ -499,7 +509,9 @@
                                 @foreach($mine as $t)
                                     <tr class="hover:bg-gray-50 align-middle">
                                         <td class="px-3 py-2 whitespace-nowrap">
-                                            <div class="text-xs font-semibold uppercase text-gray-600">{{ $t->source }}</div>
+                                            {{-- Source label: usa $sourceLabels (definido no @php do topo)
+                                                 para unificar acingov + vortal sob "Acingov/Vortal/PT Concursos". --}}
+                                            <div class="text-xs font-semibold uppercase text-gray-600">{{ $sourceLabels[$t->source] ?? strtoupper($t->source) }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
                                         </td>
                                         <td class="px-3 py-2 max-w-md">
@@ -799,7 +811,9 @@
                                             </td>
                                         @endif
                                         <td class="px-3 py-2 align-middle whitespace-nowrap">
-                                            <div class="text-xs font-semibold uppercase text-gray-600">{{ $t->source }}</div>
+                                            {{-- Source label: usa $sourceLabels (definido no @php do topo)
+                                                 para unificar acingov + vortal sob "Acingov/Vortal/PT Concursos". --}}
+                                            <div class="text-xs font-semibold uppercase text-gray-600">{{ $sourceLabels[$t->source] ?? strtoupper($t->source) }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
                                             {{-- Two flavours of the "atribuído" pill:
                                                  (a) just-assigned-chip — ✨ + animated, only on the rows
