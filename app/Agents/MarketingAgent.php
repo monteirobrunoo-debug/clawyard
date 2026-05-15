@@ -88,6 +88,21 @@ ESTILO:
 - Cita benchmarks de indústria (não inventa números)
 - Antes de propor execução, valida: objectivo de negócio? métrica de
   sucesso? budget? timeline?
+
+MEMÓRIA E CONTINUIDADE:
+Eu mantenho memória das conversas que tive antes com este utilizador.
+Em cada nova conversa, recebo um bloco "📚 MEMÓRIA — TUAS CONVERSAS
+ANTERIORES" com até 5 sessões passadas: título, quando ocorreram,
+e snippet do que foi a última entrega. Uso isto para:
+  • Garantir continuidade — não recomeçar do zero cada conversa
+  • Referir decisões já tomadas: "Como combinámos na conversa sobre X..."
+  • Não repetir propostas: se já recomendei 10 influencers ontem, hoje
+    proponho-te a próxima onda em vez de repetir
+  • Construir sobre o trabalho anterior: brand voice escolhido, calendar
+    aprovado, campaign em curso
+Se a "memória" não tem o tópico que o user pergunta ("lembras-te de
+Y?") digo claramente "não encontrei essa conversa no histórico —
+podes recordar-me?". Não invento memórias.
 PERSONA;
 
         $specialty = <<<'SPECIALTY'
@@ -463,6 +478,20 @@ TOKENS;
 
     protected function augmentMessage(string|array $message, ?callable $heartbeat = null): string|array
     {
+        // Cross-session memory — injecta resumo das últimas 5 conversas
+        // anteriores deste user com a Ana Monteiro. Isto permite que ela
+        // "lembre" decisões anteriores (brand voice já escolhido, calendars
+        // já criados, campaigns em curso) e PREPARE continuidade entre
+        // sessões — não trata cada conversa como folha em branco.
+        try {
+            $memoryBlock = $this->buildPreviousConversationsBlock($heartbeat);
+            if ($memoryBlock) {
+                $message = $this->appendToMessage($message, $memoryBlock);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('MarketingAgent: previous conversations memory failed — ' . $e->getMessage());
+        }
+
         // WebSearch só dispara em queries que precisam dados externos
         // (benchmarks, trends, influencer rates, etc).
         if (is_string($message) && $this->needsWebSearch($message)) {
@@ -470,6 +499,91 @@ TOKENS;
             $message = $this->augmentWithWebSearch($message, $heartbeat);
         }
         return $message;
+    }
+
+    /**
+     * Cross-session memory: ler as últimas N conversas marketing deste user
+     * e devolver bloco de contexto com title + último output da Ana.
+     *
+     * Por que importa: Ana é uma directora de marketing que constrói
+     * coisas ao longo do tempo — brand voice guidelines, content calendars
+     * em série, campaigns iterativas. Sem memória cross-session ela
+     * recomeça do zero cada conversa, propõe estilos contraditórios,
+     * sugere os mesmos influencers já avaliados, repete o que já foi
+     * combinado. Isto resolve esse problema.
+     *
+     * PRIVACIDADE: só lê conversas do PRÓPRIO user (filtro session_id
+     * starts with 'uX_'). Sem cross-user leakage.
+     *
+     * PERFORMANCE: 1 query SQL + 1 query messages aggregate. Limit 5.
+     * Snippet do último output limitado a 300 chars.
+     *
+     * EXCLUI a conversa actual (mais recente) porque essa já vem no
+     * $history que é passado ao agent->stream/chat — duplicaria contexto.
+     */
+    protected function buildPreviousConversationsBlock(?callable $heartbeat = null): string
+    {
+        $userId = auth()->id();
+        if (!$userId) return '';
+
+        $prefix = 'u' . $userId . '_';
+
+        if ($heartbeat) $heartbeat('a reler conversas passadas');
+
+        // Buscar as últimas 5 conversas marketing deste user, excluindo
+        // a mais recente (presumimos ser a actual — vem no $history).
+        $past = \App\Models\Conversation::query()
+            ->where('agent', 'marketing')
+            ->where('session_id', 'LIKE', $prefix . '%')
+            ->orderByDesc('updated_at')
+            ->limit(6)  // 6 para depois descartar a actual (1) → 5 históricas
+            ->get(['id', 'session_id', 'title', 'updated_at']);
+
+        if ($past->count() <= 1) return '';
+
+        // Descartar a mais recente (é a actual — já vem em $history)
+        $historical = $past->slice(1)->take(5);
+        if ($historical->isEmpty()) return '';
+
+        $lines = [];
+        foreach ($historical as $c) {
+            $title = trim($c->title ?? '') ?: '(sem título)';
+            $when  = $c->updated_at?->diffForHumans() ?? '?';
+
+            // Último output da Ana nessa conversa — proxy para "o que foi
+            // decidido / entregue". Trim para 300 chars para não inflar
+            // o prompt.
+            $lastAssistant = \App\Models\Message::query()
+                ->where('conversation_id', $c->id)
+                ->where('role', 'assistant')
+                ->latest('id')
+                ->value('content');
+
+            $snippet = '';
+            if ($lastAssistant) {
+                // Strip __TABLE__ / __CHART__ JSON do snippet — só queremos
+                // o resumo textual, não JSON cru.
+                $clean = preg_replace('/__(TABLE|CHART|PPT)__\{.*?\}(?=[\s\n]|$)/s', '[tabela/gráfico/deck]', (string) $lastAssistant);
+                $clean = preg_replace('/\s+/', ' ', trim((string) $clean));
+                $snippet = mb_substr($clean, 0, 300);
+                if (mb_strlen($clean) > 300) $snippet .= '…';
+            }
+
+            $line = "▸ \"{$title}\" ({$when})";
+            if ($snippet !== '') {
+                $line .= "\n   └ Última entrega: {$snippet}";
+            }
+            $lines[] = $line;
+        }
+
+        return "\n\n--- 📚 MEMÓRIA — TUAS CONVERSAS ANTERIORES COM ESTE UTILIZADOR ---\n"
+             . "Estas são as últimas " . count($lines) . " conversas que tiveste com este utilizador "
+             . "(ordenadas da mais recente para a mais antiga). USA-AS para garantir continuidade:\n"
+             . "  • Não repitas decisões já tomadas (brand voice escolhido, calendars combinados)\n"
+             . "  • Refere-te a propostas anteriores: \"como combinámos na conversa sobre X…\"\n"
+             . "  • Se o user perguntar \"lembras-te de X\", procura aqui antes de dizer que não\n\n"
+             . implode("\n", $lines)
+             . "\n--- FIM MEMÓRIA ---\n";
     }
 
     public function chat(string|array $message, array $history = []): string
