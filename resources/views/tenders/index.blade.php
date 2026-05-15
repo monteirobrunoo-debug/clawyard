@@ -509,8 +509,13 @@
                                         </td>
                                         <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ $t->collaborator?->name ?? '—' }}</td>
                                         <td class="px-3 py-2 whitespace-nowrap">
-                                            <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $statusStyles[$t->status] ?? 'bg-gray-100 text-gray-700 border-gray-300' }}">
-                                                {{ $statusLabels[$t->status] ?? $t->status }}
+                                            {{-- Estado: derivado SEMPRE do SAP (sapStageLabel) — substituiu
+                                                 o legacy $t->status manual em 2026-05-15. Single source of
+                                                 truth. Cache populado pelo /sap-preview JSON endpoint
+                                                 quando o user abre o detalhe do concurso. --}}
+                                            <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $t->sapStageBadgeClasses() }}"
+                                                  title="@if($t->sap_stage_updated_at)Sincronizado {{ $t->sap_stage_updated_at->diffForHumans() }} @else Ainda não sincronizado — abre o concurso para puxar do SAP @endif">
+                                                {{ $t->sapStageLabel() }}
                                             </span>
                                         </td>
                                         {{-- Nº SAP — coluna explícita para o user ver de imediato
@@ -832,8 +837,13 @@
                                             {{ $t->collaborator?->name ?? '—' }}
                                         </td>
                                         <td class="px-3 py-2 align-middle whitespace-nowrap">
-                                            <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $statusStyles[$t->status] ?? 'bg-gray-100 text-gray-700 border-gray-300' }}">
-                                                {{ $statusLabels[$t->status] ?? $t->status }}
+                                            {{-- Estado: derivado SEMPRE do SAP (sapStageLabel) — substituiu
+                                                 o legacy $t->status manual em 2026-05-15. Single source of
+                                                 truth. Cache populado pelo /sap-preview JSON endpoint
+                                                 quando o user abre o detalhe do concurso. --}}
+                                            <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $t->sapStageBadgeClasses() }}"
+                                                  title="@if($t->sap_stage_updated_at)Sincronizado {{ $t->sap_stage_updated_at->diffForHumans() }} @else Ainda não sincronizado — abre o concurso para puxar do SAP @endif">
+                                                {{ $t->sapStageLabel() }}
                                             </span>
                                         </td>
                                         <td class="px-3 py-2 align-middle font-mono text-xs whitespace-nowrap">

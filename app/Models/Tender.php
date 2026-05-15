@@ -32,6 +32,7 @@ class Tender extends Model
         'assigned_collaborator_id', 'assigned_at', 'assigned_by_user_id',
         'deadline_at', 'source_modified_at',
         'sap_opportunity_number',
+        'sap_stage_no', 'sap_opportunity_status', 'sap_stage_updated_at',
         'offer_value', 'currency', 'time_spent_hours',
         'notes', 'result',
         'raw_metadata', 'last_import_id', 'last_digest_sent_at',
@@ -49,6 +50,8 @@ class Tender extends Model
             'last_digest_sent_at'    => 'datetime',
             'deadline_alert_sent_at' => 'datetime',
             'last_sap_sync_at'       => 'datetime',
+            'sap_stage_updated_at'   => 'datetime',
+            'sap_stage_no'           => 'integer',
             'offer_value'            => 'decimal:2',
             'time_spent_hours'       => 'decimal:2',
             'raw_metadata'           => 'array',
@@ -58,7 +61,76 @@ class Tender extends Model
         ];
     }
 
-    // ── Status vocabulary ────────────────────────────────────────────────
+    // ── SAP CRM stage labels (single source of truth) ────────────────────
+    //
+    // SAP B1 CRM opportunity stages — copy do SapService::getStageLabel()
+    // exposto aqui como const para uso em views sem importar SapService.
+    // Quando a opportunity_status é 'sos_Won' ou 'sos_Lost', sobrepõe o
+    // stage label (Won/Lost são estados terminais).
+    public const SAP_STAGE_LABELS = [
+        1  => 'Prospecção',
+        5  => 'Cotação de Compra',
+        6  => 'Cotação de Venda',
+        7  => 'Follow Up Vendas',
+        8  => 'Possível Venda',
+        9  => 'Ordem de Compra',
+        10 => 'Ordem de Venda',
+    ];
+
+    /**
+     * Estado SAP "humano-legível" para mostrar nas listas e no detalhe.
+     * Substitui o legacy $tender->status (manual) — single source of truth
+     * é agora a opportunity SAP.
+     *
+     * Prioridade:
+     *   1. opportunity_status 'sos_Won'  → "Ganho"
+     *   2. opportunity_status 'sos_Lost' → "Perdido"
+     *   3. stage_no mapeado para label   → "Cotação de Compra" etc
+     *   4. sap_opportunity_number existe mas stage ainda não foi fetched
+     *      → "A sincronizar SAP..." (próxima visita ao detalhe puxa)
+     *   5. Sem sap_opportunity_number → "Sem oportunidade SAP"
+     */
+    public function sapStageLabel(): string
+    {
+        $status = (string) ($this->sap_opportunity_status ?? '');
+        if ($status === 'sos_Won')  return 'Ganho';
+        if ($status === 'sos_Lost') return 'Perdido';
+
+        $stage = (int) ($this->sap_stage_no ?? 0);
+        if ($stage > 0 && isset(self::SAP_STAGE_LABELS[$stage])) {
+            return self::SAP_STAGE_LABELS[$stage];
+        }
+
+        if (!empty($this->sap_opportunity_number)) {
+            return 'A sincronizar SAP…';
+        }
+        return 'Sem oportunidade SAP';
+    }
+
+    /**
+     * Classes Tailwind por SAP stage para badge colour-coded no dashboard.
+     */
+    public function sapStageBadgeClasses(): string
+    {
+        $status = (string) ($this->sap_opportunity_status ?? '');
+        if ($status === 'sos_Won')  return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+        if ($status === 'sos_Lost') return 'bg-rose-100 text-rose-800 border-rose-300';
+
+        $stage = (int) ($this->sap_stage_no ?? 0);
+        return match (true) {
+            $stage === 1      => 'bg-gray-100 text-gray-700 border-gray-300',         // Prospecção
+            $stage === 5      => 'bg-amber-100 text-amber-800 border-amber-300',      // Cotação Compra
+            $stage === 6      => 'bg-blue-100 text-blue-800 border-blue-300',         // Cotação Venda
+            $stage === 7      => 'bg-indigo-100 text-indigo-800 border-indigo-300',   // Follow Up
+            $stage === 8      => 'bg-purple-100 text-purple-800 border-purple-300',   // Possível Venda
+            $stage === 9      => 'bg-orange-100 text-orange-800 border-orange-300',   // Ordem Compra
+            $stage === 10     => 'bg-emerald-100 text-emerald-800 border-emerald-300',// Ordem Venda
+            default           => 'bg-gray-50 text-gray-500 border-gray-200',
+        };
+    }
+
+    // ── Status vocabulary (LEGACY — mantido para back-compat enquanto
+    //    migration cache_sap_stage roda; novas views usam sapStageLabel) ──
     public const STATUS_PENDING       = 'pending';        // new import, no status yet
     public const STATUS_EM_TRATAMENTO = 'em_tratamento';
     public const STATUS_SUBMETIDO     = 'submetido';

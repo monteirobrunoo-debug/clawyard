@@ -1049,12 +1049,20 @@
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label class="block text-xs font-medium text-gray-700 mb-1">Estado</label>
-                                <select name="status" class="w-full rounded-md border-gray-300 text-sm shadow-sm">
-                                    @foreach($statusLabels as $k => $label)
-                                        <option value="{{ $k }}" @selected(old('status', $tender->status) === $k)>{{ $label }}</option>
-                                    @endforeach
-                                </select>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">Estado <span class="text-gray-400 font-normal">(derivado do SAP)</span></label>
+                                <div class="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <span class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-semibold {{ $tender->sapStageBadgeClasses() }}">
+                                        {{ $tender->sapStageLabel() }}
+                                    </span>
+                                    @if($tender->sap_stage_updated_at)
+                                        <span class="ml-2 text-xs text-gray-500">
+                                            sincronizado {{ $tender->sap_stage_updated_at->diffForHumans() }}
+                                        </span>
+                                    @endif
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500">
+                                    O estado vem sempre do SAP (single source of truth). Para mudar, actualiza a fase da Oportunidade no SAP B1 ou pede ao Richard SAP/Marta CRM via chat.
+                                </p>
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-gray-700 mb-1">Nº Oportunidade SAP</label>

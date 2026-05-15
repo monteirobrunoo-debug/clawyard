@@ -31,11 +31,11 @@ class TenderUpdateRequest extends FormRequest
             'title'                  => ['sometimes', 'string', 'max:500'],
             'type'                   => ['nullable', 'string', 'max:64'],
             'purchasing_org'         => ['nullable', 'string', 'max:255'],
-            'status'                 => ['sometimes', 'string', Rule::in([
-                Tender::STATUS_PENDING, Tender::STATUS_EM_TRATAMENTO, Tender::STATUS_SUBMETIDO,
-                Tender::STATUS_AVALIACAO, Tender::STATUS_CANCELADO, Tender::STATUS_NAO_TRATAR,
-                Tender::STATUS_GANHO, Tender::STATUS_PERDIDO,
-            ])],
+            // 'status' removido 2026-05-15: o estado do concurso é agora
+            // derivado SEMPRE do SAP (campo opcional manual descontinuado).
+            // Ver Tender::sapStageLabel() — single source of truth.
+            // Mantemos a coluna na DB por agora para backwards compat com
+            // tenders sem opportunity SAP ligada.
             'priority'               => ['nullable', 'string', 'max:16'],
             'sap_opportunity_number' => ['nullable', 'string', 'max:64'],
             'offer_value'            => ['nullable', 'numeric', 'min:0'],

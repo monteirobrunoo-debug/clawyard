@@ -586,6 +586,29 @@ class TenderController extends Controller
         }
         $lastStage = !empty($lines) ? end($lines) : null;
 
+        // ── Cache SAP stage on the tender row ────────────────────────────
+        // O dashboard de concursos mostra agora o estado SAP como single
+        // source of truth (substituiu o $tender->status manual). Para
+        // evitar N+1 fetches no render do dashboard, gravamos aqui o
+        // stage_no e status sempre que o user abre o detalhe do concurso
+        // (esta rota é chamada via JSON pelo card SAP Opportunity).
+        try {
+            $cachedStage = (int) ($lastStage['StageKey'] ?? ($opp['CurrentStageNo'] ?? 0));
+            $oppStatus   = (string) ($opp['Status'] ?? '');
+            if ($cachedStage > 0 || $oppStatus !== '') {
+                $tender->forceFill([
+                    'sap_stage_no'           => $cachedStage > 0 ? $cachedStage : null,
+                    'sap_opportunity_status' => $oppStatus !== '' ? $oppStatus : null,
+                    'sap_stage_updated_at'   => now(),
+                ])->saveQuietly();  // saveQuietly evita disparar observers do tender
+            }
+        } catch (\Throwable $e) {
+            Log::warning('sapPreview: failed to cache stage on tender', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+
         return response()->json([
             'state' => 'ok',
             'data'  => [
