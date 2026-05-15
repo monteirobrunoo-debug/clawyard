@@ -189,6 +189,16 @@ function renderMarkdown(text) {
 let _chartCardCounter = 0;
 let _tableCardCounter = 0;
 
+// LLM JSON sanitizer — same as welcome.blade. Lida com smart quotes,
+// trailing commas e comentários ocasionais que JSON.parse rejeita.
+function sanitizeLlmJson(s) {
+    return s
+        .replace(/[“”„‟″❝❞]/g, '"')
+        .replace(/[‘’‚‛′❛❜]/g, '\'')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/,(\s*[}\]])/g, '$1');
+}
+
 function parseStructuredBlocks(text) {
     const TOKENS = ['__TABLE__', '__CHART__', '__PPT__'];
     const blocks = [];
@@ -217,28 +227,42 @@ function parseStructuredBlocks(text) {
             const ch = text[i];
             if (escape) { escape = false; continue; }
             if (ch === '\\') { escape = true; continue; }
-            if (ch === '"') { inString = !inString; continue; }
+            // Aceitar straight " E curly “/” como string delimiters
+            if (ch === '"' || ch === '“' || ch === '”') {
+                inString = !inString;
+                continue;
+            }
             if (inString) continue;
             if (ch === '{') depth++;
             else if (ch === '}') { depth--; if (depth === 0) { i++; break; } }
         }
         if (depth !== 0) { blocks.push({ type: 'text', content: text.slice(earliest) }); break; }
         const json = text.slice(start, i);
+        // Try raw, then sanitized
+        let data = null;
         try {
-            const data = JSON.parse(json);
-            const valid =
-                (earliestToken === '__TABLE__' && Array.isArray(data.columns) && Array.isArray(data.rows)) ||
-                (earliestToken === '__CHART__' && Array.isArray(data.labels)  && Array.isArray(data.datasets)) ||
-                (earliestToken === '__PPT__'   && Array.isArray(data.slides));
-            if (valid) {
-                if (earliestToken === '__TABLE__') blocks.push({ type: 'table', data });
-                else if (earliestToken === '__CHART__') {
-                    blocks.push({ type: 'chart', data, canvasId: 'chart_' + Date.now() + '_' + (++_chartCardCounter) });
-                } else blocks.push({ type: 'ppt', data });
-            } else {
+            data = JSON.parse(json);
+        } catch (e1) {
+            try {
+                data = JSON.parse(sanitizeLlmJson(json));
+                console.warn('show.blade: JSON saved by sanitizer', { token: earliestToken });
+            } catch (e2) {
+                console.error('show.blade: JSON failed', { token: earliestToken, e1: e1.message, e2: e2.message });
                 blocks.push({ type: 'text', content: text.slice(earliest, i) });
+                cursor = i;
+                continue;
             }
-        } catch (e) {
+        }
+        const valid =
+            (earliestToken === '__TABLE__' && Array.isArray(data.columns) && Array.isArray(data.rows)) ||
+            (earliestToken === '__CHART__' && Array.isArray(data.labels)  && Array.isArray(data.datasets)) ||
+            (earliestToken === '__PPT__'   && Array.isArray(data.slides));
+        if (valid) {
+            if (earliestToken === '__TABLE__') blocks.push({ type: 'table', data });
+            else if (earliestToken === '__CHART__') {
+                blocks.push({ type: 'chart', data, canvasId: 'chart_' + Date.now() + '_' + (++_chartCardCounter) });
+            } else blocks.push({ type: 'ppt', data });
+        } else {
             blocks.push({ type: 'text', content: text.slice(earliest, i) });
         }
         cursor = i;

@@ -2572,6 +2572,30 @@ function parseMultiTables(text) {
 // every part render correctly. Previously each token type had its own
 // handler that owned the whole message, so co-occurring tokens were
 // rendered as raw JSON.
+// Sanitize JSON emitted by LLMs — they ocasionalmente quebram em coisas
+// que JSON.parse() rejeita strictly:
+//   • Smart/curly quotes  →  straight ASCII "
+//   • Smart apostrophes   →  straight ASCII '
+//   • Trailing commas antes de } ou ]
+//   • Comments // ou /* */ ocasionais
+// Aplicado APÓS o brace-balanced scan, antes de JSON.parse(). Sem isto,
+// uma tabela perfeitamente formada mas com aspas curvas dentro de strings
+// caía em fallback markdown e o JSON inteiro aparecia raw no chat.
+function sanitizeLlmJson(s) {
+    return s
+        // Smart double quotes → ASCII
+        .replace(/[“”„‟″❝❞]/g, '"')
+        // Smart single quotes / apostrophes → ASCII (mas só fora de strings;
+        // dentro de strings o JSON aceita unicode, então só convertemos
+        // tipograficos genéricos para evitar quebrar conteúdo válido)
+        .replace(/[‘’‚‛′❛❜]/g, '\'')
+        // Strip JS-style comments // ... e /* ... */
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/(?:^|[^:])\/\/.*$/gm, m => m[0] === ':' ? m : m.replace(/\/\/.*$/, ''))
+        // Trailing comma antes de } ou ]
+        .replace(/,(\s*[}\]])/g, '$1');
+}
+
 function parseStructuredBlocks(text) {
     const TOKENS = ['__TABLE__', '__CHART__', '__PPT__'];
     const blocks = [];
@@ -2601,6 +2625,9 @@ function parseStructuredBlocks(text) {
         }
 
         // Skip past marker, then scan brace-balanced JSON.
+        // Trata AMBOS straight " e curly “/” como delimitadores de string,
+        // porque o LLM pode emitir curly quotes — sem isto o scanner conta
+        // braces dentro de strings e quebra cedo ou nunca acaba.
         let i = earliest + earliestToken.length;
         while (i < text.length && text[i] !== '{') i++;
         if (i >= text.length) break;
@@ -2610,7 +2637,11 @@ function parseStructuredBlocks(text) {
             const ch = text[i];
             if (escape) { escape = false; continue; }
             if (ch === '\\') { escape = true; continue; }
-            if (ch === '"') { inString = !inString; continue; }
+            // Aceitar straight " E curly quotes como string delimiters
+            if (ch === '"' || ch === '“' || ch === '”') {
+                inString = !inString;
+                continue;
+            }
             if (inString) continue;
             if (ch === '{') depth++;
             else if (ch === '}') { depth--; if (depth === 0) { i++; break; } }
@@ -2622,26 +2653,49 @@ function parseStructuredBlocks(text) {
             break;
         }
         const json = text.slice(start, i);
+
+        // Tenta JSON.parse 2 vezes:
+        //   1. Raw (caso o LLM acertou)
+        //   2. Sanitized (caso tenha curly quotes, trailing commas, etc)
+        let data = null;
         try {
-            const data = JSON.parse(json);
-            const valid =
-                (earliestToken === '__TABLE__' && Array.isArray(data.columns) && Array.isArray(data.rows)) ||
-                (earliestToken === '__CHART__' && Array.isArray(data.labels)  && Array.isArray(data.datasets)) ||
-                (earliestToken === '__PPT__'   && Array.isArray(data.slides));
-            if (valid) {
-                if (earliestToken === '__TABLE__') {
-                    blocks.push({ type: 'table', data });
-                } else if (earliestToken === '__CHART__') {
-                    const canvasId = 'chart_' + Date.now() + '_' + (++_chartCardCounter);
-                    blocks.push({ type: 'chart', data, canvasId });
-                } else {
-                    blocks.push({ type: 'ppt', data });
-                }
-            } else {
-                // Structurally invalid — render as text so user sees what came back.
+            data = JSON.parse(json);
+        } catch (e1) {
+            try {
+                const sanitized = sanitizeLlmJson(json);
+                data = JSON.parse(sanitized);
+                console.warn('parseStructuredBlocks: JSON saved by sanitizer', {
+                    token: earliestToken,
+                    rawError: e1.message,
+                });
+            } catch (e2) {
+                console.error('parseStructuredBlocks: JSON failed both raw and sanitized', {
+                    token: earliestToken,
+                    rawError: e1.message,
+                    sanitizedError: e2.message,
+                    preview: json.slice(0, 200),
+                });
                 blocks.push({ type: 'text', content: text.slice(earliest, i) });
+                cursor = i;
+                continue;
             }
-        } catch (e) {
+        }
+
+        const valid =
+            (earliestToken === '__TABLE__' && Array.isArray(data.columns) && Array.isArray(data.rows)) ||
+            (earliestToken === '__CHART__' && Array.isArray(data.labels)  && Array.isArray(data.datasets)) ||
+            (earliestToken === '__PPT__'   && Array.isArray(data.slides));
+        if (valid) {
+            if (earliestToken === '__TABLE__') {
+                blocks.push({ type: 'table', data });
+            } else if (earliestToken === '__CHART__') {
+                const canvasId = 'chart_' + Date.now() + '_' + (++_chartCardCounter);
+                blocks.push({ type: 'chart', data, canvasId });
+            } else {
+                blocks.push({ type: 'ppt', data });
+            }
+        } else {
+            // Structurally invalid — render as text so user sees what came back.
             blocks.push({ type: 'text', content: text.slice(earliest, i) });
         }
         cursor = i;
