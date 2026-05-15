@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $share->custom_title ?: $meta['name'] }}</title>
+    <!-- Structured token rendering (TABLE/CHART/PPT) — partilhado com welcome.blade -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js" defer></script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
         :root{
@@ -180,6 +184,22 @@
             .bubble{font-size:13px}
             .msg-actions button{font-size:10px;padding:3px 8px}
         }
+
+        /* Structured token cards (TABLE/CHART/PPT) — alinhado com welcome.blade */
+        .table-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin:10px 0;overflow:hidden}
+        .table-card-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:13px;color:var(--text);font-weight:600}
+        .table-card-header small{opacity:.6;font-size:11px;font-weight:400}
+        .table-wrap{overflow-x:auto;max-height:420px;overflow-y:auto}
+        .table-wrap table{width:100%;border-collapse:collapse;font-size:12px}
+        .table-wrap th,.table-wrap td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+        .table-wrap th{background:var(--bg3);font-weight:600;position:sticky;top:0;z-index:1}
+        .table-wrap tr:hover td{background:var(--bg4)}
+        .table-analysis{padding:10px 14px;background:rgba(118,185,0,.08);color:var(--text-soft);font-size:12px;line-height:1.5;border-top:1px solid var(--border)}
+        .table-recommendation{padding:10px 14px;background:rgba(244,195,97,.08);color:#f4c361;font-size:12px;line-height:1.5;border-top:1px solid var(--border)}
+        .table-actions{display:flex;gap:6px;padding:10px 14px;background:var(--bg3);flex-wrap:wrap}
+        .table-excel-btn,.table-copy-btn{background:var(--agent-color);border:1px solid var(--agent-color);color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;filter:brightness(1)}
+        .table-excel-btn:hover,.table-copy-btn:hover{filter:brightness(1.15)}
+        :root[data-theme="light"] .table-actions{background:var(--bg3)}
     </style>
 </head>
 <body>
@@ -540,6 +560,12 @@ async function sendMessage() {
                         // that will be parsed into a proper email card on final.
                         if (full.startsWith('__EMAIL__')) {
                             bubble.innerHTML = '<div style="color:var(--muted);font-size:12px">📧 A preparar email…</div>';
+                        } else if (full.includes('__TABLE__') || full.includes('__CHART__') || full.includes('__PPT__')) {
+                            // While the structured token is still streaming the
+                            // JSON may be incomplete — show a discreet placeholder
+                            // and avoid rendering broken markdown. Final pass
+                            // below will swap in the real table/chart/ppt card.
+                            bubble.innerHTML = '<div style="color:var(--muted);font-size:12px">📊 A preparar tabela/gráfico…</div>';
                         } else {
                             bubble.innerHTML = renderMarkdown(full);
                         }
@@ -572,10 +598,16 @@ async function sendMessage() {
                 }
             } else {
                 history.push({ role: 'assistant', content: full });
-                // Re-render final HTML so pipe-tables become real <table> elements,
-                // then add PDF + (if there is a table) Excel export buttons under
-                // the bubble — parity with the main ClawYard view.
-                bubble.innerHTML = renderMarkdown(full);
+                // Re-render final HTML so pipe-tables become real <table>
+                // elements AND so any structured __TABLE__ / __CHART__ / __PPT__
+                // tokens get materialised into proper cards (parity with the
+                // main ClawYard view). Charts are instantiated after the DOM
+                // node is live.
+                const rendered = renderAgentOutput(full);
+                bubble.innerHTML = rendered.html;
+                (rendered.chartsToInit || []).forEach(c => {
+                    try { renderChart(c.data, c.canvasId); } catch (_) {}
+                });
                 addMsgActions(bubble);
             }
         }
@@ -668,6 +700,265 @@ function escapeHtml(s) {
 
 // Render chips on load
 renderStarterChips();
+
+// ───────────────────────────────────────────────────────────────────────
+// STRUCTURED TOKENS (TABLE/CHART/PPT) — paridade com welcome.blade
+// Sem isto, agentes como Cor. Rodrigues, Dr.ª Ana RH, Ana Marketing
+// emitem __TABLE__{...} que aparece como JSON cru em links partilhados
+// (DLoren Wfit, etc).
+// ───────────────────────────────────────────────────────────────────────
+let _chartCardCounter = 0;
+let _tableCardCounter = 0;
+
+function escTok(s) {
+    return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]);
+}
+
+function sanitizeLlmJson(s) {
+    return s
+        .replace(/[“”„‟″❝❞]/g, '"')
+        .replace(/[‘’‚‛′❛❜]/g, '\'')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/,(\s*[}\]])/g, '$1');
+}
+
+function parseStructuredBlocks(text) {
+    const TOKENS = ['__TABLE__', '__CHART__', '__PPT__'];
+    const blocks = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+        let earliest = -1, earliestToken = null;
+        for (const tok of TOKENS) {
+            const i = text.indexOf(tok, cursor);
+            if (i !== -1 && (earliest === -1 || i < earliest)) { earliest = i; earliestToken = tok; }
+        }
+        if (earliest === -1) {
+            const rest = text.slice(cursor);
+            if (rest.trim()) blocks.push({ type: 'text', content: rest });
+            break;
+        }
+        if (earliest > cursor) {
+            const pre = text.slice(cursor, earliest);
+            if (pre.trim()) blocks.push({ type: 'text', content: pre });
+        }
+        let i = earliest + earliestToken.length;
+        while (i < text.length && text[i] !== '{') i++;
+        if (i >= text.length) break;
+        let depth = 0, inString = false, escape = false;
+        const start = i;
+        for (; i < text.length; i++) {
+            const ch = text[i];
+            if (escape) { escape = false; continue; }
+            if (ch === '\\') { escape = true; continue; }
+            if (ch === '"' || ch === '“' || ch === '”') { inString = !inString; continue; }
+            if (inString) continue;
+            if (ch === '{') depth++;
+            else if (ch === '}') { depth--; if (depth === 0) { i++; break; } }
+        }
+        if (depth !== 0) { blocks.push({ type: 'text', content: text.slice(earliest) }); break; }
+        const json = text.slice(start, i);
+        let data = null;
+        try { data = JSON.parse(json); }
+        catch (e1) {
+            try { data = JSON.parse(sanitizeLlmJson(json)); }
+            catch (e2) {
+                blocks.push({ type: 'text', content: text.slice(earliest, i) });
+                cursor = i;
+                continue;
+            }
+        }
+        const valid =
+            (earliestToken === '__TABLE__' && Array.isArray(data.columns) && Array.isArray(data.rows)) ||
+            (earliestToken === '__CHART__' && Array.isArray(data.labels)  && Array.isArray(data.datasets)) ||
+            (earliestToken === '__PPT__'   && Array.isArray(data.slides));
+        if (valid) {
+            if (earliestToken === '__TABLE__') blocks.push({ type: 'table', data });
+            else if (earliestToken === '__CHART__') {
+                blocks.push({ type: 'chart', data, canvasId: 'chart_' + Date.now() + '_' + (++_chartCardCounter) });
+            } else blocks.push({ type: 'ppt', data });
+        } else {
+            blocks.push({ type: 'text', content: text.slice(earliest, i) });
+        }
+        cursor = i;
+    }
+    return blocks;
+}
+
+function buildTableCard(data) {
+    const id = 'tbl_' + Date.now() + '_' + (++_tableCardCounter);
+    const headers = data.columns.map(c => `<th>${escTok(c)}</th>`).join('');
+    const rows = data.rows.map(r => `<tr>${r.map(c => `<td>${escTok(String(c))}</td>`).join('')}</tr>`).join('');
+    return `
+    <div class="table-card" id="${id}">
+        <div class="table-card-header">
+            <span>📊 ${escTok(data.title || 'Tabela')}</span>
+            <small>${data.rows.length} itens</small>
+        </div>
+        <div class="table-wrap"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>
+        ${data.analysis ? `<div class="table-analysis">🔍 ${escTok(data.analysis)}</div>` : ''}
+        ${data.recommendation ? `<div class="table-recommendation">✅ ${escTok(data.recommendation)}</div>` : ''}
+        <div class="table-actions">
+            <button class="table-excel-btn" onclick="exportXlsx('${id}')">📥 Excel</button>
+            <button class="table-excel-btn" onclick="exportCsv('${id}')" style="background:#475569;border-color:#475569">📄 CSV</button>
+            <button class="table-excel-btn" onclick="exportTablePdf('${id}')" style="background:#a83232;border-color:#a83232">📑 PDF</button>
+            <button class="table-copy-btn" onclick="copyTable('${id}')">📋 Copiar</button>
+        </div>
+    </div>`;
+}
+
+function buildChartCard(data, canvasId) {
+    return `
+    <div class="table-card">
+        <div class="table-card-header">
+            <span>📊 ${escTok(data.title || 'Gráfico')}</span>
+            <small>${data.labels.length} pontos · ${data.type || 'bar'}</small>
+        </div>
+        <div style="padding:14px;background:var(--bg3)"><canvas id="${canvasId}" width="700" height="380"></canvas></div>
+        ${data.analysis ? `<div class="table-analysis">🔍 ${escTok(data.analysis)}</div>` : ''}
+        <div class="table-actions">
+            <button class="table-excel-btn" onclick="exportChartPng('${canvasId}','${(data.title||'chart').replace(/'/g,'\\\'')}')">⬇ PNG</button>
+        </div>
+    </div>`;
+}
+
+function renderChart(data, canvasId) {
+    if (typeof Chart === 'undefined') return setTimeout(() => renderChart(data, canvasId), 400);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const defaultColors = ['#76b900','#3b82f6','#ec4899','#f59e0b','#a855f7','#10b981','#ef4444','#06b6d4'];
+    const datasets = data.datasets.map((d, idx) => ({
+        label: d.label || `Série ${idx+1}`,
+        data: d.data,
+        backgroundColor: d.color || defaultColors[idx % defaultColors.length],
+        borderColor: d.color || defaultColors[idx % defaultColors.length],
+        borderWidth: 2, tension: 0.3,
+    }));
+    try {
+        new Chart(canvas.getContext('2d'), {
+            type: data.type || 'bar',
+            data: { labels: data.labels, datasets },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#e6e6e6' } } },
+                scales: (['pie','doughnut','radar'].includes(data.type)) ? {} : {
+                    x: { ticks: { color: '#9ca3af' }, grid: { color: '#2a2f36' } },
+                    y: { ticks: { color: '#9ca3af' }, grid: { color: '#2a2f36' } },
+                },
+            },
+        });
+    } catch (e) { console.error('Chart render failed:', e); }
+}
+
+function buildPptCard(pd) {
+    const slides = pd.slides || [];
+    return `
+    <div class="table-card">
+        <div class="table-card-header">
+            <span>📊 ${escTok(pd.title || 'PowerPoint')}</span>
+            <small>${slides.length} slide${slides.length===1?'':'s'}</small>
+        </div>
+        <div style="padding:14px;color:var(--text);font-size:13px;line-height:1.6">
+            ${pd.author ? `<div style="opacity:.65;margin-bottom:8px">Autor: ${escTok(pd.author)}</div>` : ''}
+            <ol style="margin:0;padding-left:20px">${slides.map(s => `<li>${escTok(s.title || '(sem título)')}</li>`).join('')}</ol>
+        </div>
+        <div class="table-actions">
+            <button class="table-excel-btn" onclick='exportPpt(${JSON.stringify(pd).replace(/'/g,"\\'")})' style="background:#c2410c;border-color:#c2410c">📊 Download .pptx</button>
+        </div>
+    </div>`;
+}
+
+// Exporters
+function exportXlsx(id) {
+    if (typeof XLSX === 'undefined') return exportCsv(id);
+    const card = document.getElementById(id);
+    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','').trim() || 'tabela';
+    const rows = Array.from(card.querySelectorAll('table tr')).map(tr =>
+        Array.from(tr.querySelectorAll('th,td')).map(c => {
+            const v = c.textContent.trim();
+            if (/^-?\d+([.,]\d+)?$/.test(v)) return parseFloat(v.replace(',', '.'));
+            return v;
+        })
+    );
+    if (!rows.length) return;
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, title.replace(/[^a-zA-Z0-9 _-]/g,'').slice(0,31) || 'Tabela');
+    XLSX.writeFile(wb, title.replace(/[^a-zA-Z0-9_\-]/g,'_').slice(0,80) + '.xlsx');
+}
+function exportCsv(id) {
+    const card = document.getElementById(id);
+    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','').trim() || 'tabela';
+    const rows = Array.from(card.querySelectorAll('table tr'));
+    const csv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => '"' + c.textContent.replace(/"/g,'""') + '"').join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = title.replace(/[^a-zA-Z0-9_\-]/g,'_') + '.csv'; a.click();
+}
+function exportTablePdf(id) {
+    const card = document.getElementById(id);
+    const title = card.querySelector('.table-card-header span')?.textContent?.replace('📊 ','').trim() || 'tabela';
+    const tableHtml = card.querySelector('table').outerHTML;
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>${escTok(title)}</title><style>body{font-family:system-ui;padding:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:8px;text-align:left}th{background:#f4f4f4}</style></head><body><h2>${escTok(title)}</h2>${tableHtml}<script>window.onload=()=>setTimeout(()=>window.print(),300);<\/script></body></html>`);
+    w.document.close();
+}
+function copyTable(id) {
+    const rows = Array.from(document.getElementById(id).querySelectorAll('table tr'));
+    const tsv = rows.map(r => Array.from(r.querySelectorAll('th,td')).map(c => c.textContent).join('\t')).join('\n');
+    navigator.clipboard.writeText(tsv);
+}
+function exportChartPng(canvasId, title) {
+    const c = document.getElementById(canvasId); if (!c) return;
+    const a = document.createElement('a');
+    a.href = c.toDataURL('image/png', 1.0);
+    a.download = title.replace(/[^a-zA-Z0-9_\-]/g,'_') + '.png';
+    a.click();
+}
+function exportPpt(pd) {
+    if (typeof PptxGenJS === 'undefined') { alert('PptxGenJS a carregar — tenta novamente'); return; }
+    const pptx = new PptxGenJS();
+    pptx.author = pd.author || 'ClawYard';
+    pptx.title = pd.title || 'ClawYard Deck';
+    pptx.layout = 'LAYOUT_WIDE';
+    const title = pptx.addSlide();
+    title.background = { color: '0F1115' };
+    title.addText(pd.title || 'Deck', { x:0.5, y:2.5, w:12, h:1.2, fontSize:36, bold:true, color:'FFFFFF', align:'center' });
+    if (pd.author) title.addText('por ' + pd.author, { x:0.5, y:4, w:12, h:0.6, fontSize:18, color:'EC4899', align:'center' });
+    (pd.slides || []).forEach((s, idx) => {
+        const slide = pptx.addSlide();
+        slide.addText(s.title || `Slide ${idx+1}`, { x:0.5, y:0.3, w:12, h:0.8, fontSize:28, bold:true, color:'76B900' });
+        if (Array.isArray(s.bullets)) {
+            slide.addText(s.bullets.map(b => ({ text:b, options:{bullet:true} })), { x:0.5, y:1.5, w:12, h:5, fontSize:16, color:'222222' });
+        } else if (s.body) {
+            slide.addText(s.body, { x:0.5, y:1.5, w:12, h:5.5, fontSize:14, color:'222222' });
+        }
+    });
+    pptx.writeFile({ fileName: (pd.title || 'deck').replace(/[^a-zA-Z0-9_\-]/g,'_').slice(0,60) + '.pptx' });
+}
+
+/**
+ * Render output do agente: se tiver tokens TABLE/CHART/PPT, gera cards
+ * mixed com markdown. Charts inicializados após DOM live.
+ * Retorna { html, chartsToInit: [{data, canvasId}] }
+ */
+function renderAgentOutput(text) {
+    if (!text.includes('__TABLE__') && !text.includes('__CHART__') && !text.includes('__PPT__')) {
+        return { html: renderMarkdown(text), chartsToInit: [] };
+    }
+    const blocks = parseStructuredBlocks(text);
+    if (!blocks.some(b => b.type !== 'text')) {
+        return { html: renderMarkdown(text), chartsToInit: [] };
+    }
+    const chartsToInit = [];
+    const html = blocks.map(b => {
+        if (b.type === 'text') return `<div>${renderMarkdown(b.content)}</div>`;
+        if (b.type === 'table') return buildTableCard(b.data);
+        if (b.type === 'chart') { chartsToInit.push({ data: b.data, canvasId: b.canvasId }); return buildChartCard(b.data, b.canvasId); }
+        if (b.type === 'ppt') return buildPptCard(b.data);
+        return '';
+    }).join('');
+    return { html, chartsToInit };
+}
 
 // ── Simple markdown renderer ──
 function renderMarkdown(md) {
