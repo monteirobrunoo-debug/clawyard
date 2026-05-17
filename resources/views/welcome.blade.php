@@ -4790,7 +4790,32 @@ async function sendMessage() {
                 const displayText = accumulated.replace(
                     /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
                 );
-                streamBubble.innerHTML = renderMarkdown(displayText) + '<span class="stream-cursor">▌</span>';
+
+                // 2026-05-17: assim que detectamos um structured token, mostrar
+                // placeholder em vez do JSON cru — o final DONE substitui pela
+                // card real. Sem isto, o user via __TABLE__{...} a expandir
+                // durante o stream e ficava ansioso. Mostra o texto markdown
+                // ANTES do token + placeholder discreto a indicar o card que
+                // vem a caminho.
+                const firstTokenAt = Math.min(
+                    ...['__TABLE__','__CHART__','__PPT__']
+                        .map(t => displayText.indexOf(t))
+                        .filter(i => i >= 0)
+                );
+                if (Number.isFinite(firstTokenAt) && firstTokenAt >= 0) {
+                    const preText = displayText.slice(0, firstTokenAt).trim();
+                    const tokenName = displayText.slice(firstTokenAt).startsWith('__TABLE__')
+                        ? 'tabela'
+                        : (displayText.slice(firstTokenAt).startsWith('__CHART__') ? 'gráfico' : 'apresentação');
+                    streamBubble.innerHTML =
+                        (preText ? renderMarkdown(preText) : '') +
+                        `<div style="margin-top:10px;padding:10px 14px;border-radius:10px;background:color-mix(in srgb, var(--agent-color,#76b900) 8%, transparent);border:1px dashed color-mix(in srgb, var(--agent-color,#76b900) 35%, transparent);color:var(--muted);font-size:12px;display:flex;align-items:center;gap:8px;">
+                            <span class="stream-cursor" style="background:var(--agent-color,#76b900)">▌</span>
+                            <span>📊 A preparar ${tokenName}…</span>
+                        </div>`;
+                } else {
+                    streamBubble.innerHTML = renderMarkdown(displayText) + '<span class="stream-cursor">▌</span>';
+                }
                 chat.scrollTop = chat.scrollHeight;
             }
         }
@@ -4913,23 +4938,94 @@ async function sendMessage() {
                                 streamBubble.innerHTML = renderMarkdown(accumulated.replace('__EMAILS__', ''));
                             }
                         } else {
-                            // Final render + add save button (strip hidden QuantumAgent JSON block)
+                            // Final render — strip hidden QuantumAgent JSON block first.
                             const finalDisplay = accumulated.replace(
                                 /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
                             ).trim();
-                            streamBubble.innerHTML = renderMarkdown(finalDisplay);
+
+                            // ── STRUCTURED TOKEN RENDERER (2026-05-17 fix) ──
+                            // Bug: o streaming path acabava em renderMarkdown(),
+                            // por isso __TABLE__{json} / __CHART__ / __PPT__
+                            // ficavam em raw mesmo depois do DONE. O addMessage
+                            // path já o trata correctamente; aqui replicamos
+                            // a mesma lógica (parseStructuredBlocks +
+                            // buildTableCard / buildChartCard / buildPptCard)
+                            // para o caminho streamado.
+                            if (finalDisplay.includes('__TABLE__') || finalDisplay.includes('__CHART__') || finalDisplay.includes('__PPT__')) {
+                                const blocks = parseStructuredBlocks(finalDisplay);
+                                const cardCount = blocks.filter(b => b.type !== 'text').length;
+                                if (cardCount > 0) {
+                                    // Substituir a bubble streamada por uma série
+                                    // de cards estruturados + texto markdown
+                                    // intercalado.
+                                    const chartsToInit = [];
+                                    const tablesInResponse = blocks.filter(b => b.type === 'table');
+                                    const bodyHtml = blocks.map(b => {
+                                        if (b.type === 'text') {
+                                            const t = b.content.trim();
+                                            return t ? `<div class="bubble" style="margin-top:10px">${markdownToHtml(t)}</div>` : '';
+                                        }
+                                        if (b.type === 'table') return buildTableCard(b.data);
+                                        if (b.type === 'chart') {
+                                            chartsToInit.push({ data: b.data, canvasId: b.canvasId });
+                                            return buildChartCard(b.data, b.canvasId);
+                                        }
+                                        if (b.type === 'ppt') return buildPptCard(b.data);
+                                        return '';
+                                    }).join('');
+
+                                    // Workbook combinado se houver 2+ tabelas
+                                    const workbookBtn = tablesInResponse.length >= 2
+                                        ? `<div style="margin:8px 0 0 0"><button class="table-excel-btn" onclick="exportAllTablesAsWorkbook(this)" style="background:#1e7a3d;border:1px solid #2c9a4f">📊 Workbook combinado (1 .xlsx com ${tablesInResponse.length} tabs)</button></div>`
+                                        : '';
+
+                                    // Sub-meta resumida
+                                    const tCount = blocks.filter(b => b.type === 'table').length;
+                                    const cCount = blocks.filter(b => b.type === 'chart').length;
+                                    const pCount = blocks.filter(b => b.type === 'ppt').length;
+                                    const parts = [];
+                                    if (tCount) parts.push(`${tCount} tabela${tCount===1?'':'s'}`);
+                                    if (cCount) parts.push(`${cCount} gráfico${cCount===1?'':'s'}`);
+                                    if (pCount) parts.push(`${pCount} PPT`);
+                                    const subMeta = parts.join(' · ') + ' · pronto a exportar';
+
+                                    // Substitui o conteúdo da msg-col (mantém o avatar)
+                                    const msgCol = streamMsg.querySelector('.msg-col');
+                                    const photo  = AGENT_PHOTOS[agentKey];
+                                    const emoji  = AGENT_EMOJIS[agentKey] || '🤖';
+                                    const name   = AGENT_NAMES[agentKey]  || 'ClawYard';
+                                    msgCol.innerHTML = `
+                                        <div class="msg-meta">
+                                            <span class="agent-tag active">${emoji} ${esc(name)}</span>
+                                            <span>${subMeta}</span>
+                                        </div>
+                                        ${bodyHtml}
+                                        ${workbookBtn}`;
+                                    // Instanciar Chart.js DEPOIS dos canvases estarem no DOM
+                                    chartsToInit.forEach(c => renderChart(c.data, c.canvasId));
+                                    chat.scrollTop = chat.scrollHeight;
+                                    // Continuar para anexar save button + feedback bar
+                                } else {
+                                    // Tokens presentes mas JSON inválido — fallback markdown
+                                    streamBubble.innerHTML = renderMarkdown(finalDisplay);
+                                }
+                            } else {
+                                // Sem tokens — render markdown normal
+                                streamBubble.innerHTML = renderMarkdown(finalDisplay);
+                            }
+
                             const meta = streamMsg.querySelector('.msg-meta');
-                            const saveBtn = document.createElement('button');
-                            saveBtn.className = 'save-report-btn';
-                            saveBtn.title     = 'Guardar como relatório';
-                            saveBtn.textContent = '💾';
-                            saveBtn.onclick   = function() { saveAsReport(this, agentKey); };
-                            meta.appendChild(saveBtn);
+                            // Re-locate meta because msgCol may have been replaced
+                            if (meta && !meta.querySelector('.save-report-btn')) {
+                                const saveBtn = document.createElement('button');
+                                saveBtn.className = 'save-report-btn';
+                                saveBtn.title     = 'Guardar como relatório';
+                                saveBtn.textContent = '💾';
+                                saveBtn.onclick   = function() { saveAsReport(this, agentKey); };
+                                meta.appendChild(saveBtn);
+                            }
                             // Anexar toolbar "Outlook (todos)" se a resposta
-                            // contém emails extraídos pelo agente. (Path
-                            // streamado — o path "addMessage" também o faz
-                            // mas só corre quando uma mensagem chega já
-                            // completa.)
+                            // contém emails extraídos pelo agente.
                             attachOutlookRoundup(streamMsg, agentKey);
                         }
 
