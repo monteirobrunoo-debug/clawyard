@@ -431,6 +431,20 @@ Route::middleware(['auth'])->group(function () {
         ->name('hp_history.upload.store');
 });
 
+// 2026-05-15 Saúde dos agentes — dashboard manager+ com tokens/latência/custo
+// por agente, gráfico semanal e prompts falhados recentes. Rotas separadas
+// da view + JSON do gráfico para que /agents/health/data possa ser polled
+// sem re-render da página inteira.
+Route::middleware(['auth'])->group(function () {
+    Route::get('/agents/health',      [\App\Http\Controllers\AgentHealthController::class, 'index'])->name('agents.health');
+    Route::get('/agents/health/data', [\App\Http\Controllers\AgentHealthController::class, 'data'])->name('agents.health.data');
+});
+
+// 2026-05-15 Feedback 👍/👎 sobre mensagens assistant — alimenta
+// RewardEvent (thumbs_up/down) e marca messages.is_failed=true em down.
+Route::middleware(['auth'])->post('/api/feedback', [\App\Http\Controllers\MessageFeedbackController::class, 'store'])
+    ->name('messages.feedback');
+
 // Agent profile — per-agent landing page with description, stats, starters
 // and recent conversations. Provides a deeper entry point than the dashboard
 // card (which just drops you into /chat). Linked from the card's long-press

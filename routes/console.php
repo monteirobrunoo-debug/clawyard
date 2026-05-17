@@ -146,6 +146,20 @@ Schedule::command('clawyard:send-weekly-digest')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Relatório semanal de actividade ClawYard — segundas 08:00 Lisboa ─────
+// Manda a cada utilizador activo um resumo da sua semana: pontos ganhos,
+// nível actual, streak, agentes mais usados, ranking. Skip silencioso
+// para quem teve 0 pts (férias / fim-de-semana inactivo). Per-run cost:
+// só SMTP, sem LLM. Idempotência: a semana é fixa pelo intervalo de
+// query (weekAgo); re-runs no mesmo dia mandam o mesmo conteúdo. Aceite
+// — Laravel scheduler garante apenas 1 corrida por minuto agendado.
+Schedule::command('clawyard:weekly-activity')
+    ->mondays()
+    ->at('08:00')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Individual deadline alert — fires ~24h before each tender's deadline,
 // exactly ONCE per tender lifetime (de-duped via deadline_alert_sent_at).
 // Sent only to the assigned collaborator so we don't duplicate the digest.

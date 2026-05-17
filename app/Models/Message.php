@@ -9,6 +9,8 @@ class Message extends Model
 {
     protected $fillable = [
         'conversation_id', 'role', 'agent', 'content', 'metadata',
+        // 2026-05-15 prompt analytics — ver migration add_prompt_analytics_to_messages
+        'model', 'tokens_in', 'tokens_out', 'latency_ms', 'cost_usd', 'is_failed',
     ];
 
     /**
@@ -34,9 +36,44 @@ class Message extends Model
      * search index rather than regressing to plaintext.
      */
     protected $casts = [
-        'content'  => \App\Casts\SafeEncryptedString::class,
-        'metadata' => \App\Casts\SafeEncryptedArray::class,
+        'content'    => \App\Casts\SafeEncryptedString::class,
+        'metadata'   => \App\Casts\SafeEncryptedArray::class,
+        'tokens_in'  => 'integer',
+        'tokens_out' => 'integer',
+        'latency_ms' => 'integer',
+        'cost_usd'   => 'decimal:6',
+        'is_failed'  => 'boolean',
     ];
+
+    /**
+     * Estimativa de custo por modelo em USD por 1M tokens (input, output).
+     * Valores a 2026-05-15 — actualizar quando os preços do upstream mudarem.
+     *
+     * @var array<string, array{0:float,1:float}>
+     */
+    public const MODEL_PRICING = [
+        // Claude (Anthropic)
+        'claude-sonnet-4-5'    => [3.00, 15.00],
+        'claude-opus-4'        => [15.00, 75.00],
+        'claude-haiku-4-5'     => [0.80,  4.00],
+        // NVIDIA NIM — gratuito para uso interno mas registamos $0 para diferenciar
+        'nemotron-mini-4b'     => [0.00, 0.00],
+        'nemotron-340b'        => [0.00, 0.00],
+        'nv-embedqa-e5-v5'     => [0.00, 0.00],
+    ];
+
+    /**
+     * Computa cost_usd dado um modelo e contagem de tokens. Devolve null se
+     * o modelo é desconhecido (não inventamos preços).
+     */
+    public static function estimateCost(?string $model, int $tokensIn, int $tokensOut): ?float
+    {
+        if (!$model) return null;
+        $pricing = self::MODEL_PRICING[$model] ?? null;
+        if (!$pricing) return null;
+        [$inUsd, $outUsd] = $pricing;
+        return round(($tokensIn * $inUsd + $tokensOut * $outUsd) / 1_000_000, 6);
+    }
 
     public function conversation(): BelongsTo
     {

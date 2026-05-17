@@ -483,6 +483,10 @@ class NvidiaController extends Controller
                 flush();
             };
 
+            // 2026-05-15 prompt analytics — capturar t0 antes do stream
+            // arrancar para calcular latency_ms no fim.
+            $streamStart = microtime(true);
+
             // ── INCREMENTAL PERSISTENCE ────────────────────────────────────
             // Create the assistant row up-front (empty content) so even if the
             // script is killed mid-stream by PHP-FPM (timeout, OOM, fatal) the
@@ -495,8 +499,17 @@ class NvidiaController extends Controller
                 $assistantMsg = $conversationRef->messages()->create([
                     'role'    => 'assistant',
                     'agent'   => $agentName_final,
+                    'model'   => $agentModel,
                     'content' => '',
                 ]);
+                // 2026-05-15: emite o ID assim que a row existe — o cliente
+                // anexa ao bubble.dataset para depois enviar 👍/👎 a
+                // /api/feedback. Antes deste SSE, o cliente não conhecia
+                // o ID e os botões de feedback não funcionavam.
+                if ($assistantMsg) {
+                    echo 'data: ' . json_encode(['type' => 'assistant_msg', 'id' => $assistantMsg->id]) . "\n\n";
+                    flush();
+                }
             } catch (\Throwable $e) {
                 \Log::warning('ClawYard: could not pre-create assistant row — ' . $e->getMessage());
                 $assistantMsg = null;
@@ -590,21 +603,40 @@ class NvidiaController extends Controller
             // pipeline. A redacted marker keeps the UI consistent.
             $fullReplyPersisted = $this->redactKyberSecrets($fullReply);
 
+            // 2026-05-15 prompt analytics — calcular métricas finais
+            // antes do save final para podermos gravar tudo numa só passagem.
+            $latencyMs = (int) round((microtime(true) - $streamStart) * 1000);
+            // Estimativa de tokens — ~4 chars por token é uma aproximação
+            // razoável para pt/en mixed. Suficiente para tendências; quando
+            // o agente expuser usage real (futuro), substitui-se aqui.
+            $promptSerial = is_array($resolvedMessage) ? json_encode($resolvedMessage) : (string) $resolvedMessage;
+            $historySerial = is_array($resolvedHistory) ? json_encode($resolvedHistory) : '';
+            $tokensIn  = (int) ceil((mb_strlen($promptSerial) + mb_strlen($historySerial)) / 4);
+            $tokensOut = (int) ceil(mb_strlen($fullReplyPersisted) / 4);
+            $costUsd   = \App\Models\Message::estimateCost($agentModel, $tokensIn, $tokensOut);
+
             // Final save: patch the row we pre-created (incremental updates
             // have been happening during the stream). If the early create
             // failed for some reason, fall back to creating a fresh row so
             // we never lose the reply.
             try {
+                $analyticsPatch = [
+                    'content'    => $fullReplyPersisted,
+                    'model'      => $agentModel,
+                    'tokens_in'  => $tokensIn,
+                    'tokens_out' => $tokensOut,
+                    'latency_ms' => $latencyMs,
+                    'cost_usd'   => $costUsd,
+                ];
                 if ($assistantMsg) {
-                    $assistantMsg->update(['content' => $fullReplyPersisted]);
+                    $assistantMsg->update($analyticsPatch);
                     // Prevent the shutdown handler from double-writing
                     $lastSavedLen = strlen($fullReply);
                 } else {
-                    $conversationRef->messages()->create([
-                        'role'    => 'assistant',
-                        'agent'   => $agentName_final,
-                        'content' => $fullReplyPersisted,
-                    ]);
+                    $conversationRef->messages()->create(array_merge(
+                        ['role' => 'assistant', 'agent' => $agentName_final],
+                        $analyticsPatch
+                    ));
                 }
 
                 // #3 — Update conversation.updated_at so the conversations list

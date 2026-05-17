@@ -2052,6 +2052,57 @@ function playLevelUpOverlay(level, levelName) {
     }, 2600);
 }
 
+// ═══════════════════════════════
+//  FEEDBACK 👍/👎 BAR (acoplada a assistant messages)
+// ═══════════════════════════════
+function attachFeedbackBar(msgEl) {
+    if (!msgEl) return;
+    const id = msgEl.dataset?.msgId;
+    if (!id) return; // sem ID, sem feedback (acontece em respostas Kyber, email, …)
+
+    // Não duplicar — se já existir uma bar nesta mensagem, sai.
+    if (msgEl.querySelector('.cy-fb-bar')) return;
+
+    const bar = document.createElement('div');
+    bar.className = 'cy-fb-bar';
+    bar.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.06);';
+    bar.innerHTML = `
+        <span style="font-size:11px;color:var(--muted);">Foi útil?</span>
+        <button data-dir="up"   class="cy-fb-btn" title="👍 Esta resposta foi útil (+2 pts)">👍</button>
+        <button data-dir="down" class="cy-fb-btn" title="👎 Esta resposta não ajudou (+1 pt — feedback honesto)">👎</button>
+        <span class="cy-fb-status" style="font-size:11px;color:var(--muted);margin-left:auto;"></span>
+    `;
+    const col = msgEl.querySelector('.msg-col');
+    (col || msgEl).appendChild(bar);
+
+    // Inline styles for the buttons (avoid touching stylesheet)
+    bar.querySelectorAll('.cy-fb-btn').forEach(b => {
+        b.style.cssText = 'background:transparent;border:1px solid var(--border2);color:var(--muted);padding:4px 10px;border-radius:14px;cursor:pointer;font-size:14px;transition:all 0.15s;';
+        b.addEventListener('mouseenter', () => { b.style.borderColor = '#76b900'; b.style.color = '#76b900'; });
+        b.addEventListener('mouseleave', () => { if (!b.dataset.sent) { b.style.borderColor = ''; b.style.color = ''; }});
+        b.addEventListener('click', async () => {
+            if (b.dataset.sent) return;
+            const dir = b.dataset.dir;
+            try {
+                const r = await fetch('/api/feedback', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, 'Accept': 'application/json' },
+                    body:    JSON.stringify({ message_id: parseInt(id, 10), direction: dir }),
+                });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                b.dataset.sent = '1';
+                b.style.borderColor = dir === 'up' ? '#22c55e' : '#ef4444';
+                b.style.color       = dir === 'up' ? '#22c55e' : '#ef4444';
+                // Desactiva o outro botão para deixar o feedback definitivo claro.
+                bar.querySelectorAll('.cy-fb-btn').forEach(other => { if (other !== b) other.style.opacity = 0.35; });
+                bar.querySelector('.cy-fb-status').textContent = dir === 'up' ? 'Obrigado! +2 pts' : 'Feedback registado · +1 pt';
+            } catch (e) {
+                bar.querySelector('.cy-fb-status').textContent = 'Erro ao enviar feedback';
+            }
+        });
+    });
+}
+
 function playBadgeToast(badgeKey) {
     if (!window.cyToast) return;
     // Pretty name por key — mantém-se em sync com BadgeEvaluator no server.
@@ -4448,6 +4499,14 @@ async function sendMessage() {
                 return;
             }
 
+            // 2026-05-15: backend emite o ID da row assistant assim que ela
+            // existe — guardamos no dataset do streamMsg para o botão de
+            // feedback (👍/👎) saber qual mensagem está a avaliar.
+            if (evt.type === 'assistant_msg' && evt.id) {
+                if (streamMsg) streamMsg.dataset.msgId = evt.id;
+                return;
+            }
+
             // ── Smart suggestions event (arrives after response is complete) ──
             if (evt.type === 'suggestions') {
                 if (evt.suggestions && evt.suggestions.length) {
@@ -4668,6 +4727,12 @@ async function sendMessage() {
                             // completa.)
                             attachOutlookRoundup(streamMsg, agentKey);
                         }
+
+                        // 2026-05-15: 👍/👎 feedback row — habilita o
+                        // dashboard "Saúde dos agentes" a detectar prompts
+                        // maus e premeia o utilizador por feedback honesto.
+                        attachFeedbackBar(streamMsg);
+
                         chat.scrollTop = chat.scrollHeight;
                     }
 

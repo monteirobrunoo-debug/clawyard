@@ -755,6 +755,9 @@
         @if(Auth::user()->canSeeNav('rewards'))
             <a href="{{ route('rewards.me') }}" class="nav-link">🏆 Rewards</a>
         @endif
+        @if(Auth::user()->isManager())
+            <a href="{{ route('agents.health') }}" class="nav-link">🩺 Saúde Agentes</a>
+        @endif
         @if(Auth::user()->canSeeNav('marketplace'))
             <a href="{{ route('marketplace.index') }}" class="nav-link">🛒 Marketplace</a>
         @endif
