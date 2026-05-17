@@ -509,7 +509,7 @@
                                 @foreach($mine as $t)
                                     <tr class="hover:bg-gray-50 align-middle">
                                         <td class="px-3 py-2 whitespace-nowrap">
-                                            {{-- Source label: usa $sourceLabels (definido no @php do topo)
+                                            {{-- Source label: usa $sourceLabels (definido no bloco PHP do topo)
                                                  para unificar acingov + vortal sob "Acingov/Vortal/PT Concursos". --}}
                                             <div class="text-xs font-semibold uppercase text-gray-600">{{ $sourceLabels[$t->source] ?? strtoupper($t->source) }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
@@ -811,7 +811,7 @@
                                             </td>
                                         @endif
                                         <td class="px-3 py-2 align-middle whitespace-nowrap">
-                                            {{-- Source label: usa $sourceLabels (definido no @php do topo)
+                                            {{-- Source label: usa $sourceLabels (definido no bloco PHP do topo)
                                                  para unificar acingov + vortal sob "Acingov/Vortal/PT Concursos". --}}
                                             <div class="text-xs font-semibold uppercase text-gray-600">{{ $sourceLabels[$t->source] ?? strtoupper($t->source) }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
