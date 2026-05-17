@@ -387,7 +387,9 @@ class NvidiaController extends Controller
         ]);
 
         // C5 — register chat engagement. See recordChatEngagement().
-        $this->recordChatEngagement($userId, $agentName, $sessionId);
+        // 2026-05-15: agora devolve delta (level-up + novos badges) que é
+        // injectado no meta SSE para o cliente animar.
+        $rewardDelta = $this->recordChatEngagement($userId, $agentName, $sessionId);
 
         // Resolve agent (orchestrator falls back to non-streaming chat())
         if ($agentName === 'orchestrator') {
@@ -404,13 +406,14 @@ class NvidiaController extends Controller
             ]);
 
             // Return as SSE with a single chunk + metadata + DONE
-            return response()->stream(function () use ($reply, $results, $sessionId) {
+            return response()->stream(function () use ($reply, $results, $sessionId, $rewardDelta) {
                 // Send agent_log
                 $meta = [
                     'type'       => 'meta',
                     'mode'       => 'orchestrator',
                     'agents'     => array_column($results, 'agent'),
                     'session_id' => $sessionId,
+                    'reward'     => $rewardDelta,
                 ];
                 echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
                 flush();
@@ -450,7 +453,7 @@ class NvidiaController extends Controller
         return response()->stream(function () use (
             $resolvedAgent, $resolvedMessage, $resolvedHistory,
             $resolvedAgentLog, $agentModel, $agentName_final,
-            $conversationRef, $sessionId, $userId, $message
+            $conversationRef, $sessionId, $userId, $message, $rewardDelta
         ) {
             // Release session lock so other tabs don't block waiting for this stream
             session()->save();
@@ -469,6 +472,7 @@ class NvidiaController extends Controller
                 'session_id'  => $sessionId,
                 'agent_log'   => $resolvedAgentLog,
                 'suggestions' => [], // sent later after response is complete
+                'reward'      => $rewardDelta,
             ];
             echo 'data: ' . json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) . "\n\n";
             flush();
@@ -943,15 +947,45 @@ PROMPT;
      *                           ('auto', 'orchestrator', or specific)
      * @param string   $sessionId conversation session for the metadata
      */
-    protected function recordChatEngagement(?int $userId, string $agentKey, string $sessionId): void
+    protected function recordChatEngagement(?int $userId, string $agentKey, string $sessionId): array
     {
-        if ($userId === null) return;
-        app(\App\Services\Rewards\RewardRecorder::class)->record(
+        if ($userId === null) return ['level_up' => false, 'new_badges' => [], 'points_earned' => 0];
+
+        // 2026-05-15: pontos variam por agente (CHAT_POINTS_BY_AGENT) —
+        // agentes premium (SAP, finance, patent, acingov, hr) valem 5pts,
+        // padrão 3pts, fallbacks (claude/auto) 2pts. Cap diário 20.
+        $points = \App\Services\Rewards\RewardRecorder::chatPointsFor($agentKey);
+
+        // Snapshot ANTES da gravação para detectar level-up + novos badges.
+        // Tem de ser fresh() porque o recorder modifica o row na mesma request.
+        $before = \App\Models\UserPoints::find($userId);
+        $beforeLevel  = (int) ($before?->level ?? 0);
+        $beforeBadges = (array) ($before?->badges ?? []);
+
+        $event = app(\App\Services\Rewards\RewardRecorder::class)->record(
             eventType: \App\Models\RewardEvent::TYPE_AGENT_CHAT,
             userId:    $userId,
             agentKey:  $agentKey,
-            metadata:  ['session_id' => $sessionId],
+            metadata:  ['session_id' => $sessionId, 'agent_tier_pts' => $points],
+            points:    $points,
         );
+
+        $after = \App\Models\UserPoints::find($userId);
+        $afterLevel  = (int) ($after?->level ?? 0);
+        $afterBadges = (array) ($after?->badges ?? []);
+
+        $newBadges = array_values(array_diff($afterBadges, $beforeBadges));
+
+        return [
+            'level_up'      => $afterLevel > $beforeLevel,
+            'old_level'     => $beforeLevel,
+            'new_level'     => $afterLevel,
+            'new_level_name'=> \App\Models\UserPoints::LEVEL_NAMES[$afterLevel] ?? null,
+            'new_badges'    => $newBadges,
+            'points_earned' => (int) ($event?->points ?? 0),
+            'total_points'  => (int) ($after?->total_points ?? 0),
+            'streak'        => (int) ($after?->current_streak_days ?? 0),
+        ];
     }
 
     /**

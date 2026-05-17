@@ -921,14 +921,17 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 @endphp
 
 {{-- E2 — Rewards strip — points + level + streak + last 3 events.
-     Hidden when the user has zero activity (clean dashboard for admins
-     who don't earn via the system). Mirrors the "Partilhados comigo"
-     strip styling to feel native. --}}
+     2026-05-15: card AGORA é permanente (mesmo a 0 pts) para que novos
+     utilizadores vejam o sistema e saibam como ganhar pontos. O bump de
+     +1→+3 por chat (e até +5 para agentes premium) torna o progresso
+     visível desde a primeira interacção. --}}
 @php
-    $hasRewardActivity = isset($myPoints) && $myPoints
-        && ((int) $myPoints->total_points > 0 || (isset($myRecentRewards) && $myRecentRewards->count() > 0));
+    $myPoints = $myPoints ?? \App\Models\UserPoints::firstOrCreate(
+        ['user_id' => auth()->id()],
+        ['total_points' => 0, 'level' => 0]
+    );
+    $myRecentRewards = $myRecentRewards ?? collect();
 @endphp
-@if($hasRewardActivity)
 <div class="recent-wrap">
     <div class="recent-header">
         <span class="recent-title">🏆 Os teus rewards</span>
@@ -967,20 +970,154 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
             @endif
         </div>
 
-        {{-- Last 3 reward events — compact list --}}
-        @if($myRecentRewards && $myRecentRewards->count() > 0)
+        {{-- Last 3 reward events — compact list. Empty state mostra como
+             ganhar pontos para zero-state ser educativo. --}}
         <div style="flex:1.5;min-width:300px;background:#111;border:1px solid #1e1e1e;border-radius:12px;padding:14px 18px;">
-            <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Atividade recente</div>
-            @foreach($myRecentRewards as $ev)
-                <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #1e1e1e;font-size:12px;">
-                    <span style="color:#bcd;">{{ str_replace('_', ' ', $ev->event_type) }}</span>
-                    <span style="display:flex;gap:8px;align-items:center;">
-                        <span style="color:#789;font-size:10px;">{{ $ev->created_at->diffForHumans() }}</span>
-                        <span style="color:{{ $ev->points > 0 ? '#7c3' : '#666' }};font-family:monospace;font-weight:bold;min-width:36px;text-align:right;">
-                            {{ $ev->points > 0 ? '+' : '' }}{{ $ev->points }}
+            <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+                {{ $myRecentRewards && $myRecentRewards->count() > 0 ? 'Atividade recente' : 'Como ganhar pontos' }}
+            </div>
+            @if($myRecentRewards && $myRecentRewards->count() > 0)
+                @foreach($myRecentRewards as $ev)
+                    <div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #1e1e1e;font-size:12px;">
+                        <span style="color:#bcd;">{{ str_replace('_', ' ', $ev->event_type) }}</span>
+                        <span style="display:flex;gap:8px;align-items:center;">
+                            <span style="color:#789;font-size:10px;">{{ $ev->created_at->diffForHumans() }}</span>
+                            <span style="color:{{ $ev->points > 0 ? '#7c3' : '#666' }};font-family:monospace;font-weight:bold;min-width:36px;text-align:right;">
+                                {{ $ev->points > 0 ? '+' : '' }}{{ $ev->points }}
+                            </span>
+                        </span>
+                    </div>
+                @endforeach
+            @else
+                <div style="font-size:12px;color:#bcd;line-height:1.7;">
+                    <div>💬 <strong>Falar com um agente</strong> · +3 a +5 pts (cap 20/dia)</div>
+                    <div>📑 <strong>Importar concurso</strong> · +5 pts</div>
+                    <div>🎯 <strong>Qualificar lead</strong> · +10 pts</div>
+                    <div>🏆 <strong>Fechar negócio</strong> · +50 pts</div>
+                </div>
+                <div style="margin-top:10px;font-size:10px;color:#789;">
+                    Agentes premium (SAP, finance, patent, HR, contratos) valem +5 pts cada.
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
+
+{{-- E3 — Leaderboard público top 10 + MVP semanal dos agentes.
+     Antes só estava acessível a managers em /rewards/leaderboard.
+     Agora qualquer operador vê quem está em cima e quais agentes geram
+     mais resultados — competição saudável + reforça os agentes premium. --}}
+@php
+    try {
+        $leaderboard = \App\Models\UserPoints::query()
+            ->join('users', 'users.id', '=', 'user_points.user_id')
+            ->where('users.is_active', true)
+            ->orderByDesc('user_points.total_points')
+            ->orderByDesc('user_points.current_streak_days')
+            ->limit(10)
+            ->get([
+                'user_points.user_id',
+                'user_points.total_points',
+                'user_points.level',
+                'user_points.current_streak_days',
+                'users.name',
+            ]);
+        $myRank = null;
+        if (auth()->check()) {
+            $myTotal = (int) ($myPoints->total_points ?? 0);
+            $myRank = 1 + (int) \App\Models\UserPoints::query()
+                ->join('users', 'users.id', '=', 'user_points.user_id')
+                ->where('users.is_active', true)
+                ->where(function ($q) use ($myTotal) {
+                    $q->where('user_points.total_points', '>', $myTotal);
+                })
+                ->count();
+        }
+
+        // MVP agentes da semana — top 3 por actividade nos últimos 7 dias
+        $weekAgo = now()->subDays(7);
+        $mvpAgents = \App\Models\RewardEvent::query()
+            ->selectRaw('agent_key, COUNT(*) as chats, SUM(points) as pts')
+            ->whereNotNull('agent_key')
+            ->where('event_type', \App\Models\RewardEvent::TYPE_AGENT_CHAT)
+            ->where('created_at', '>=', $weekAgo)
+            ->groupBy('agent_key')
+            ->orderByDesc('chats')
+            ->limit(3)
+            ->get();
+        $agentMeta = \App\Models\AgentShare::agentMeta();
+    } catch (\Throwable $e) {
+        $leaderboard = collect();
+        $myRank = null;
+        $mvpAgents = collect();
+        $agentMeta = [];
+    }
+@endphp
+
+@if($leaderboard->count() > 0 || $mvpAgents->count() > 0)
+<div class="recent-wrap">
+    <div class="recent-header">
+        <span class="recent-title">🥇 Ranking & MVP da semana</span>
+        @if($myRank)
+            <span class="recent-view-all" style="pointer-events:none;">
+                Estás em <strong style="color:#fbbf24">#{{ $myRank }}</strong>
+            </span>
+        @endif
+    </div>
+    <div class="recent-strip" style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;">
+
+        {{-- Leaderboard top 10 --}}
+        @if($leaderboard->count() > 0)
+        <div style="flex:1;min-width:320px;background:#111;border:1px solid #1e1e1e;border-radius:12px;padding:14px 18px;">
+            <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Top 10 ClawYard</div>
+            @foreach($leaderboard as $i => $row)
+                @php
+                    $isMe = $row->user_id === auth()->id();
+                    $medal = ['🥇','🥈','🥉'][$i] ?? ($i + 1) . '.';
+                @endphp
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #1e1e1e;font-size:12px;{{ $isMe ? 'background:rgba(251,191,36,0.08);border-radius:6px;padding-left:6px;padding-right:6px;' : '' }}">
+                    <span style="display:flex;gap:8px;align-items:center;min-width:0;">
+                        <span style="min-width:24px;text-align:center;">{{ $medal }}</span>
+                        <span style="color:{{ $isMe ? '#fbbf24' : '#bcd' }};font-weight:{{ $isMe ? 'bold' : 'normal' }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            {{ \Illuminate\Support\Str::limit($row->name, 22) }}{{ $isMe ? ' (tu)' : '' }}
                         </span>
                     </span>
+                    <span style="display:flex;gap:10px;align-items:center;">
+                        @if($row->current_streak_days >= 3)
+                            <span style="color:#f93;font-size:10px;">🔥{{ $row->current_streak_days }}d</span>
+                        @endif
+                        <span style="color:#7c3;font-family:monospace;font-weight:bold;">{{ number_format($row->total_points) }}</span>
+                    </span>
                 </div>
+            @endforeach
+        </div>
+        @endif
+
+        {{-- MVP agentes da semana --}}
+        @if($mvpAgents->count() > 0)
+        <div style="flex:1;min-width:300px;background:linear-gradient(135deg,#0f1a2a 0%,#1a0f2a 100%);border:1px solid #2a3a4a;border-radius:12px;padding:14px 18px;">
+            <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">🏆 Agentes MVP — últimos 7 dias</div>
+            @foreach($mvpAgents as $i => $row)
+                @php
+                    $meta = $agentMeta[$row->agent_key] ?? ['name' => $row->agent_key, 'emoji' => '🤖', 'photo' => null, 'color' => '#76b900'];
+                    $medal = ['🥇','🥈','🥉'][$i] ?? '🤖';
+                @endphp
+                <a href="/chat?agent={{ $row->agent_key }}"
+                   style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #1e1e1e;font-size:13px;text-decoration:none;">
+                    <span style="display:flex;gap:10px;align-items:center;min-width:0;">
+                        <span style="font-size:18px;">{{ $medal }}</span>
+                        @if(!empty($meta['photo']))
+                            <img src="{{ $meta['photo'] }}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1.5px solid {{ $meta['color'] }};">
+                        @else
+                            <span style="width:28px;height:28px;border-radius:50%;background:{{ $meta['color'] }}22;border:1.5px solid {{ $meta['color'] }};display:flex;align-items:center;justify-content:center;">{{ $meta['emoji'] ?? '🤖' }}</span>
+                        @endif
+                        <span style="color:#dde;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ \Illuminate\Support\Str::limit($meta['name'] ?? $row->agent_key, 22) }}</span>
+                    </span>
+                    <span style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+                        <span style="color:#7c3;font-family:monospace;font-weight:bold;font-size:12px;">{{ $row->chats }} chats</span>
+                        <span style="color:#9ab;font-size:10px;">{{ number_format($row->pts) }} pts gerados</span>
+                    </span>
+                </a>
             @endforeach
         </div>
         @endif

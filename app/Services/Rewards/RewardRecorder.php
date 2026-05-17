@@ -49,10 +49,51 @@ class RewardRecorder
      * @var array<string, int>
      */
     public const DAILY_CAPS = [
-        RewardEvent::TYPE_AGENT_CHAT      => 10,
+        RewardEvent::TYPE_AGENT_CHAT      => 20,  // 2026-05-15 bump: 10→20 — operadores não sentiam progresso
         RewardEvent::TYPE_LEAD_REVIEWED   => 5,
         RewardEvent::TYPE_AGENT_THUMBS_UP => 20,
     ];
+
+    /**
+     * Pontos base por chat com cada agente. Agentes "difíceis" (que exigem
+     * conhecimento de domínio + integrações reais) valem mais para premiar
+     * a sua utilização. Cai de volta a TYPE_AGENT_CHAT default (3) quando
+     * o agente não está mapeado.
+     *
+     * 2026-05-15: introduzido para tornar o progresso mais visível e
+     * incentivar a utilização de agentes especializados que estavam a ser
+     * sub-utilizados.
+     *
+     * @var array<string, int>
+     */
+    public const CHAT_POINTS_BY_AGENT = [
+        // Agentes "premium" — domínio técnico forte + integração real (SAP/BD/APIs externas)
+        'sap'       => 5,
+        'finance'   => 5,
+        'patent'    => 5,
+        'acingov'   => 5,  // contratos públicos / EU funding
+        'hr'        => 5,
+        // Agentes padrão — chat útil mas sem integração crítica
+        'sales'     => 3,
+        'marketing' => 3,
+        'support'   => 3,
+        'research'  => 3,
+        'engineer'  => 3,
+        'energy'    => 3,
+        'briefing'  => 3,
+        'email'     => 3,
+        'aria'      => 3,
+        'quantum'   => 3,
+        'document'  => 3,
+        // Fallback / catch-all
+        'claude'    => 2,
+        'auto'      => 2,
+    ];
+
+    public static function chatPointsFor(string $agentKey): int
+    {
+        return self::CHAT_POINTS_BY_AGENT[$agentKey] ?? RewardEvent::pointsFor(RewardEvent::TYPE_AGENT_CHAT);
+    }
 
     /**
      * Record a reward event. Returns the persisted RewardEvent on

@@ -1967,6 +1967,114 @@ function setAgentDone(agentName) {
     // Keep .active if this is still the selected agent
 }
 
+// ═══════════════════════════════
+//  REWARD DELTA — level-up + badge animation
+// ═══════════════════════════════
+// Chamado em cada resposta de /api/chat com o payload evt.reward.
+// Discreto quando só ganhou pontos (subtitle no model badge).
+// Festivo quando subiu de nível ou ganhou badge novo (overlay + confetti).
+function showRewardDelta(r) {
+    if (!r) return;
+
+    // 1. Sempre — pisca "+N pts" no model badge durante 2s.
+    if (r.points_earned > 0) {
+        const badge = document.getElementById('model-badge');
+        if (badge) {
+            const original = badge.textContent;
+            badge.textContent = `+${r.points_earned} pts · ${r.total_points || ''} total`;
+            badge.style.cssText = (badge.style.cssText || '') + ';color:#76b900;font-weight:bold;transition:color 0.3s;';
+            setTimeout(() => {
+                badge.textContent = original;
+                badge.style.color = '';
+                badge.style.fontWeight = '';
+            }, 2200);
+        }
+    }
+
+    // 2. Level-up — overlay festivo + som curto.
+    if (r.level_up) {
+        playLevelUpOverlay(r.new_level, r.new_level_name);
+    }
+
+    // 3. Badges novos — toast por cada um.
+    if (Array.isArray(r.new_badges)) {
+        r.new_badges.forEach((badgeKey, idx) => {
+            setTimeout(() => playBadgeToast(badgeKey), idx * 700);
+        });
+    }
+}
+
+function playLevelUpOverlay(level, levelName) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;
+        background:radial-gradient(ellipse at center,rgba(118,185,0,0.18) 0%,rgba(0,0,0,0.65) 70%);
+        backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+        animation:cylvl-in 0.3s ease-out;pointer-events:none;
+    `;
+    overlay.innerHTML = `
+        <div style="text-align:center;animation:cylvl-pop 0.6s cubic-bezier(0.34,1.56,0.64,1);">
+            <div style="font-size:96px;line-height:1;margin-bottom:16px;animation:cylvl-spin 1.2s ease-in-out;">🏆</div>
+            <div style="font-size:14px;color:#76b900;text-transform:uppercase;letter-spacing:4px;font-weight:bold;margin-bottom:6px;">Subiste de Nível</div>
+            <div style="font-size:56px;font-weight:bold;color:#fff;text-shadow:0 0 24px rgba(118,185,0,0.7);line-height:1;">Nível ${level}</div>
+            <div style="font-size:24px;color:#9cf;margin-top:8px;">${esc(levelName || '')}</div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    // CSS keyframes inline (avoid touching stylesheets)
+    if (!document.getElementById('cylvl-keyframes')) {
+        const s = document.createElement('style');
+        s.id = 'cylvl-keyframes';
+        s.textContent = `
+            @keyframes cylvl-in   { from { opacity: 0; } to { opacity: 1; } }
+            @keyframes cylvl-out  { from { opacity: 1; } to { opacity: 0; } }
+            @keyframes cylvl-pop  { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+            @keyframes cylvl-spin { 0% { transform: rotate(-15deg) scale(0.8); } 50% { transform: rotate(15deg) scale(1.1); } 100% { transform: rotate(0) scale(1); } }
+        `;
+        document.head.appendChild(s);
+    }
+    // Som curto via WebAudio (sem ficheiros externos)
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator(); const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'triangle'; o.frequency.setValueAtTime(523, ctx.currentTime); // C5
+        o.frequency.exponentialRampToValueAtTime(1047, ctx.currentTime + 0.18); // C6
+        g.gain.setValueAtTime(0.25, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        o.start(); o.stop(ctx.currentTime + 0.45);
+    } catch (_) { /* silent */ }
+
+    // Dismiss after 2.6s
+    setTimeout(() => {
+        overlay.style.animation = 'cylvl-out 0.35s ease-in forwards';
+        setTimeout(() => overlay.remove(), 360);
+    }, 2600);
+}
+
+function playBadgeToast(badgeKey) {
+    if (!window.cyToast) return;
+    // Pretty name por key — mantém-se em sync com BadgeEvaluator no server.
+    const names = {
+        FIRST_CHAT: '💬 Primeira Conversa',
+        FIRST_WIN: '🏆 Primeira Vitória',
+        POLYGLOT: '🌍 Poliglota (10 agentes)',
+        FRIEND: '🤝 Amigo dos Agentes',
+        STREAK_3: '🔥 Streak de 3 dias',
+        STREAK_7: '⚡ Streak de 7 dias',
+        STREAK_30: '👑 Streak de 30 dias',
+        QUALIFIER: '🎯 Qualificador (10 leads)',
+        IMPORTER: '📥 Importador (5 concursos)',
+    };
+    const pretty = names[badgeKey] || ('🏅 ' + badgeKey);
+    window.cyToast({
+        title: 'Badge desbloqueado!',
+        body:  pretty,
+        tone:  'success',
+        duration: 4500,
+    });
+}
+
 // Sidebar agent click → switch agent
 document.querySelectorAll('.agent-grid-item').forEach(el => {
     el.addEventListener('click', () => {
@@ -4307,6 +4415,9 @@ async function sendMessage() {
                 if (evt.agent_log) {
                     evt.agent_log.forEach(l => logActivity(l.icon, l.text, 'done'));
                 }
+
+                // 2026-05-15: reward delta — anima level-up / badge raro
+                if (evt.reward) showRewardDelta(evt.reward);
 
                 // Show agent name only — never the raw model identifier
                 modelBadge.textContent = AGENT_NAMES[agentKey] || AGENT_NAMES[evt.agent] || 'PartYard AI';

@@ -36,7 +36,7 @@ class RewardEvent extends Model
     public const TYPE_LEAD_QUALIFIED    = 'lead_qualified';      // 10 pts — moved status to confident
     public const TYPE_LEAD_CONTACTED    = 'lead_contacted';      // 5 pts — marked "contactado"
     public const TYPE_LEAD_WON          = 'lead_won';            // 50 pts — closed a deal
-    public const TYPE_AGENT_CHAT        = 'agent_chat';          // 1 pt — used an agent (cap 10/day)
+    public const TYPE_AGENT_CHAT        = 'agent_chat';          // 3 pt fallback (cap 20/dia). Agentes premium override em RewardRecorder::CHAT_POINTS_BY_AGENT
     public const TYPE_AGENT_THUMBS_UP   = 'agent_thumbs_up';     // 2 pts (user) + agent metric
     public const TYPE_AGENT_THUMBS_DOWN = 'agent_thumbs_down';   // 1 pt (user, for honest signal) + agent metric
     public const TYPE_AGENT_SHARE       = 'agent_share';         // 3 pts — shared a conversation
@@ -58,7 +58,7 @@ class RewardEvent extends Model
         self::TYPE_LEAD_QUALIFIED    => 10,
         self::TYPE_LEAD_CONTACTED    => 5,
         self::TYPE_LEAD_WON          => 50,
-        self::TYPE_AGENT_CHAT        => 1,
+        self::TYPE_AGENT_CHAT        => 3,  // 2026-05-15 bump: 1→3 default. Premium agentes ainda mais (ver RewardRecorder::CHAT_POINTS_BY_AGENT)
         self::TYPE_AGENT_THUMBS_UP   => 2,
         self::TYPE_AGENT_THUMBS_DOWN => 1,
         self::TYPE_AGENT_SHARE       => 3,
