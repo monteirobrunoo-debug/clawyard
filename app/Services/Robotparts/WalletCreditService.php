@@ -4,6 +4,7 @@ namespace App\Services\Robotparts;
 
 use App\Models\AgentMetric;
 use App\Models\AgentWallet;
+use App\Models\RewardEvent;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -36,12 +37,21 @@ class WalletCreditService
      *
      * Keys MUST match the names used in last_credit_basis snapshots
      * so historical wallets stay backwards-compatible if rates change.
+     *
+     * 2026-05-17: adicionado agent_chat = $0.02. Antes só leads/signals/thumbs
+     * creditavam, o que deixava agentes com muito uso conversacional (Marco
+     * Sales, Ana Monteiro Marketing) com wallets estagnados durante semanas.
+     * $0.02 × ~16 chats/sem = $0.32/sem por agente popular → tempo realista
+     * para acumular budget de uma peça PAM8403 ($4) em ~6 semanas.
+     * Inflação controlada: agentes pouco usados (que não geram chats) não
+     * acumulam só por existirem.
      */
     public const RATES = [
         'leads_won'         => 0.50,
         'signals_processed' => 0.05,
         'thumbs_up'         => 0.10,
         'thumbs_down'       => -0.05,
+        'agent_chat'        => 0.02,
     ];
 
     /**
@@ -88,16 +98,30 @@ class WalletCreditService
      * Credit ONE agent based on the delta since their last_credit_basis
      * snapshot. Returns the USD amount credited (can be 0 or negative
      * — though negative is clamped to 0 by AgentWallet::adjust()).
+     *
+     * 2026-05-17: agent_chat count vem do reward_events (não do
+     * agent_metrics, que só recolhe sinais swarm). Contamos lifetime
+     * agent_chat para este agente — o delta cálculo faz o resto.
      */
     private function creditOne(AgentMetric $metric): float
     {
         $wallet = AgentWallet::forAgent($metric->agent_key);
+
+        // Lifetime count de agent_chat para este agente (RewardEvent table).
+        // É lifetime (não 7d window) para casar com a semântica dos outros
+        // counters em $current — todos comparam against o snapshot em
+        // last_credit_basis, não janelas relativas.
+        $chatLifetime = (int) RewardEvent::query()
+            ->where('agent_key', $metric->agent_key)
+            ->where('event_type', RewardEvent::TYPE_AGENT_CHAT)
+            ->count();
 
         $current = [
             'leads_won'         => (int) $metric->leads_won,
             'signals_processed' => (int) $metric->signals_processed,
             'thumbs_up'         => (int) $metric->thumbs_up,
             'thumbs_down'       => (int) $metric->thumbs_down,
+            'agent_chat'        => $chatLifetime,
         ];
         $previous = (array) ($wallet->last_credit_basis ?? []);
 
