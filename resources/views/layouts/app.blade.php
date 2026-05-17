@@ -55,7 +55,12 @@
         @include('partials.toast-system')
         @include('partials.view-transitions')
         @include('partials.cheat-sheet')
-        @include('partials.global-dropzone')
+        {{-- global-dropzone removido propositadamente: o overlay capturava QUALQUER
+             drag em QUALQUER página e redirecionava para /hp-history/upload, mesmo
+             quando o utilizador queria anexar ao chat de um agente. Substituído
+             por dropzones explícitas (ver dashboard.blade.php → secção "Base de
+             Conhecimento"). Para anexar ao chat o handler já existe em
+             welcome.blade.php → fileInputChangeHandler. --}}
         @include('partials.presence')
         @include('partials.activity-meter')
     </body>

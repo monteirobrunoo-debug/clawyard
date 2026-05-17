@@ -1061,6 +1061,152 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 </div>
 @endif
 
+{{-- ═══════════════════════════════════════════════════════════════════════
+     BASE DE CONHECIMENTO — drop card scoped
+     Substitui o antigo global-dropzone que capturava QUALQUER drag.
+     Agora o utilizador só envia para a base de PDFs (hp-history) quando
+     larga o ficheiro SOBRE este card. Em todos os outros lados o drag
+     vai para o handler local (chat de agente / tender / fornecedor).
+     ═══════════════════════════════════════════════════════════════════════ --}}
+<div class="recent-wrap">
+    <div class="recent-header">
+        <span class="recent-title">📚 Base de Conhecimento</span>
+        <a href="{{ route('hp_history.upload') }}" class="recent-view-all">gerir documentos →</a>
+    </div>
+    <div id="cy-kb-dropcard"
+         class="recent-strip"
+         style="display:flex;gap:12px;align-items:stretch;flex-wrap:wrap;">
+        <div class="recent-card cy-kb-drop"
+             style="--card-color:#76b900;flex:1;min-height:96px;display:flex;align-items:center;gap:14px;cursor:pointer;border-style:dashed;border-width:2px;transition:all 0.18s ease;"
+             role="button" tabindex="0"
+             aria-label="Arrastar PDF para a Base de Conhecimento">
+            <div class="recent-avatar" style="background:rgba(118,185,0,0.12);border-color:rgba(118,185,0,0.45);font-size:22px;">📥</div>
+            <div class="recent-body">
+                <div class="recent-agent-name" id="cy-kb-droptitle">Arrasta PDF / TXT / MD para aqui</div>
+                <div class="recent-meta" id="cy-kb-dropsub">…ou clica para escolher ficheiro · até 16 MB</div>
+            </div>
+            <input type="file" id="cy-kb-input" accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown" style="display:none;" multiple>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Active state when a file is dragged over the card. */
+    .cy-kb-drop.is-drag-over {
+        border-color: #76b900 !important;
+        background: rgba(118,185,0,0.10) !important;
+        box-shadow: 0 0 0 4px rgba(118,185,0,0.25), 0 8px 32px rgba(118,185,0,0.18) !important;
+        transform: translateY(-2px);
+    }
+    .cy-kb-drop.is-uploading { opacity: 0.7; pointer-events: none; }
+</style>
+
+<script>
+(function () {
+    const card  = document.querySelector('.cy-kb-drop');
+    const input = document.getElementById('cy-kb-input');
+    const title = document.getElementById('cy-kb-droptitle');
+    const sub   = document.getElementById('cy-kb-dropsub');
+    if (!card || !input) return;
+
+    // Click anywhere on the card opens the file picker (parity with the
+    // hp-history upload UI, just localised here).
+    card.addEventListener('click', () => input.click());
+    card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+    });
+
+    function isFileDrag(e) {
+        const types = Array.from(e.dataTransfer?.types || []);
+        return types.includes('Files');
+    }
+
+    // Only listen on the card itself — no global capture. This is the
+    // single biggest win vs. the old global-dropzone.
+    card.addEventListener('dragenter', (e) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        card.classList.add('is-drag-over');
+    });
+    card.addEventListener('dragover', (e) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        e.dataTransfer.dropEffect = 'copy';
+    });
+    card.addEventListener('dragleave', (e) => {
+        if (!isFileDrag(e)) return;
+        // Only deactivate if leaving the card itself, not a child.
+        if (e.target === card || !card.contains(e.relatedTarget)) {
+            card.classList.remove('is-drag-over');
+        }
+    });
+    card.addEventListener('drop', (e) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault(); e.stopPropagation();
+        card.classList.remove('is-drag-over');
+        const files = Array.from(e.dataTransfer.files || [])
+            .filter(f => /\.(pdf|txt|md)$/i.test(f.name));
+        if (!files.length) {
+            window.cyToast && window.cyToast({
+                title: 'Tipo de ficheiro não suportado',
+                body:  'A Base de Conhecimento aceita PDF, TXT ou MD.',
+                tone:  'warn',
+            });
+            return;
+        }
+        uploadFiles(files);
+    });
+    input.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length) uploadFiles(files);
+    });
+
+    async function uploadFiles(files) {
+        // Hp-history aceita até 10 ficheiros num único POST e exige campo
+        // `files[]`. Mandar tudo num batch é mais barato (uma chamada HMAC
+        // ao serviço remoto vs. N) e o utilizador vê uma barra de progresso
+        // só. Se for >10, faz upload em lotes.
+        card.classList.add('is-uploading');
+        const total = files.length;
+        title.textContent = `A enviar ${total} ficheiro(s)…`;
+        sub.textContent   = '';
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const BATCH = 10;
+        let ok = 0, fail = 0;
+
+        for (let i = 0; i < files.length; i += BATCH) {
+            const slice = files.slice(i, i + BATCH);
+            const fd = new FormData();
+            slice.forEach(f => fd.append('files[]', f, f.name));
+            try {
+                const r = await fetch('{{ route('hp_history.upload.store') }}', {
+                    method:  'POST',
+                    headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                    body:    fd,
+                });
+                if (r.ok || r.redirected) ok += slice.length;
+                else                       fail += slice.length;
+            } catch (_) { fail += slice.length; }
+        }
+
+        card.classList.remove('is-uploading');
+        title.textContent = 'Arrasta PDF / TXT / MD para aqui';
+        sub.textContent   = '…ou clica para escolher ficheiro · até 16 MB';
+
+        if (window.cyToast) {
+            if (ok && !fail) {
+                window.cyToast({ title: '✅ Ficheiro(s) na Base', body: `${ok} guardado(s) em hp-history.`, tone: 'success' });
+            } else if (ok && fail) {
+                window.cyToast({ title: '⚠️ Upload parcial', body: `${ok} ok · ${fail} falharam.`, tone: 'warn' });
+            } else {
+                window.cyToast({ title: '❌ Upload falhou', body: 'Verifica tamanho/formato e tenta novamente.', tone: 'error' });
+            }
+        }
+    }
+})();
+</script>
+
 @if(!empty($recentConversations) && $recentConversations->count() > 0)
 <div class="recent-wrap">
     <div class="recent-header">
@@ -1454,7 +1600,9 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 @include('partials.toast-system')
 @include('partials.view-transitions')
 @include('partials.cheat-sheet')
-@include('partials.global-dropzone')
+{{-- global-dropzone removido: substituído pela "Base de Conhecimento — drop card"
+     mais acima, que só activa quando o ficheiro é largado SOBRE o card próprio.
+     Drag em outros sítios do dashboard agora não é intercetado. --}}
 @include('partials.presence')
 @include('partials.activity-meter')
 

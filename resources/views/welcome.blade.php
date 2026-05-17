@@ -4959,7 +4959,9 @@ updateShareBtn();
 @include('partials.toast-system')
 @include('partials.view-transitions')
 @include('partials.cheat-sheet')
-@include('partials.global-dropzone')
+{{-- global-dropzone removido: o chat já tem o seu próprio overlay e handler
+     (#drop-overlay + fileInputChangeHandler). Drag em welcome anexa ao chat
+     do agente activo, não vai para hp-history. --}}
 @include('partials.presence')
 @include('partials.activity-meter')
 
