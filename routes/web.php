@@ -730,6 +730,9 @@ Route::middleware(['auth'])->group(function () {
         ->name('robot.research');
     Route::get('/parts/{order}/stl',  [\App\Http\Controllers\PartOrderController::class, 'downloadStl'])
         ->name('parts.stl');
+    // 2026-05-17 — re-corre pesquisa para ordens canceladas (manager+).
+    Route::post('/parts/{order}/retry', [\App\Http\Controllers\PartOrderController::class, 'retry'])
+        ->name('parts.retry');
 });
 
 // Schedules page — visible to all authenticated users

@@ -34,6 +34,32 @@ class PartSearchService
     ) {}
 
     /**
+     * Reabrir uma ordem cancelada e re-correr a pesquisa.
+     *
+     * Use case: operador vê no dashboard que uma ordem foi cancelada com
+     * "dispatch_failed" (Anthropic hiccup) e quer tentar de novo sem ter
+     * de esperar pelo próximo shop cycle semanal. Em vez de criar nova
+     * row, reseta a existente para STATUS_SEARCHING (preserva id, agent,
+     * search_query, history) e chama findAndPick() outra vez.
+     *
+     * Não-idempotente apenas no sentido de que cada chamada CONSOME 1
+     * call à Anthropic + 1 call à Tavily. Mas se a ordem já está em
+     * estado válido (purchased/stl_ready), devolve sem fazer nada.
+     */
+    public function retryCancelled(PartOrder $order): PartOrder
+    {
+        if ($order->status !== PartOrder::STATUS_CANCELLED) {
+            return $order;
+        }
+        // Reset apenas o necessário — name/description/cost ficam do
+        // último pick (caso tenha havido) para o utilizador ver o histórico.
+        $order->status = PartOrder::STATUS_SEARCHING;
+        $order->notes  = '[retry] ' . ($order->notes ?? '');
+        $order->save();
+        return $this->findAndPick($order);
+    }
+
+    /**
      * Run the search-and-pick pass for a single PartOrder.
      * Returns the same order with updated status. Idempotent: if the
      * order is not in 'searching' state, returns it as-is.
@@ -62,10 +88,20 @@ class PartSearchService
                 return $order;
             }
 
-            $picked = $this->askBuyerToPick($order, $searchText);
+            // askBuyerToPick agora devolve ['pick'=>..., 'reason'=>...].
+            // reason é populado quando pick é null para que o operador
+            // saiba se foi dispatch fail, parse fail ou no-fit deliberado.
+            $result = $this->askBuyerToPick($order, $searchText);
+            $picked = $result['pick'] ?? null;
             if ($picked === null) {
+                $reason = $result['reason'] ?? 'unknown';
                 $order->status = PartOrder::STATUS_CANCELLED;
-                $order->notes  = 'PartSearchService: buyer dispatch failed or picked nothing.';
+                $order->notes  = match ($reason) {
+                    'dispatch_failed' => 'PartSearchService: LLM call falhou (API timeout / rate-limit / 5xx). Retry com `parts:retry-cancelled` deve resolver.',
+                    'parse_failed'    => 'PartSearchService: resposta do agente buyer não foi JSON parseável. Retry pode resolver — modelo às vezes envolve em prosa.',
+                    'no_fit'          => 'PartSearchService: buyer concluiu que nenhuma peça nos resultados cabe no orçamento (cost_usd 0 / source_url vazio). Aguarda mais saldo no wallet ou ajusta persona.',
+                    default           => 'PartSearchService: buyer dispatch failed or picked nothing.',
+                };
                 $order->save();
                 return $order;
             }
@@ -126,7 +162,14 @@ class PartSearchService
 
     /**
      * Ask the buyer agent to read search results + pick 1.
-     * Returns null on dispatch failure or unparseable response.
+     *
+     * Returns an array with two keys:
+     *   - pick:   the JSON-decoded pick (array) OR null if no pick
+     *   - reason: when pick is null, one of:
+     *       'dispatch_failed' — Anthropic call returned !ok (API hiccup, 5xx, transport)
+     *       'parse_failed'    — text wasn't valid JSON / no { found
+     *       'no_fit'          — buyer deliberately signalled "nothing fits budget"
+     *                           (cost_usd<=0 OR source_url empty)
      *
      * Critical: the prompt is now budget-aware. Earlier versions let
      * the LLM pick whatever caught its eye in the search results, even
@@ -136,7 +179,7 @@ class PartSearchService
      * to pick within it; a hard guard at the call site catches anything
      * the LLM still slips through.
      */
-    private function askBuyerToPick(PartOrder $order, string $searchText): ?array
+    private function askBuyerToPick(PartOrder $order, string $searchText): array
     {
         $buyerMeta = AgentCatalog::find($order->agent_key);
         $name = $buyerMeta['name'] ?? $order->agent_key;
@@ -170,14 +213,20 @@ class PartSearchService
               . "Pick one within the \${$budgetStr} budget. JSON only.";
 
         $res = $this->dispatcher->dispatch($system, $user, maxTokens: 600);
-        if (!($res['ok'] ?? false)) return null;
+        if (!($res['ok'] ?? false)) {
+            return ['pick' => null, 'reason' => 'dispatch_failed'];
+        }
 
         $parsed = $this->parseJson((string) $res['text']);
-        if ($parsed === null) return null;
+        if ($parsed === null) {
+            return ['pick' => null, 'reason' => 'parse_failed'];
+        }
         // Reject zero-cost / empty-url picks — buyer signalled "no fit".
-        if (empty($parsed['source_url']) || (float) ($parsed['cost_usd'] ?? 0) <= 0) return null;
+        if (empty($parsed['source_url']) || (float) ($parsed['cost_usd'] ?? 0) <= 0) {
+            return ['pick' => null, 'reason' => 'no_fit'];
+        }
 
-        return $parsed;
+        return ['pick' => $parsed, 'reason' => 'ok'];
     }
 
     /** Tolerant JSON parse — same as elsewhere in the project. */

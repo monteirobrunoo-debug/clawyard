@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\PartOrder;
+use App\Services\Robotparts\PartSearchService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controllers\HasMiddleware;
 use Illuminate\Support\Facades\Storage;
@@ -12,12 +14,41 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * Read-only controller for the robot-parts marketplace. The agents do
  * the writing via crons; users only view + download.
+ *
+ * 2026-05-17: added retry() POST endpoint so cancelled orders can be
+ * relaunched from the UI without waiting for the next weekly shop cycle.
  */
 class PartOrderController extends Controller implements HasMiddleware
 {
     public static function middleware(): array
     {
         return ['auth'];
+    }
+
+    /**
+     * POST /parts/{order}/retry — re-corre a pesquisa para uma ordem
+     * cancelada. Apenas managers, e apenas em ordens em STATUS_CANCELLED.
+     *
+     * Devolve redirect para a página de origem com flash de sucesso/erro.
+     */
+    public function retry(PartOrder $order, PartSearchService $svc): RedirectResponse
+    {
+        if (!auth()->user()?->isManager()) abort(403);
+
+        if ($order->status !== PartOrder::STATUS_CANCELLED) {
+            return back()->with('error', "Ordem #{$order->id} não está cancelada — está {$order->status}.");
+        }
+
+        $refreshed = $svc->retryCancelled($order);
+        $msg = match ($refreshed->status) {
+            PartOrder::STATUS_PURCHASED, PartOrder::STATUS_STL_READY
+                => "✅ Ordem #{$order->id} re-pesquisada e comprada por \${$refreshed->cost_usd}.",
+            PartOrder::STATUS_CANCELLED
+                => "⚠️ Ordem #{$order->id} re-pesquisada mas voltou a cancelar: {$refreshed->notes}",
+            default
+                => "Ordem #{$order->id} agora em estado {$refreshed->status}.",
+        };
+        return back()->with('status', $msg);
     }
 
     /**

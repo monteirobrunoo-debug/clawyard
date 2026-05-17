@@ -275,6 +275,40 @@
                                 📝 {{ $order->notes }}
                             </div>
                         @endif
+
+                        {{-- 2026-05-17: botão de retry para ordens canceladas.
+                             Apenas managers vêem (a rota fá-lo abort 403 caso
+                             contrário). Re-corre PartSearchService.findAndPick()
+                             síncronamente — em geral resolve em ~5s. --}}
+                        @if($order->status === \App\Models\PartOrder::STATUS_CANCELLED && auth()->user()?->isManager())
+                            <div class="px-4 py-3 bg-amber-50/40 border-t border-amber-100 flex items-center justify-between gap-3 flex-wrap">
+                                <div class="text-[11px] text-amber-800">
+                                    <strong>Como avançar:</strong>
+                                    @php
+                                        $isDispatch = str_contains((string) $order->notes, 'LLM call falhou');
+                                        $isParse    = str_contains((string) $order->notes, 'não foi JSON');
+                                        $isNoFit    = str_contains((string) $order->notes, 'nenhuma peça');
+                                    @endphp
+                                    @if($isDispatch)
+                                        Anthropic hiccup transitório — retry costuma resolver de imediato.
+                                    @elseif($isParse)
+                                        Resposta do agente saiu em prosa — retry com novo dado pode resolver.
+                                    @elseif($isNoFit)
+                                        Agente concluiu que nada cabia no budget — espera mais saldo no wallet ou afrouxa persona.
+                                    @else
+                                        Causa não identificada — retry para tentar de novo.
+                                    @endif
+                                </div>
+                                <form method="POST" action="{{ route('parts.retry', $order) }}" class="shrink-0">
+                                    @csrf
+                                    <button type="submit"
+                                            class="inline-flex items-center gap-1.5 rounded-md bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 text-[11px] font-semibold shadow-sm transition"
+                                            title="Reabrir esta ordem cancelada e re-correr PartSearchService">
+                                        🔄 Tentar de novo
+                                    </button>
+                                </form>
+                            </div>
+                        @endif
                     </article>
                 @endforeach
             </div>
