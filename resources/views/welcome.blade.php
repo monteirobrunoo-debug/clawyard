@@ -161,25 +161,79 @@
         #chat::-webkit-scrollbar-track { background:transparent; }
         #chat::-webkit-scrollbar-thumb { background:var(--border2); border-radius:4px; }
 
-        /* ── MESSAGES ── */
-        .message { display:flex; gap:10px; max-width:780px; width:100%; animation:fadeIn 0.2s ease; }
+        /* ── MESSAGES (2026-05-17 visual polish) ── */
+        .message { display:flex; gap:12px; max-width:820px; width:100%; animation:msgIn 0.32s cubic-bezier(0.34,1.4,0.64,1); }
         .message.user { align-self:flex-end; flex-direction:row-reverse; }
+        @keyframes msgIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 
-        .avatar { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; }
+        .avatar {
+            width:36px; height:36px; border-radius:50%;
+            display:flex; align-items:center; justify-content:center;
+            font-size:15px; font-weight:700; flex-shrink:0;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            transition: transform 0.15s, box-shadow 0.2s;
+        }
+        .message:hover .avatar { transform: scale(1.05); }
         .message.user .avatar { background:var(--green); color:#000; }
-        .message.ai .avatar { background:var(--bg3); color:var(--green); border:1px solid var(--border2); font-size:16px; }
+        .message.ai .avatar {
+            background: linear-gradient(135deg, color-mix(in srgb, var(--agent-color) 24%, var(--bg3)), var(--bg3));
+            color: var(--agent-color);
+            border: 1.5px solid color-mix(in srgb, var(--agent-color) 55%, transparent);
+            font-size:18px;
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--agent-color) 12%, transparent), 0 2px 6px rgba(0,0,0,0.25);
+        }
 
-        .msg-col { display:flex; flex-direction:column; gap:4px; max-width:calc(100% - 42px); }
-        .msg-meta { font-size:10px; color:var(--muted); display:flex; align-items:center; gap:6px; }
-        .msg-meta .agent-tag { background:var(--bg3); border:1px solid var(--border2); padding:1px 7px; border-radius:10px; color:#888; }
-        .msg-meta .agent-tag.active { border-color:var(--green); color:var(--green); }
+        .msg-col { display:flex; flex-direction:column; gap:5px; max-width:calc(100% - 48px); min-width: 0; }
+        .msg-meta {
+            font-size:10.5px; color:var(--muted);
+            display:flex; align-items:center; gap:8px;
+            text-transform: lowercase; letter-spacing: 0.2px;
+        }
+        .msg-meta .agent-tag {
+            background: linear-gradient(90deg, color-mix(in srgb, var(--agent-color) 14%, transparent), transparent);
+            border: 1px solid color-mix(in srgb, var(--agent-color) 25%, var(--border2));
+            padding: 2px 9px;
+            border-radius: 999px;
+            color: color-mix(in srgb, var(--agent-color) 90%, #ffffff);
+            font-weight: 600;
+            font-size: 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .msg-meta .agent-tag.active {
+            border-color: var(--agent-color);
+            color: var(--agent-color);
+            box-shadow: 0 0 8px color-mix(in srgb, var(--agent-color) 30%, transparent);
+        }
 
-        .bubble { padding:11px 15px; border-radius:14px; font-size:13.5px; line-height:1.65; white-space:pre-wrap; word-break:break-word; }
-        .message.user .bubble { background:var(--green); color:#000; border-bottom-right-radius:4px; font-weight:500; }
-        .message.ai .bubble { background:var(--bg3); color:var(--text); border-bottom-left-radius:4px; border:1px solid var(--border2); }
-
-        /* Agent color left border on AI bubbles */
-        .message.ai .bubble { border-left: 3px solid var(--agent-color); }
+        .bubble {
+            padding: 13px 17px;
+            border-radius: 14px;
+            font-size: 13.5px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+        .message.user .bubble {
+            background: linear-gradient(135deg, var(--green), color-mix(in srgb, var(--green) 75%, #ffffff));
+            color: #000;
+            border-bottom-right-radius: 4px;
+            font-weight: 500;
+            box-shadow: 0 2px 10px color-mix(in srgb, var(--green) 25%, transparent);
+        }
+        .message.ai .bubble {
+            background: var(--bg3);
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+            border: 1px solid var(--border2);
+            border-left: 3px solid var(--agent-color);
+        }
+        .message.ai .bubble:hover {
+            border-left-width: 4px;
+            transition: border-left-width 0.15s ease;
+        }
 
         /* Markdown-like styling inside bubble */
         .bubble strong { font-weight:700; }
@@ -347,22 +401,140 @@
         .email-batch-row .email-card { border-top-left-radius:0; }
         .email-batch-footer { margin-top:10px; padding:8px 12px; background:rgba(0,120,212,0.05); border:1px dashed rgba(0,120,212,0.3); border-radius:10px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
         .email-batch-hint { font-size:10px; color:var(--muted); }
-        /* ── TABLE CARD (Marco Sales) ── */
-        .table-card { background:var(--bg); border:1px solid #1a2e00; border-left:3px solid #3b82f6; border-radius:12px; overflow:hidden; margin-top:4px; }
-        .table-card-header { background:#0a1220; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #1a2e00; }
-        .table-card-header span { font-size:12px; font-weight:700; color:#3b82f6; }
-        .table-card-header small { font-size:11px; color:var(--muted); }
-        .table-wrap { overflow-x:auto; max-height:320px; overflow-y:auto; }
-        .table-card table { width:100%; border-collapse:collapse; font-size:12px; }
-        .table-card th { background:#0d1a30; color:#7ab3f0; padding:7px 12px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; position:sticky; top:0; }
-        .table-card td { padding:7px 12px; border-bottom:1px solid #111; color:#ccc; }
-        .table-card tr:hover td { background:#0a1220; }
-        .table-analysis { padding:10px 16px; font-size:12px; color:#aaa; border-top:1px solid #111; line-height:1.6; }
-        .table-recommendation { padding:8px 16px 10px; font-size:12px; color:var(--green); font-weight:600; }
-        .table-actions { padding:8px 16px; display:flex; gap:8px; background:#0a1220; border-top:1px solid #1a2e00; }
-        .table-excel-btn { background:#217346; color:#fff; border:none; padding:7px 16px; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:5px; }
-        .table-excel-btn:hover { background:#1a5c38; }
-        .table-copy-btn { background:none; color:var(--muted); border:1px solid var(--border2); padding:7px 14px; border-radius:8px; font-size:12px; cursor:pointer; }
+        /* ── TABLE CARD (2026-05-17 visual polish) ──
+           Usa --agent-color (definido em applyAgentColor) para o border + header,
+           zebra rows, hover suave, sombra subtil, animação de entrada. */
+        .table-card {
+            --tc-accent: var(--agent-color, #3b82f6);
+            background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.15) 100%), var(--bg);
+            border: 1px solid color-mix(in srgb, var(--tc-accent) 18%, transparent);
+            border-left: 4px solid var(--tc-accent);
+            border-radius: 14px;
+            overflow: hidden;
+            margin-top: 10px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.04) inset;
+            animation: tc-fade-in 0.32s ease-out;
+        }
+        @keyframes tc-fade-in {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .table-card-header {
+            background: linear-gradient(90deg, color-mix(in srgb, var(--tc-accent) 14%, transparent) 0%, transparent 70%);
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid color-mix(in srgb, var(--tc-accent) 18%, transparent);
+            gap: 12px;
+        }
+        .table-card-header span {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--tc-accent);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: 0.2px;
+        }
+        .table-card-header small {
+            font-size: 11px;
+            color: var(--muted);
+            background: rgba(255,255,255,0.04);
+            padding: 3px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border2);
+        }
+        .table-wrap { overflow-x: auto; max-height: 360px; overflow-y: auto; scroll-behavior: smooth; }
+        .table-card table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .table-card th {
+            background: rgba(0,0,0,0.35);
+            color: color-mix(in srgb, var(--tc-accent) 75%, #ffffff);
+            padding: 9px 14px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            border-bottom: 1px solid color-mix(in srgb, var(--tc-accent) 22%, #000);
+        }
+        .table-card td {
+            padding: 8px 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            color: #d7d7d7;
+            line-height: 1.4;
+        }
+        .table-card tbody tr:nth-child(even) td { background: rgba(255,255,255,0.018); }
+        .table-card tbody tr:hover td {
+            background: color-mix(in srgb, var(--tc-accent) 8%, transparent);
+            transition: background 0.12s ease;
+        }
+        .table-analysis {
+            padding: 11px 18px;
+            font-size: 12.5px;
+            color: #b8b8b8;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            line-height: 1.65;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+        }
+        .table-analysis::before { content: "🔍"; flex-shrink: 0; }
+        .table-analysis :first-child { /* avoid double icon if message already has one */ }
+        .table-recommendation {
+            padding: 9px 18px 12px;
+            font-size: 12.5px;
+            color: var(--green);
+            font-weight: 600;
+            display: flex;
+            gap: 8px;
+            align-items: flex-start;
+            line-height: 1.55;
+        }
+        .table-recommendation::before { content: "✅"; flex-shrink: 0; }
+        .table-actions {
+            padding: 10px 16px;
+            display: flex;
+            gap: 8px;
+            background: rgba(0,0,0,0.22);
+            border-top: 1px solid rgba(255,255,255,0.04);
+            flex-wrap: wrap;
+        }
+        .table-excel-btn {
+            background: #217346;
+            color: #fff;
+            border: 1px solid transparent;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: transform 0.1s, background 0.15s;
+        }
+        .table-excel-btn:hover { background: #1a5c38; transform: translateY(-1px); }
+        .table-copy-btn {
+            background: transparent;
+            color: var(--muted);
+            border: 1px solid var(--border2);
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .table-copy-btn:hover { border-color: var(--tc-accent); color: var(--tc-accent); }
+        /* Light theme adjustments */
+        :root[data-theme="light"] .table-card { background: #ffffff; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+        :root[data-theme="light"] .table-card td { color: #374151; border-bottom-color: rgba(0,0,0,0.06); }
+        :root[data-theme="light"] .table-card th { background: rgba(0,0,0,0.04); color: var(--tc-accent); }
+        :root[data-theme="light"] .table-card tbody tr:nth-child(even) td { background: rgba(0,0,0,0.025); }
+        :root[data-theme="light"] .table-actions { background: rgba(0,0,0,0.03); }
 
         /* ── KYBER CARDS ── */
         .kyber-card { background:var(--bg); border:1px solid #1a3300; border-left:3px solid #76b900; border-radius:12px; overflow:hidden; margin-top:4px; font-size:13px; }
@@ -2741,18 +2913,51 @@ function parseMultiTables(text) {
 // uma tabela perfeitamente formada mas com aspas curvas dentro de strings
 // caía em fallback markdown e o JSON inteiro aparecia raw no chat.
 function sanitizeLlmJson(s) {
-    return s
+    // Step 1 — global replacements que NÃO dependem de estado de string.
+    s = s
         // Smart double quotes → ASCII
         .replace(/[“”„‟″❝❞]/g, '"')
-        // Smart single quotes / apostrophes → ASCII (mas só fora de strings;
-        // dentro de strings o JSON aceita unicode, então só convertemos
-        // tipograficos genéricos para evitar quebrar conteúdo válido)
+        // Smart single quotes / apostrophes → ASCII
         .replace(/[‘’‚‛′❛❜]/g, '\'')
-        // Strip JS-style comments // ... e /* ... */
+        // Strip JS-style block + line comments
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/(?:^|[^:])\/\/.*$/gm, m => m[0] === ':' ? m : m.replace(/\/\/.*$/, ''))
         // Trailing comma antes de } ou ]
         .replace(/,(\s*[}\]])/g, '$1');
+
+    // Step 2 — CONTROL-CHAR ESCAPING dentro de strings JSON.
+    // Causa do bug (2026-05-17 — Ana Monteiro Marketing share #103): o LLM
+    // pode emitir __TABLE__{json} com NEWLINES e TABS LITERAIS dentro de
+    // valores string (especialmente em descrições compridas com quebras
+    // visuais). JSON.parse rejeita isso porque o standard exige `\n` `\r`
+    // `\t` escapados dentro de strings. Antes deste pass, o resultado era
+    // o token aparecer em raw no chat.
+    //
+    // O scanner abaixo percorre carácter a carácter, mantém um estado
+    // booleano `inString` que vira em " unescaped, e em modo string troca
+    // \n → \\n  \r → \\r  \t → \\t  outros control chars → \\uXXXX.
+    let out = '';
+    let inString = false;
+    let escape = false;
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (escape) { out += ch; escape = false; continue; }
+        if (ch === '\\') { out += ch; escape = true; continue; }
+        if (ch === '"')  { out += ch; inString = !inString; continue; }
+        if (inString) {
+            const code = ch.charCodeAt(0);
+            if (ch === '\n') { out += '\\n'; continue; }
+            if (ch === '\r') { out += '\\r'; continue; }
+            if (ch === '\t') { out += '\\t'; continue; }
+            // Outros control chars (0x00-0x1F) → unicode escape para satisfazer JSON.
+            if (code < 0x20) {
+                out += '\\u' + code.toString(16).padStart(4, '0');
+                continue;
+            }
+        }
+        out += ch;
+    }
+    return out;
 }
 
 function parseStructuredBlocks(text) {

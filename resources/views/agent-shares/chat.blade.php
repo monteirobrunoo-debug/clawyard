@@ -185,21 +185,115 @@
             .msg-actions button{font-size:10px;padding:3px 8px}
         }
 
-        /* Structured token cards (TABLE/CHART/PPT) — alinhado com welcome.blade */
-        .table-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin:10px 0;overflow:hidden}
-        .table-card-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:13px;color:var(--text);font-weight:600}
-        .table-card-header small{opacity:.6;font-size:11px;font-weight:400}
-        .table-wrap{overflow-x:auto;max-height:420px;overflow-y:auto}
-        .table-wrap table{width:100%;border-collapse:collapse;font-size:12px}
-        .table-wrap th,.table-wrap td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
-        .table-wrap th{background:var(--bg3);font-weight:600;position:sticky;top:0;z-index:1}
-        .table-wrap tr:hover td{background:var(--bg4)}
-        .table-analysis{padding:10px 14px;background:rgba(118,185,0,.08);color:var(--text-soft);font-size:12px;line-height:1.5;border-top:1px solid var(--border)}
-        .table-recommendation{padding:10px 14px;background:rgba(244,195,97,.08);color:#f4c361;font-size:12px;line-height:1.5;border-top:1px solid var(--border)}
-        .table-actions{display:flex;gap:6px;padding:10px 14px;background:var(--bg3);flex-wrap:wrap}
-        .table-excel-btn,.table-copy-btn{background:var(--agent-color);border:1px solid var(--agent-color);color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;filter:brightness(1)}
-        .table-excel-btn:hover,.table-copy-btn:hover{filter:brightness(1.15)}
-        :root[data-theme="light"] .table-actions{background:var(--bg3)}
+        /* Structured token cards (TABLE/CHART/PPT) — 2026-05-17 visual polish.
+           Usa --agent-color para destaque (passada via inline style do PHP). */
+        .table-card{
+            --tc-accent: var(--agent-color, #76b900);
+            background: var(--bg2);
+            border: 1px solid color-mix(in srgb, var(--tc-accent) 18%, transparent);
+            border-left: 4px solid var(--tc-accent);
+            border-radius: 14px;
+            margin: 12px 0;
+            overflow: hidden;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.03) inset;
+            animation: tc-fade-in 0.32s ease-out;
+        }
+        @keyframes tc-fade-in { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+        .table-card-header{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 18px;
+            background: linear-gradient(90deg, color-mix(in srgb, var(--tc-accent) 14%, transparent) 0%, transparent 70%);
+            border-bottom: 1px solid color-mix(in srgb, var(--tc-accent) 18%, transparent);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--tc-accent);
+            gap: 12px;
+        }
+        .table-card-header small{
+            opacity: .7;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-soft);
+            background: rgba(255,255,255,0.04);
+            padding: 3px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+        }
+        .table-wrap{ overflow-x: auto; max-height: 440px; overflow-y: auto; scroll-behavior: smooth; }
+        .table-wrap table{ width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .table-wrap th, .table-wrap td{
+            padding: 9px 14px;
+            text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            color: var(--text);
+            vertical-align: top;
+            line-height: 1.45;
+        }
+        .table-wrap th{
+            background: rgba(0,0,0,0.35);
+            color: color-mix(in srgb, var(--tc-accent) 75%, #ffffff);
+            font-weight: 700;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+            border-bottom: 1px solid color-mix(in srgb, var(--tc-accent) 22%, #000);
+        }
+        .table-wrap tbody tr:nth-child(even) td { background: rgba(255,255,255,0.018); }
+        .table-wrap tbody tr:hover td {
+            background: color-mix(in srgb, var(--tc-accent) 8%, transparent);
+            transition: background 0.12s ease;
+        }
+        .table-analysis{
+            padding: 11px 18px;
+            background: color-mix(in srgb, var(--tc-accent) 6%, transparent);
+            color: var(--text-soft);
+            font-size: 12.5px;
+            line-height: 1.6;
+            border-top: 1px solid rgba(255,255,255,0.04);
+        }
+        .table-recommendation{
+            padding: 10px 18px 12px;
+            background: rgba(244,195,97,.06);
+            color: #f4c361;
+            font-size: 12.5px;
+            line-height: 1.55;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            font-weight: 600;
+        }
+        .table-actions{
+            display: flex;
+            gap: 8px;
+            padding: 10px 16px;
+            background: rgba(0,0,0,0.22);
+            border-top: 1px solid rgba(255,255,255,0.04);
+            flex-wrap: wrap;
+        }
+        .table-excel-btn, .table-copy-btn{
+            background: var(--tc-accent);
+            border: 1px solid var(--tc-accent);
+            color: #fff;
+            padding: 7px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: transform 0.1s, filter 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .table-excel-btn:hover, .table-copy-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        /* Light theme overrides */
+        :root[data-theme="light"] .table-card { background: #ffffff; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+        :root[data-theme="light"] .table-card td { color: #374151; border-bottom-color: rgba(0,0,0,0.06); }
+        :root[data-theme="light"] .table-card th { background: rgba(0,0,0,0.04); color: var(--tc-accent); }
+        :root[data-theme="light"] .table-card tbody tr:nth-child(even) td { background: rgba(0,0,0,0.025); }
+        :root[data-theme="light"] .table-actions { background: rgba(0,0,0,0.03); }
     </style>
 </head>
 <body>
@@ -715,11 +809,34 @@ function escTok(s) {
 }
 
 function sanitizeLlmJson(s) {
-    return s
+    // Step 1 — substituições globais
+    s = s
         .replace(/[“”„‟″❝❞]/g, '"')
         .replace(/[‘’‚‛′❛❜]/g, '\'')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/,(\s*[}\]])/g, '$1');
+
+    // Step 2 — escape de control chars dentro de strings JSON.
+    // Fix 2026-05-17: o LLM pode emitir newlines literais dentro de
+    // valores compridos (descrições, analysis, recommendation) que
+    // JSON.parse rejeita. Sem este pass, o token __TABLE__ ficava em
+    // raw no chat da DLoren Wfit (share #103).
+    let out = '', inString = false, escape = false;
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (escape) { out += ch; escape = false; continue; }
+        if (ch === '\\') { out += ch; escape = true; continue; }
+        if (ch === '"')  { out += ch; inString = !inString; continue; }
+        if (inString) {
+            const code = ch.charCodeAt(0);
+            if (ch === '\n') { out += '\\n'; continue; }
+            if (ch === '\r') { out += '\\r'; continue; }
+            if (ch === '\t') { out += '\\t'; continue; }
+            if (code < 0x20) { out += '\\u' + code.toString(16).padStart(4,'0'); continue; }
+        }
+        out += ch;
+    }
+    return out;
 }
 
 function parseStructuredBlocks(text) {

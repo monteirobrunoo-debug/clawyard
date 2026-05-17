@@ -69,28 +69,84 @@
 
         .empty-msgs{text-align:center;padding:40px;color:#444;font-size:13px}
 
-        /* Structured token cards (TABLE/CHART/PPT) — match welcome.blade.php */
-        .table-card{background:#0f1115;border:1px solid #2a2f36;border-radius:10px;margin:10px 0;overflow:hidden}
-        .table-card-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#1c1f24;border-bottom:1px solid #2a2f36;font-size:13px;color:#e6e6e6}
-        .table-card-header small{opacity:.6;font-size:11px}
-        .table-wrap{overflow-x:auto;max-height:400px;overflow-y:auto}
-        .table-wrap table{width:100%;border-collapse:collapse;font-size:12px}
-        .table-wrap th,.table-wrap td{padding:8px 12px;text-align:left;border-bottom:1px solid #2a2f36;color:#e6e6e6}
-        .table-wrap th{background:#1c1f24;font-weight:600;position:sticky;top:0;z-index:1}
-        .table-wrap tr:hover td{background:#1a1d22}
-        .table-analysis{padding:10px 14px;background:#0a1a0f;color:#9ec5a8;font-size:12px;line-height:1.5;border-top:1px solid #2a2f36}
-        .table-recommendation{padding:10px 14px;background:#1a1408;color:#f4c361;font-size:12px;line-height:1.5;border-top:1px solid #2a2f36}
-        .table-actions{display:flex;gap:6px;padding:10px 14px;background:#1c1f24;flex-wrap:wrap}
-        .table-excel-btn,.table-copy-btn{background:#1e7a3d;border:1px solid #2c9a4f;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
-        .table-excel-btn:hover,.table-copy-btn:hover{filter:brightness(1.2)}
+        /* Structured token cards (TABLE/CHART/PPT) — 2026-05-17 visual polish.
+           Cor de destaque baseada na agent-color (passada inline via PHP, default verde). */
+        .table-card{
+            --tc-accent: var(--agent-color, #76b900);
+            background: #0f1115;
+            border: 1px solid color-mix(in srgb, var(--tc-accent) 18%, transparent);
+            border-left: 4px solid var(--tc-accent);
+            border-radius: 14px;
+            margin: 12px 0;
+            overflow: hidden;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.18);
+            animation: tc-fade-in 0.32s ease-out;
+        }
+        @keyframes tc-fade-in { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
+        .table-card-header{
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 12px 18px;
+            background: linear-gradient(90deg, color-mix(in srgb, var(--tc-accent) 14%, transparent) 0%, transparent 70%);
+            border-bottom: 1px solid color-mix(in srgb, var(--tc-accent) 18%, transparent);
+            font-size: 13px; font-weight: 700; color: var(--tc-accent); gap: 12px;
+        }
+        .table-card-header small{
+            opacity: .7; font-size: 11px; font-weight: 500; color: #aaa;
+            background: rgba(255,255,255,0.04); padding: 3px 10px;
+            border-radius: 999px; border: 1px solid #2a2f36;
+        }
+        .table-wrap{ overflow-x: auto; max-height: 440px; overflow-y: auto; }
+        .table-wrap table{ width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .table-wrap th, .table-wrap td{
+            padding: 9px 14px; text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            color: #e6e6e6; vertical-align: top; line-height: 1.45;
+        }
+        .table-wrap th{
+            background: rgba(0,0,0,0.35);
+            color: color-mix(in srgb, var(--tc-accent) 75%, #ffffff);
+            font-weight: 700; font-size: 11px; text-transform: uppercase;
+            letter-spacing: 0.6px; position: sticky; top: 0; z-index: 2;
+            border-bottom: 1px solid color-mix(in srgb, var(--tc-accent) 22%, #000);
+        }
+        .table-wrap tbody tr:nth-child(even) td { background: rgba(255,255,255,0.018); }
+        .table-wrap tbody tr:hover td {
+            background: color-mix(in srgb, var(--tc-accent) 8%, transparent);
+            transition: background 0.12s ease;
+        }
+        .table-analysis{
+            padding: 11px 18px;
+            background: color-mix(in srgb, var(--tc-accent) 6%, transparent);
+            color: #b8d1bf; font-size: 12.5px; line-height: 1.6;
+            border-top: 1px solid rgba(255,255,255,0.04);
+        }
+        .table-recommendation{
+            padding: 10px 18px 12px; background: rgba(244,195,97,.06);
+            color: #f4c361; font-size: 12.5px; line-height: 1.55;
+            border-top: 1px solid rgba(255,255,255,0.04); font-weight: 600;
+        }
+        .table-actions{
+            display: flex; gap: 8px; padding: 10px 16px;
+            background: rgba(0,0,0,0.22);
+            border-top: 1px solid rgba(255,255,255,0.04); flex-wrap: wrap;
+        }
+        .table-excel-btn, .table-copy-btn{
+            background: var(--tc-accent); border: 1px solid var(--tc-accent);
+            color: #fff; padding: 7px 14px; border-radius: 8px;
+            cursor: pointer; font-size: 12px; font-weight: 600;
+            transition: transform 0.1s, filter 0.15s;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .table-excel-btn:hover, .table-copy-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
 
-        :root[data-theme="light"] .table-card{background:#fff;border-color:#e5e7eb}
-        :root[data-theme="light"] .table-card-header{background:#f9fafb;border-bottom-color:#e5e7eb;color:#111}
+        :root[data-theme="light"] .table-card{background:#fff;border-color:color-mix(in srgb, var(--tc-accent) 18%, transparent);box-shadow:0 4px 14px rgba(0,0,0,0.06)}
+        :root[data-theme="light"] .table-card-header{color:var(--tc-accent)}
+        :root[data-theme="light"] .table-card-header small{background:rgba(0,0,0,0.04);color:#6b7280;border-color:#e5e7eb}
         :root[data-theme="light"] .table-wrap th,
-        :root[data-theme="light"] .table-wrap td{color:#111;border-bottom-color:#e5e7eb}
-        :root[data-theme="light"] .table-wrap th{background:#f3f4f6}
-        :root[data-theme="light"] .table-wrap tr:hover td{background:#f9fafb}
-        :root[data-theme="light"] .table-actions{background:#f9fafb}
+        :root[data-theme="light"] .table-wrap td{color:#374151;border-bottom-color:rgba(0,0,0,0.06)}
+        :root[data-theme="light"] .table-wrap th{background:rgba(0,0,0,0.04);color:var(--tc-accent)}
+        :root[data-theme="light"] .table-wrap tbody tr:nth-child(even) td{background:rgba(0,0,0,0.025)}
+        :root[data-theme="light"] .table-actions{background:rgba(0,0,0,0.03)}
 
         /* ── LIGHT THEME ── */
         :root[data-theme="light"] body{background:#f8fafc;color:#1f2937}
@@ -192,11 +248,28 @@ let _tableCardCounter = 0;
 // LLM JSON sanitizer — same as welcome.blade. Lida com smart quotes,
 // trailing commas e comentários ocasionais que JSON.parse rejeita.
 function sanitizeLlmJson(s) {
-    return s
+    s = s
         .replace(/[“”„‟″❝❞]/g, '"')
         .replace(/[‘’‚‛′❛❜]/g, '\'')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/,(\s*[}\]])/g, '$1');
+    // Escape control chars dentro de strings JSON (newline/tab/etc)
+    let out = '', inString = false, escape = false;
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (escape) { out += ch; escape = false; continue; }
+        if (ch === '\\') { out += ch; escape = true; continue; }
+        if (ch === '"')  { out += ch; inString = !inString; continue; }
+        if (inString) {
+            const code = ch.charCodeAt(0);
+            if (ch === '\n') { out += '\\n'; continue; }
+            if (ch === '\r') { out += '\\r'; continue; }
+            if (ch === '\t') { out += '\\t'; continue; }
+            if (code < 0x20) { out += '\\u' + code.toString(16).padStart(4,'0'); continue; }
+        }
+        out += ch;
+    }
+    return out;
 }
 
 function parseStructuredBlocks(text) {
