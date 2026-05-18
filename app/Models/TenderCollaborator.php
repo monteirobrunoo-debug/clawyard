@@ -242,6 +242,12 @@ class TenderCollaborator extends Model
         //    import of "Monica" must NOT resurrect that ghost row — it
         //    must hit the alias path on the active survivor.
         if ($exact = self::where('normalized_name', $norm)->where('is_active', true)->first()) {
+            // 2026-05-18: se a row já existir mas sem user_id, tentar
+            // back-fill via match com User::name (caso esse User tenha
+            // sido criado depois do collaborator). Pedido directo:
+            // "quando o supervisor importa, os nomes dos colaboradores
+            //  ficam automaticamente atribuídos aos users".
+            self::backfillUserIdByName($exact, $name);
             return $exact;
         }
 
@@ -250,6 +256,7 @@ class TenderCollaborator extends Model
         //    row, populated by the merge endpoint or an admin edit).
         //    Active-only for the same reason.
         if ($byAlias = self::findByAlias($norm)) {
+            self::backfillUserIdByName($byAlias, $name);
             return $byAlias;
         }
 
@@ -286,6 +293,7 @@ class TenderCollaborator extends Model
                 ],
             );
 
+            self::backfillUserIdByName($best, $name);
             return $best;
         }
 
@@ -300,11 +308,102 @@ class TenderCollaborator extends Model
             return null;
         }
 
+        // 2026-05-18: ao criar de raiz, já tentar resolver o User por nome.
+        // O atributo user_id é null se nenhum User bater certo — o admin
+        // pode atribuir depois manualmente em /tenders/collaborators.
+        $userId = self::matchUserIdByName($name);
+
         return self::create([
             'name'            => trim((string) $name),
             'normalized_name' => $norm,
+            'user_id'         => $userId,
             'is_active'       => true,
         ]);
+    }
+
+    /**
+     * Procura um User cujo `name` corresponde (normalizado) ao nome
+     * dado, e devolve o id. Caso contrário null.
+     *
+     * 2026-05-18: pedido directo "quando o supervisor importa, os nomes
+     * dos colaboradores com os concursos atribuídos ficam automaticamente
+     * atribuídos aos users". Resolução em 3 níveis:
+     *   1) Exact match (User.name normalizado == nome importado normalizado)
+     *   2) Primeiro nome match (single token) — útil para "Mónica" → "Mónica Pereira"
+     *   3) Last name match — útil para "Pereira" → "Mónica Pereira"
+     * Só faz link se houver UM resultado único — múltiplos matches deixam
+     * em null para evitar enganos (admin escolhe depois).
+     */
+    public static function matchUserIdByName(?string $name): ?int
+    {
+        $norm = self::normalize($name);
+        if ($norm === '' || $norm === '-') return null;
+
+        // Carrega todos os users activos uma vez — não há muitos.
+        $users = \App\Models\User::where('is_active', true)
+            ->select(['id', 'name'])
+            ->get();
+        if ($users->isEmpty()) return null;
+
+        $usersByNorm = $users->map(fn($u) => [
+            'id'    => $u->id,
+            'norm'  => self::normalize($u->name),
+            'parts' => array_filter(preg_split('/\s+/', self::normalize($u->name)) ?: []),
+        ]);
+
+        // Nível 1: exact full match
+        $exact = $usersByNorm->where('norm', $norm);
+        if ($exact->count() === 1) return $exact->first()['id'];
+
+        // Nível 2 e 3: token match (primeiro ou último nome)
+        $incomingParts = array_values(array_filter(preg_split('/\s+/', $norm) ?: []));
+        if (empty($incomingParts)) return null;
+
+        $first = $incomingParts[0];
+        $last  = end($incomingParts);
+
+        // Primeiro nome — match único entre os users
+        $byFirst = $usersByNorm->filter(fn($u) => !empty($u['parts']) && $u['parts'][array_key_first($u['parts'])] === $first);
+        if ($byFirst->count() === 1) return $byFirst->first()['id'];
+
+        // Último apelido — match único
+        if ($first !== $last) {
+            $byLast = $usersByNorm->filter(function ($u) use ($last) {
+                if (empty($u['parts'])) return false;
+                return end($u['parts']) === $last;
+            });
+            if ($byLast->count() === 1) return $byLast->first()['id'];
+        }
+
+        // Múltiplos matches ambíguos OU zero matches: deixa null
+        return null;
+    }
+
+    /**
+     * Helper interno para o findOrCreateByName: se um TenderCollaborator
+     * já existe sem user_id, tenta resolver via nome e gravar. Não
+     * sobrescreve user_id se já estiver definido.
+     */
+    private static function backfillUserIdByName(self $collab, ?string $incomingName): void
+    {
+        if (!empty($collab->user_id)) return;
+        // Tenta por nome incoming primeiro (mais específico), depois
+        // pelo nome do collab actual como fallback.
+        $userId = self::matchUserIdByName($incomingName) ?? self::matchUserIdByName($collab->name);
+        if ($userId === null) return;
+        try {
+            $collab->user_id = $userId;
+            $collab->save();
+            \Illuminate\Support\Facades\Log::info(
+                'TenderCollaborator: back-filled user_id by name match on import',
+                ['collab_id' => $collab->id, 'collab_name' => $collab->name, 'user_id' => $userId],
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                'TenderCollaborator: user_id backfill failed',
+                ['collab_id' => $collab->id, 'error' => $e->getMessage()],
+            );
+        }
     }
 
     /**
