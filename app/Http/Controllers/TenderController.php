@@ -1046,6 +1046,17 @@ class TenderController extends Controller
         }
 
         buildPayload:
+        // 2026-05-18: Information Source inferido do título do tender.
+        // Pedido directo: "Information source deveria escolher um tipo
+        // de categoria conforme o título". Códigos 100-120 mapeados em
+        // Tender::SAP_SOURCE_CATEGORIES (engine, hydraulic, lubricant,
+        // medical, IT, …). Fallback 106 OUTROS/Defense Miscellaneous.
+        //
+        // Status Oportunidade "Em aberto" já é aplicado automaticamente
+        // pela SapService::createOpportunity via discoverStatusOportunidadeField()
+        // — não precisa de ser passado aqui.
+        $informationSource = $tender->inferSapInformationSource();
+
         $payload = [
             'OpportunityName'     => mb_substr($tender->title, 0, 100),
             'Remarks'             => $remarks,
@@ -1054,6 +1065,7 @@ class TenderController extends Controller
             'ExpectedClosingDate' => $closingDate,
             'MaxLocalTotal'       => 1.0,   // placeholder mínimo (SAP requer >0); operador acerta depois
             'StageId'             => 1,     // Prospecção
+            'InformationSource'   => $informationSource,
         ];
 
         try {

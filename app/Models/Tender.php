@@ -216,6 +216,78 @@ class Tender extends Model
     }
 
     /**
+     * Categorias do campo "Information source" em SAP B1 OOPR.Source.
+     * Códigos 100-120 verificados na instância PartYard 2026-05-18.
+     * Adicionar novas categorias aqui se SAP B1 ganhar mais Sort codes.
+     *
+     * Cada entrada é [code => [list_of_keywords]]. O matcher pontua cada
+     * categoria pelo número de keywords distintos que aparecem no título
+     * do tender (case-insensitive, word boundary). Empate → menor code.
+     * 106 "OUTROS/Defense Miscellaneous" é o catch-all default.
+     *
+     * @var array<int, list<string>>
+     */
+    public const SAP_SOURCE_CATEGORIES = [
+        100 => ['engine', 'motor', 'vehicle', 'viatura', 'truck', 'camião', 'jeep', 'land rover', 'unimog'],
+        101 => ['electrical', 'eléctric', 'power', 'generator', 'gerador', 'energia', 'ups', 'transformer'],
+        102 => ['pump', 'bomba', 'separator', 'separador'],
+        103 => ['hydraulic', 'hidráulic', 'hidraulico', 'cilindro', 'cylinder'],
+        104 => ['repair', 'reparação', 'overhaul', 'mro', 'manutenção', 'maintenance'],
+        105 => ['shredder', 'destruidor', 'hsm', 'classified', 'classificad'],
+        107 => ['pneumatic', 'pneumático', 'pneumatico', 'compressor', 'ar comprimido'],
+        108 => ['battery', 'batteries', 'bateria', 'cell', 'lithium'],
+        109 => ['combat', 'outfit', 'apresto', 'uniform', 'farda', 'helmet', 'kevlar', 'vest', 'colete'],
+        110 => ['avionic', 'avionica', 'avionics', 'amplifier', 'amplificador', 'comunicaç', 'radio'],
+        111 => ['galley', 'kitchen', 'cozinha', 'oven', 'forno'],
+        112 => ['fire', 'incêndio', 'incendio', 'extinguish', 'fogo', 'sprinkler'],
+        113 => ['lubricant', 'lubrificante', 'óleo', 'oil', 'grease', 'massa lubrificante', 'mil-spec'],
+        114 => ['radar', 'c4isr', 'sonar', 'sensor'],
+        115 => ['container', 'shelter', 'mobile command'],
+        116 => ['marine chem', 'decontamin', 'descontamin', 'água', 'desinfect'],
+        117 => ['burner', 'queimador', 'heating', 'aquecimento', 'heater'],
+        118 => ['mechanical', 'mecânic', 'mecanic', 'weapon', 'arma', 'gun', 'rifle'],
+        119 => ['specialty mi', 'medic', 'cirúrgico', 'cirurgico', 'surgical', 'debrider', 'hospital'],
+        120 => ['it equip', 'software', 'licens', 'computador', 'laptop', 'server', 'servidor', 'network', 'rede', 'router', 'switch', 'firewall'],
+    ];
+
+    /** Catch-all default quando nenhuma categoria bate. */
+    public const SAP_SOURCE_DEFAULT = 106;   // OUTROS/Defense Miscellaneous
+
+    /**
+     * Infere o InformationSource code (100-120 ou SAP_SOURCE_DEFAULT)
+     * a partir do título do tender. Usado por createSapOpp() para
+     * pré-popular o campo "Information source" no SAP B1 — pedido
+     * directo 2026-05-18: "Information source deveria escolher um tipo
+     * de categoria conforme o título".
+     *
+     * Algoritmo: counts distinct-keyword hits per category, devolve a
+     * categoria com mais hits. Empate → menor code (mais "raiz").
+     * Zero hits → SAP_SOURCE_DEFAULT (106 OUTROS).
+     */
+    public function inferSapInformationSource(): int
+    {
+        $haystack = mb_strtolower($this->title ?? '');
+        if ($haystack === '') return self::SAP_SOURCE_DEFAULT;
+
+        $bestCode  = self::SAP_SOURCE_DEFAULT;
+        $bestScore = 0;
+
+        foreach (self::SAP_SOURCE_CATEGORIES as $code => $keywords) {
+            $score = 0;
+            foreach ($keywords as $kw) {
+                if (str_contains($haystack, mb_strtolower($kw))) {
+                    $score++;
+                }
+            }
+            if ($score > $bestScore || ($score === $bestScore && $code < $bestCode && $score > 0)) {
+                $bestScore = $score;
+                $bestCode  = $code;
+            }
+        }
+        return $bestScore > 0 ? $bestCode : self::SAP_SOURCE_DEFAULT;
+    }
+
+    /**
      * Devolve o nome canónico de BP para uma source — ou null se não há
      * mapeamento. NSPA/NATO/NCIA/SAM/UNGM/UNIDO têm; acingov/vortal/other
      * devolvem null e caem no fallback de pedir purchasing_org manual.
