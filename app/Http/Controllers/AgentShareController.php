@@ -915,6 +915,11 @@ HTML;
                 $portalSid = $this->sharePortalSessionId($share->portal_token);
                 if ($svc->portalCoversShare($share, $portalSid, $request)) {
                     $meta = AgentShare::agentMeta()[$share->agent_key] ?? ['name' => $share->agent_key, 'emoji' => '🤖', 'color' => '#76b900'];
+                    // 2026-05-18: emite cookie share_chat_{id} também
+                    // neste path (portal-cover) — sem isto, browsers
+                    // que entram via portal nunca ficavam com o cookie
+                    // e o histórico não persistia entre visitas.
+                    $this->chatSessionId($share);
                     return view('agent-shares.chat', [
                         'share'     => $share,
                         'meta'      => $meta,
