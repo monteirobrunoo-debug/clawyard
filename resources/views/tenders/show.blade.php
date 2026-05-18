@@ -182,11 +182,38 @@
                             }
                             $martaPrompt .= "\nQuando criares a oportunidade, devolve o ID SAP para eu actualizar este concurso.";
                         @endphp
-                        <a href="/chat?agent=crm&prompt={{ urlencode($martaPrompt) }}"
-                           class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500"
-                           title="Abre /chat com Marta CRM já com metadados + texto dos primeiros 4 anexos">
-                            🤖 Pedir à Marta para abrir SAP
-                        </a>
+                        {{-- 2026-05-18: dois caminhos para criar SAP Opp:
+                             (a) Botão directo → POST /create-sap-opp (manager+).
+                                 Cria a oportunidade IMEDIATAMENTE com base nos
+                                 dados do tender + 1ª linha de anexos no Remarks.
+                                 Auto-liga ao tender.sap_opportunity_number.
+                             (b) Link para /chat para o flow interactivo (toda
+                                 a gente, mais flexível mas requer Marta a
+                                 interpretar + utilizador a confirmar). --}}
+                        @if(empty($tender->sap_opportunity_number))
+                            @if(auth()->user()?->isManager() || auth()->user()?->can('tenders.create-sap-opp'))
+                            <form method="POST" action="{{ route('tenders.create-sap-opp', $tender) }}"
+                                  class="inline"
+                                  onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='⏳ A criar SAP Opp…';">
+                                @csrf
+                                <button type="submit"
+                                        class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500"
+                                        title="Cria DIRECTAMENTE a oportunidade SAP B1 com os dados do concurso + 1ª linha de anexos no Remarks. Auto-liga ao concurso.">
+                                    🤖 Abrir SAP Opp (directo)
+                                </button>
+                            </form>
+                            @endif
+                            <a href="/chat?agent=crm&prompt={{ urlencode($martaPrompt) }}"
+                               class="rounded-md border border-blue-300 bg-white text-blue-700 hover:bg-blue-50 px-3 py-1.5 text-sm font-semibold"
+                               title="Caminho alternativo: abre /chat com Marta CRM para conversar antes de criar (útil se queres editar campos antes).">
+                                💬 ou via chat com Marta
+                            </a>
+                        @else
+                            <span class="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-1.5 text-sm font-semibold inline-flex items-center gap-1.5"
+                                  title="Concurso já ligado a SAP Opp #{{ $tender->sap_opportunity_number }}. Para criar uma nova, primeiro limpa o campo Nº Oportunidade SAP nas notas.">
+                                ✓ SAP Opp #{{ $tender->sap_opportunity_number }}
+                            </span>
+                        @endif
                         {{-- 2026-05-18: botão dedicado para resumo automático server-side.
                              Mais rápido que o flow de chat — processa TODOS os anexos sem
                              cap de URL, gera resumo ≤200 chars, mete em notas + SAP. --}}

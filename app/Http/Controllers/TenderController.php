@@ -769,6 +769,108 @@ class TenderController extends Controller
             ->with('status', "✓ Resumo da Marta gravado nas notas · {$sapStatus}");
     }
 
+    /**
+     * POST /tenders/{tender}/create-sap-opp — 2026-05-18.
+     *
+     * Cria DIRECTAMENTE a SAP Opportunity para o concurso, sem passar
+     * por chat. O botão antigo "Pedir à Marta para abrir SAP" abria o
+     * /chat com prompt pré-populado mas dependia de a LLM emitir o JSON
+     * pending correcto + utilizador confirmar — o que falhava muitas vezes.
+     *
+     * Este endpoint:
+     *   1. Verifica que o tender não tem SAP Opp ainda (se tem, devolve a actual)
+     *   2. Constrói payload com tudo o que conseguimos derivar:
+     *        OpportunityName = título (capped 100)
+     *        Remarks        = título + ref + breve excerto de anexos
+     *        CardName       = purchasing_org (SAP resolve para CardCode)
+     *        ExpectedClosingDate = deadline_at (ou +30 dias se sem deadline)
+     *        MaxLocalTotal  = 1.0 (placeholder — operador acerta no SAP depois)
+     *   3. Chama SapService::createOpportunity() directamente
+     *   4. Em sucesso: actualiza tender.sap_opportunity_number + sap_stage_no
+     *   5. Em falha: flash error com detail
+     */
+    public function createSapOpp(Tender $tender, SapService $sap)
+    {
+        $user = Auth::user();
+        $this->enforceVisibility($tender, $user);
+
+        if (!$user->isManager() && !$user->can('tenders.create-sap-opp')) {
+            // Visibility já garantiu autenticação; falta gate de manager+.
+            // Operadores regulares vêem o botão se forem colaboradores, mas
+            // só managers podem disparar a criação SAP que mexe em SAP B1.
+            abort(403, 'Apenas managers podem abrir oportunidades SAP.');
+        }
+
+        if ($tender->is_confidential) {
+            return back()->with('error', 'Concurso confidencial — não envia dados para SAP B1.');
+        }
+
+        // Idempotência: se já existe SAP Opp ligada, não cria nova.
+        if (!empty($tender->sap_opportunity_number)) {
+            return back()->with('status', "Concurso já tem SAP Opp #{$tender->sap_opportunity_number}. Para re-sincronizar, edita as Notas e guarda.");
+        }
+
+        if (!config('services.sap.username')) {
+            return back()->with('error', 'SAP B1 não está configurado no servidor — não posso criar a oportunidade.');
+        }
+
+        // Constrói Remarks pré-populados — título + ref + 1ª linha de cada anexo.
+        // O cap do SAP B1 é 254 chars; deixar margem.
+        $tender->load('attachments');
+        $remarks = $tender->title;
+        if ($tender->reference) {
+            $remarks .= ' · ref ' . $tender->reference;
+        }
+        $okAttachments = $tender->attachments->where('extraction_status', 'ok');
+        if ($okAttachments->isNotEmpty()) {
+            $first = $okAttachments->first();
+            $firstLine = trim((string) mb_strtok((string) $first->extracted_text, "\n"));
+            if ($firstLine !== '') {
+                $remarks .= ' · ' . mb_substr($firstLine, 0, 60);
+            }
+            $remarks .= ' · ' . $okAttachments->count() . ' anexos';
+        }
+        $remarks = mb_substr($remarks, 0, 240);
+
+        // Deadline: se não houver, +30 dias a partir de hoje.
+        $closingDate = $tender->deadline_at
+            ? $tender->deadline_at->format('Y-m-d')
+            : now()->addDays(30)->format('Y-m-d');
+
+        $payload = [
+            'OpportunityName'     => mb_substr($tender->title, 0, 100),
+            'Remarks'             => $remarks,
+            'CardName'            => $tender->purchasing_org ?: null,   // SAP resolve para CardCode
+            'ExpectedClosingDate' => $closingDate,
+            'MaxLocalTotal'       => 1.0,   // placeholder mínimo (SAP requer >0); operador acerta depois
+            'StageId'             => 1,     // Prospecção
+        ];
+
+        try {
+            $result = $sap->createOpportunity($payload);
+        } catch (\Throwable $e) {
+            Log::error('Tender createSapOpp: exception', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+            return back()->with('error', 'Excepção a criar SAP Opp: ' . $e->getMessage());
+        }
+
+        if (!$result || empty($result['SequentialNo'])) {
+            $err = $sap->getLastError() ?: 'erro desconhecido (provavelmente CardCode não resolvido — verifica purchasing_org no SAP B1)';
+            return back()->with('error', 'SAP rejeitou criação: ' . $err);
+        }
+
+        // Auto-link da SAP Opp ao tender.
+        $tender->sap_opportunity_number = (string) $result['SequentialNo'];
+        $tender->last_sap_sync_at       = now();
+        $tender->save();
+
+        return redirect()
+            ->route('tenders.show', $tender)
+            ->with('status', "✅ SAP Opportunity #{$result['SequentialNo']} criada e ligada a este concurso. Vai ao SAP B1 → CRM → Sales Opportunities para acertar valor e fase.");
+    }
+
     public function observe(Request $request, Tender $tender)
     {
         $user = Auth::user();

@@ -688,6 +688,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/tenders/{tender}/observe',    [TenderController::class, 'observe'])->name('tenders.observe');
     // 2026-05-18: server-side Marta CRM com todos os anexos + auto-push SAP
     Route::post('/tenders/{tender}/marta-summarize', [TenderController::class, 'martaSummarize'])->name('tenders.marta-summarize');
+    // 2026-05-18: criação directa de SAP Opp (sem chat) — manager+
+    Route::post('/tenders/{tender}/create-sap-opp',  [TenderController::class, 'createSapOpp'])->name('tenders.create-sap-opp');
 });
 
 // Lead opportunities — agent-swarm-discovered business signals
