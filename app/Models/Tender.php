@@ -189,6 +189,33 @@ class Tender extends Model
     ];
 
     /**
+     * Mapeamento DIRECTO source → CardCode (Customer ou Lead).
+     * Atalho rápido quando sabemos exactamente qual o BP a usar — evita
+     * round-trip de search + ranking + filtro Customer/Lead que pode
+     * falhar com matches ambíguos ou suppliers a "roubar" o nome.
+     *
+     * Pedido directo 2026-05-18: "Anspa op codigo de clinete é C000263".
+     * Confirmado em produção via searchBusinessPartners() — só os C*
+     * são utilizáveis em Sales Opportunities.
+     *
+     * Para acrescentar novo source, adicionar aqui (precedência absoluta).
+     *
+     * @var array<string, string>
+     */
+    public const SOURCE_TO_CARDCODE = [
+        'nspa' => 'C000263',   // NSPA - NATO SUPPORT AND PROCUREMENT AGENCY - CIMO (Customer)
+        // 'ncia'    => ?       — pendente de confirmação do CardCode certo
+        // 'nato'    => ?
+        // 'sam_gov' => ?
+    ];
+
+    public static function cardCodeForSource(?string $source): ?string
+    {
+        if (!$source) return null;
+        return self::SOURCE_TO_CARDCODE[strtolower(trim($source))] ?? null;
+    }
+
+    /**
      * Devolve o nome canónico de BP para uma source — ou null se não há
      * mapeamento. NSPA/NATO/NCIA/SAM/UNGM/UNIDO têm; acingov/vortal/other
      * devolvem null e caem no fallback de pedir purchasing_org manual.

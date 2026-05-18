@@ -885,20 +885,39 @@ class TenderController extends Controller
             ? $tender->deadline_at->format('Y-m-d')
             : now()->addDays(30)->format('Y-m-d');
 
-        // 2026-05-18: pre-flight de Business Partner BEFORE chegar a
-        // createOpportunity. Antes deixávamos o SapService tentar
-        // resolver internamente e quando falhava o SAP B1 devolvia
-        // "Invalid BP code [OOPR.CardCode]" — confuso para o operador.
-        //
-        // 2026-05-18 fase 2: fallback automático para source-canonical-name.
-        // Pedido directo do operador: "neste caso é NSPA, não devia
-        // preencher a entidade logo pelo concurso?". Quando o concurso
-        // vem de uma fonte conhecida (NSPA/NATO/NCIA/SAM.gov/UNGM/UNIDO),
-        // tentamos resolver primeiro com o purchasing_org se existir,
-        // depois com o nome canónico da source. Só pedimos input manual
-        // quando ambos falham.
+        // 2026-05-18 fase 3: SHORTCUT directo source → CardCode quando
+        // sabemos exactamente qual o BP usar. Evita o search/ranking/
+        // filtro Customer-Lead que pode falhar quando o nome bate vários
+        // BPs (ex.: NSPA tem 1 supplier e 2 customers, todos com
+        // prefix "NSPA"). Pedido directo do operador:
+        // "Anspa op codigo de clinete é C000263".
         $purchasingOrg = trim((string) $tender->purchasing_org);
-        $sourceBp      = Tender::bpNameForSource($tender->source);
+        $directCardCode = Tender::cardCodeForSource($tender->source);
+
+        if ($directCardCode) {
+            // Busca o nome certo do BP a partir do CardCode para confirmar
+            // que existe e mostrar no flash. Se falhar, cai para o search.
+            try {
+                $bp = $sap->getBusinessPartner($directCardCode);
+            } catch (\Throwable $e) {
+                Log::warning('Tender createSapOpp: direct cardcode lookup failed', [
+                    'cardcode' => $directCardCode,
+                    'error'    => $e->getMessage(),
+                ]);
+                $bp = null;
+            }
+
+            if ($bp && !empty($bp['CardCode'])) {
+                $resolvedCardCode = (string) $bp['CardCode'];
+                $resolvedCardName = (string) ($bp['CardName'] ?? $directCardCode);
+                $resolvedVia      = 'source_cardcode_map';
+                // Pula directo para a construção do Remarks abaixo.
+                goto buildPayload;
+            }
+            // Se o lookup falhou, deixa o pipeline normal continuar.
+        }
+
+        $sourceBp = Tender::bpNameForSource($tender->source);
 
         // Estratégia de resolução em 2 passos:
         //   1. Procurar pelo purchasing_org se existir
@@ -1026,6 +1045,7 @@ class TenderController extends Controller
             $tender->save();
         }
 
+        buildPayload:
         $payload = [
             'OpportunityName'     => mb_substr($tender->title, 0, 100),
             'Remarks'             => $remarks,
@@ -1056,9 +1076,11 @@ class TenderController extends Controller
         $tender->last_sap_sync_at       = now();
         $tender->save();
 
-        $viaNote = $resolvedVia === 'source_fallback'
-            ? " (BP detectado automaticamente a partir da fonte {$tender->source})"
-            : '';
+        $viaNote = match ($resolvedVia) {
+            'source_cardcode_map' => " (BP mapeado directamente para a fonte {$tender->source})",
+            'source_fallback'     => " (BP detectado automaticamente a partir da fonte {$tender->source})",
+            default               => '',
+        };
 
         return redirect()
             ->route('tenders.show', $tender)
