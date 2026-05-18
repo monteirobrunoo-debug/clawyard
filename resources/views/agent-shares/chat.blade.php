@@ -405,7 +405,24 @@
 <script>
 const TOKEN      = '{{ $share->token }}';
 const CSRF       = document.querySelector('meta[name="csrf-token"]').content;
-const SESSION_ID = 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+// 2026-05-18: SESSION_ID persistente em localStorage por share-token —
+// quando o cliente volta ao link, recupera a session anterior e o
+// servidor devolve as mensagens já gravadas em BD (não 12h-cache).
+// Pedido directo: "cliente Dloren Wfit já consegue gravar as conversas,
+// guarda vários anos".
+const SESSION_ID = (() => {
+    const key = 'cy-share-session-' + '{{ $share->token }}';
+    try {
+        let v = localStorage.getItem(key);
+        if (!v) {
+            v = 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+            localStorage.setItem(key, v);
+        }
+        return v;
+    } catch (e) {
+        return 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+    }
+})();
 const AGENT_EMOJI = '{{ $meta['emoji'] }}';
 // Public session id minted by show() — sent back as a header on every stream
 // call so the server can look up the authorised OTP session regardless of
@@ -1339,6 +1356,42 @@ function toggleClawTheme(){
     applyClawTheme(next);
     try { localStorage.setItem('cy-theme', next); } catch (e) {}
 }
+
+// 2026-05-18: ao carregar o link, hidrata conversa anterior do servidor.
+// O servidor lê a Conversation/Message em BD para o (share_id, session_id)
+// e devolve até 50 mensagens. Pedido directo do operador:
+//   "cliente Dloren Wfit já consegue gravar as conversas, guarda
+//    vários anos" — agora SIM, persistência permanente em BD.
+(async function loadShareHistoryOnce() {
+    try {
+        const url = '/api/a/' + encodeURIComponent(TOKEN) + '/history?session_id=' + encodeURIComponent(SESSION_ID);
+        const headers = { 'Accept': 'application/json' };
+        if (SHARE_SID) headers['X-Share-SID'] = SHARE_SID;
+        const res = await fetch(url, { headers, credentials: 'same-origin' });
+        if (!res.ok) return;   // 401 reauth ou 404 — silenciar
+        const data = await res.json();
+        const msgs = data.messages || [];
+        if (!msgs.length) return;
+        // Limpa welcome message se existir e mostra histórico
+        const welcome = document.getElementById('welcome-msg');
+        if (welcome) welcome.remove();
+        // Reset history JS array para alinhar com server
+        history = msgs.slice(-20);
+        // Mostra hint de continuidade
+        const hint = document.createElement('div');
+        hint.style.cssText = 'text-align:center;padding:8px 0;font-size:11px;color:var(--muted);border-bottom:1px dashed var(--border);margin-bottom:8px;';
+        hint.textContent = '↑ ' + msgs.length + ' mensagens da tua conversa anterior';
+        const msgsEl = document.getElementById('messages');
+        if (msgsEl) msgsEl.appendChild(hint);
+        // Render cada mensagem
+        msgs.forEach(m => {
+            const role = m.role === 'user' ? 'user' : 'assistant';
+            addMessage(role, String(m.content || ''));
+        });
+    } catch (e) {
+        // sem rede ou erro — não bloqueia o uso normal
+    }
+})();
 </script>
 </body>
 </html>

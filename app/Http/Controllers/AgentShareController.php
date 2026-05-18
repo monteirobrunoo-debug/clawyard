@@ -1098,6 +1098,57 @@ HTML;
     }
 
     // ── PUBLIC: SSE Stream for shared agent ──────────────────────────────────
+    /**
+     * GET /a/{token}/history?session_id=X — devolve as mensagens
+     * gravadas em BD para esta session do share. Pedido directo do
+     * operador: "cliente Dloren Wfit já consegue gravar as conversas,
+     * guarda vários anos". Chamado pelo chat.blade no page load para
+     * mostrar a conversa anterior antes do utilizador escrever.
+     *
+     * Idêntico ao loadTrustedHistory privado mas expostor para JSON:
+     *   • Validação OTP igual ao stream() — sem sessão, 401
+     *   • Devolve até 50 últimas mensagens
+     *   • Não devolve mensagens de outro session_id ou outro share
+     */
+    public function history(Request $request, string $token)
+    {
+        $share = AgentShare::where('token', $token)->where('is_active', true)->first();
+        if (!$share || !$share->isValid()) {
+            return response()->json(['error' => 'invalid_share'], 404);
+        }
+
+        // OTP check (parity com stream())
+        if ($share->require_otp) {
+            $publicSid = $request->header('X-Share-SID')
+                      ?: $this->sharePublicSessionId($share);
+            if (!is_string($publicSid) || !preg_match('/^[a-f0-9]{32}$/', $publicSid)) {
+                return response()->json(['error' => 'no_session', 'reauth' => true], 401);
+            }
+            $svc = app(AgentShareAccessService::class);
+
+            // Portal session inheritance (parity with stream())
+            $allowed = false;
+            if ($share->portal_token) {
+                $portalSid = $this->sharePortalSessionId($share->portal_token);
+                $allowed   = $svc->portalCoversShare($share, $portalSid, $request);
+            }
+            if (!$allowed) {
+                $status = $svc->sessionStatus($share, $publicSid, $request);
+                if ($status !== 'ok') {
+                    return response()->json(['error' => 'unauthorised', 'reauth' => true], 401);
+                }
+            }
+        }
+
+        $sessionId = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) $request->query('session_id', ''));
+        if ($sessionId === '') {
+            return response()->json(['messages' => []]);
+        }
+
+        $messages = $this->loadTrustedHistory($share, $sessionId);
+        return response()->json(['messages' => $messages]);
+    }
+
     public function stream(Request $request, string $token)
     {
         $share = AgentShare::where('token', $token)->firstOrFail();
@@ -1585,6 +1636,19 @@ HTML;
         $cacheKey  = 'share_hist:' . $share->token . ':' . $sessionId;
         $stored    = \Illuminate\Support\Facades\Cache::get($cacheKey, []);
 
+        // 2026-05-18: se cache estiver vazio (TTL expirou, server restart),
+        // hidrata da BD. Pedido directo do operador:
+        //   "Cliente Dloren Wfit já consegue gravar as conversas, guarda
+        //    vários anos?"
+        // Resposta: agora SIM — cache 12h + BD permanente.
+        if (empty($stored) || !is_array($stored)) {
+            $stored = $this->loadHistoryFromDb($share, $sessionId);
+            if (!empty($stored)) {
+                // Repõe no cache para próximas reads serem rápidas
+                \Illuminate\Support\Facades\Cache::put($cacheKey, $stored, now()->addHours(12));
+            }
+        }
+
         if (!is_array($stored)) return [];
 
         return array_slice(
@@ -1600,15 +1664,90 @@ HTML;
     /**
      * Append a validated turn to the server-side share history. Called from
      * the SSE stream handler after each agent turn completes.
+     *
+     * 2026-05-18: agora persiste em DUAS camadas:
+     *   1. Cache (12h) — leitura rápida no hot-path
+     *   2. BD Conversation/Message (permanente) — sobrevive a expiry de cache,
+     *      restart de servidor, e fica disponível para o cliente externo
+     *      voltar e ver a conversa de meses/anos atrás.
      */
     private function persistTrustedHistory(AgentShare $share, string $sessionId, array $turn): void
     {
         $sessionId = preg_replace('/[^A-Za-z0-9_\-]/', '', $sessionId);
+
+        // 1. Cache (rápido, last-20)
         $cacheKey  = 'share_hist:' . $share->token . ':' . $sessionId;
         $stored    = \Illuminate\Support\Facades\Cache::get($cacheKey, []);
         if (!is_array($stored)) $stored = [];
         $stored[]  = $turn;
         $stored    = array_slice($stored, -20);
         \Illuminate\Support\Facades\Cache::put($cacheKey, $stored, now()->addHours(12));
+
+        // 2. BD permanente (Conversation/Message)
+        $this->persistTurnToDb($share, $sessionId, $turn);
+    }
+
+    /**
+     * Cria/encontra a Conversation correspondente a este (share, session_id)
+     * e grava o turn como Message. Usado por persistTrustedHistory para
+     * tornar a conversa permanente em BD.
+     */
+    private function persistTurnToDb(AgentShare $share, string $sessionId, array $turn): void
+    {
+        try {
+            $dbSessionId = 'share' . $share->id . '_' . $sessionId;
+            $conv = \App\Models\Conversation::firstOrCreate(
+                ['session_id' => $dbSessionId],
+                [
+                    'agent'   => $share->agent_key,
+                    'user_id' => $share->created_by,
+                    'title'   => 'Share #' . $share->id . ' · ' . ($share->client_name ?? '?'),
+                ]
+            );
+            \App\Models\Message::create([
+                'conversation_id' => $conv->id,
+                'role'            => $turn['role'] ?? 'user',
+                'agent'           => $share->agent_key,
+                'content'         => (string) ($turn['content'] ?? ''),
+                'metadata'        => [
+                    'source'         => 'agent_share',
+                    'share_id'       => $share->id,
+                    'client_email'   => $share->client_email,
+                    'client_name'    => $share->client_name,
+                ],
+            ]);
+            $conv->touch();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('AgentShare: persist to DB failed — ' . $e->getMessage(), [
+                'share_id' => $share->id,
+                'session'  => $sessionId,
+            ]);
+        }
+    }
+
+    /**
+     * Carrega o histórico da BD (Conversation/Message) quando o cache
+     * está frio. Retorna no formato do cache: array de {role, content}.
+     * Cap de 50 messages para não saturar o context window do LLM
+     * (cache continua a usar last-20).
+     */
+    private function loadHistoryFromDb(AgentShare $share, string $sessionId): array
+    {
+        try {
+            $dbSessionId = 'share' . $share->id . '_' . $sessionId;
+            $conv = \App\Models\Conversation::where('session_id', $dbSessionId)->first();
+            if (!$conv) return [];
+
+            return \App\Models\Message::where('conversation_id', $conv->id)
+                ->whereIn('role', ['user', 'assistant'])
+                ->orderBy('created_at')
+                ->limit(50)
+                ->get(['role', 'content'])
+                ->map(fn($m) => ['role' => $m->role, 'content' => (string) $m->content])
+                ->all();
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('AgentShare: load from DB failed — ' . $e->getMessage());
+            return [];
+        }
     }
 }

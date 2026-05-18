@@ -18,6 +18,11 @@ use Illuminate\Support\Facades\Route;
 Route::post('/a/{token}/stream', [AgentShareController::class, 'stream'])
     ->middleware('throttle:60,1');
 
+// 2026-05-18: GET histórico permanente do share — cliente externo carrega
+// quando volta ao link, vê conversa anterior em vez de página em branco.
+Route::get('/a/{token}/history', [AgentShareController::class, 'history'])
+    ->middleware('throttle:60,1');
+
 // Company profile JSON — readable by AI agents, crawlers, and integrations
 Route::get('/company-profile', function () {
     return response()->json(PartYardProfileService::toPublicJson(), 200, [
