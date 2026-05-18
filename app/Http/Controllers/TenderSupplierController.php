@@ -59,6 +59,11 @@ class TenderSupplierController extends Controller
             'local'           => $bundle['local']->map(fn(Supplier $s) => $this->shapeSupplier($s))->values()->all(),
             'web'             => $bundle['web'],
             'expert_opinions' => $bundle['expert_opinions'] ?? [],
+            // 2026-05-18: quando especialistas dizem "fora do domínio H&P",
+            // local fica vazio e oem_direct traz a lista de OEMs a contactar
+            // directamente (Karl Storz, Medtronic, Interacoustics, …).
+            'out_of_scope'    => $bundle['out_of_scope'] ?? false,
+            'oem_direct'      => $bundle['oem_direct']   ?? [],
         ]);
     }
 
@@ -219,12 +224,28 @@ Concurso/RFQ:
 Por favor escreve UM email tailored POR FORNECEDOR — usa o template "Quote Request" /
 "Cold Outreach" conforme apropriado. {$langLine}
 
+REGRA CRÍTICA — DETALHE TÉCNICO POR LINHA (pedido directo do operador 2026-05-18):
+Sem o detalhe técnico de cada item, o fornecedor não sabe o que cotar. Por isso
+o CORPO do email TEM de incluir uma TABELA / LISTA com TODAS as linhas de equipamento
+extraídas do RFP, no formato:
+
+    Item 1: <Descrição> · P/N <number> · Qty <N> · <especificações relevantes>
+    Item 2: <Descrição> · P/N <number> · Qty <N> · <especificações relevantes>
+    ...
+
+Se o RFP usar Item code, NSN, modelo, dimensões, normas (CE-MDR, NATO Mil-Std, EUR.1),
+INCLUI cada um. Não resumas em "vários equipamentos" — o fornecedor precisa de saber
+exactamente o que cotar para ser útil.
+
 Cada email deve:
   • Mencionar o concurso e a referência no assunto
-  • Pedir cotação / disponibilidade para os equipamentos relevantes
-  • Ser específico ao portfolio de cada fornecedor (não copy-paste com nome trocado)
+  • LISTAR cada item técnico do RFP no corpo (não omitir — é o ponto crítico)
+  • Pedir cotação para CADA linha + lead time + condições de pagamento
+  • Ser específico ao portfolio do fornecedor — se o fornecedor só faz Item 1 e 3,
+    foca-te neles e marca os outros como "Se também fornecem, indiquem"
   • Incluir a assinatura standard do PartYard
   • Ter um CTA claro com o deadline em mente
+  • Mencionar normas / compliance se aparecerem no RFP (CE-MDR, NATO, EUR.1, ISO)
 
 Lista de fornecedores:
 {$supLines}

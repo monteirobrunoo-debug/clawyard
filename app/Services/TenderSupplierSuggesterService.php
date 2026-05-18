@@ -4,7 +4,10 @@ namespace App\Services;
 
 use App\Models\Supplier;
 use App\Models\Tender;
+use App\Services\AgentSwarm\AgentDispatcher;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Picks the best supplier candidates for a given tender, combining:
@@ -29,6 +32,7 @@ class TenderSupplierSuggesterService
     public function __construct(
         private WebSearchService $web,
         private AgentExpertSupplierConsultant $experts,
+        private AgentDispatcher $dispatcher,
     ) {}
 
     /**
@@ -74,14 +78,124 @@ class TenderSupplierSuggesterService
             }
         }
 
+        // 2026-05-18: detectar quando o concurso está FORA DO DOMÍNIO H&P.
+        // Pedido directo do operador: "porquê sugeriu fornecedores internos
+        // da H&P quando os especialistas disseram para contactar OEM directo
+        // (Interacoustics, Karl Storz, Medtronic ENT)".
+        //
+        // Sinal: experts consultados, TODOS devolveram suppliers vazios E
+        // pelo menos um summary tem keyword de fora-do-domínio. Quando isso
+        // acontece, escondemos os matches locais (que são H&P generic
+        // military, irrelevantes para ENT/medical/specialty) e sugerimos
+        // OEMs directamente via 1 chamada LLM dedicada.
+        $outOfScope = false;
+        $oemDirect = [];
+
+        if (!empty($expertOpinions)) {
+            $allEmpty = collect($expertOpinions)->every(fn($o) => empty($o['suppliers'] ?? []));
+            if ($allEmpty) {
+                $outOfScopeKeywords = ['fora do domínio', 'fora do dominio', 'outside.*domain', 'outside.*core', 'sem overlap', 'no overlap', 'fully outside', 'not.*core', 'totalmente fora', 'fora do.*ecossistema'];
+                $signal = collect($expertOpinions)
+                    ->map(fn($o) => mb_strtolower((string) ($o['response'] ?? '')))
+                    ->filter(function ($s) use ($outOfScopeKeywords) {
+                        foreach ($outOfScopeKeywords as $kw) {
+                            if (preg_match('/' . str_replace('/', '\\/', $kw) . '/u', $s)) return true;
+                        }
+                        return false;
+                    });
+
+                if ($signal->count() > 0) {
+                    $outOfScope = true;
+                    $oemDirect = $this->suggestOemDirect($tender);
+                }
+            }
+        }
+
+        // Quando out of scope: esconder H&P local (são irrelevantes)
+        // mas manter web + experts (operador pode querer ver).
+        $effectiveLocal = $outOfScope ? collect() : $local;
+
         return [
             'categories'      => $categories,
-            'local'           => $local,
+            'local'           => $effectiveLocal,
+            'local_hidden'    => $outOfScope ? $local : collect(),   // expostos para debug se necessário
             'web'             => $webResults,
             'web_available'   => $webAvailable,
             'query'           => $query,
             'expert_opinions' => $expertOpinions,
+            'out_of_scope'    => $outOfScope,
+            'oem_direct'      => $oemDirect,
         ];
+    }
+
+    /**
+     * Quando os especialistas H&P unanimemente dizem que o concurso está
+     * fora do domínio, pedir ao LLM uma lista de 3-5 OEMs directos que
+     * deveriam ser contactados em vez dos H&P approved.
+     *
+     * Exemplo de saída para concurso ENT/medical NSPA:
+     *   [
+     *     {"name":"Interacoustics","focus":"audiómetros, equipamento otorrino"},
+     *     {"name":"Karl Storz","focus":"endoscopia ENT, instrumentos cirúrgicos"},
+     *     {"name":"Medtronic ENT","focus":"microdebriders, navegação cirúrgica"},
+     *     {"name":"Grason-Stadler","focus":"audiometria clínica"},
+     *   ]
+     *
+     * Cache 24h por (tender_id + title hash) — OEMs por categoria não
+     * mudam com frequência.
+     *
+     * @return list<array{name: string, focus: string}>
+     */
+    public function suggestOemDirect(Tender $tender): array
+    {
+        $cacheKey = 'oem_direct.' . $tender->id . '.' . md5((string) $tender->title);
+        return Cache::remember($cacheKey, 60 * 60 * 24, function () use ($tender) {
+            $pdfBlob = '';
+            try {
+                $first = $tender->attachments()->where('extraction_status', 'ok')->first();
+                if ($first) {
+                    $pdfBlob = mb_substr((string) $first->extracted_text, 0, 4000);
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+
+            $system = 'És um buyer sénior de procurement. Para um concurso/RFP, identifica os 3-5 OEM (Original Equipment Manufacturer) ou prime contractors que fabricam ou distribuem o tipo de produto descrito.'
+                . ' Regras: (1) NUNCA OEMs da Russia ou China. (2) Foco em fabricantes EU/NATO/USA. (3) Dá o nome COMERCIAL real que o operador vai pesquisar. (4) Numa frase, diz qual a área de produto do OEM.'
+                . ' Devolve APENAS JSON, sem markdown:'
+                . ' {"oems": [{"name": "Karl Storz", "focus": "endoscopia médica + instrumentos cirúrgicos"}, ...]}';
+
+            $user = "Concurso:\n"
+                . "  Título: {$tender->title}\n"
+                . "  Organização: " . ($tender->purchasing_org ?: '—') . "\n"
+                . "  Referência: " . ($tender->reference ?: '—') . "\n"
+                . "  Fonte: " . strtoupper((string) $tender->source) . "\n";
+            if ($pdfBlob) {
+                $user .= "\nExcerto do RFP:\n---\n{$pdfBlob}\n---\n";
+            }
+            $user .= "\nLista 3-5 OEMs que fabricam este tipo de produto. JSON only.";
+
+            $res = $this->dispatcher->dispatch(systemPrompt: $system, userMessage: $user, maxTokens: 500);
+            if (!($res['ok'] ?? false)) {
+                Log::warning('OEM direct suggest: dispatch failed', ['tender_id' => $tender->id, 'error' => $res['error'] ?? '?']);
+                return [];
+            }
+
+            $text = (string) ($res['text'] ?? '');
+            $start = strpos($text, '{');
+            $end   = strrpos($text, '}');
+            if ($start === false || $end === false || $end <= $start) return [];
+            $json = json_decode(substr($text, $start, $end - $start + 1), true);
+            if (!is_array($json)) return [];
+
+            $oems = [];
+            foreach (($json['oems'] ?? []) as $o) {
+                $name = trim((string) ($o['name'] ?? ''));
+                $focus = trim((string) ($o['focus'] ?? ''));
+                if ($name === '') continue;
+                $oems[] = ['name' => mb_substr($name, 0, 80), 'focus' => mb_substr($focus, 0, 200)];
+                if (count($oems) >= 5) break;
+            }
+            return $oems;
+        });
     }
 
     /**

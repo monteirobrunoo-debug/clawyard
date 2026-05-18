@@ -649,18 +649,60 @@
                 });
 
                 function renderSuggestions(data) {
-                    const cats     = (data.categories || []).join(', ');
-                    const local    = data.local           || [];
-                    const web      = data.web             || [];
-                    const opinions = data.expert_opinions || [];
+                    const cats       = (data.categories || []).join(', ');
+                    const local      = data.local           || [];
+                    const web        = data.web             || [];
+                    const opinions   = data.expert_opinions || [];
+                    const outOfScope = !!data.out_of_scope;
+                    const oemDirect  = data.oem_direct     || [];
 
                     let html = `
                         <div class="rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600 mb-3">
                             🏷️ Categorias inferidas: <span class="font-mono text-gray-800">${esc(cats || 'nenhuma')}</span>
                             · ${local.length} fornecedor(es) H&amp;P · ${web.length} web
                             ${opinions.length ? `· <span class="text-purple-700 font-medium">${opinions.length} especialista(s) consultado(s)</span>` : ''}
+                            ${outOfScope ? `· <span class="text-amber-700 font-bold">⚠ fora do domínio H&amp;P</span>` : ''}
                         </div>
                     `;
+
+                    // 2026-05-18: banner de "fora do domínio" + lista de OEMs directos.
+                    // Aparece em primeiro lugar quando os especialistas H&P unanimamente
+                    // não viram encaixe (ex.: concurso ENT médico para PartYard naval).
+                    if (outOfScope) {
+                        html += `
+                            <div class="rounded-md bg-amber-50 border-l-4 border-amber-500 px-4 py-3 mb-4">
+                                <div class="text-sm font-semibold text-amber-900 mb-2">⚠ Especialistas H&amp;P não vêem encaixe neste concurso</div>
+                                <div class="text-xs text-amber-800 mb-3">
+                                    Os pareceres acima indicam que o produto/serviço está fora do ecossistema H&amp;P actual.
+                                    Em vez de contactar fornecedores internos genéricos, considera contactar os <strong>OEM directos</strong>:
+                                </div>
+                                ${oemDirect.length ? `
+                                    <div class="bg-white rounded border border-amber-200 px-3 py-2">
+                                        <ul class="space-y-1.5 text-xs">
+                                            ${oemDirect.map(o => `
+                                                <li class="flex items-start gap-2">
+                                                    <span class="text-amber-700 font-bold">▸</span>
+                                                    <span>
+                                                        <strong class="text-gray-900">${esc(o.name)}</strong>
+                                                        ${o.focus ? `<span class="text-gray-600"> — ${esc(o.focus)}</span>` : ''}
+                                                    </span>
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                        <div class="text-[10px] text-amber-700 mt-2 italic">
+                                            💡 Sugestões geradas por LLM com base no RFP. Confirma cada OEM antes de contactar.
+                                            Procura o canal de procurement directo (vendas / distribuidores oficiais EU/NATO).
+                                        </div>
+                                    </div>
+                                ` : `
+                                    <div class="text-xs text-amber-700 italic">
+                                        Sem sugestões de OEM disponíveis (LLM falhou ou não reconheceu o domínio).
+                                        Procura manualmente os fabricantes pelos termos-chave do RFP.
+                                    </div>
+                                `}
+                            </div>
+                        `;
+                    }
 
                     // ── Expert opinions panel — appears ABOVE the local list
                     //    so the operator reads the human-style rationale
