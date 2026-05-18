@@ -2366,7 +2366,7 @@ function addMessage(role, text, agentName = '') {
             const bodyHtml = blocks.map(b => {
                 if (b.type === 'text') {
                     const t = b.content.trim();
-                    return t ? `<div class="bubble" style="margin-top:10px">${markdownToHtml(t)}</div>` : '';
+                    return t ? `<div class="bubble" style="margin-top:10px">${renderMarkdown(t)}</div>` : '';
                 }
                 if (b.type === 'table') return buildTableCard(b.data);
                 if (b.type === 'chart') {
@@ -4963,7 +4963,7 @@ async function sendMessage() {
                                     const bodyHtml = blocks.map(b => {
                                         if (b.type === 'text') {
                                             const t = b.content.trim();
-                                            return t ? `<div class="bubble" style="margin-top:10px">${markdownToHtml(t)}</div>` : '';
+                                            return t ? `<div class="bubble" style="margin-top:10px">${renderMarkdown(t)}</div>` : '';
                                         }
                                         if (b.type === 'table') return buildTableCard(b.data);
                                         if (b.type === 'chart') {
