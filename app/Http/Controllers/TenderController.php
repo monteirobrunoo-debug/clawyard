@@ -824,7 +824,14 @@ class TenderController extends Controller
         $okAttachments = $tender->attachments->where('extraction_status', 'ok');
         if ($okAttachments->isNotEmpty()) {
             $first = $okAttachments->first();
-            $firstLine = trim((string) mb_strtok((string) $first->extracted_text, "\n"));
+            // 2026-05-18 fix: mb_strtok não existe em PHP — usar explode.
+            // Primeira linha não-vazia do texto extraído do 1º anexo.
+            $lines = preg_split('/\r?\n/', (string) $first->extracted_text) ?: [];
+            $firstLine = '';
+            foreach ($lines as $l) {
+                $t = trim((string) $l);
+                if ($t !== '') { $firstLine = $t; break; }
+            }
             if ($firstLine !== '') {
                 $remarks .= ' · ' . mb_substr($firstLine, 0, 60);
             }
