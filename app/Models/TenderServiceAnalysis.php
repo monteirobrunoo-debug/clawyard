@@ -77,19 +77,20 @@ class TenderServiceAnalysis extends Model
 
     /**
      * Converte a action-list para um bloco de texto plain pronto para
-     * meter em tender.notes → sincronizado para SAP Opportunity Remarks
-     * (cap 254 chars do SAP B1).
+     * meter em tender.notes (local ilimitado). SapService trunca em
+     * 254 chars sozinho ao fazer push para SAP B1 OOPR.Remarks.
+     *
+     * 2026-05-18: cap padrão 240→800 (3.3x) para alinhar com a política
+     * "mais info nas notas" da feature martaSummarize. Quem queira o
+     * cap antigo passa explicitamente $maxChars=240.
      *
      * Formato:
      *   [Análise Multi-Agente · 18/05/2026]
      *   • passo um · finance
      *   • passo dois · acingov
      *   ...
-     *
-     * Se o total exceder 240 chars (deixar margem para o cabeçalho do
-     * SAP), corta os menos prioritários e adiciona "(+N mais)".
      */
-    public function toSapNotesBlock(?int $maxChars = 240): string
+    public function toSapNotesBlock(?int $maxChars = 800): string
     {
         $items = $this->extractActionItems();
         if (empty($items)) return '';

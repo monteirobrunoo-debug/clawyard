@@ -686,9 +686,12 @@ class TenderController extends Controller
         }
 
         $deadline = $tender->deadline_lisbon?->format('d/m/Y H:i') ?? '—';
-        $prompt = "Analisa este concurso e dá-me um RESUMO EXECUTIVO de ≤200 caracteres pronto para meter no SAP Remarks. "
-            . "O resumo deve incluir: objecto/material, organização compradora, deadline, e 1-2 pontos críticos (ex. urgência, compliance, fornecedor preferido). "
-            . "Formato: texto plano, sem markdown, sem emojis, separado por · entre pontos.\n\n"
+        // 2026-05-18 — cap 240→800 (3.3x). Localmente tender.notes é
+        // ilimitado; o SAP B1 trunca em 254 sozinho. Dar à Marta espaço
+        // para 4-6 pontos críticos em vez de só 1-2.
+        $prompt = "Analisa este concurso e dá-me um RESUMO EXECUTIVO completo (≤700 caracteres) pronto para meter nas Notas do ClawYard. "
+            . "O resumo deve incluir: objecto/material com qtds, organização compradora, deadline, 3-5 pontos críticos (urgência, compliance NATO/CE/EUR.1, fornecedor preferido, prazo de entrega, valor estimado se inferível). "
+            . "Formato: texto plano, sem markdown, sem emojis, pontos separados por ' · '.\n\n"
             . "=== CONCURSO ===\n"
             . "• Título: {$tender->title}\n"
             . "• Referência: " . ($tender->reference ?: '—') . "\n"
@@ -708,9 +711,9 @@ class TenderController extends Controller
         }
 
         $prompt .= "\n=== INSTRUÇÃO ===\n"
-            . "Devolve APENAS o resumo (≤200 chars). Sem cabeçalhos, sem 'aqui está', sem markdown. "
-            . "Vai directo para o ponto. Se a deadline for ≤7 dias, começa com 'URGENTE · '. "
-            . "Exemplo de formato: 'Fornecimento de 50 reds NETGATE-7100 · NCIA Bélgica · deadline 25/05 · referência NSPA-2026-1234 · cliente prioritário'.";
+            . "Devolve APENAS o resumo (≤700 chars). Sem cabeçalhos, sem 'aqui está', sem markdown. "
+            . "Vai directo aos pontos. Se a deadline for ≤7 dias, começa com 'URGENTE · '. "
+            . "Exemplo de formato: 'Fornecimento de 50 reds NETGATE-7100 · NCIA Bélgica · deadline 25/05 · ref NSPA-2026-1234 · compliance NATO Mil-Std-461 · lead time 12-16 sem · valor estimado €120-150k · cliente prioritário (3 contratos 2025) · fornecedor preferido Cisco EU'.";
 
         try {
             $marta = app(\App\Agents\CrmAgent::class);
@@ -724,9 +727,10 @@ class TenderController extends Controller
         }
 
         // Cap defensivo se Marta ignorar o limite — corta no último ponto
-        // ou no carácter 240 (deixar margem para o cabeçalho).
-        if (mb_strlen($summary) > 240) {
-            $cut = mb_substr($summary, 0, 240);
+        // ou no carácter 800 (3.3x do antigo 240). O SAP B1 trunca em
+        // 254 sozinho ao fazer push; localmente preservamos toda a info.
+        if (mb_strlen($summary) > 800) {
+            $cut = mb_substr($summary, 0, 800);
             $lastDot = mb_strrpos($cut, '·');
             $summary = $lastDot !== false ? mb_substr($cut, 0, $lastDot) : $cut;
             $summary = rtrim($summary, ' ·') . '…';
@@ -824,8 +828,9 @@ class TenderController extends Controller
         $okAttachments = $tender->attachments->where('extraction_status', 'ok');
         if ($okAttachments->isNotEmpty()) {
             $first = $okAttachments->first();
-            // 2026-05-18 fix: mb_strtok não existe em PHP — usar explode.
-            // Primeira linha não-vazia do texto extraído do 1º anexo.
+            // 2026-05-18 fix: mb_strtok não existe em PHP — usar preg_split.
+            // 2026-05-18: cap por linha 60→180 (3x) — mais detalhe do
+            // material/objecto do concurso vai já no Remarks.
             $lines = preg_split('/\r?\n/', (string) $first->extracted_text) ?: [];
             $firstLine = '';
             foreach ($lines as $l) {
@@ -833,11 +838,14 @@ class TenderController extends Controller
                 if ($t !== '') { $firstLine = $t; break; }
             }
             if ($firstLine !== '') {
-                $remarks .= ' · ' . mb_substr($firstLine, 0, 60);
+                $remarks .= ' · ' . mb_substr($firstLine, 0, 180);
             }
             $remarks .= ' · ' . $okAttachments->count() . ' anexos';
         }
-        $remarks = mb_substr($remarks, 0, 240);
+        // Cap local 240→800 (3.3x). O SapService::createOpportunity trunca
+        // em 254 chars sozinho ao fazer push (SAP B1 OOPR.Remarks varchar
+        // hard limit). Localmente o tender.notes preserva tudo.
+        $remarks = mb_substr($remarks, 0, 800);
 
         // Deadline: se não houver, +30 dias a partir de hoje.
         $closingDate = $tender->deadline_at
