@@ -404,6 +404,29 @@ class TenderInquiryController extends Controller
     }
 
     /**
+     * Sanitiza string para PhpWord/OOXML:
+     *   • Força UTF-8 válido (substitui bytes maus por '')
+     *   • Strip XML-illegal control chars (XML 1.0: 0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F)
+     *     — único permitidos são \t \n \r — caso contrário o docx fica
+     *     corrupto e o Word recusa-se a abrir.
+     *
+     * 2026-05-18 fix: utilizador reportou "Word experienced an error
+     * trying to open the file" no Inquiry-PartYard-SAP17509(2).docx.
+     * Causa: bytes inválidos da extração de PDF chegavam ao XML do docx.
+     */
+    private function xmlSafe(string $s): string
+    {
+        if ($s === '') return '';
+        // 1) UTF-8 válido
+        if (!mb_check_encoding($s, 'UTF-8')) {
+            $s = @iconv('UTF-8', 'UTF-8//IGNORE', $s) ?: mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+        }
+        // 2) XML 1.0 illegal control chars — apenas \t \n \r são válidos
+        $s = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $s) ?? $s;
+        return (string) $s;
+    }
+
+    /**
      * GET /tenders/{tender}/inquiry-word[?supplier_id=X]
      *
      * Gera o Inquiry como ficheiro .docx editável (PhpWord). Estrutura
@@ -465,8 +488,8 @@ class TenderInquiryController extends Controller
         ]);
 
         // Header bar
-        $section->addText('INQUIRY · ' . $displayRef . ' · ' . now()->format('d-m-Y'), 'h1');
-        $section->addText('PartYard — Defense Procurement · Pedido de Cotação ao Fornecedor',
+        $section->addText($this->xmlSafe('INQUIRY · ' . $displayRef . ' · ' . now()->format('d-m-Y')), 'h1');
+        $section->addText($this->xmlSafe('PartYard — Defense Procurement · Pedido de Cotação ao Fornecedor'),
                           ['size' => 9, 'color' => '6B7280']);
         $section->addTextBreak(1);
 
@@ -481,7 +504,7 @@ class TenderInquiryController extends Controller
         $tblMeta->addRow($rowH);
         $tblMeta->addCell(2400, ['bgColor' => 'F1F5F9'])->addText('PARTYARD CONTACTO', 'label');
         $cellC = $tblMeta->addCell(7600);
-        $cellC->addText($contactName . ' · ' . $contactEmail, ['bold' => true, 'size' => 10]);
+        $cellC->addText($this->xmlSafe($contactName . ' · ' . $contactEmail), ['bold' => true, 'size' => 10]);
         $cellC->addText('HP-Group · PartYard Defense · Lisboa, Portugal', ['size' => 9, 'color' => '6B7280']);
 
         $tblMeta->addRow($rowH);
@@ -491,7 +514,7 @@ class TenderInquiryController extends Controller
             $supText = $supplier->name;
             if ($supplier->primary_email) $supText .= ' · ' . $supplier->primary_email;
             if (!empty($supplier->brands)) $supText .= ' · Marcas: ' . implode(', ', (array) $supplier->brands);
-            $cellS->addText($supText, ['bold' => true]);
+            $cellS->addText($this->xmlSafe($supText), ['bold' => true]);
         } else {
             // Linha em branco para o operador preencher
             $cellS->addText('Nome: ____________________________   Email: __________________________', 'body');
@@ -504,14 +527,14 @@ class TenderInquiryController extends Controller
             $cellD = $tblMeta->addCell(7600);
             $cellD->addText($tender->deadline_at->format('d/m/Y H:i'),
                              ['bold' => true, 'color' => 'B91C1C']);
-            $cellD->addText('(' . $tender->deadline_at->diffForHumans() . ')',
+            $cellD->addText($this->xmlSafe('(' . $tender->deadline_at->diffForHumans() . ')'),
                              ['size' => 8, 'color' => '6B7280']);
         }
 
         $section->addTextBreak(1);
 
         // Items table
-        $section->addText('📋 Items a Cotar', 'h2');
+        $section->addText('Items a Cotar', 'h2');
         $tblItems = $section->addTable([
             'borderColor' => 'E2E8F0',
             'borderSize'  => 4,
@@ -530,18 +553,18 @@ class TenderInquiryController extends Controller
         if (empty($items)) {
             $tblItems->addRow();
             $tblItems->addCell(10000, ['gridSpan' => 6])
-                ->addText('Items não extraídos automaticamente — ver Statement of Requirements em baixo (texto integral).',
+                ->addText($this->xmlSafe('Items não extraídos automaticamente — ver Statement of Requirements em baixo (texto integral).'),
                           ['italic' => true, 'size' => 9, 'color' => '6B7280']);
         } else {
             foreach ($items as $i => $it) {
                 $tblItems->addRow();
                 $bg = $i % 2 === 0 ? null : ['bgColor' => 'F8FAFC'];
                 $tblItems->addCell(500,  $bg)->addText((string)($i + 1), 'body');
-                $tblItems->addCell(3400, $bg)->addText($it['desc'] ?? '—', 'body');
-                $tblItems->addCell(1500, $bg)->addText($it['pn'] ?? '—', 'mono');
-                $tblItems->addCell(700,  $bg)->addText($it['qty'] ?? '—', 'body');
+                $tblItems->addCell(3400, $bg)->addText($this->xmlSafe($it['desc'] ?? '—'), 'body');
+                $tblItems->addCell(1500, $bg)->addText($this->xmlSafe($it['pn'] ?? '—'), 'mono');
+                $tblItems->addCell(700,  $bg)->addText($this->xmlSafe($it['qty'] ?? '—'), 'body');
                 $tblItems->addCell(2300, $bg)->addText(
-                    ($it['specs'] ?? '') . ($it['norms'] ? ' · ' . $it['norms'] : ''),
+                    $this->xmlSafe(($it['specs'] ?? '') . ($it['norms'] ? ' · ' . $it['norms'] : '')),
                     ['size' => 9]
                 );
                 $tblItems->addCell(1600, ['bgColor' => 'FFFBEB'])->addText('__________', 'body');
@@ -550,8 +573,9 @@ class TenderInquiryController extends Controller
 
         $section->addTextBreak(1);
 
-        // Terms block
-        $section->addText('⚙ Termos do Pedido', 'h2');
+        // Terms block — sem emojis (PhpWord 1.4 + emoji em alguns fonts
+        // gera entities malformadas no docx).
+        $section->addText('Termos do Pedido', 'h2');
         foreach ([
             'Cotação por linha — preço unitário + total + IVA (indicar isenção NATO / Mil / EUR.1 quando aplicável).',
             'Lead time por item — incluir prazo de entrega EXW / DAP / DDP conforme melhor opção.',
@@ -561,21 +585,22 @@ class TenderInquiryController extends Controller
             'Documentos — material safety data sheets (MSDS), datasheets, declaração de conformidade.',
             'Garantia — indicar período + cobertura.',
         ] as $bullet) {
-            $section->addListItem($bullet, 0, ['size' => 9], 'multilevel');
+            $section->addListItem($this->xmlSafe($bullet), 0, ['size' => 9], 'multilevel');
         }
         $section->addTextBreak(1);
 
         // SoR block
         if ($sor) {
-            $section->addText('📄 Statement of Requirements (extracto)', 'h2');
+            $section->addText('Statement of Requirements (extracto)', 'h2');
             // Limita o que vai para o Word para não rebentar páginas
             $sorTrim = mb_substr($sor, 0, 8000);
             foreach (preg_split('/\r?\n/', $sorTrim) as $line) {
+                $line = $this->xmlSafe((string) $line);
                 if (trim($line) === '') { $section->addTextBreak(); continue; }
                 $section->addText($line, 'mono');
             }
             if (mb_strlen($sor) > 8000) {
-                $section->addText('… [SoR truncado a 8 000 chars — ver PDF para versão completa]',
+                $section->addText($this->xmlSafe('… [SoR truncado a 8 000 chars — ver PDF para versão completa]'),
                                   ['size' => 8, 'italic' => true, 'color' => '94A3B8']);
             }
         }
@@ -587,16 +612,16 @@ class TenderInquiryController extends Controller
         $tblSig->addRow();
         $cellL = $tblSig->addCell(5000);
         $cellL->addText('PARTYARD DEFENSE', ['bold' => true]);
-        $cellL->addText($contactName, 'body');
-        $cellL->addText($contactEmail, 'body');
+        $cellL->addText($this->xmlSafe($contactName), 'body');
+        $cellL->addText($this->xmlSafe($contactEmail), 'body');
         $cellL->addText('_________________________________', ['size' => 9]);
         $cellL->addText('Data: ' . now()->format('d/m/Y'), ['size' => 8, 'color' => '6B7280']);
 
         $cellR = $tblSig->addCell(5000);
         $cellR->addText('FORNECEDOR', ['bold' => true]);
         if ($supplier) {
-            $cellR->addText($supplier->name, 'body');
-            $cellR->addText((string) ($supplier->primary_email ?? ''), 'body');
+            $cellR->addText($this->xmlSafe((string) $supplier->name), 'body');
+            $cellR->addText($this->xmlSafe((string) ($supplier->primary_email ?? '')), 'body');
         } else {
             $cellR->addText('______________________________', 'body');
             $cellR->addText('______________________________', 'body');
@@ -606,7 +631,7 @@ class TenderInquiryController extends Controller
 
         $section->addTextBreak(1);
         $section->addText(
-            'MOD_072_V3 · Inquiry Military Defense · PartYard SGQ · ClawYard ' . $tender->id,
+            $this->xmlSafe('MOD_072_V3 · Inquiry Military Defense · PartYard SGQ · ClawYard ' . $tender->id),
             ['size' => 7, 'color' => '94A3B8'], ['alignment' => Jc::CENTER]
         );
 
