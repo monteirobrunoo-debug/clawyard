@@ -856,38 +856,80 @@ class TenderController extends Controller
         // createOpportunity. Antes deixávamos o SapService tentar
         // resolver internamente e quando falhava o SAP B1 devolvia
         // "Invalid BP code [OOPR.CardCode]" — confuso para o operador.
-        // Agora pre-resolvemos aqui e damos mensagem clara se falhar.
+        //
+        // 2026-05-18 fase 2: fallback automático para source-canonical-name.
+        // Pedido directo do operador: "neste caso é NSPA, não devia
+        // preencher a entidade logo pelo concurso?". Quando o concurso
+        // vem de uma fonte conhecida (NSPA/NATO/NCIA/SAM.gov/UNGM/UNIDO),
+        // tentamos resolver primeiro com o purchasing_org se existir,
+        // depois com o nome canónico da source. Só pedimos input manual
+        // quando ambos falham.
         $purchasingOrg = trim((string) $tender->purchasing_org);
-        if ($purchasingOrg === '') {
-            return back()->with('error', 'Concurso não tem "Organização Compradora" preenchida. Edita o concurso e indica o nome do cliente antes de abrir a oportunidade SAP.');
+        $sourceBp      = Tender::bpNameForSource($tender->source);
+
+        // Estratégia de resolução em 2 passos:
+        //   1. Procurar pelo purchasing_org se existir
+        //   2. Se 0 hits, procurar pelo source-canonical (NSPA, NCIA, …)
+        $bps = [];
+        $resolvedVia = null;
+
+        if ($purchasingOrg !== '') {
+            try {
+                $bps = $sap->searchBusinessPartners($purchasingOrg, 5);
+                if (!empty($bps)) $resolvedVia = 'purchasing_org';
+            } catch (\Throwable $e) {
+                Log::warning('Tender createSapOpp: BP search by org failed', [
+                    'tender_id' => $tender->id,
+                    'org'       => $purchasingOrg,
+                    'error'     => $e->getMessage(),
+                ]);
+                // Continua para o fallback de source
+            }
         }
 
-        try {
-            $bps = $sap->searchBusinessPartners($purchasingOrg, 5);
-        } catch (\Throwable $e) {
-            Log::warning('Tender createSapOpp: BP search failed', [
-                'tender_id' => $tender->id,
-                'org'       => $purchasingOrg,
-                'error'     => $e->getMessage(),
-            ]);
-            return back()->with('error', 'Erro a procurar Business Partner no SAP B1: ' . $e->getMessage());
+        if (empty($bps) && $sourceBp) {
+            try {
+                $bps = $sap->searchBusinessPartners($sourceBp, 5);
+                if (!empty($bps)) {
+                    $resolvedVia = 'source_fallback';
+                    Log::info('Tender createSapOpp: resolved BP via source fallback', [
+                        'tender_id' => $tender->id,
+                        'source'    => $tender->source,
+                        'bp_name'   => $sourceBp,
+                        'found'     => count($bps),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Tender createSapOpp: BP search by source failed', [
+                    'tender_id' => $tender->id,
+                    'source'    => $tender->source,
+                    'error'     => $e->getMessage(),
+                ]);
+            }
         }
 
         if (empty($bps)) {
-            // Sugestão accionável: link directo ao SAP B1 web client para
-            // criar o BP, OU edita o concurso para usar um BP existente.
+            // Ambas as tentativas falharam — instruções claras com os dois caminhos.
+            $tried = [];
+            if ($purchasingOrg !== '') $tried[] = "\"{$purchasingOrg}\"";
+            if ($sourceBp)             $tried[] = "\"{$sourceBp}\" (da source {$tender->source})";
+            $triedStr = $tried ? ' (tentei: ' . implode(' e ', $tried) . ')' : '';
+
             return back()->with('error',
-                "Business Partner \"{$purchasingOrg}\" não existe no SAP B1. " .
+                "Não encontrei nenhum Business Partner no SAP B1{$triedStr}. " .
                 "Resolução: 1) cria o BP em SAP B1 → Negócios → Parceiros de Negócios, OU " .
                 "2) edita este concurso e ajusta o campo \"Organização Compradora\" para um cliente que já exista no SAP."
             );
         }
 
-        // Match exacto vs múltiplos parciais — se há 2+ matches sem nenhum
-        // ser exacto, evita escolher cegamente e pede confirmação.
+        // Match exacto vs múltiplos parciais. O comparador usa o termo
+        // que efectivamente trouxe os resultados (purchasing_org ou
+        // source_fallback) — caso contrário sources com 2+ matches
+        // ficavam sempre como "ambíguos".
+        $searchTerm = $resolvedVia === 'purchasing_org' ? $purchasingOrg : (string) $sourceBp;
         $exact = null;
         foreach ($bps as $bp) {
-            if (mb_strtolower(trim((string) $bp['CardName'])) === mb_strtolower($purchasingOrg)) {
+            if (mb_strtolower(trim((string) $bp['CardName'])) === mb_strtolower($searchTerm)) {
                 $exact = $bp;
                 break;
             }
@@ -897,7 +939,7 @@ class TenderController extends Controller
             // 2+ matches parciais — fast UX é flash error com os 3 mais prováveis.
             $opts = collect($bps)->take(3)->map(fn($b) => "{$b['CardCode']} → {$b['CardName']}")->implode(' | ');
             return back()->with('error',
-                "Encontrei {$bps[0]['CardName']} e " . (count($bps) - 1) . " outro(s) BPs parecidos com \"{$purchasingOrg}\". " .
+                "Encontrei {$bps[0]['CardName']} e " . (count($bps) - 1) . " outro(s) BPs parecidos com \"{$searchTerm}\". " .
                 "Edita o concurso e ajusta \"Organização Compradora\" para um nome EXACTO. Sugestões: {$opts}"
             );
         }
@@ -906,6 +948,15 @@ class TenderController extends Controller
         $bp = $exact ?? $bps[0];
         $resolvedCardCode = (string) $bp['CardCode'];
         $resolvedCardName = (string) $bp['CardName'];
+
+        // Se resolvemos via source_fallback (porque purchasing_org estava
+        // vazio ou não bateu), auto-preencher purchasing_org com o nome
+        // certo do SAP para que da próxima vez bate logo. Pequena ajuda
+        // de qualidade-de-dados sem pedir nada ao operador.
+        if ($resolvedVia === 'source_fallback' && trim((string) $tender->purchasing_org) === '') {
+            $tender->purchasing_org = $resolvedCardName;
+            $tender->save();
+        }
 
         $payload = [
             'OpportunityName'     => mb_substr($tender->title, 0, 100),
@@ -937,9 +988,13 @@ class TenderController extends Controller
         $tender->last_sap_sync_at       = now();
         $tender->save();
 
+        $viaNote = $resolvedVia === 'source_fallback'
+            ? " (BP detectado automaticamente a partir da fonte {$tender->source})"
+            : '';
+
         return redirect()
             ->route('tenders.show', $tender)
-            ->with('status', "✅ SAP Opportunity #{$result['SequentialNo']} criada para {$resolvedCardName} ({$resolvedCardCode}) e ligada a este concurso. Vai ao SAP B1 → CRM → Sales Opportunities para acertar valor e fase.");
+            ->with('status', "✅ SAP Opportunity #{$result['SequentialNo']} criada para {$resolvedCardName} ({$resolvedCardCode}){$viaNote} e ligada a este concurso. Vai ao SAP B1 → CRM → Sales Opportunities para acertar valor e fase.");
     }
 
     public function observe(Request $request, Tender $tender)

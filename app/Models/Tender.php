@@ -163,6 +163,43 @@ class Tender extends Model
     ];
 
     /**
+     * Mapping source → canonical Business Partner name no SAP B1.
+     * Usado por TenderController::createSapOpp() como fallback quando
+     * o purchasing_org do concurso não bate certo com nenhum BP.
+     * Adicionado 2026-05-18 por pedido directo: "neste caso é NSPA, não
+     * devia preencher a entidade logo pelo concurso?".
+     *
+     * Os nomes têm de ser os nomes EXACTOS dos BPs no SAP B1 do PartYard.
+     * Verifica antes de adicionar novo source: SAP B1 → Negócios →
+     * Parceiros → filtra por nome.
+     *
+     * @var array<string, string>
+     */
+    public const SOURCE_TO_BP_NAME = [
+        'nspa'    => 'NSPA',
+        'nato'    => 'NATO',
+        'ncia'    => 'NCIA',
+        'sam_gov' => 'US Government',   // ajustar se SAP usar outro nome
+        'ungm'    => 'UNGM',
+        'unido'   => 'UNIDO',
+        // acingov / vortal / other / manual deixam-se em branco — fontes
+        // PT/genéricas onde o purchasing_org varia muito (cada ministério
+        // ou autarquia é um BP diferente). Para essas o operador continua
+        // a editar purchasing_org manualmente.
+    ];
+
+    /**
+     * Devolve o nome canónico de BP para uma source — ou null se não há
+     * mapeamento. NSPA/NATO/NCIA/SAM/UNGM/UNIDO têm; acingov/vortal/other
+     * devolvem null e caem no fallback de pedir purchasing_org manual.
+     */
+    public static function bpNameForSource(?string $source): ?string
+    {
+        if (!$source) return null;
+        return self::SOURCE_TO_BP_NAME[strtolower(trim($source))] ?? null;
+    }
+
+    /**
      * Map arbitrary source-language status strings to our canonical enum.
      * Everything unknown collapses to `pending` so the dashboard surfaces
      * "something needs human attention" instead of silently dropping it.
