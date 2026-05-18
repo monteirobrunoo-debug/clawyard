@@ -917,17 +917,31 @@ class TenderController extends Controller
             }
         }
 
+        // 2026-05-18: SAP B1 Sales Opportunities só aceita Customers (C)
+        // e Leads (L) — Suppliers (F prefix, cSupplier) dão "Select
+        // business partner of either customer or lead type". Filtrar
+        // ANTES do ranking para evitar escolher o supplier canónico
+        // (ex.: NSPA está como cSupplier F000366, mas as suas divisões
+        // como cCustomer C000263 / C000273 — temos de pegar nas C's).
+        $bps = collect($bps)->filter(function ($bp) {
+            $type = (string) ($bp['CardType'] ?? '');
+            return in_array($type, ['cCustomer', 'cLid', 'C', 'L'], true);
+        })->values()->all();
+
         if (empty($bps)) {
-            // Ambas as tentativas falharam — instruções claras com os dois caminhos.
+            // Pode ser:
+            //   (a) nenhum BP existe com esse nome
+            //   (b) BPs existem mas são todos Suppliers (não Customer/Lead)
             $tried = [];
             if ($purchasingOrg !== '') $tried[] = "\"{$purchasingOrg}\"";
             if ($sourceBp)             $tried[] = "\"{$sourceBp}\" (da source {$tender->source})";
             $triedStr = $tried ? ' (tentei: ' . implode(' e ', $tried) . ')' : '';
 
             return back()->with('error',
-                "Não encontrei nenhum Business Partner no SAP B1{$triedStr}. " .
-                "Resolução: 1) cria o BP em SAP B1 → Negócios → Parceiros de Negócios, OU " .
-                "2) edita este concurso e ajusta o campo \"Organização Compradora\" para um cliente que já exista no SAP."
+                "Não encontrei nenhum Customer ou Lead no SAP B1{$triedStr}. " .
+                "Nota: o SAP B1 só aceita Customers (C) ou Leads (L) em Sales Opportunities — Suppliers (F) não servem. " .
+                "Resolução: 1) cria/converte o BP para Customer em SAP B1 → Negócios → Parceiros, OU " .
+                "2) edita este concurso e ajusta o campo \"Organização Compradora\" para um Customer existente."
             );
         }
 
