@@ -99,6 +99,15 @@ class TenderServiceAnalysisService
 
             $execSummary = $this->synthesizeExecutiveSummary($tender, $sections);
 
+            // 2026-05-18 fix: sanitização UTF-8 antes de gravar.
+            // Os LLMs por vezes devolvem bytes inválidos em strings com
+            // acentos PT — depois o response()->json() do controller
+            // rebenta porque json_encode falha com "Malformed UTF-8".
+            // Substituímos bytes inválidos por U+FFFD agora, na origem,
+            // para que o DB também não acumule lixo.
+            $sections    = $this->sanitizeUtf8($sections);
+            $execSummary = $this->sanitizeUtf8($execSummary);
+
             $analysis->status             = 'done';
             $analysis->agents_consulted   = array_keys($sections);
             $analysis->sections           = $sections;
@@ -266,5 +275,35 @@ PROMPT;
             }
         }
         return mb_substr(implode("\n\n", $bits), 0, 1500);
+    }
+
+    /**
+     * Sanitização recursiva de bytes UTF-8 inválidos em strings de qualquer
+     * profundidade dentro de uma estrutura (array | string | scalar).
+     * Substitui bytes inválidos por '?' usando iconv com //IGNORE//TRANSLIT.
+     *
+     * Necessário porque os LLMs ocasionalmente emitem sequências UTF-8
+     * partidas em texto português com acentos — depois Laravel json_encode
+     * rebenta com fatal "Malformed UTF-8 characters" e o controller
+     * devolve HTML 500 em vez de JSON. Sanitizar antes do save evita
+     * problemas downstream também na renderização da view (Blade).
+     */
+    private function sanitizeUtf8(mixed $data): mixed
+    {
+        if (is_array($data)) {
+            $out = [];
+            foreach ($data as $k => $v) {
+                $out[$k] = $this->sanitizeUtf8($v);
+            }
+            return $out;
+        }
+        if (is_string($data)) {
+            // Tenta primeiro validar — se já é UTF-8 válido, devolve as-is.
+            if (mb_check_encoding($data, 'UTF-8')) return $data;
+            // Fallback: força UTF-8 substituindo bytes inválidos.
+            $clean = @iconv('UTF-8', 'UTF-8//IGNORE', $data);
+            return $clean !== false ? $clean : mb_convert_encoding($data, 'UTF-8', 'UTF-8');
+        }
+        return $data;
     }
 }

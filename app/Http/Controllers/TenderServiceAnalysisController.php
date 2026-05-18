@@ -65,11 +65,39 @@ class TenderServiceAnalysisController extends Controller
             ], 502);
         }
 
-        return response()->json([
+        return $this->jsonSafe([
             'cached'   => false,
             'view_url' => route('tenders.service-analysis.show', $tender),
             'analysis' => $analysis,
         ]);
+    }
+
+    /**
+     * Resposta JSON tolerante a UTF-8 malformado vindo do LLM.
+     *
+     * 2026-05-18 fix: TenderServiceAnalysis::sections (array de
+     * payloads de 6 agentes) e executive_summary podem conter bytes
+     * inválidos quando os LLMs retornam Portuguese accents partidos
+     * em algumas sequências. Laravel response()->json() chama
+     * json_encode() sem flags → fatal → HTML 500 → frontend tenta
+     * await res.json() e dá "JSON.parse: unexpected character at line 1".
+     *
+     * Solução: codificar com JSON_INVALID_UTF8_SUBSTITUTE — substitui
+     * bytes inválidos por U+FFFD em vez de explodir. Aplicado também
+     * a Concursos para outras rotas que serializam strings vindas de
+     * LLMs.
+     */
+    private function jsonSafe(array $data, int $status = 200): \Illuminate\Http\Response
+    {
+        $body = json_encode(
+            $data,
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR
+        );
+        if ($body === false) {
+            $body = json_encode(['error' => 'json_encode_failed', 'detail' => json_last_error_msg()]);
+            $status = 500;
+        }
+        return response((string) $body, $status, ['Content-Type' => 'application/json']);
     }
 
     /** GET /tenders/{tender}/service-analysis — full view (printable). */
