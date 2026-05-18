@@ -763,7 +763,7 @@
                                                     <span class="text-amber-700 font-bold">▸</span>
                                                     <span>
                                                         <strong class="text-gray-900">${esc(o.name)}</strong>
-                                                        ${o.focus ? `<span class="text-gray-600"> — ${esc(o.focus)}</span>` : ''}
+                                                        ${(o.items || o.focus) ? `<span class="text-gray-600 text-[11px]"> — <em>${esc(o.items || o.focus)}</em></span>` : ''}
                                                     </span>
                                                 </li>
                                             `).join('')}

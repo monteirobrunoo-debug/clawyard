@@ -336,7 +336,12 @@ class TenderCollaborator extends Model
      */
     public static function matchUserIdByName(?string $name): ?int
     {
-        $norm = self::normalize($name);
+        // 2026-05-18 fix: strip sufixos de organização e role-tokens
+        // antes de tokenizar para evitar matches falsos onde TODOS os
+        // colaboradores têm "(PartYard)" no nome e o último token bate
+        // a um único user com o mesmo sufixo.
+        $stripped = self::stripOrgSuffix($name);
+        $norm = self::normalize($stripped);
         if ($norm === '' || $norm === '-') return null;
 
         // Carrega todos os users activos uma vez — não há muitos.
@@ -345,38 +350,74 @@ class TenderCollaborator extends Model
             ->get();
         if ($users->isEmpty()) return null;
 
-        $usersByNorm = $users->map(fn($u) => [
-            'id'    => $u->id,
-            'norm'  => self::normalize($u->name),
-            'parts' => array_filter(preg_split('/\s+/', self::normalize($u->name)) ?: []),
-        ]);
+        $usersByNorm = $users->map(function ($u) {
+            $clean = self::normalize(self::stripOrgSuffix($u->name));
+            $parts = array_values(array_filter(preg_split('/\s+/', $clean) ?: []));
+            return [
+                'id'    => $u->id,
+                'norm'  => $clean,
+                'parts' => $parts,
+            ];
+        });
 
-        // Nível 1: exact full match
+        // Nível 1: exact full match (após strip de sufixos org)
         $exact = $usersByNorm->where('norm', $norm);
         if ($exact->count() === 1) return $exact->first()['id'];
 
-        // Nível 2 e 3: token match (primeiro ou último nome)
-        $incomingParts = array_values(array_filter(preg_split('/\s+/', $norm) ?: []));
+        // Nível 2 e 3: token match — usar APENAS tokens que sejam
+        // nomes reais (≥3 chars, alfa-only). Rejeita tokens genéricos
+        // como "logistica", "financeiro", "operacoes", role-words.
+        $genericTokens = ['logistica', 'logistica', 'financeiro', 'operacoes', 'operacao',
+                          'administracao', 'admin', 'comercial', 'tecnico', 'gestao',
+                          'gerente', 'director', 'manager', 'staff', 'rh', 'sgq', 'qhse',
+                          'compras', 'vendas', 'partyard', 'hp', 'group', 'team', 'bu'];
+        $isRealNameToken = fn(string $t) => mb_strlen($t) >= 3
+            && preg_match('/^[a-z]+$/u', $t)
+            && !in_array($t, $genericTokens, true);
+
+        $incomingParts = array_values(array_filter(
+            preg_split('/\s+/', $norm) ?: [],
+            $isRealNameToken
+        ));
         if (empty($incomingParts)) return null;
 
         $first = $incomingParts[0];
         $last  = end($incomingParts);
 
-        // Primeiro nome — match único entre os users
-        $byFirst = $usersByNorm->filter(fn($u) => !empty($u['parts']) && $u['parts'][array_key_first($u['parts'])] === $first);
+        // Primeiro nome — match único entre os users (também com tokens reais)
+        $byFirst = $usersByNorm->filter(function ($u) use ($first, $isRealNameToken) {
+            $realParts = array_values(array_filter($u['parts'], $isRealNameToken));
+            return !empty($realParts) && $realParts[0] === $first;
+        });
         if ($byFirst->count() === 1) return $byFirst->first()['id'];
 
-        // Último apelido — match único
+        // Último apelido — match único entre os tokens reais
         if ($first !== $last) {
-            $byLast = $usersByNorm->filter(function ($u) use ($last) {
-                if (empty($u['parts'])) return false;
-                return end($u['parts']) === $last;
+            $byLast = $usersByNorm->filter(function ($u) use ($last, $isRealNameToken) {
+                $realParts = array_values(array_filter($u['parts'], $isRealNameToken));
+                if (empty($realParts)) return false;
+                return end($realParts) === $last;
             });
             if ($byLast->count() === 1) return $byLast->first()['id'];
         }
 
         // Múltiplos matches ambíguos OU zero matches: deixa null
         return null;
+    }
+
+    /**
+     * Remove sufixos de organização entre parêntesis ou após delimitadores
+     * para que "GOMES Luis (PartYard)" → "GOMES Luis", evitando matches
+     * falsos onde o sufixo é partilhado por toda a equipa.
+     */
+    private static function stripOrgSuffix(?string $name): string
+    {
+        $s = (string) $name;
+        // Remove conteúdo dentro de () [] {}
+        $s = preg_replace('/[\(\[\{][^\)\]\}]*[\)\]\}]/u', '', $s) ?? $s;
+        // Remove sufixos comuns após " - " ou " | " ou " / "
+        $s = preg_replace('/\s+[\-\|\/]\s+(partyard|hp[-\s]?group|h&p|hpg|defense|marine|industrial|military)\b.*$/iu', '', $s) ?? $s;
+        return trim($s);
     }
 
     /**

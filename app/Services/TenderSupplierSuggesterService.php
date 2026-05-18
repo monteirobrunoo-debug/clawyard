@@ -159,9 +159,10 @@ class TenderSupplierSuggesterService
             } catch (\Throwable $e) { /* ignore */ }
 
             $system = 'És um buyer sénior de procurement. Para um concurso/RFP, identifica os 3-5 OEM (Original Equipment Manufacturer) ou prime contractors que fabricam ou distribuem o tipo de produto descrito.'
-                . ' Regras: (1) NUNCA OEMs da Russia ou China. (2) Foco em fabricantes EU/NATO/USA. (3) Dá o nome COMERCIAL real que o operador vai pesquisar. (4) Numa frase, diz qual a área de produto do OEM.'
+                . ' Regras: (1) NUNCA OEMs da Russia ou China. (2) Foco em fabricantes EU/NATO/USA. (3) Dá o nome COMERCIAL real que o operador vai pesquisar.'
+                . ' (4) CRITICAL: para CADA OEM diz exactamente que LINHAS / ITEMS do RFP esse fabricante cobre — não basta "endoscopia médica", diz "Item 1 e 2: endoscópios rígidos 4mm + microdebrider".'
                 . ' Devolve APENAS JSON, sem markdown:'
-                . ' {"oems": [{"name": "Karl Storz", "focus": "endoscopia médica + instrumentos cirúrgicos"}, ...]}';
+                . ' {"oems": [{"name": "Karl Storz", "items": "Items 1,3: endoscópios + instrumentos cirúrgicos ENT"}, ...]}';
 
             $user = "Concurso:\n"
                 . "  Título: {$tender->title}\n"
@@ -171,7 +172,7 @@ class TenderSupplierSuggesterService
             if ($pdfBlob) {
                 $user .= "\nExcerto do RFP:\n---\n{$pdfBlob}\n---\n";
             }
-            $user .= "\nLista 3-5 OEMs que fabricam este tipo de produto. JSON only.";
+            $user .= "\nIdentifica 3-5 OEMs. Para CADA UM indica os números/descrições dos items específicos do RFP que esse fabricante consegue cotar. JSON only.";
 
             $res = $this->dispatcher->dispatch(systemPrompt: $system, userMessage: $user, maxTokens: 500);
             if (!($res['ok'] ?? false)) {
@@ -189,9 +190,17 @@ class TenderSupplierSuggesterService
             $oems = [];
             foreach (($json['oems'] ?? []) as $o) {
                 $name = trim((string) ($o['name'] ?? ''));
-                $focus = trim((string) ($o['focus'] ?? ''));
+                // 2026-05-18: prompt pede 'items' (linhas correspondentes
+                // do RFP) mas aceita 'focus' como fallback se a LLM
+                // continuar com o formato antigo.
+                $items = trim((string) ($o['items'] ?? $o['focus'] ?? ''));
                 if ($name === '') continue;
-                $oems[] = ['name' => mb_substr($name, 0, 80), 'focus' => mb_substr($focus, 0, 200)];
+                $oems[] = [
+                    'name'  => mb_substr($name, 0, 80),
+                    'items' => mb_substr($items, 0, 240),
+                    // Mantém 'focus' alias para retrocompatibilidade UI antiga
+                    'focus' => mb_substr($items, 0, 240),
+                ];
                 if (count($oems) >= 5) break;
             }
             return $oems;
