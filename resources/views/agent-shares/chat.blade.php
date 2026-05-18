@@ -126,6 +126,11 @@
         .send-btn svg{width:18px;height:18px;flex-shrink:0}
         .send-btn:hover{filter:brightness(1.1)}
         .send-btn:disabled{opacity:.4;cursor:not-allowed}
+        /* 2026-05-18: Stop button — interrompe streaming activo. */
+        .stop-btn{width:44px;height:44px;background:#dc2626;border:none;border-radius:10px;cursor:pointer;flex-shrink:0;display:none;align-items:center;justify-content:center;transition:.15s;color:#fff}
+        .stop-btn svg{width:16px;height:16px}
+        .stop-btn:hover{background:#b91c1c}
+        .stop-btn.visible{display:flex}
         .input-hint{text-align:center;font-size:11px;color:var(--muted);margin-top:8px;max-width:800px;margin:8px auto 0}
         /* File preview */
         .file-preview-bar{display:none;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;font-size:13px;color:var(--muted);margin-bottom:8px;max-width:800px;margin-left:auto;margin-right:auto}
@@ -395,6 +400,12 @@
                     <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
             </button>
+            {{-- 2026-05-18: botão Stop — pedido directo do operador
+                 "possibilidade de clicar em stop num botão para
+                 interromper o chat". Visível apenas durante streaming. --}}
+            <button class="stop-btn" id="stop-btn" onclick="stopStreaming()" title="Parar resposta">
+                <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
         </div>
         @if($share->show_branding)
         <div class="input-hint">© PartYard/Setq.AI Rights reserved 2026</div>
@@ -405,24 +416,16 @@
 <script>
 const TOKEN      = '{{ $share->token }}';
 const CSRF       = document.querySelector('meta[name="csrf-token"]').content;
-// 2026-05-18: SESSION_ID persistente em localStorage por share-token —
-// quando o cliente volta ao link, recupera a session anterior e o
-// servidor devolve as mensagens já gravadas em BD (não 12h-cache).
-// Pedido directo: "cliente Dloren Wfit já consegue gravar as conversas,
-// guarda vários anos".
-const SESSION_ID = (() => {
-    const key = 'cy-share-session-' + '{{ $share->token }}';
-    try {
-        let v = localStorage.getItem(key);
-        if (!v) {
-            v = 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
-            localStorage.setItem(key, v);
-        }
-        return v;
-    } catch (e) {
-        return 'share_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
-    }
-})();
+// 2026-05-18 — SECURITY: o session_id usado para namespacing do
+// histórico é AGORA derivado server-side de um cookie HttpOnly
+// (`share_chat_{id}`, 365d). Aplicação directa do pedido do operador:
+//   "quando se copia os links para outro browser o sistema está a
+//    inserir as conversas de outros users"
+// O servidor passou a IGNORAR qualquer session_id que o cliente envie
+// — o cookie HttpOnly é a identidade do browser e é impossível de
+// forjar a partir de JS. Por compatibilidade enviamos um marker no
+// body/query, mas o backend descarta-o.
+const SESSION_ID = 'cookie-bound';
 const AGENT_EMOJI = '{{ $meta['emoji'] }}';
 // Public session id minted by show() — sent back as a header on every stream
 // call so the server can look up the authorised OTP session regardless of
@@ -433,6 +436,10 @@ const AGENT_COLOR = '{{ $meta['color'] }}';
 const AGENT_KEY   = '{{ $share->agent_key }}';
 let history = [];
 let isStreaming = false;
+// 2026-05-18: AbortController para o botão Stop — referência guardada
+// para que o handler stopStreaming() consiga cancelar o fetch SSE em
+// curso. Limpa para null sempre que o stream termina (normal ou abort).
+let streamAbortCtrl = null;
 
 // ── File attachment state ──────────────────────────────────────────────────
 let attachImg     = null;
@@ -558,7 +565,9 @@ async function sendMessage() {
     document.getElementById('welcome')?.remove();
     document.getElementById('starter-chips')?.remove();
     document.getElementById('send-btn').disabled = true;
+    document.getElementById('stop-btn').classList.add('visible');
     isStreaming = true;
+    streamAbortCtrl = new AbortController();
 
     addMessage('user', text);
     history.push({ role: 'user', content: text });
@@ -622,7 +631,13 @@ async function sendMessage() {
             method: 'POST',
             headers: fetchHeaders,
             body:    fetchBody,
-            credentials: 'same-origin',
+            // 2026-05-18: 'include' (era 'same-origin') para garantir
+            // que o cookie HttpOnly `share_chat_{id}` viaja na chamada
+            // mesmo em embeds/subdomain — sem ele, o servidor cria um
+            // novo session per request e o histórico não persiste.
+            credentials: 'include',
+            // 2026-05-18: signal para suportar abort via botão Stop.
+            signal: streamAbortCtrl?.signal,
         });
 
         // Handle HTTP errors (413 Too Large, 422 Unprocessable, 500, etc.)
@@ -637,7 +652,9 @@ async function sendMessage() {
             } catch(_){}
             addMessage('assistant', `❌ ${errMsg}`);
             document.getElementById('send-btn').disabled = false;
+            document.getElementById('stop-btn').classList.remove('visible');
             isStreaming = false;
+            streamAbortCtrl = null;
             // Sessão expirou / revogada → reenvia o visitante para a OTP gate.
             if (reauth) setTimeout(() => { window.location.href = '/a/' + TOKEN; }, 1500);
             return;
@@ -725,11 +742,27 @@ async function sendMessage() {
 
     } catch(e) {
         typingEl?.remove();
-        addMessage('assistant', '❌ Erro de ligação: ' + (e.message || 'Tenta novamente.'));
+        if (e.name === 'AbortError') {
+            // Stop foi clicado — não mostramos erro, só marca a bubble
+            // como interrompida (se já existir conteúdo parcial).
+            addMessage('assistant', '⏹️ Resposta interrompida.');
+        } else {
+            addMessage('assistant', '❌ Erro de ligação: ' + (e.message || 'Tenta novamente.'));
+        }
     }
 
     document.getElementById('send-btn').disabled = false;
+    document.getElementById('stop-btn').classList.remove('visible');
     isStreaming = false;
+    streamAbortCtrl = null;
+}
+
+// 2026-05-18: handler do botão Stop. Aborta o fetch SSE em curso via
+// AbortController — o catch acima trata o AbortError silenciosamente.
+function stopStreaming() {
+    if (streamAbortCtrl) {
+        try { streamAbortCtrl.abort(); } catch (e) {}
+    }
 }
 
 function makeAgentAvatar() {
@@ -1364,10 +1397,13 @@ function toggleClawTheme(){
 //    vários anos" — agora SIM, persistência permanente em BD.
 (async function loadShareHistoryOnce() {
     try {
-        const url = '/api/a/' + encodeURIComponent(TOKEN) + '/history?session_id=' + encodeURIComponent(SESSION_ID);
+        // session_id deliberadamente OMITIDO da query — o servidor usa
+        // o cookie HttpOnly `share_chat_{id}` para identificar o browser.
+        // Enviar credentials: 'include' garante que o cookie viaja.
+        const url = '/api/a/' + encodeURIComponent(TOKEN) + '/history';
         const headers = { 'Accept': 'application/json' };
         if (SHARE_SID) headers['X-Share-SID'] = SHARE_SID;
-        const res = await fetch(url, { headers, credentials: 'same-origin' });
+        const res = await fetch(url, { headers, credentials: 'include' });
         if (!res.ok) return;   // 401 reauth ou 404 — silenciar
         const data = await res.json();
         const msgs = data.messages || [];

@@ -987,6 +987,15 @@ HTML;
         // without `credentials: 'include'`).
         $shareSid = $this->sharePublicSessionId($share);
 
+        // SECURITY (2026-05-18): garante que o cookie `share_chat_{id}` é
+        // emitido AGORA, no primeiro GET da página. Sem isto, a primeira
+        // chamada a /api/a/{token}/history (no page load) viria sem o
+        // cookie e devolveria a história de outro browser caso o servidor
+        // ainda lesse o session_id do cliente (legacy). Agora o servidor
+        // ignora qualquer session_id que o cliente envie e usa SEMPRE o
+        // valor deste cookie — esta linha apenas força a emissão precoce.
+        $this->chatSessionId($share);
+
         return view('agent-shares.chat', [
             'share'     => $share,
             'meta'      => $meta,
@@ -1140,10 +1149,11 @@ HTML;
             }
         }
 
-        $sessionId = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) $request->query('session_id', ''));
-        if ($sessionId === '') {
-            return response()->json(['messages' => []]);
-        }
+        // SECURITY: session_id é SEMPRE derivado do cookie server-side
+        // (chatSessionId). O cliente NÃO pode forçar/forge um session_id
+        // para ler conversas de outro browser. Query string session_id
+        // (legacy) é ignorado.
+        $sessionId = $this->chatSessionId($share);
 
         $messages = $this->loadTrustedHistory($share, $sessionId);
         return response()->json(['messages' => $messages]);
@@ -1202,7 +1212,13 @@ HTML;
         }
 
         $message   = $request->input('message', '');
-        $sessionId = $request->input('session_id', 'shared_' . uniqid());
+
+        // SECURITY (2026-05-18): session_id é derivado server-side de um
+        // cookie HttpOnly per-browser (chatSessionId). O cliente PODE
+        // continuar a enviar `session_id` no body, mas é ignorado para
+        // não permitir que um browser autenticado leia/escreva no
+        // histórico de outro browser autenticado para o mesmo share.
+        $sessionId = $this->chatSessionId($share);
 
         // SECURITY (C1): Public share-link clients CANNOT supply their own
         // history. An attacker with a valid share token would otherwise be
@@ -1550,6 +1566,55 @@ HTML;
                 null,                         // domain (default)
                 $request->secure(),           // secure
                 true,                         // httpOnly
+                false,                        // raw
+                'lax'                         // sameSite
+            )
+        );
+        return $sid;
+    }
+
+    /**
+     * SECURITY (2026-05-18): identificador per-browser para o histórico de
+     * chat. Cookie HttpOnly, encriptado pelo Laravel, TTL 365 dias.
+     *
+     * Pedido directo do operador: "quando se copia os links para outro
+     * browser o sistema está a inserir as conversas de outros users".
+     *
+     * PROBLEMA ORIGINAL: o session_id vinha do localStorage do cliente e
+     * era enviado em cada request. Um utilizador autenticado (OTP válido)
+     * podia simplesmente passar o session_id de OUTRO visitante na query
+     * string de /history ou no body de /stream e ler/contaminar essa
+     * conversa. Cross-user data leak dentro do mesmo share.
+     *
+     * FIX: o session_id é AGORA derivado server-side via cookie HttpOnly,
+     * impossível de ler/forge a partir de JS. Cada browser fica com a
+     * sua identidade própria e persistente. Mesmo que dois browsers
+     * autentiquem com o mesmo OTP, ficam com session_ids DIFERENTES
+     * porque os cookies são por-browser.
+     *
+     * Se o cliente continuar a enviar `session_id` no body/query, é
+     * ignorado pelo controller — usamos sempre o valor deste cookie.
+     */
+    private function chatSessionId(AgentShare $share): string
+    {
+        $cookieName = 'share_chat_' . $share->id;
+        $request    = request();
+
+        $existing = $request->cookie($cookieName);
+        if (is_string($existing) && preg_match('/^[a-f0-9]{32}$/', $existing)) {
+            return $existing;
+        }
+
+        $sid = bin2hex(random_bytes(16));
+        \Illuminate\Support\Facades\Cookie::queue(
+            \Illuminate\Support\Facades\Cookie::make(
+                $cookieName,
+                $sid,
+                60 * 24 * 365,                // 365 dias — sobrevive vários anos
+                '/',                          // path
+                null,                         // domain (default)
+                $request->secure(),           // secure
+                true,                         // httpOnly — JS não consegue ler
                 false,                        // raw
                 'lax'                         // sameSite
             )
