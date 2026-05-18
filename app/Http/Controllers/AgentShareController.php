@@ -1691,6 +1691,20 @@ HTML;
      * Cria/encontra a Conversation correspondente a este (share, session_id)
      * e grava o turn como Message. Usado por persistTrustedHistory para
      * tornar a conversa permanente em BD.
+     *
+     * 2026-05-18 BUG FIX: Conversation.metadata é coluna json + cast
+     * SafeEncryptedArray → o cast encripta para base64 ciphertext, mas
+     * Postgres json type rejeita ciphertext (SQLSTATE 22P02: invalid input
+     * syntax for type json). Resultado: 100+ warnings na laravel.log do
+     * share #103 (Dloren WFit), com Conversation criada mas zero messages.
+     *
+     * Correcção:
+     *   • Removido o `metadata` no Message::create (não é necessário —
+     *     o share_id já está codificado no session_id "share103_…" e o
+     *     client info no Conversation.title)
+     *   • Removido `user_id` no firstOrCreate (a coluna não existe em
+     *     conversations — Laravel ignorava silenciosamente mas mais
+     *     limpo não passar)
      */
     private function persistTurnToDb(AgentShare $share, string $sessionId, array $turn): void
     {
@@ -1699,9 +1713,10 @@ HTML;
             $conv = \App\Models\Conversation::firstOrCreate(
                 ['session_id' => $dbSessionId],
                 [
-                    'agent'   => $share->agent_key,
-                    'user_id' => $share->created_by,
-                    'title'   => 'Share #' . $share->id . ' · ' . ($share->client_name ?? '?'),
+                    'agent' => $share->agent_key,
+                    'title' => 'Share #' . $share->id . ' · ' . ($share->client_name ?? '?'),
+                    'email' => $share->client_email,
+                    'name'  => $share->client_name,
                 ]
             );
             \App\Models\Message::create([
@@ -1709,12 +1724,10 @@ HTML;
                 'role'            => $turn['role'] ?? 'user',
                 'agent'           => $share->agent_key,
                 'content'         => (string) ($turn['content'] ?? ''),
-                'metadata'        => [
-                    'source'         => 'agent_share',
-                    'share_id'       => $share->id,
-                    'client_email'   => $share->client_email,
-                    'client_name'    => $share->client_name,
-                ],
+                // NOTA: metadata propositadamente omitida — o cast
+                // SafeEncryptedArray + coluna json não são compatíveis
+                // (Postgres rejeita ciphertext na coluna json). O share
+                // context já fica em session_id + title.
             ]);
             $conv->touch();
         } catch (\Throwable $e) {
