@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use PhpOffice\PhpWord\IOFactory as WordIOFactory;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\Shared\Converter;
+use PhpOffice\PhpWord\SimpleType\JcTable;
+use PhpOffice\PhpWord\SimpleType\Jc;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -73,12 +78,18 @@ class TenderInquiryController extends Controller
                  . mb_substr((string) $first->extracted_text, 0, 8000);
         }
 
-        // 2026-05-18: SCRUB de info do cliente final antes de mostrar
-        // ao fornecedor. Pedido directo: "para enviar o inquiry não
-        // mencionas o nosso cliente". Remove NSPA / NATO / NCIA / etc.
-        // do título E do bloco SoR antes de renderizar.
+        // 2026-05-18: pipeline de limpeza em 2 passos:
+        //   1. cleanSorBoilerplate — remove headers/footers RFP (UNCLASSIFIED,
+        //      addresses, page numbers, URLs, form refs) que vazam cliente
+        //   2. scrubCustomerInfo — mascara nomes específicos (NSPA, NATO...)
+        // Pedido directo do operador: nas primeiras versões havia "[end-customer]"
+        // a meio das frases por causa do boilerplate — agora as linhas inteiras
+        // de boilerplate são removidas, o que reduz drasticamente o ruído.
         $maskedTitle = $this->scrubCustomerInfo($tender->title, $tender);
-        $sor         = $sor ? $this->scrubCustomerInfo($sor, $tender) : null;
+        if ($sor) {
+            $sor = $this->cleanSorBoilerplate($sor);
+            $sor = $this->scrubCustomerInfo($sor, $tender);
+        }
 
         // Parse items do SoR via regex heurística — captura linhas
         // estruturadas e agrupa sub-specs no mesmo item (numera apenas
@@ -257,6 +268,56 @@ class TenderInquiryController extends Controller
     }
 
     /**
+     * Limpa o SoR de boilerplate RFP que vaza cliente: classificação,
+     * páginas, endereços, telefones, websites, form numbers.
+     * Aplica-se ANTES do scrubCustomerInfo para reduzir o ruído de
+     * "[end-customer]" repetido em headers/footers de cada página.
+     *
+     * 2026-05-18 fix: utilizador viu SoR com 30+ "[end-customer]" em
+     * footers tipo "NSPA L-8302 CAPELLEN Luxembourg TEL +352 ..."
+     * — esses blocos têm de sair, não basta mascarar.
+     */
+    private function cleanSorBoilerplate(string $text): string
+    {
+        if ($text === '') return $text;
+
+        $lines = preg_split('/\r?\n/', $text) ?: [];
+        $kept  = [];
+
+        foreach ($lines as $line) {
+            $t = trim($line);
+            if ($t === '') { $kept[] = ''; continue; }
+
+            // Classificação NATO/UE/US — sai sempre
+            if (preg_match('/^(\[end-customer\]\s+)?(unclassified|classified|confidential|restricted|releasable|secret|top\s+secret)\b/iu', $t)) continue;
+            // Cabeçalhos "AGENCE OTAN DE SOUTIEN" etc.
+            if (preg_match('/agence\s+otan|nato\s+(support|procurement|csa)/i', $t)) continue;
+            // "Page N of M", "Pg N", "Página N/N", "(page X)"
+            if (preg_match('/^(page|p[áa]gina|pg\.?)\s+\d+\s*(of|de|\/)\s*\d+/i', $t)) continue;
+            if (preg_match('/^\(?\s*page\s+\d+\s*\)?$/i', $t)) continue;
+            // Endereços: linha com TEL: / FAX: / Website:
+            if (preg_match('/^\s*(tel\.?|fax|t\.|telefon[eo]|telephone|website|email|e-?mail)[\s:]/iu', $t)) continue;
+            // Linha de endereço típica RFP NATO: "L-8302 CAPELLEN(Luxembourg)" ou "B-1110 BRUSSELS"
+            if (preg_match('/^[A-Z]{1,3}[-\s]?\d{4,5}\s+[A-ZÁÉÍÓÚ]/u', $t) && mb_strlen($t) < 120) continue;
+            // URLs sozinhas
+            if (preg_match('/^https?:\/\/\S+\s*$/i', $t)) continue;
+            // Form numbers tipo "/LB-UR-6001054519" ou "Form 6001054519"
+            if (preg_match('/^[\/\-\s]?(form\s+)?[A-Z]{1,3}-?[A-Z]{1,3}-?\d{6,}/i', $t) && mb_strlen($t) < 80) continue;
+            // Linhas só com símbolos / pontilhados / underscores
+            if (preg_match('/^[\s\-_=•·…]+$/u', $t)) continue;
+            // Linhas tipo "===" (separadores)
+            if (preg_match('/^.{1,5}$/u', $t)) continue;
+
+            $kept[] = $t;
+        }
+
+        // Colapsa runs de 3+ linhas em branco
+        $out = implode("\n", $kept);
+        $out = preg_replace('/\n{3,}/', "\n\n", $out) ?? $out;
+        return trim($out);
+    }
+
+    /**
      * Remove referências ao cliente final (NSPA / NCIA / NATO / etc.) de
      * texto que vai para o fornecedor. Heurística:
      *   • Nome canónico da source (Tender::SOURCE_TO_BP_NAME)
@@ -340,6 +401,258 @@ class TenderInquiryController extends Controller
         $text = preg_replace('/(\[end-customer\][\s,\-]*){2,}/u', '[end-customer] ', $text) ?? $text;
 
         return $text;
+    }
+
+    /**
+     * GET /tenders/{tender}/inquiry-word[?supplier_id=X]
+     *
+     * Gera o Inquiry como ficheiro .docx editável (PhpWord). Estrutura
+     * idêntica ao PDF mas o operador pode rever / editar / adicionar
+     * cláusulas antes de enviar. Pedido directo:
+     *   "em vez de pdf, ficheiro word para ser alterado"
+     */
+    public function generateWord(Request $request, Tender $tender): Response
+    {
+        $this->authorizeView($tender);
+        if ($tender->is_confidential) {
+            abort(403, 'Concurso confidencial — geração de Inquiry desligada.');
+        }
+
+        $supplier = $request->filled('supplier_id') ? Supplier::find($request->integer('supplier_id')) : null;
+
+        // Mesmo pipeline do PDF — SoR + scrub + parseItems
+        $tender->load('attachments');
+        $okAttachments = $tender->attachments->where('extraction_status', 'ok');
+        $sors = [];
+        foreach ($okAttachments as $att) {
+            $sor = $att->extractStatementOfRequirements(10000);
+            if ($sor) $sors[] = "[{$att->original_name}]\n{$sor}";
+        }
+        $sor = $sors ? implode("\n\n", $sors) : null;
+        if (!$sor && $okAttachments->isNotEmpty()) {
+            $first = $okAttachments->first();
+            $sor = "[{$first->original_name} · texto integral]\n" . mb_substr((string) $first->extracted_text, 0, 8000);
+        }
+        if ($sor) {
+            $sor = $this->cleanSorBoilerplate($sor);
+            $sor = $this->scrubCustomerInfo($sor, $tender);
+        }
+        $items = $this->parseItems($sor ?? '');
+
+        $contactName  = Auth::user()?->name  ?? 'PartYard Defense';
+        $contactEmail = Auth::user()?->email ?? config('mail.from.address', 'defense@hp-group.org');
+        $displayRef = $tender->sap_opportunity_number
+            ? '#' . $tender->sap_opportunity_number
+            : 'PYD-' . str_pad((string) $tender->id, 6, '0', STR_PAD_LEFT);
+
+        // ── Build docx ─────────────────────────────────────────────────
+        $phpWord = new PhpWord();
+        $phpWord->getCompatibility()->setOoxmlVersion(15);
+
+        // Cor PartYard navy + monoespaçada para detalhes técnicos
+        $phpWord->addFontStyle('h1',   ['name' => 'Calibri', 'size' => 18, 'bold' => true, 'color' => '1E3A8A']);
+        $phpWord->addFontStyle('h2',   ['name' => 'Calibri', 'size' => 12, 'bold' => true, 'color' => '1E3A8A']);
+        $phpWord->addFontStyle('body', ['name' => 'Calibri', 'size' => 10]);
+        $phpWord->addFontStyle('mono', ['name' => 'Consolas','size' => 9]);
+        $phpWord->addFontStyle('th',   ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => 'FFFFFF']);
+        $phpWord->addFontStyle('label',['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => '475569']);
+
+        $section = $phpWord->addSection([
+            'marginLeft' => Converter::cmToTwip(1.6),
+            'marginRight' => Converter::cmToTwip(1.6),
+            'marginTop' => Converter::cmToTwip(1.8),
+            'marginBottom' => Converter::cmToTwip(1.8),
+        ]);
+
+        // Header bar
+        $section->addText('INQUIRY · ' . $displayRef . ' · ' . now()->format('d-m-Y'), 'h1');
+        $section->addText('PartYard — Defense Procurement · Pedido de Cotação ao Fornecedor',
+                          ['size' => 9, 'color' => '6B7280']);
+        $section->addTextBreak(1);
+
+        // Meta table
+        $tblMeta = $section->addTable([
+            'borderColor' => 'CBD5E1',
+            'borderSize'  => 4,
+            'cellMargin'  => 80,
+        ]);
+        $rowH = 320;
+
+        $tblMeta->addRow($rowH);
+        $tblMeta->addCell(2400, ['bgColor' => 'F1F5F9'])->addText('PARTYARD CONTACTO', 'label');
+        $cellC = $tblMeta->addCell(7600);
+        $cellC->addText($contactName . ' · ' . $contactEmail, ['bold' => true, 'size' => 10]);
+        $cellC->addText('HP-Group · PartYard Defense · Lisboa, Portugal', ['size' => 9, 'color' => '6B7280']);
+
+        $tblMeta->addRow($rowH);
+        $tblMeta->addCell(2400, ['bgColor' => 'F1F5F9'])->addText('FORNECEDOR', 'label');
+        $cellS = $tblMeta->addCell(7600);
+        if ($supplier) {
+            $supText = $supplier->name;
+            if ($supplier->primary_email) $supText .= ' · ' . $supplier->primary_email;
+            if (!empty($supplier->brands)) $supText .= ' · Marcas: ' . implode(', ', (array) $supplier->brands);
+            $cellS->addText($supText, ['bold' => true]);
+        } else {
+            // Linha em branco para o operador preencher
+            $cellS->addText('Nome: ____________________________   Email: __________________________', 'body');
+            $cellS->addText('(preencher antes de enviar)', ['size' => 8, 'italic' => true, 'color' => '94A3B8']);
+        }
+
+        if ($tender->deadline_at) {
+            $tblMeta->addRow($rowH);
+            $tblMeta->addCell(2400, ['bgColor' => 'F1F5F9'])->addText('DEADLINE RESPOSTA', 'label');
+            $cellD = $tblMeta->addCell(7600);
+            $cellD->addText($tender->deadline_at->format('d/m/Y H:i'),
+                             ['bold' => true, 'color' => 'B91C1C']);
+            $cellD->addText('(' . $tender->deadline_at->diffForHumans() . ')',
+                             ['size' => 8, 'color' => '6B7280']);
+        }
+
+        $section->addTextBreak(1);
+
+        // Items table
+        $section->addText('📋 Items a Cotar', 'h2');
+        $tblItems = $section->addTable([
+            'borderColor' => 'E2E8F0',
+            'borderSize'  => 4,
+            'cellMargin'  => 80,
+            'alignment'   => JcTable::CENTER,
+        ]);
+        $headerBg = ['bgColor' => '1E3A8A'];
+        $tblItems->addRow(280);
+        $tblItems->addCell(500,  $headerBg)->addText('#',           'th');
+        $tblItems->addCell(3400, $headerBg)->addText('DESCRIÇÃO',    'th');
+        $tblItems->addCell(1500, $headerBg)->addText('P/N',          'th');
+        $tblItems->addCell(700,  $headerBg)->addText('QTY',          'th');
+        $tblItems->addCell(2300, $headerBg)->addText('SPECS / NORMAS','th');
+        $tblItems->addCell(1600, $headerBg)->addText('COTAÇÃO',      'th');
+
+        if (empty($items)) {
+            $tblItems->addRow();
+            $tblItems->addCell(10000, ['gridSpan' => 6])
+                ->addText('Items não extraídos automaticamente — ver Statement of Requirements em baixo (texto integral).',
+                          ['italic' => true, 'size' => 9, 'color' => '6B7280']);
+        } else {
+            foreach ($items as $i => $it) {
+                $tblItems->addRow();
+                $bg = $i % 2 === 0 ? null : ['bgColor' => 'F8FAFC'];
+                $tblItems->addCell(500,  $bg)->addText((string)($i + 1), 'body');
+                $tblItems->addCell(3400, $bg)->addText($it['desc'] ?? '—', 'body');
+                $tblItems->addCell(1500, $bg)->addText($it['pn'] ?? '—', 'mono');
+                $tblItems->addCell(700,  $bg)->addText($it['qty'] ?? '—', 'body');
+                $tblItems->addCell(2300, $bg)->addText(
+                    ($it['specs'] ?? '') . ($it['norms'] ? ' · ' . $it['norms'] : ''),
+                    ['size' => 9]
+                );
+                $tblItems->addCell(1600, ['bgColor' => 'FFFBEB'])->addText('__________', 'body');
+            }
+        }
+
+        $section->addTextBreak(1);
+
+        // Terms block
+        $section->addText('⚙ Termos do Pedido', 'h2');
+        foreach ([
+            'Cotação por linha — preço unitário + total + IVA (indicar isenção NATO / Mil / EUR.1 quando aplicável).',
+            'Lead time por item — incluir prazo de entrega EXW / DAP / DDP conforme melhor opção.',
+            'Condições de pagamento — confirmar (default 30/60 dias após factura).',
+            'Validade da oferta — mínimo 60 dias.',
+            'Compliance — certificado de origem (EUR.1 / Form A), Mil-Std, CE-MDR, ISO conforme RFP.',
+            'Documentos — material safety data sheets (MSDS), datasheets, declaração de conformidade.',
+            'Garantia — indicar período + cobertura.',
+        ] as $bullet) {
+            $section->addListItem($bullet, 0, ['size' => 9], 'multilevel');
+        }
+        $section->addTextBreak(1);
+
+        // SoR block
+        if ($sor) {
+            $section->addText('📄 Statement of Requirements (extracto)', 'h2');
+            // Limita o que vai para o Word para não rebentar páginas
+            $sorTrim = mb_substr($sor, 0, 8000);
+            foreach (preg_split('/\r?\n/', $sorTrim) as $line) {
+                if (trim($line) === '') { $section->addTextBreak(); continue; }
+                $section->addText($line, 'mono');
+            }
+            if (mb_strlen($sor) > 8000) {
+                $section->addText('… [SoR truncado a 8 000 chars — ver PDF para versão completa]',
+                                  ['size' => 8, 'italic' => true, 'color' => '94A3B8']);
+            }
+        }
+
+        $section->addTextBreak(2);
+
+        // Signature table
+        $tblSig = $section->addTable(['cellMargin' => 80]);
+        $tblSig->addRow();
+        $cellL = $tblSig->addCell(5000);
+        $cellL->addText('PARTYARD DEFENSE', ['bold' => true]);
+        $cellL->addText($contactName, 'body');
+        $cellL->addText($contactEmail, 'body');
+        $cellL->addText('_________________________________', ['size' => 9]);
+        $cellL->addText('Data: ' . now()->format('d/m/Y'), ['size' => 8, 'color' => '6B7280']);
+
+        $cellR = $tblSig->addCell(5000);
+        $cellR->addText('FORNECEDOR', ['bold' => true]);
+        if ($supplier) {
+            $cellR->addText($supplier->name, 'body');
+            $cellR->addText((string) ($supplier->primary_email ?? ''), 'body');
+        } else {
+            $cellR->addText('______________________________', 'body');
+            $cellR->addText('______________________________', 'body');
+        }
+        $cellR->addText('_________________________________', ['size' => 9]);
+        $cellR->addText('Data + Assinatura', ['size' => 8, 'color' => '6B7280']);
+
+        $section->addTextBreak(1);
+        $section->addText(
+            'MOD_072_V3 · Inquiry Military Defense · PartYard SGQ · ClawYard ' . $tender->id,
+            ['size' => 7, 'color' => '94A3B8'], ['alignment' => Jc::CENTER]
+        );
+
+        // ── Stream the docx ────────────────────────────────────────────
+        $refForFile = $tender->sap_opportunity_number
+            ? 'SAP' . $tender->sap_opportunity_number
+            : 'PYD' . str_pad((string) $tender->id, 6, '0', STR_PAD_LEFT);
+        $downloadName = 'Inquiry-PartYard-' . $refForFile . ($supplier ? '-' . $supplier->slug : '') . '.docx';
+
+        $tmp = tempnam(sys_get_temp_dir(), 'inquiry_') . '.docx';
+        WordIOFactory::createWriter($phpWord, 'Word2007')->save($tmp);
+        $bytes = file_get_contents($tmp);
+        @unlink($tmp);
+
+        // Idempotente: anexa também ao concurso (operador encontra na
+        // secção Anexos depois). Hash do conteúdo evita duplicados.
+        $hash = hash('sha256', $bytes);
+        $slug = Str::slug(($tender->reference ?: 'concurso-' . $tender->id) . '-inquiry' . ($supplier ? '-' . Str::slug($supplier->name) : ''));
+        $storedName = $slug . '-' . substr($hash, 0, 8) . '.docx';
+        $relPath = 'tender-attachments/' . $tender->id . '/' . $storedName;
+        $existing = TenderAttachment::where('tender_id', $tender->id)->where('file_hash', $hash)->first();
+        if (!$existing) {
+            try {
+                Storage::disk('local')->put($relPath, $bytes);
+                TenderAttachment::create([
+                    'tender_id'           => $tender->id,
+                    'original_name'       => $downloadName,
+                    'disk_path'           => $relPath,
+                    'mime_type'           => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'size_bytes'          => strlen($bytes),
+                    'file_hash'           => $hash,
+                    'extraction_status'   => TenderAttachment::STATUS_OK,
+                    'extracted_text'      => 'Inquiry PartYard Word editável gerado em ' . now()->format('d/m/Y H:i'),
+                    'extracted_chars'     => 60,
+                    'uploaded_by_user_id' => Auth::id(),
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Inquiry Word: storage failed', ['tender_id' => $tender->id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return response($bytes, 200, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition' => 'attachment; filename="' . $downloadName . '"',
+            'Cache-Control'       => 'private, max-age=0, no-store',
+        ]);
     }
 
     private function authorizeView(Tender $tender): void

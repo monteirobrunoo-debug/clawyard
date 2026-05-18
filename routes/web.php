@@ -693,6 +693,9 @@ Route::middleware(['auth'])->group(function () {
     // 2026-05-18: gera Inquiry PartYard PDF (mimica MOD_072_V3) com items
     // do SoR + termos NATO/NSPA, anexa automaticamente ao concurso
     Route::get ('/tenders/{tender}/inquiry-pdf',     [\App\Http\Controllers\TenderInquiryController::class, 'generate'])->name('tenders.inquiry-pdf');
+    // 2026-05-18: versão Word editável (PhpWord) — pedido directo do operador
+    // "em vez de pdf, ficheiro word para ser alterado"
+    Route::get ('/tenders/{tender}/inquiry-word',    [\App\Http\Controllers\TenderInquiryController::class, 'generateWord'])->name('tenders.inquiry-word');
 });
 
 // Lead opportunities — agent-swarm-discovered business signals

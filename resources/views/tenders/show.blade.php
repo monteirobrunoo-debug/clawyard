@@ -237,7 +237,12 @@
                            target="_blank"
                            class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
                            title="Gera PDF Inquiry PartYard Defense (modelo MOD_072_V3) com items do SoR, termos NATO/NSPA e bloco assinatura. Anexa automaticamente.">
-                            📋 Inquiry PartYard (PDF)
+                            📋 Inquiry PDF
+                        </a>
+                        <a href="{{ route('tenders.inquiry-word', $tender) }}"
+                           class="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-500"
+                           title="Gera Inquiry PartYard como Word editável (.docx) — para revisar/ajustar antes de enviar ao fornecedor. Anexa automaticamente.">
+                            📝 Inquiry Word
                         </a>
                         @endif
                         @unless($tender->is_confidential)
