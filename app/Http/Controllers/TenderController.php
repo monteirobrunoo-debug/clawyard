@@ -852,10 +852,66 @@ class TenderController extends Controller
             ? $tender->deadline_at->format('Y-m-d')
             : now()->addDays(30)->format('Y-m-d');
 
+        // 2026-05-18: pre-flight de Business Partner BEFORE chegar a
+        // createOpportunity. Antes deixávamos o SapService tentar
+        // resolver internamente e quando falhava o SAP B1 devolvia
+        // "Invalid BP code [OOPR.CardCode]" — confuso para o operador.
+        // Agora pre-resolvemos aqui e damos mensagem clara se falhar.
+        $purchasingOrg = trim((string) $tender->purchasing_org);
+        if ($purchasingOrg === '') {
+            return back()->with('error', 'Concurso não tem "Organização Compradora" preenchida. Edita o concurso e indica o nome do cliente antes de abrir a oportunidade SAP.');
+        }
+
+        try {
+            $bps = $sap->searchBusinessPartners($purchasingOrg, 5);
+        } catch (\Throwable $e) {
+            Log::warning('Tender createSapOpp: BP search failed', [
+                'tender_id' => $tender->id,
+                'org'       => $purchasingOrg,
+                'error'     => $e->getMessage(),
+            ]);
+            return back()->with('error', 'Erro a procurar Business Partner no SAP B1: ' . $e->getMessage());
+        }
+
+        if (empty($bps)) {
+            // Sugestão accionável: link directo ao SAP B1 web client para
+            // criar o BP, OU edita o concurso para usar um BP existente.
+            return back()->with('error',
+                "Business Partner \"{$purchasingOrg}\" não existe no SAP B1. " .
+                "Resolução: 1) cria o BP em SAP B1 → Negócios → Parceiros de Negócios, OU " .
+                "2) edita este concurso e ajusta o campo \"Organização Compradora\" para um cliente que já exista no SAP."
+            );
+        }
+
+        // Match exacto vs múltiplos parciais — se há 2+ matches sem nenhum
+        // ser exacto, evita escolher cegamente e pede confirmação.
+        $exact = null;
+        foreach ($bps as $bp) {
+            if (mb_strtolower(trim((string) $bp['CardName'])) === mb_strtolower($purchasingOrg)) {
+                $exact = $bp;
+                break;
+            }
+        }
+
+        if (!$exact && count($bps) > 1) {
+            // 2+ matches parciais — fast UX é flash error com os 3 mais prováveis.
+            $opts = collect($bps)->take(3)->map(fn($b) => "{$b['CardCode']} → {$b['CardName']}")->implode(' | ');
+            return back()->with('error',
+                "Encontrei {$bps[0]['CardName']} e " . (count($bps) - 1) . " outro(s) BPs parecidos com \"{$purchasingOrg}\". " .
+                "Edita o concurso e ajusta \"Organização Compradora\" para um nome EXACTO. Sugestões: {$opts}"
+            );
+        }
+
+        // 1 match (exacto ou único) — usar.
+        $bp = $exact ?? $bps[0];
+        $resolvedCardCode = (string) $bp['CardCode'];
+        $resolvedCardName = (string) $bp['CardName'];
+
         $payload = [
             'OpportunityName'     => mb_substr($tender->title, 0, 100),
             'Remarks'             => $remarks,
-            'CardName'            => $tender->purchasing_org ?: null,   // SAP resolve para CardCode
+            'CardCode'            => $resolvedCardCode,        // pre-resolved
+            'CardName'            => $resolvedCardName,
             'ExpectedClosingDate' => $closingDate,
             'MaxLocalTotal'       => 1.0,   // placeholder mínimo (SAP requer >0); operador acerta depois
             'StageId'             => 1,     // Prospecção
@@ -872,8 +928,8 @@ class TenderController extends Controller
         }
 
         if (!$result || empty($result['SequentialNo'])) {
-            $err = $sap->getLastError() ?: 'erro desconhecido (provavelmente CardCode não resolvido — verifica purchasing_org no SAP B1)';
-            return back()->with('error', 'SAP rejeitou criação: ' . $err);
+            $err = $sap->getLastError() ?: 'erro desconhecido';
+            return back()->with('error', "SAP rejeitou criação (BP {$resolvedCardCode} resolvido OK): {$err}");
         }
 
         // Auto-link da SAP Opp ao tender.
@@ -883,7 +939,7 @@ class TenderController extends Controller
 
         return redirect()
             ->route('tenders.show', $tender)
-            ->with('status', "✅ SAP Opportunity #{$result['SequentialNo']} criada e ligada a este concurso. Vai ao SAP B1 → CRM → Sales Opportunities para acertar valor e fase.");
+            ->with('status', "✅ SAP Opportunity #{$result['SequentialNo']} criada para {$resolvedCardName} ({$resolvedCardCode}) e ligada a este concurso. Vai ao SAP B1 → CRM → Sales Opportunities para acertar valor e fase.");
     }
 
     public function observe(Request $request, Tender $tender)
