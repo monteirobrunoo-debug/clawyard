@@ -27,6 +27,8 @@ class TenderAttachment extends Model
     public const STATUS_PENDING = 'pending';
     public const STATUS_OK      = 'ok';
     public const STATUS_FAILED  = 'failed';
+    /** 2026-05-18: ficheiro não-PDF guardado sem extracção (xlsx, eml, jpg, …). */
+    public const STATUS_SKIPPED = 'skipped';
 
     public function tender(): BelongsTo
     {

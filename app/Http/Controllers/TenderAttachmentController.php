@@ -14,41 +14,46 @@ use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Per-tender PDF attachment management.
+ * Per-tender attachment management.
  *
  * Routes:
  *   POST   /tenders/{tender}/attachments        — drag-drop upload
  *   GET    /tenders/{tender}/attachments/{id}   — download (auth proxy)
  *   DELETE /tenders/{tender}/attachments/{id}   — soft-delete (manager+)
  *
- * Accepts: PDF only (10 MB cap per file). Multiple files per request.
- * Side effect on success: text is extracted synchronously via
- * PdfTextExtractor and persisted to extracted_text/extracted_chars/
- * extraction_status. The suggester + Marta CRM trigger read from
- * those columns later — no async re-fetch.
+ * 2026-05-18: aceita qualquer tipo de ficheiro até 50 MB. Antes era
+ * apenas PDF — operadores frustravam-se ao tentar anexar xlsx/docx/eml/
+ * imagens que normalmente acompanham um concurso. Agora:
+ *   • PDF                            → extracção via PdfTextExtractor
+ *   • Outros (xlsx, docx, eml, jpg…) → STATUS_SKIPPED (guardado para
+ *                                       download, sem extracção)
+ * O suggester + Marta CRM continuam a ler apenas onde STATUS_OK.
  *
- * Idempotency: file_hash + tender_id is unique. Re-uploading the
- * same PDF returns the existing row instead of creating a duplicate.
+ * Idempotency: file_hash + tender_id é unique. Re-upload do mesmo
+ * ficheiro toca a row existente em vez de duplicar.
  */
 class TenderAttachmentController extends Controller
 {
     private const DISK            = 'local';
     private const PATH_PREFIX     = 'tender-attachments';
-    private const MAX_BYTES_PER   = 10 * 1024 * 1024;   // 10 MB
+    private const MAX_BYTES_PER   = 50 * 1024 * 1024;   // 50 MB (2026-05-18 bump: 10→50)
     private const MAX_FILES_PER   = 10;
 
     public function store(Request $request, Tender $tender, PdfTextExtractor $extractor): JsonResponse
     {
         $this->authorizeView($tender);
 
+        // 2026-05-18: sem restrição de mime — operador pode anexar
+        // qualquer formato (xlsx, docx, eml, jpg, …). Só o tamanho é
+        // limitado. Extracção é tentada para PDFs; outros formatos
+        // ficam em STATUS_SKIPPED (download disponível, sem texto).
         $request->validate([
             'files'   => ['required', 'array', 'min:1', 'max:' . self::MAX_FILES_PER],
-            'files.*' => ['file', 'mimes:pdf', 'max:' . (self::MAX_BYTES_PER / 1024)],
+            'files.*' => ['file', 'max:' . (self::MAX_BYTES_PER / 1024)],
         ], [
-            'files.required' => 'Anexa pelo menos um PDF.',
+            'files.required' => 'Anexa pelo menos um ficheiro.',
             'files.max'      => 'Máximo ' . self::MAX_FILES_PER . ' ficheiros por upload.',
-            'files.*.mimes'  => 'Aceita apenas PDF.',
-            'files.*.max'    => 'Cada PDF tem de ter ≤ 10 MB.',
+            'files.*.max'    => 'Cada ficheiro tem de ter ≤ 50 MB.',
         ]);
 
         $created   = [];
@@ -77,24 +82,30 @@ class TenderAttachmentController extends Controller
                 continue;
             }
 
-            // Persist file → /storage/app/private/tender-attachments/{id}/{slug}.pdf
-            $slug    = Str::slug(pathinfo($f->getClientOriginalName(), PATHINFO_FILENAME));
-            $slug    = $slug !== '' ? $slug : 'doc';
-            $relPath = self::PATH_PREFIX . '/' . $tender->id . '/' . $slug . '-' . substr($hash, 0, 8) . '.pdf';
+            // Persist file → /storage/app/private/tender-attachments/{id}/{slug}.{ext}
+            // 2026-05-18: extensão derivada do ficheiro original (era .pdf
+            // hard-coded). Slug + hash continuam a garantir nome único.
+            $originalName = $f->getClientOriginalName();
+            $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+            if ($ext === '') $ext = 'bin'; // fallback para ficheiros sem extensão
+            $slug = Str::slug(pathinfo($originalName, PATHINFO_FILENAME));
+            $slug = $slug !== '' ? $slug : 'doc';
+            $storedName = $slug . '-' . substr($hash, 0, 8) . '.' . $ext;
+            $relPath    = self::PATH_PREFIX . '/' . $tender->id . '/' . $storedName;
             try {
                 Storage::disk(self::DISK)->putFileAs(
                     self::PATH_PREFIX . '/' . $tender->id,
                     $f,
-                    $slug . '-' . substr($hash, 0, 8) . '.pdf',
+                    $storedName,
                 );
             } catch (\Throwable $e) {
-                $failed[] = [$f->getClientOriginalName(), 'storage_failed: ' . $e->getMessage()];
+                $failed[] = [$originalName, 'storage_failed: ' . $e->getMessage()];
                 continue;
             }
 
             $att = TenderAttachment::create([
                 'tender_id'           => $tender->id,
-                'original_name'       => $f->getClientOriginalName(),
+                'original_name'       => $originalName,
                 'disk_path'           => $relPath,
                 'mime_type'           => $f->getClientMimeType(),
                 'size_bytes'          => $f->getSize(),
@@ -103,20 +114,27 @@ class TenderAttachmentController extends Controller
                 'uploaded_by_user_id' => Auth::id(),
             ]);
 
-            // Synchronous extraction — small PDFs parse in < 1s. For
-            // larger ones this could move to a queued job, but for
-            // typical tender RFQs (≤ 30 pages) the user benefits from
-            // immediate text-availability when they hit "Sugerir".
-            $absolutePath = Storage::disk(self::DISK)->path($relPath);
-            $res = $extractor->extract($absolutePath);
-            if ($res['ok']) {
-                $att->extracted_text   = $res['text'];
-                $att->extracted_chars  = mb_strlen($res['text']);
-                $att->extraction_status = TenderAttachment::STATUS_OK;
-                $att->extraction_error = null;
+            // Extracção apenas para PDFs. Outros formatos (xlsx, docx,
+            // eml, imagens, …) ficam em STATUS_SKIPPED — guardados para
+            // download mas sem texto extraído. O suggester / Marta CRM
+            // já filtram por STATUS_OK antes de injectar no contexto.
+            if ($ext === 'pdf') {
+                $absolutePath = Storage::disk(self::DISK)->path($relPath);
+                $res = $extractor->extract($absolutePath);
+                if ($res['ok']) {
+                    $att->extracted_text    = $res['text'];
+                    $att->extracted_chars   = mb_strlen($res['text']);
+                    $att->extraction_status = TenderAttachment::STATUS_OK;
+                    $att->extraction_error  = null;
+                } else {
+                    $att->extraction_status = TenderAttachment::STATUS_FAILED;
+                    $att->extraction_error  = mb_substr((string) ($res['error'] ?? 'unknown'), 0, 500);
+                }
             } else {
-                $att->extraction_status = TenderAttachment::STATUS_FAILED;
-                $att->extraction_error  = mb_substr((string) ($res['error'] ?? 'unknown'), 0, 500);
+                $att->extraction_status = TenderAttachment::STATUS_SKIPPED;
+                $att->extraction_error  = null;
+                // Nota descritiva para o operador saber porque ficou "skipped".
+                $att->extraction_error  = 'Formato ' . strtoupper($ext) . ' — guardado sem extracção de texto. Disponível para download.';
             }
             $att->save();
             $created[] = $att->id;
@@ -145,8 +163,12 @@ class TenderAttachmentController extends Controller
         $abs = Storage::disk(self::DISK)->path($attachment->disk_path);
         if (!is_file($abs)) abort(404);
 
+        // 2026-05-18: Content-Type derivado do mime_type guardado (era
+        // hard-coded application/pdf). Fallback para octet-stream se
+        // não tivermos mime (ficheiros legacy ou sem detecção).
+        $contentType = $attachment->mime_type ?: 'application/octet-stream';
         return Storage::disk(self::DISK)->download($attachment->disk_path, $attachment->original_name, [
-            'Content-Type'  => 'application/pdf',
+            'Content-Type'  => $contentType,
             'Cache-Control' => 'private, max-age=0, no-store',
         ]);
     }
