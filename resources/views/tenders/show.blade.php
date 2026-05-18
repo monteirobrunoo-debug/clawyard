@@ -228,6 +228,17 @@
                                 ✨ Auto-resumo → Notas+SAP
                             </button>
                         </form>
+                        {{-- 2026-05-18: Inquiry PartYard Defense — gera PDF
+                             conforme modelo MOD_072_V3 (Sistema_Gestão_Qualidade
+                             /QUALIDADE/MODELOS/PY Military). Inclui items do
+                             SoR + termos NATO/NSPA + bloco assinatura. Anexa
+                             automaticamente ao concurso. --}}
+                        <a href="{{ route('tenders.inquiry-pdf', $tender) }}"
+                           target="_blank"
+                           class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                           title="Gera PDF Inquiry PartYard Defense (modelo MOD_072_V3) com items do SoR, termos NATO/NSPA e bloco assinatura. Anexa automaticamente.">
+                            📋 Inquiry PartYard (PDF)
+                        </a>
                         @endif
                         @unless($tender->is_confidential)
                         <button type="button" id="ts-service-analysis-btn"

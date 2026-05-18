@@ -710,10 +710,23 @@ class TenderController extends Controller
         }
 
         $prompt .= "\n=== ANEXOS ({$okAttachments->count()}) ===\n";
+        $sorAll = [];
         foreach ($okAttachments as $a) {
             $snippet = mb_substr((string) $a->extracted_text, 0, 8000);
             $prompt .= "\n--- {$a->original_name} ({$a->extracted_chars} chars) ---\n";
             $prompt .= $snippet . "\n";
+            // 2026-05-18: extrai SoR se existir e adiciona em bloco
+            // separado — Marta tem de citar isto explicitamente.
+            $sor = $a->extractStatementOfRequirements(8000);
+            if ($sor) $sorAll[] = "[{$a->original_name} · SoR]\n" . $sor;
+        }
+        if (!empty($sorAll)) {
+            $prompt .= "\n=== STATEMENT OF REQUIREMENTS (CRÍTICO) ===\n"
+                    .  "Esta é a secção que tem as specs técnicas linha-a-linha. "
+                    .  "Inclui no resumo TODOS os items/quantidades/normas que aqui aparecem — "
+                    .  "sem isto o operador comercial não sabe o que está em jogo.\n\n"
+                    .  implode("\n\n", $sorAll)
+                    .  "\n=== FIM SoR ===\n";
         }
 
         $prompt .= "\n=== INSTRUÇÃO ===\n"

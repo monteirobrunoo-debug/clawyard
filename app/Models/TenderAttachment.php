@@ -47,4 +47,78 @@ class TenderAttachment extends Model
         if (mb_strlen($text) <= $maxChars) return $text;
         return mb_substr($text, 0, $maxChars) . "\n\n…[truncado a {$maxChars} caracteres]";
     }
+
+    /**
+     * Extrai a secção "Statement of Requirements" (ou equivalente PT) do
+     * texto do anexo — peça mais crítica num RFP NATO/NSPA.
+     *
+     * 2026-05-18: pedido directo do operador — "falta a info que está no
+     * Statement of Requirements, muito importante". Esta secção contém
+     * as specs técnicas linha-a-linha que o fornecedor precisa para cotar.
+     *
+     * Heurística:
+     *   1. Procura cabeçalhos comuns ("Statement of Requirements",
+     *      "Technical Requirements", "Requisitos Técnicos", "SoR",
+     *      "Specifications", "Especificações", "Annex A", "Anexo A").
+     *   2. Extrai do cabeçalho até ao próximo cabeçalho/secção ou fim do
+     *      texto (cap maxChars).
+     *   3. Se não encontrar cabeçalho, devolve null (caller decide se usa
+     *      o texto inteiro como fallback).
+     *
+     * Útil para Daniel emails, martaSummarize, e Inquiry PartYard PDF.
+     */
+    public function extractStatementOfRequirements(int $maxChars = 10000): ?string
+    {
+        $text = (string) $this->extracted_text;
+        if ($text === '') return null;
+
+        // Cabeçalhos comuns de SoR em PT/EN, ordenados por especificidade.
+        // O padrão captura desde o cabeçalho até ao próximo cabeçalho ou
+        // fim do texto (lookahead).
+        $headers = [
+            'statement\s+of\s+requirements?',
+            'technical\s+requirements?',
+            'technical\s+specifications?',
+            'specifications?\s+of\s+supply',
+            'requisitos\s+t[ée]cnicos',
+            'especifica[çc][õo]es?\s+t[ée]cnicas?',
+            'caderno\s+de\s+encargos',
+            'annex\s+a\b',
+            'anexo\s+a\b',
+            'scope\s+of\s+(supply|work)',
+            '\bso[rR]\b',
+            'lista\s+de\s+equipamentos?',
+            'items?\s+to\s+(supply|quote|deliver)',
+            'list\s+of\s+items',
+            'lots?\s+description',
+        ];
+
+        $headerRe = '/(?:^|\n)\s*(?:\d+[\.\)]\s*)?(?:' . implode('|', $headers) . ')\b/iu';
+
+        if (!preg_match($headerRe, $text, $m, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+
+        $startByte = $m[0][1];
+        // Converter byte offset para char offset (UTF-8 safe).
+        $start = mb_strlen(substr($text, 0, $startByte));
+
+        // Próximo cabeçalho de secção (limita o tamanho do SoR).
+        // Padrões: "N. UPPERCASE", "Section N", "Annex B+", "Chapter N"
+        $endRe = '/\n\s*(?:\d+\.\s+[A-ZÁÉÍÓÚ][A-ZÁÉÍÓÚ\s]{4,}|Section\s+\d+|Annex\s+[B-Z]|Anexo\s+[B-Z]|Chapter\s+\d+)/u';
+        $remainder = mb_substr($text, $start);
+        $sor = $remainder;
+
+        if (preg_match($endRe, $remainder, $em, PREG_OFFSET_CAPTURE)) {
+            $endByte = $em[0][1];
+            $endChar = mb_strlen(substr($remainder, 0, $endByte));
+            $sor = mb_substr($remainder, 0, $endChar);
+        }
+
+        $sor = trim($sor);
+        if (mb_strlen($sor) > $maxChars) {
+            $sor = mb_substr($sor, 0, $maxChars) . "\n…[SoR truncado em {$maxChars} chars]";
+        }
+        return $sor !== '' ? $sor : null;
+    }
 }

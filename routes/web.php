@@ -690,6 +690,9 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/tenders/{tender}/marta-summarize', [TenderController::class, 'martaSummarize'])->name('tenders.marta-summarize');
     // 2026-05-18: criação directa de SAP Opp (sem chat) — manager+
     Route::post('/tenders/{tender}/create-sap-opp',  [TenderController::class, 'createSapOpp'])->name('tenders.create-sap-opp');
+    // 2026-05-18: gera Inquiry PartYard PDF (mimica MOD_072_V3) com items
+    // do SoR + termos NATO/NSPA, anexa automaticamente ao concurso
+    Route::get ('/tenders/{tender}/inquiry-pdf',     [\App\Http\Controllers\TenderInquiryController::class, 'generate'])->name('tenders.inquiry-pdf');
 });
 
 // Lead opportunities — agent-swarm-discovered business signals

@@ -196,19 +196,41 @@ class TenderSupplierController extends Controller
         // We feed him the first ~6KB of each attached PDF (capped via
         // promptSnippet on the model) so he can reference real
         // equipment / part numbers / quantities in each draft.
+        //
+        // 2026-05-18: bloco SEPARADO para o Statement of Requirements
+        // se ele existir. Pedido directo do operador: "falta a info
+        // que está no statement of requirements, muito importante".
+        // SoR contém as specs técnicas linha-a-linha que o fornecedor
+        // precisa de ver para cotar — não pode ser misturada com o
+        // resto do RFP boilerplate.
         $pdfBlock = '';
+        $sorBlock = '';
         try {
             $atts = $tender->attachments()->where('extraction_status', 'ok')->get();
             if ($atts->isNotEmpty()) {
                 $chunks = [];
+                $sors   = [];
                 foreach ($atts as $att) {
                     $chunks[] = "[{$att->original_name}]\n" . $att->promptSnippet(6000);
+                    $sor = $att->extractStatementOfRequirements(8000);
+                    if ($sor) {
+                        $sors[] = "[{$att->original_name} · SoR]\n" . $sor;
+                    }
                 }
                 $pdfBlock = "\n\nDocumentos do concurso (RFP/RFQ):\n---\n"
                           . implode("\n\n---\n\n", $chunks)
                           . "\n---\n\nUsa o conteúdo destes documentos para tornar cada email "
                           . "específico aos equipamentos / part-numbers / quantidades reais. "
                           . "NUNCA inventes números — se um detalhe não estiver no documento, omite-o.";
+
+                if (!empty($sors)) {
+                    $sorBlock = "\n\n=== STATEMENT OF REQUIREMENTS (SECÇÃO CRÍTICA) ===\n"
+                              . "Esta é a secção do RFP onde estão as specs técnicas linha-a-linha. "
+                              . "OBRIGATÓRIO mencionar TODOS os items / specs / normas que aqui aparecem "
+                              . "no corpo de cada email — sem isto o fornecedor não sabe o que cotar.\n\n"
+                              . implode("\n\n", $sors)
+                              . "\n=== FIM STATEMENT OF REQUIREMENTS ===";
+                }
             }
         } catch (\Throwable $e) { /* attachments relation missing — skip silently */ }
 
@@ -219,7 +241,7 @@ Concurso/RFQ:
   • Referência: {$ref}
   • Organização: {$org}
   • Deadline: {$deadline}
-  • Fonte: {$tender->source}{$pdfBlock}
+  • Fonte: {$tender->source}{$pdfBlock}{$sorBlock}
 
 Por favor escreve UM email tailored POR FORNECEDOR — usa o template "Quote Request" /
 "Cold Outreach" conforme apropriado. {$langLine}
