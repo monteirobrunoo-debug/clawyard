@@ -513,6 +513,17 @@
                                                  para unificar acingov + vortal sob "Acingov/Vortal/PT Concursos". --}}
                                             <div class="text-xs font-semibold uppercase text-gray-600">{{ $sourceLabels[$t->source] ?? strtoupper($t->source) }}</div>
                                             <div class="text-xs font-mono text-gray-500">{{ $t->reference }}</div>
+                                            {{-- 2026-05-18: pill com nome do colaborador para consistência
+                                                 com a vista "all tenders". Útil para concursos partilhados
+                                                 onde o user actual NÃO é o colaborador principal. --}}
+                                            @if($t->collaborator?->name)
+                                                <div class="mt-1">
+                                                    <span class="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
+                                                          title="Atribuído a {{ $t->collaborator->name }}">
+                                                        ✓ atribuído · {{ $t->collaborator->name }}
+                                                    </span>
+                                                </div>
+                                            @endif
                                         </td>
                                         <td class="px-3 py-2 max-w-md">
                                             <a href="{{ route('tenders.show', $t) }}" class="text-indigo-700 hover:underline font-medium">
@@ -824,17 +835,22 @@
                                                      manager can scan the whole table and instantly see
                                                      which processes have already been delegated. Asked
                                                      for explicitly 2026-04-27. --}}
+                                            {{-- 2026-05-18: a pill agora mostra o NOME do colaborador
+                                                 junto, conforme pedido: "quando tem nome de colaborador
+                                                 adicionar na frente atribuído e nome do colaborador
+                                                 conforme tabela do Excel". O nome vem da coluna
+                                                 Colaborador da importação — TenderCollaborator::name. --}}
                                             @if($wasJustAssigned)
                                                 <div class="mt-1">
                                                     <span class="just-assigned-chip" title="Atribuído agora mesmo{{ $justAssignedLabel ? ' a ' . $justAssignedLabel : '' }}">
-                                                        ✨ atribuído
+                                                        ✨ atribuído{{ $t->collaborator?->name ? ' · ' . $t->collaborator->name : '' }}
                                                     </span>
                                                 </div>
                                             @elseif($hasAssignee)
                                                 <div class="mt-1">
                                                     <span class="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800"
-                                                          title="Já atribuído a {{ $t->collaborator?->name ?? 'alguém' }}">
-                                                        ✓ atribuído
+                                                          title="Atribuído a {{ $t->collaborator?->name ?? 'alguém' }} via import Excel ou atribuição manual">
+                                                        ✓ atribuído{{ $t->collaborator?->name ? ' · ' . $t->collaborator->name : '' }}
                                                     </span>
                                                 </div>
                                             @endif
