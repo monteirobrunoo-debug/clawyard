@@ -274,10 +274,17 @@
                                         </button>
                                     </form>
                                     <a href="{{ route('tenders.service-analysis.show', $tender) }}"
+                                       target="_blank"
                                        class="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 px-2.5 py-1 text-[11px] font-semibold"
-                                       title="Abrir vista completa da análise">
-                                        Abrir
+                                       title="Abrir vista completa da análise em nova tab">
+                                        Vista completa ↗
                                     </a>
+                                    <button type="button"
+                                            onclick="document.getElementById('ts-service-analysis-btn')?.click()"
+                                            class="inline-flex items-center gap-1 rounded bg-violet-600 hover:bg-violet-500 text-white px-2.5 py-1 text-[11px] font-semibold"
+                                            title="Re-correr análise + render inline no dashboard">
+                                        Ver inline
+                                    </button>
                                 </div>
                             </div>
                             <ol class="ml-5 list-decimal text-xs text-gray-800 space-y-0.5">
@@ -320,8 +327,16 @@
                                 const data = await res.json();
                                 if (!res.ok) throw new Error(data.detail || 'HTTP ' + res.status);
                                 status.className = 'mt-3 text-xs text-emerald-700';
-                                status.textContent = (data.cached ? '✓ Análise pronta (cached). ' : '✓ Análise gerada. ') + 'A abrir...';
-                                window.open(data.view_url, '_blank');
+                                status.textContent = (data.cached ? '✓ Análise pronta (cached). ' : '✓ Análise gerada. ') + 'A renderizar inline…';
+
+                                // 2026-05-18: render INLINE em vez de nova tab.
+                                // Pedido directo: "quando estou no dashboard do
+                                // concurso queria não sair, analisar os emails
+                                // para enviar logo, pedidos e analise dos
+                                // agentes logo ali". Faz fetch da página da
+                                // análise e injecta o conteúdo num panel logo
+                                // por baixo do botão.
+                                renderAnalysisInline(data.view_url);
                             } catch (e) {
                                 status.className = 'mt-3 text-xs text-red-700';
                                 status.textContent = 'Erro: ' + e.message;
@@ -330,6 +345,54 @@
                                 btn.textContent = orig;
                             }
                         });
+
+                        // 2026-05-18: helper para render inline da análise multi-agente.
+                        // Faz fetch ao GET /tenders/{id}/service-analysis e injecta
+                        // o html dentro de #ts-service-analysis-inline.
+                        async function renderAnalysisInline(viewUrl) {
+                            let panel = document.getElementById('ts-service-analysis-inline');
+                            if (!panel) {
+                                panel = document.createElement('div');
+                                panel.id = 'ts-service-analysis-inline';
+                                panel.className = 'mt-4 rounded-md border border-violet-200 bg-violet-50/30 overflow-hidden';
+                                status.insertAdjacentElement('afterend', panel);
+                            }
+                            panel.innerHTML = '<div class="p-4 text-xs text-gray-500">⏳ A carregar análise…</div>';
+
+                            try {
+                                const r = await fetch(viewUrl, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } });
+                                if (!r.ok) throw new Error('HTTP ' + r.status);
+                                const html = await r.text();
+                                // Extrai o <div class="doc-wrap"> com o conteúdo principal
+                                const parser = new DOMParser();
+                                const doc = parser.parseFromString(html, 'text/html');
+                                const docWrap = doc.querySelector('.doc-wrap');
+                                if (!docWrap) {
+                                    // Fallback: link para abrir em nova tab
+                                    panel.innerHTML = `<div class="p-4 text-xs">
+                                        Análise pronta. <a href="${viewUrl}" target="_blank" class="text-violet-700 underline font-semibold">Abrir vista completa</a>.
+                                    </div>`;
+                                    return;
+                                }
+                                // Cabeçalho com link para a vista completa + botão de fechar
+                                const header = `<div class="px-4 py-2 bg-violet-100 border-b border-violet-200 flex items-center justify-between">
+                                    <span class="text-xs font-semibold text-violet-900">🎯 Análise multi-agente (inline)</span>
+                                    <div class="flex gap-2">
+                                        <a href="${viewUrl}" target="_blank" class="text-[11px] text-violet-700 hover:underline">Abrir vista completa ↗</a>
+                                        <button type="button" onclick="document.getElementById('ts-service-analysis-inline').remove()"
+                                                class="text-[11px] text-violet-700 hover:underline">Fechar ✕</button>
+                                    </div>
+                                </div>`;
+                                panel.innerHTML = header + '<div class="bg-white p-4">' + docWrap.innerHTML + '</div>';
+                                // Scroll suave até ao painel
+                                panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            } catch (err) {
+                                panel.innerHTML = `<div class="p-4 text-xs text-red-700">
+                                    Erro a carregar análise: ${err.message}.
+                                    <a href="${viewUrl}" target="_blank" class="text-violet-700 underline">Abrir em nova tab</a>.
+                                </div>`;
+                            }
+                        }
                     })();
                     </script>
 
@@ -937,7 +1000,15 @@
                                     <textarea id="${id}_body" rows="8"
                                               class="w-full rounded-md border-gray-300 text-xs font-mono leading-relaxed">${esc(em.body || '')}</textarea>
                                     <input type="hidden" id="${id}_cc" value="${esc(em.cc || '')}">
-                                    <div class="flex items-center gap-2 pt-1">
+                                    <div class="flex items-center gap-2 pt-1 flex-wrap">
+                                        {{-- 2026-05-18: botão Send via ClawYard (SMTP do servidor)
+                                             para o operador não precisar de sair para o Outlook.
+                                             Pedido directo: "analisar os emails para enviar logo,
+                                             pedidos e analise dos agentes logo ali". --}}
+                                        <button type="button" data-card-id="${id}" data-action="send"
+                                                class="rounded-md bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-500">
+                                            📤 Enviar via ClawYard
+                                        </button>
                                         <button type="button" data-card-id="${id}" data-action="outlook"
                                                 class="rounded-md bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-500">
                                             ✉ Abrir no Outlook
@@ -970,8 +1041,9 @@
                         b.addEventListener('click', () => {
                             const id = b.dataset.cardId;
                             const action = b.dataset.action;
-                            if (action === 'outlook') openInOutlookLocal(id);
-                            else if (action === 'copy') copyEmailLocal(id);
+                            if (action === 'outlook')      openInOutlookLocal(id);
+                            else if (action === 'copy')    copyEmailLocal(id);
+                            else if (action === 'send')    sendViaClawYardLocal(id, b);
                         });
                     });
                     document.getElementById('ss-open-all')?.addEventListener('click', () => {
@@ -1014,6 +1086,56 @@
                             setTimeout(() => { st.textContent = ''; }, 1800);
                         }
                     });
+                }
+
+                // 2026-05-18: enviar email DIRECTAMENTE via SMTP do servidor
+                // ClawYard, sem precisar de Outlook desktop. Pedido directo:
+                // "analisar os emails para enviar logo... logo ali".
+                async function sendViaClawYardLocal(id, btn) {
+                    const to      = document.getElementById(id+'_to')?.value.trim()      || '';
+                    const cc      = document.getElementById(id+'_cc')?.value.trim()      || '';
+                    const subject = document.getElementById(id+'_subject')?.value.trim() || '';
+                    const body    = document.getElementById(id+'_body')?.value.trim()    || '';
+                    const st      = document.getElementById(id+'_status');
+
+                    if (!to || !subject || !body) {
+                        if (st) { st.textContent = '⚠ Preenche Para + Assunto + Corpo'; st.style.color = '#b91c1c'; }
+                        return;
+                    }
+                    if (!confirm(`Enviar email para ${to}?\nAssunto: ${subject.slice(0,60)}...`)) return;
+
+                    const orig = btn.textContent;
+                    btn.disabled = true;
+                    btn.textContent = '⏳ a enviar…';
+                    if (st) { st.textContent = ''; st.style.color = ''; }
+
+                    try {
+                        const fd = new FormData();
+                        fd.append('to', to);
+                        if (cc) fd.append('cc', cc);
+                        fd.append('subject', subject);
+                        fd.append('body', body);
+
+                        const res = await fetch('/api/email/send', {
+                            method:  'POST',
+                            headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                            body:    fd,
+                            credentials: 'same-origin',
+                        });
+                        if (res.status === 401 && await maybeRedirectOnOtp(res)) return;
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok || data.error) throw new Error(data.error || data.message || ('HTTP ' + res.status));
+
+                        btn.style.background = '#16a34a';
+                        btn.textContent = '✅ enviado';
+                        if (st) { st.textContent = '✅ enviado para ' + to; st.style.color = '#15803d'; }
+                        // Desactiva o card para evitar reenvio acidental.
+                        document.getElementById(id+'_card')?.style.setProperty('opacity', '0.55');
+                    } catch (e) {
+                        btn.disabled = false;
+                        btn.textContent = orig;
+                        if (st) { st.textContent = '❌ ' + (e.message || 'erro'); st.style.color = '#b91c1c'; }
+                    }
                 }
             })();
             </script>
