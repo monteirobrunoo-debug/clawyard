@@ -79,27 +79,24 @@
         </td>
     </tr>
     <tr>
-        <td class="label">CONCURSO</td>
+        <td class="label">PEDIDO</td>
         <td>
-            <strong>{{ $tender->title }}</strong><br>
-            Referência: {{ $tender->reference ?: '—' }} ·
-            Organização Compradora: {{ $tender->purchasing_org ?: '—' }} ·
-            Fonte: {{ strtoupper((string) $tender->source) }}
+            {{-- 2026-05-18: cliente NUNCA é revelado ao fornecedor.
+                 Pedido directo do operador: "para enviar o inquiry não
+                 mencionas o nosso cliente". Por isso aqui mostra-se só
+                 o título do pedido (genericamente) e a nossa referência
+                 interna ClawYard, sem source nem purchasing_org. --}}
+            <strong>{{ $maskedTitle ?: $tender->title }}</strong><br>
+            Referência interna: PYD-{{ str_pad((string) $tender->id, 6, '0', STR_PAD_LEFT) }}
         </td>
     </tr>
     @if($tender->deadline_at)
     <tr>
-        <td class="label">DEADLINE</td>
+        <td class="label">DEADLINE RESPOSTA</td>
         <td>
             <strong style="color:#b91c1c">{{ $tender->deadline_at->format('d/m/Y H:i') }}</strong>
             ({{ \Carbon\Carbon::parse($tender->deadline_at)->diffForHumans() }})
         </td>
-    </tr>
-    @endif
-    @if($tender->sap_opportunity_number)
-    <tr>
-        <td class="label">SAP OPP</td>
-        <td>#{{ $tender->sap_opportunity_number }}</td>
     </tr>
     @endif
 </table>

@@ -73,10 +73,16 @@ class TenderInquiryController extends Controller
                  . mb_substr((string) $first->extracted_text, 0, 8000);
         }
 
+        // 2026-05-18: SCRUB de info do cliente final antes de mostrar
+        // ao fornecedor. Pedido directo: "para enviar o inquiry não
+        // mencionas o nosso cliente". Remove NSPA / NATO / NCIA / etc.
+        // do título E do bloco SoR antes de renderizar.
+        $maskedTitle = $this->scrubCustomerInfo($tender->title, $tender);
+        $sor         = $sor ? $this->scrubCustomerInfo($sor, $tender) : null;
+
         // Parse items do SoR via regex heurística — captura linhas
-        // estruturadas tipo:
-        //   "Item 1: NETGATE-7100 · P/N NG-7100 · Qty 5"
-        //   "2x TANQUE VERTICAL 500L · P/N HJI-500L"
+        // estruturadas e agrupa sub-specs no mesmo item (numera apenas
+        // quando muda o equipamento — pedido directo do operador).
         $items = $this->parseItems($sor ?? '');
 
         $contactName  = Auth::user()?->name  ?? 'PartYard Defense';
@@ -87,6 +93,7 @@ class TenderInquiryController extends Controller
             'supplier'      => $supplier,
             'items'         => $items,
             'sor'           => $sor,
+            'maskedTitle'   => $maskedTitle,
             'today'         => now(),
             'contactName'   => $contactName,
             'contactEmail'  => $contactEmail,
@@ -137,13 +144,20 @@ class TenderInquiryController extends Controller
     }
 
     /**
-     * Parser heurístico de items a partir do texto SoR.
-     * Captura padrões comuns em RFPs NATO/NSPA:
-     *   • "Item N: descrição · P/N XXX · Qty YY · specs"
-     *   • "N. descrição · part number XXX · quantity YY"
-     *   • "Lot N: descrição"
-     *   • "Nx descrição · P/N XXX"
-     * Devolve até 20 items (mais que isto fica ilegível na tabela A4).
+     * Parser heurístico de items + agrupamento de sub-specs.
+     *
+     * 2026-05-18 mudança: "é sempre as linhas não numeres apenas quando
+     * passa para outro equipamento". Agora as linhas que NÃO têm sinal
+     * de novo equipamento (P/N novo, Qty nova, header "Item N:") são
+     * FUNDIDAS no item anterior como specs adicionais — em vez de
+     * criarem novas linhas numeradas.
+     *
+     * Heurística "é novo equipamento":
+     *   • Tem header "Item N:" / "N." / "Lot N:" / "• "
+     *   • OU tem P/N próprio
+     *   • OU tem Qty própria (números diferentes do anterior)
+     *
+     * Devolve até 20 items distintos.
      *
      * @return list<array{desc: string, pn: string, qty: string, specs: string, norms: string}>
      */
@@ -152,51 +166,174 @@ class TenderInquiryController extends Controller
         if ($text === '') return [];
 
         $items = [];
+        $current = null;   // último item activo para acumular sub-specs
+
         $lines = preg_split('/\r?\n/', $text) ?: [];
         foreach ($lines as $line) {
             $line = trim((string) $line);
-            if (mb_strlen($line) < 12 || mb_strlen($line) > 400) continue;
+            if (mb_strlen($line) < 5 || mb_strlen($line) > 400) continue;
 
-            // Padrões "Item N:", "N.", "Lot N", "Nx <coisa>", "• <coisa>"
-            $isItem = preg_match('/^(?:item\s+\d+[\.:]|\d+[\.\)]\s+|lot\s+\d+[\.:]|•\s+|\d+\s*x\s+)/iu', $line);
-            $hasPn  = preg_match('/(P\/N|Part\s*Number|Item\s*Code|NSN)\s*[:=]?\s*([A-Z0-9\.\-\/_]+)/i', $line, $pnM);
-            $hasQty = preg_match('/(Qty|Quantity|QT|qtde)\s*[:=]?\s*(\d+(?:\s*(?:units?|pcs?|peças?|unidades?))?)/i', $line, $qtyM)
-                  || preg_match('/^(\d+)\s*x\s+/u', $line, $qtyM);
+            // Sinais de NOVO equipamento (não sub-spec)
+            $hasHeader = preg_match('/^(?:item\s+\d+[\.:]|\d+[\.\)]\s+|lot\s+\d+[\.:]|•\s+|\d+\s*x\s+)/iu', $line);
+            $hasPn     = preg_match('/(P\/N|Part\s*Number|Item\s*Code|NSN)\s*[:=]?\s*([A-Z0-9\.\-\/_]+)/i', $line, $pnM);
+            $hasQty    = preg_match('/(Qty|Quantity|QT|qtde)\s*[:=]?\s*(\d+(?:\s*(?:units?|pcs?|peças?|unidades?))?)/i', $line, $qtyM)
+                      || preg_match('/^(\d+)\s*x\s+/u', $line, $qtyM);
 
-            if (!$isItem && !$hasPn && !$hasQty) continue;
+            $isNewEquipment = $hasHeader || ($hasPn && (!$current || ($current['pn'] !== '' && trim($pnM[2]) !== $current['pn'])));
 
-            // Desc: tira P/N, Qty, normas conhecidas, separadores
-            $desc = $line;
-            $desc = preg_replace('/(P\/N|Part\s*Number|Item\s*Code|NSN)\s*[:=]?\s*[A-Z0-9\.\-\/_]+/i', '', $desc) ?? $desc;
-            $desc = preg_replace('/(Qty|Quantity|QT|qtde)\s*[:=]?\s*\d+(?:\s*(?:units?|pcs?|peças?|unidades?))?/i', '', $desc) ?? $desc;
-            $desc = preg_replace('/^(?:item\s+\d+[\.:]|\d+[\.\)]\s+|lot\s+\d+[\.:]|•\s+|\d+\s*x\s+)/iu', '', $desc) ?? $desc;
-            $desc = preg_replace('/\s+[·|]\s+$/', '', trim($desc)) ?? $desc;
-            $desc = mb_substr(trim($desc, " ·|—-"), 0, 160);
-
-            // Normas
+            // Extrai normas/specs sempre (acumulam no item actual ou novo)
             $norms = [];
             if (preg_match_all('/(CE-MDR|MIL-STD-\d+[A-Z]?|EUR\.1|Form\s*A|ISO\s*\d+|NATO\s+Mil-Std-\d+|REACH|RoHS)/i', $line, $normsM)) {
                 $norms = array_values(array_unique($normsM[0]));
             }
-
-            // Specs = qualquer coisa em parêntesis ou após específicos
-            $specs = '';
+            $parens = '';
             if (preg_match('/\(([^)]{8,120})\)/u', $line, $spM)) {
-                $specs = trim($spM[1]);
+                $parens = trim($spM[1]);
             }
 
-            $items[] = [
-                'desc'  => $desc !== '' ? $desc : '(ver SoR)',
-                'pn'    => $hasPn  ? trim($pnM[2])  : '',
-                'qty'   => $hasQty ? trim($qtyM[count($qtyM) - 1]) : '',
-                'specs' => $specs,
-                'norms' => implode(', ', $norms),
-            ];
+            if ($isNewEquipment) {
+                // Fechar item anterior se existir
+                if ($current !== null) {
+                    $items[] = $current;
+                    if (count($items) >= 20) break;
+                }
 
-            if (count($items) >= 20) break;
+                // Constrói descrição limpa
+                $desc = $line;
+                $desc = preg_replace('/(P\/N|Part\s*Number|Item\s*Code|NSN)\s*[:=]?\s*[A-Z0-9\.\-\/_]+/i', '', $desc) ?? $desc;
+                $desc = preg_replace('/(Qty|Quantity|QT|qtde)\s*[:=]?\s*\d+(?:\s*(?:units?|pcs?|peças?|unidades?))?/i', '', $desc) ?? $desc;
+                $desc = preg_replace('/^(?:item\s+\d+[\.:]|\d+[\.\)]\s+|lot\s+\d+[\.:]|•\s+|\d+\s*x\s+)/iu', '', $desc) ?? $desc;
+                $desc = preg_replace('/\s+[·|]\s+$/', '', trim($desc)) ?? $desc;
+                $desc = mb_substr(trim($desc, " ·|—-"), 0, 160);
+
+                $current = [
+                    'desc'   => $desc !== '' ? $desc : '(ver SoR)',
+                    'pn'     => $hasPn  ? trim($pnM[2])  : '',
+                    'qty'    => $hasQty ? trim($qtyM[count($qtyM) - 1]) : '',
+                    'specs'  => $parens,
+                    'norms'  => implode(', ', $norms),
+                    '_specs' => $parens ? [$parens] : [],
+                    '_norms' => $norms,
+                ];
+                continue;
+            }
+
+            // Não é novo equipamento — funde no current se existir
+            if ($current === null) continue;
+
+            // Acumula specs/normas na entry actual
+            if ($parens !== '' && !in_array($parens, $current['_specs'], true)) {
+                $current['_specs'][] = $parens;
+                $current['specs'] = mb_substr(implode(' · ', $current['_specs']), 0, 200);
+            }
+            if (!empty($norms)) {
+                $current['_norms'] = array_values(array_unique(array_merge($current['_norms'], $norms)));
+                $current['norms'] = implode(', ', $current['_norms']);
+            }
+            // Linha extra de descrição (sem cabeçalho) — adiciona à desc
+            // se ainda não tem muito conteúdo
+            if (mb_strlen($current['desc']) < 100 && !preg_match('/^\s*[\(\[]/', $line)) {
+                $extra = mb_substr($line, 0, 80);
+                $current['desc'] = mb_substr($current['desc'] . ' · ' . $extra, 0, 200);
+            }
         }
 
-        return $items;
+        // Fecha o último item activo
+        if ($current !== null && count($items) < 20) {
+            $items[] = $current;
+        }
+
+        // Cleanup dos _specs/_norms internos
+        return array_map(function ($it) {
+            unset($it['_specs'], $it['_norms']);
+            return $it;
+        }, $items);
+    }
+
+    /**
+     * Remove referências ao cliente final (NSPA / NCIA / NATO / etc.) de
+     * texto que vai para o fornecedor. Heurística:
+     *   • Nome canónico da source (Tender::SOURCE_TO_BP_NAME)
+     *   • Purchasing_org (nome literal do BP)
+     *   • Reference quando começa com prefix do cliente
+     *   • Frase comuns NATO/NSPA mantidas como "[end-customer]" apenas
+     *     se o operador realmente precisar de contexto técnico
+     *
+     * 2026-05-18: pedido directo "para enviar o inquiry não mencionas o
+     * nosso cliente". Pratica padrão de procurement — o fornecedor não
+     * deve saber quem é o end-customer (margem, abordagem directa, etc).
+     */
+    private function scrubCustomerInfo(string $text, Tender $tender): string
+    {
+        if ($text === '') return $text;
+
+        $masks = [];
+
+        // Customer canonical name (NSPA, NATO, NCIA, …)
+        $sourceBp = Tender::bpNameForSource($tender->source);
+        if ($sourceBp) $masks[] = $sourceBp;
+
+        // Purchasing org name (NSPA - NATO SUPPORT AND PROCUREMENT AGENCY)
+        $org = trim((string) $tender->purchasing_org);
+        if ($org !== '' && mb_strlen($org) >= 3) {
+            $masks[] = $org;
+            // Variantes / sub-strings importantes (e.g., "NATO SUPPORT")
+            foreach (preg_split('/[\s,\-\.\/]+/u', $org) ?: [] as $part) {
+                $part = trim($part);
+                if (mb_strlen($part) >= 4 && !ctype_lower($part)) $masks[] = $part;
+            }
+        }
+
+        // Reference completa (NSPA-2026-1234 etc.)
+        $ref = trim((string) $tender->reference);
+        if ($ref !== '' && mb_strlen($ref) >= 6) $masks[] = $ref;
+
+        // Source key se for grande (não mascarar 'pt' etc.)
+        $source = trim((string) $tender->source);
+        if (in_array(strtolower($source), ['nspa', 'nato', 'ncia', 'sam_gov', 'ungm', 'unido'], true)) {
+            $masks[] = strtoupper($source);
+        }
+
+        // Aplica mask — substitui por "[end-customer]" para o supplier
+        // saber que há um cliente final mas não quem.
+        $masks = array_values(array_unique(array_filter($masks, fn($m) => mb_strlen($m) >= 4)));
+        // Ordena por length DESC — substitui longos primeiro para evitar
+        // substituições parciais (ex.: "NSPA - NATO SUPPORT" antes de "NSPA")
+        usort($masks, fn($a, $b) => mb_strlen($b) - mb_strlen($a));
+
+        // Termos TÉCNICOS que NÃO devem ser mascarados mesmo contendo
+        // "NATO" / "NSPA" etc. Pedido directo: queremos esconder o
+        // cliente mas manter normas técnicas que o fornecedor precisa
+        // de ver (NATO Mil-Std-461, NATO STANAG, NSN/NATO Stock Number,
+        // NATO codification, format SNATO, etc).
+        $technicalKeepers = [
+            'mil-std',
+            'stanag',
+            'stock\s+number',
+            'stock\s+format',
+            'codification',
+            'codification\s+number',
+            'standard\s*\d',
+            'nsn\b',
+            'cage\s+code',
+            'ncage',
+        ];
+
+        foreach ($masks as $mask) {
+            // Negative lookahead: não substitui se for seguido por um
+            // dos technical keepers (case-insensitive, com espaço opcional).
+            $keepRe = '(?!\s+(?:' . implode('|', $technicalKeepers) . '))';
+            $text = preg_replace(
+                '/(?<![A-Za-z0-9])' . preg_quote($mask, '/') . $keepRe . '(?![A-Za-z0-9])/iu',
+                '[end-customer]',
+                $text
+            ) ?? $text;
+        }
+
+        // Compacta repetições de "[end-customer]" consecutivas
+        $text = preg_replace('/(\[end-customer\][\s,\-]*){2,}/u', '[end-customer] ', $text) ?? $text;
+
+        return $text;
     }
 
     private function authorizeView(Tender $tender): void
