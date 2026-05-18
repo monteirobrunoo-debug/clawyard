@@ -153,9 +153,10 @@
                             </p>
                         </div>
                         @php
-                            // Pré-construir o prompt para a Marta com tudo o que ela precisa para
-                            // criar a oportunidade SAP. O front-end abre /chat?agent=crm&prompt=…
-                            // por isso o texto vai URL-encoded no link.
+                            // 2026-05-18: prompt da Marta agora inclui TODOS os anexos extraídos
+                            // (não só o primeiro), porque o operador pediu "abre logo com os
+                            // ficheiros em anexo". Cap 6000 chars por anexo para o link URL não
+                            // explodir; até 4 anexos enviados via query string.
                             $deadline = $tender->deadline_lisbon?->format('d/m/Y H:i') ?? '—';
                             $martaPrompt = "Cria oportunidade SAP B1 para este concurso:\n"
                                 . "• Título: {$tender->title}\n"
@@ -163,24 +164,44 @@
                                 . "• Fonte: " . strtoupper((string) $tender->source) . "\n"
                                 . "• Organização: " . ($tender->purchasing_org ?: '—') . "\n"
                                 . "• Deadline: {$deadline}\n";
-                            if ($tender->attachments->isNotEmpty()) {
-                                $martaPrompt .= "\nDocumentos anexados ({$tender->attachments->count()} PDF):\n";
+                            $okAttachments = $tender->attachments->where('extraction_status', 'ok');
+                            if ($okAttachments->isNotEmpty()) {
+                                $martaPrompt .= "\nDocumentos anexados ({$okAttachments->count()}/" . $tender->attachments->count() . " com texto extraído):\n";
                                 foreach ($tender->attachments as $a) {
-                                    $martaPrompt .= "  - {$a->original_name} ({$a->extracted_chars} chars extraídos)\n";
+                                    $martaPrompt .= "  - {$a->original_name} (" . ($a->extracted_chars ?? 0) . " chars)\n";
                                 }
-                                $first = $tender->attachments->where('extraction_status', 'ok')->first();
-                                if ($first) {
-                                    $snippet = mb_substr((string) $first->extracted_text, 0, 1500);
-                                    $martaPrompt .= "\nExcerto do primeiro PDF:\n---\n{$snippet}\n---\n";
+                                // Inclui os primeiros 4 anexos com 6000 chars cada — chega
+                                // para Marta ter contexto material sem rebentar a URL.
+                                foreach ($okAttachments->take(4) as $i => $a) {
+                                    $snippet = mb_substr((string) $a->extracted_text, 0, 6000);
+                                    $martaPrompt .= "\n--- Anexo {$i}: {$a->original_name} ---\n{$snippet}\n";
+                                }
+                                if ($okAttachments->count() > 4) {
+                                    $martaPrompt .= "\n(+" . ($okAttachments->count() - 4) . " anexos não incluídos no chat — usa o botão 'Auto-resumo' para Marta processar TODOS server-side)\n";
                                 }
                             }
                             $martaPrompt .= "\nQuando criares a oportunidade, devolve o ID SAP para eu actualizar este concurso.";
                         @endphp
                         <a href="/chat?agent=crm&prompt={{ urlencode($martaPrompt) }}"
                            class="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-500"
-                           title="Pré-popula o /chat com Marta CRM e todo o contexto do concurso">
+                           title="Abre /chat com Marta CRM já com metadados + texto dos primeiros 4 anexos">
                             🤖 Pedir à Marta para abrir SAP
                         </a>
+                        {{-- 2026-05-18: botão dedicado para resumo automático server-side.
+                             Mais rápido que o flow de chat — processa TODOS os anexos sem
+                             cap de URL, gera resumo ≤200 chars, mete em notas + SAP. --}}
+                        @if($tender->attachments->where('extraction_status', 'ok')->isNotEmpty())
+                        <form method="POST" action="{{ route('tenders.marta-summarize', $tender) }}"
+                              class="inline" id="marta-summarize-form"
+                              onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='✨ Marta a ler {{ $tender->attachments->where('extraction_status', 'ok')->count() }} anexos…';">
+                            @csrf
+                            <button type="submit"
+                                    class="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-500"
+                                    title="Marta processa TODOS os anexos server-side, gera resumo ≤200 chars, mete em Notas e sincroniza com SAP Remarks. Demora ~10-20s.">
+                                ✨ Auto-resumo → Notas+SAP
+                            </button>
+                        </form>
+                        @endif
                         @unless($tender->is_confidential)
                         <button type="button" id="ts-service-analysis-btn"
                                 class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-500"

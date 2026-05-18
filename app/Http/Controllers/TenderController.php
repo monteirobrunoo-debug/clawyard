@@ -645,6 +645,130 @@ class TenderController extends Controller
      * without a dedicated table. Any authenticated, active user can observe
      * — this is our lowest-privilege action.
      */
+
+    /**
+     * POST /tenders/{tender}/marta-summarize — 2026-05-18.
+     *
+     * Pedido directo do Bruno: o botão "Pedir à Marta" deve abrir já
+     * com os ficheiros em anexo e meter o resumo nas notas do concurso
+     * (que sincronizam para SAP Remarks).
+     *
+     * Server-side flow (em vez de URL ?prompt= como antes):
+     *   1. Constrói prompt rico com TODOS os atachments (até 8000 chars
+     *      cada) + metadados do tender.
+     *   2. Chama CrmAgent::chat() — Marta processa e devolve resumo
+     *      em formato plano (≤200 chars) adequado para SAP Remarks.
+     *   3. APPEND o resumo a tender.notes (preserva o que já lá estava).
+     *   4. Dispara updateOpportunity() no SAP se houver SequentialNo.
+     *   5. Redirect → tender.show com flash status.
+     *
+     * Crash-safe: se o LLM falhar, guarda nota local com erro mas não
+     * rebenta a página.
+     */
+    public function martaSummarize(Tender $tender, SapService $sap)
+    {
+        $user = Auth::user();
+        $this->enforceVisibility($tender, $user);
+
+        // Confidential tenders nunca vão a LLM externo.
+        if ($tender->is_confidential) {
+            return back()->with('error', 'Concurso confidencial — Marta CRM não pode processar (envia conteúdo a Claude). Desmarca a flag se quiseres correr.');
+        }
+
+        // Carrega anexos com texto extraído. Máximo 8KB por anexo para
+        // evitar saturar o context window (cada PDF típico tem 2-5 páginas
+        // de texto útil; concursos com 20 anexos ficam em ≤160KB total).
+        $tender->load('attachments');
+        $okAttachments = $tender->attachments->where('extraction_status', 'ok');
+
+        if ($okAttachments->isEmpty()) {
+            return back()->with('error', 'Concurso sem anexos com texto extraído. Anexa pelo menos um PDF antes de pedir à Marta.');
+        }
+
+        $deadline = $tender->deadline_lisbon?->format('d/m/Y H:i') ?? '—';
+        $prompt = "Analisa este concurso e dá-me um RESUMO EXECUTIVO de ≤200 caracteres pronto para meter no SAP Remarks. "
+            . "O resumo deve incluir: objecto/material, organização compradora, deadline, e 1-2 pontos críticos (ex. urgência, compliance, fornecedor preferido). "
+            . "Formato: texto plano, sem markdown, sem emojis, separado por · entre pontos.\n\n"
+            . "=== CONCURSO ===\n"
+            . "• Título: {$tender->title}\n"
+            . "• Referência: " . ($tender->reference ?: '—') . "\n"
+            . "• Fonte: " . strtoupper((string) $tender->source) . "\n"
+            . "• Organização: " . ($tender->purchasing_org ?: '—') . "\n"
+            . "• Deadline: {$deadline}\n";
+
+        if ($tender->sap_opportunity_number) {
+            $prompt .= "• SAP Opp: #{$tender->sap_opportunity_number}\n";
+        }
+
+        $prompt .= "\n=== ANEXOS ({$okAttachments->count()}) ===\n";
+        foreach ($okAttachments as $a) {
+            $snippet = mb_substr((string) $a->extracted_text, 0, 8000);
+            $prompt .= "\n--- {$a->original_name} ({$a->extracted_chars} chars) ---\n";
+            $prompt .= $snippet . "\n";
+        }
+
+        $prompt .= "\n=== INSTRUÇÃO ===\n"
+            . "Devolve APENAS o resumo (≤200 chars). Sem cabeçalhos, sem 'aqui está', sem markdown. "
+            . "Vai directo para o ponto. Se a deadline for ≤7 dias, começa com 'URGENTE · '. "
+            . "Exemplo de formato: 'Fornecimento de 50 reds NETGATE-7100 · NCIA Bélgica · deadline 25/05 · referência NSPA-2026-1234 · cliente prioritário'.";
+
+        try {
+            $marta = app(\App\Agents\CrmAgent::class);
+            $summary = trim($marta->chat($prompt, []));
+        } catch (\Throwable $e) {
+            Log::error('Tender martaSummarize: chat failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+            return back()->with('error', 'Erro a contactar a Marta CRM: ' . $e->getMessage());
+        }
+
+        // Cap defensivo se Marta ignorar o limite — corta no último ponto
+        // ou no carácter 240 (deixar margem para o cabeçalho).
+        if (mb_strlen($summary) > 240) {
+            $cut = mb_substr($summary, 0, 240);
+            $lastDot = mb_strrpos($cut, '·');
+            $summary = $lastDot !== false ? mb_substr($cut, 0, $lastDot) : $cut;
+            $summary = rtrim($summary, ' ·') . '…';
+        }
+
+        // Bloco para meter nas notas. Marcado com data para o operador
+        // saber quando foi gerado e poder filtrar / re-correr.
+        $date = now()->format('d/m/Y H:i');
+        $block = "[Marta CRM · {$date}]\n{$summary}";
+
+        // APPEND preservando notas manuais existentes.
+        $existing = trim((string) $tender->notes);
+        $tender->notes = $existing === '' ? $block : ($existing . "\n\n" . $block);
+        $tender->save();
+
+        // SAP push — mesma lógica de gates do update() normal.
+        $seqNo = $tender->getSapSequentialNo();
+        $sapConfigured = (bool) config('services.sap.username');
+        $sapStatus = '';
+
+        if (!$sapConfigured) {
+            $sapStatus = 'SAP não configurado — guardado só local';
+        } elseif (!$seqNo) {
+            $sapStatus = 'sem Nº Oportunidade SAP — guardado só local. Preenche o campo SAP para activar sync';
+        } else {
+            try {
+                $ok = $sap->updateOpportunity($seqNo, ['Remarks' => (string) $tender->notes]);
+                $sapStatus = $ok ? "SAP Opp #{$seqNo} sincronizado" : 'SAP rejeitou: ' . ($sap->getLastError() ?: 'erro desconhecido');
+            } catch (\Throwable $e) {
+                Log::warning('Tender martaSummarize SAP sync failed', [
+                    'tender_id' => $tender->id,
+                    'error'     => $e->getMessage(),
+                ]);
+                $sapStatus = "excepção SAP: {$e->getMessage()}";
+            }
+        }
+
+        return redirect()
+            ->route('tenders.show', $tender)
+            ->with('status', "✓ Resumo da Marta gravado nas notas · {$sapStatus}");
+    }
+
     public function observe(Request $request, Tender $tender)
     {
         $user = Auth::user();

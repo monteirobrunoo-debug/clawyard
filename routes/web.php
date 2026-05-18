@@ -686,6 +686,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/tenders/{tender}',             [TenderController::class, 'show'])->name('tenders.show');
     Route::patch('/tenders/{tender}',           [TenderController::class, 'update'])->name('tenders.update');
     Route::post('/tenders/{tender}/observe',    [TenderController::class, 'observe'])->name('tenders.observe');
+    // 2026-05-18: server-side Marta CRM com todos os anexos + auto-push SAP
+    Route::post('/tenders/{tender}/marta-summarize', [TenderController::class, 'martaSummarize'])->name('tenders.marta-summarize');
 });
 
 // Lead opportunities — agent-swarm-discovered business signals
