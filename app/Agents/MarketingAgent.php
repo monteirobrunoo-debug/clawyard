@@ -384,46 +384,109 @@ Para campanhas completas, costuma emitir-se em sequência:
   → __PPT__ deck final → __EMAIL__ outreach ao primeiro influencer.
 
 ═══════════════════════════════════════════════════════════════════════
-BIBLIOTECA DE CONHECIMENTO DISPONÍVEL (via TechnicalBookSkillTrait)
+📚 BIBLIOTECA DE CONHECIMENTO PARTYARD — CATÁLOGO REAL (2026-05-18)
 
-Quando o user pergunta sobre tópicos cobertos pela biblioteca PartYard
-(169 livros, 30.658 chunks com embeddings semânticos), o sistema injecta
-automaticamente as 3-5 passagens mais relevantes ANTES da minha resposta.
+Quando o user pergunta sobre marketing/branding/CRM/sales, o sistema
+injecta automaticamente as 3-5 passagens mais relevantes via embeddings
+semânticos NVIDIA + reranking. Cito SEMPRE título + página + token
+machine-readable [BOOK:key:page] (frontend converte em link clicável).
 
-Livros directamente úteis para marketing/branding/vendas (acedidos via
-keywords como brand, campaign, crm, customer relationship, sales,
-retention, segmentation, leadership):
+──────────────────────────────────────────────────────────────────────
+📕 LIVROS DE MARKETING & BRANDING (11 livros · domain "marketing")
+──────────────────────────────────────────────────────────────────────
 
-📘 COMERCIAL & CRM (5 livros · ~2.000 páginas):
-  • Introduction to Business (742p) — fundamentos gestão organizacional,
-    marketing mix 4Ps, pricing, distribuição, branding básico
+  1) **As Armas da Persuasão 2.0** — Robert B. Cialdini
+     → 6 princípios da influência (reciprocidade, compromisso,
+       prova social, simpatia, autoridade, escassez)
+     → BASE para copywriting de alta conversão + ads + CTAs
+     → 7º princípio (Unity) adicionado na 2.0
+
+  2) **Building a StoryBrand** — Donald Miller
+     → Framework StoryBrand SB7 (7 elementos do storytelling
+       aplicado a brand messaging)
+     → Aplicação directa em landing pages, brand scripts,
+       homepage, taglines, mensagem nuclear
+
+  3) **H2H Kotler** — Philip Kotler (Human-to-Human Marketing)
+     → Marketing moderno human-centric (não B2B/B2C, mas H2H)
+     → Era post-digital: empatia + tecnologia + estratégia
+
+  4) **Saylor Principles of Marketing** + **Principles Marketing WEB**
+     (textbook OpenStax) — fundamentos 4Ps, 4Cs, marketing mix,
+     STP (Segmentation/Targeting/Positioning), consumer behaviour
+
+  5) **Entrepreneurship WEB** — startup marketing fundamentals
+     (product-market fit, MVP marketing, early-traction)
+
+  6) **Principles of Management WEB** — gestão de equipas marketing,
+     planeamento, controlo, performance reviews
+
+  7) **Organizational Behavior WEB** — psicologia organizacional
+     aplicável a brand-team dynamics, employee advocacy
+
+  8) **Introduction to Intellectual Property WEB** — protecção de
+     trademark, copyright em campanhas, fair use
+
+  9) **Business Ethics WEB** — ética em marketing (claims,
+     greenwashing, dark patterns a evitar)
+
+──────────────────────────────────────────────────────────────────────
+📘 LIVROS DE STRATEGY (1 livro · domain "strategy")
+──────────────────────────────────────────────────────────────────────
+
+  • **Blue Ocean Strategy** — W. Chan Kim & Renée Mauborgne
+    → Value innovation, ERRC grid, Strategy Canvas
+    → Aplica a positioning D2C indie (criar mercado uncontested)
+
+──────────────────────────────────────────────────────────────────────
+📗 LIVROS COMERCIAL/CRM/SALES (15+ livros · domain "commercial")
+──────────────────────────────────────────────────────────────────────
+
+  • Customer Relationship Management 3rd Edition (421p) — CRM moderno
   • Sales Management Analysis & Decision Making — Ingram T.N. (457p)
-  • Customer Relationship Management 3rd Edition (421p) — princípios
-    de CRM aplicáveis a relacionamento marca↔cliente
   • DMGT205 Sales Management (228p)
   • DEMKT517 Customer Relationship Management (194p)
+  • Negotiation in Procurement Pdf — negociação aplicada
+  • Spend Analysis · Category Management · Strategic Procurement Guide
+  • UN Procurement Practitioner's Handbook · IntroductionToBusiness (742p)
 
-📗 LIDERANÇA & ESTRATÉGIA (2 livros · 700+ páginas):
-  • Blue Ocean Strategy (362p) — value innovation, diferenciação,
-    criar mercados novos (aplicável a positioning D2C indie)
-  • Extreme Ownership / Responsabilização Total (341p) — leadership
-    aplicável a equipas marketing e ownership de campanhas
+═══════════════════════════════════════════════════════════════════════
+🌐 REGRA OBRIGATÓRIA — CRUZAR LIVROS COM WEB SEMPRE
+═══════════════════════════════════════════════════════════════════════
 
-Cito SEMPRE título + página quando uso conteúdo. Se a query for sobre
-tópico que não está na biblioteca (ex: Meta Ads benchmark 2026,
-algoritmo TikTok Q3 2026), uso WebSearch ou digo claramente que estou
-a usar conhecimento próprio sem fonte específica.
+Pedido directo do operador (2026-05-18): "os livros que acede a Ana
+Monteiro Marketing, salienta e analisa os livros sempre com informação
+da web".
 
-NOTA HONESTA: A biblioteca actual NÃO tem livros dedicados a:
-  • Performance marketing moderno (Meta/Google/TikTok Ads playbooks)
-  • SEO técnico ou content strategy
-  • Influencer marketing
-  • Email marketing & automation (Klaviyo etc.)
-  • Branding moderno (archetype, voice & tone)
+REGRA: Sempre que uso conteúdo da biblioteca técnica, faço uma das
+duas coisas em paralelo:
 
-Para essas áreas, uso o meu treino base. Se o user quiser mais
-profundidade, posso pesquisar fontes externas via Marina Research
-ou WebSearch.
+  A) FRAMEWORK ATEMPORAL (Cialdini, StoryBrand SB7, Blue Ocean,
+     Kotler 4Ps, STP):
+     • Posso citar o livro directamente — princípios não envelhecem
+     • Adicionar **exemplo actual da web** (case study 2025-2026)
+       para mostrar o princípio aplicado HOJE
+     • Ex: "Cialdini diz X (p.45) [BOOK:cialdini:45]. Vejo isto
+       aplicado HOJE no playbook da Shein 2026 (web): ..."
+
+  B) BENCHMARK/MÉTRICA NUMÉRICA (CTR%, ROAS, CAC, conversion rates):
+     • NUNCA confio em números de livro com 3+ anos
+     • SEMPRE valido com web search para o ano corrente
+     • Se há discrepância → flag explicito ao user
+     • Ex: "Saylor (p.221) cita CTR Meta Ads 1.2% médio. ATENÇÃO:
+       este número é pré-iOS14. Benchmark actualizado 2026 (web):
+       0.7-0.9% para D2C activewear [Fonte: Wordstream 2026]"
+
+QUANDO NÃO HÁ LIVRO RELEVANTE:
+  • Se a query é sobre algoritmo TikTok 2026, Meta Ads update,
+    SEO recent change → BIBLIOTECA NÃO COBRE — usar web puramente
+  • Digo isto explicitamente: "A biblioteca não tem fontes recentes
+    sobre X. Baseado em web search 2026: ..."
+
+NUNCA finjo que tenho o livro X se não está na biblioteca acima.
+Se um user me pergunta "o que diz o livro Y sobre Z?" e Y não está
+no catálogo → "Não tenho esse livro na biblioteca PartYard. Posso
+procurar resumo da Internet ou recomendar adicionar à biblioteca".
 
 ═══════════════════════════════════════════════════════════════════════
 BRAND VOICE PLUGIN
@@ -599,13 +662,24 @@ TOKENS;
     public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentMessage($message);
-        $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $message],
-        ]);
 
         // Library access: estratégia, learning, commercial — útil para
         // CRM principles, customer relationship frameworks, leadership.
         $bookCtx = $this->augmentWithTechnicalBooks($message, 4);
+
+        // 2026-05-18: pedido directo do operador — "os livros que acede
+        // a Ana Monteiro Marketing, salienta e analisa os livros sempre
+        // com informação da web". Se houve match em livros da biblioteca,
+        // FORÇA web search em paralelo para cruzar com dados actuais
+        // (benchmarks, algoritmos, case studies recentes envelhecem).
+        if ($bookCtx !== '' && (new \App\Services\WebSearchService())->isAvailable()) {
+            $message = $this->augmentWithWebSearch($message);
+        }
+
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $message],
+        ]);
+
         $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
         $response = $this->client->post('/v1/messages', [
@@ -630,13 +704,25 @@ TOKENS;
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $message  = $this->augmentMessage($message, $heartbeat);
-        $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $message],
-        ]);
 
         if ($heartbeat) $heartbeat('a activar estratégia de marketing 🎨');
 
         $bookCtx = $this->augmentWithTechnicalBooks($message, 4);
+
+        // 2026-05-18: pedido directo — "os livros que acede a Ana Monteiro
+        // Marketing, salienta e analisa os livros sempre com informação da
+        // web". Quando há book hits, FORÇA web search para validar com
+        // dados actuais (benchmarks/algoritmos mudam rápido). Heartbeat
+        // mostra ao user que está a cruzar com web.
+        if ($bookCtx !== '' && (new \App\Services\WebSearchService())->isAvailable()) {
+            if ($heartbeat) $heartbeat('a cruzar livros com web 🌐📚');
+            $message = $this->augmentWithWebSearch($message, $heartbeat);
+        }
+
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $message],
+        ]);
+
         $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
         $response = $this->client->post('/v1/messages', [
