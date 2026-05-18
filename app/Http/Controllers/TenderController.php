@@ -922,30 +922,51 @@ class TenderController extends Controller
             );
         }
 
-        // Match exacto vs múltiplos parciais. O comparador usa o termo
-        // que efectivamente trouxe os resultados (purchasing_org ou
-        // source_fallback) — caso contrário sources com 2+ matches
-        // ficavam sempre como "ambíguos".
+        // Ranking dos matches em tiers de qualidade decrescente:
+        //   tier 1 — exact match (CardName igual a searchTerm)
+        //   tier 2 — prefix match com separador (CardName começa com
+        //            "NSPA ", "NSPA-", "NSPA — ", "NSPA:") — divisões ou
+        //            sub-unidades da entidade canónica
+        //   tier 3 — qualquer prefix (começa com searchTerm sem separator)
+        //   tier 4 — só contains (apareceu no resultado mas não no início)
+        //
+        // Dentro de cada tier, escolhemos o BP com CardName mais curto —
+        // é quase sempre o canónico / raiz (ex.: "NSPA - NATO SUPPORT AND
+        // PROCUREMENT AGENCY" antes de "NSPA - ... - CIMO").
         $searchTerm = $resolvedVia === 'purchasing_org' ? $purchasingOrg : (string) $sourceBp;
-        $exact = null;
-        foreach ($bps as $bp) {
-            if (mb_strtolower(trim((string) $bp['CardName'])) === mb_strtolower($searchTerm)) {
-                $exact = $bp;
-                break;
-            }
-        }
+        $needleLow  = mb_strtolower($searchTerm);
 
-        if (!$exact && count($bps) > 1) {
-            // 2+ matches parciais — fast UX é flash error com os 3 mais prováveis.
-            $opts = collect($bps)->take(3)->map(fn($b) => "{$b['CardCode']} → {$b['CardName']}")->implode(' | ');
+        $tier = function (array $bp) use ($needleLow): int {
+            $name = mb_strtolower(trim((string) ($bp['CardName'] ?? '')));
+            if ($name === $needleLow) return 1;
+            // Prefix with explicit separator → almost certainly the canonical entity
+            if (preg_match('/^' . preg_quote($needleLow, '/') . '[\s\-—:_]/u', $name)) return 2;
+            if (str_starts_with($name, $needleLow)) return 3;
+            return 4;
+        };
+
+        // Ordena: tier ASC, depois length ASC
+        $rankedBps = collect($bps)
+            ->map(fn($bp) => ['bp' => $bp, 'tier' => $tier($bp), 'len' => mb_strlen((string) $bp['CardName'])])
+            ->sortBy([['tier', 'asc'], ['len', 'asc']])
+            ->values();
+
+        $best = $rankedBps->first()['bp'] ?? null;
+        $bestTier = $rankedBps->first()['tier'] ?? 99;
+
+        // Só pedimos input manual quando NEM SEQUER há um match prefix/exact.
+        // Se há match tier 1, 2 ou 3 → usa o melhor. Tier 4 (só contains)
+        // pode ser ruído (ex.: "GKN AEROSPACE" matched "NSPA" porque tem
+        // a sequência "NSP" algures), por isso desambiguamos.
+        if (!$best || $bestTier >= 4) {
+            $opts = $rankedBps->take(3)->map(fn($r) => "{$r['bp']['CardCode']} → {$r['bp']['CardName']}")->implode(' | ');
             return back()->with('error',
-                "Encontrei {$bps[0]['CardName']} e " . (count($bps) - 1) . " outro(s) BPs parecidos com \"{$searchTerm}\". " .
-                "Edita o concurso e ajusta \"Organização Compradora\" para um nome EXACTO. Sugestões: {$opts}"
+                "Não tenho um match claro para \"{$searchTerm}\" no SAP B1. " .
+                "Encontrei só matches fracos. Edita o concurso e ajusta \"Organização Compradora\" para um nome mais específico. Sugestões: {$opts}"
             );
         }
 
-        // 1 match (exacto ou único) — usar.
-        $bp = $exact ?? $bps[0];
+        $bp = $best;
         $resolvedCardCode = (string) $bp['CardCode'];
         $resolvedCardName = (string) $bp['CardName'];
 
