@@ -277,6 +277,165 @@ mesmo que sejam só 2 fornecedores. Não devolvas SHAPE A.{$noteBlock}
 PROMPT;
     }
 
+    /**
+     * POST /tenders/{tender}/draft-emails-from-analysis
+     *
+     * 2026-05-18: gera 1 email por fornecedor MENCIONADO NA ANÁLISE
+     * multi-agente — não a partir do directório H&P. Pedido directo:
+     *   "deveria depois preparar os emails a perguntar os preços para
+     *    cada fornecedor mencionado e analisado conforme as
+     *    especificações na web"
+     *
+     * Diferente do flow draft() normal:
+     *   • Não recebe supplier_ids (não há rows no directório)
+     *   • Lê TenderServiceAnalysis (executive_summary + sections.*)
+     *   • Daniel extrai os fornecedores mencionados na análise
+     *     (Karl Storz, Medtronic, Interacoustics, etc.) com as
+     *     linhas/items que cada um cobre
+     *   • Devolve emails estruturados (SHAPE B) com tabela linha-a-linha
+     *     por fornecedor
+     */
+    public function draftFromAnalysis(Request $request, Tender $tender, EmailAgent $daniel): JsonResponse
+    {
+        $this->authorizeTender($tender);
+
+        if ($tender->is_confidential) {
+            return response()->json([
+                'error'  => 'tender_confidential',
+                'detail' => 'Concurso confidencial — Daniel desligado.',
+            ], 403);
+        }
+
+        $analysis = \App\Models\TenderServiceAnalysis::where('tender_id', $tender->id)
+            ->where('status', 'done')
+            ->first();
+        if (!$analysis) {
+            return response()->json([
+                'error'  => 'no_analysis',
+                'detail' => 'Este concurso ainda não tem análise multi-agente. Corre primeiro "🎯 Análise do serviço".',
+            ], 422);
+        }
+
+        $language = $request->input('language', 'pt');
+        $note     = trim((string) $request->input('note', ''));
+        $langLine = match ($language) {
+            'en' => 'Write the emails in English.',
+            'es' => 'Escribe los emails en español.',
+            default => 'Escreve os emails em português europeu (pt-PT).',
+        };
+
+        // Constrói contexto rico da análise: exec summary + cada secção
+        // por agente. As secções têm key_points + risks + recommendations
+        // + (importante) o texto livre dos summary com fornecedores
+        // candidatos mencionados.
+        $tender->load('attachments');
+        $sors = [];
+        foreach ($tender->attachments->where('extraction_status', 'ok') as $att) {
+            $sor = $att->extractStatementOfRequirements(6000);
+            if ($sor) $sors[] = "[{$att->original_name}]\n{$sor}";
+        }
+        $sorBlock = $sors ? "\n=== SoR ===\n" . implode("\n\n", $sors) . "\n=== FIM SoR ===\n" : '';
+
+        $analysisBlock = "=== ANÁLISE MULTI-AGENTE ===\n"
+            . ($analysis->executive_summary ?: '') . "\n\n";
+        foreach ((array) $analysis->sections as $key => $sec) {
+            $analysisBlock .= "--- " . ($sec['agent_name'] ?? $key) . " ---\n"
+                            . ($sec['summary'] ?? '') . "\n";
+            if (!empty($sec['key_points'])) {
+                $analysisBlock .= "Pontos-chave:\n";
+                foreach ((array) $sec['key_points'] as $kp) $analysisBlock .= "  • {$kp}\n";
+            }
+            if (!empty($sec['recommendations'])) {
+                $analysisBlock .= "Recomendações:\n";
+                foreach ((array) $sec['recommendations'] as $r) $analysisBlock .= "  • {$r}\n";
+            }
+            $analysisBlock .= "\n";
+        }
+        $analysisBlock .= "=== FIM ANÁLISE ===\n";
+
+        $deadline = $tender->deadline_lisbon?->format('d/m/Y H:i') ?? '—';
+        $ref      = $tender->reference ?: '—';
+
+        // Prompt para o Daniel: extrair fornecedores da análise + 1 email
+        // POR FORNECEDOR com a TABELA das linhas/items que esse cobre.
+        $prompt = <<<PROMPT
+Concurso/RFQ:
+  • Título: {$tender->title}
+  • Referência: {$ref}
+  • Deadline: {$deadline}
+
+{$sorBlock}
+
+{$analysisBlock}
+
+PEDIDO CRÍTICO:
+A análise multi-agente acima identifica vários FORNECEDORES CANDIDATOS
+(Karl Storz, Medtronic, Interacoustics, Olympus, Stryker, etc.) com as
+LINHAS / ITEMS específicos que cada um cobre. {$langLine}
+
+Para CADA fornecedor mencionado na análise, escreve UM email tailored
+com este formato no corpo:
+
+  • Saudação curta apresentando-se como PartYard Defense Procurement
+  • Tabela COMPLETA das linhas/items que ESTE fornecedor cobre
+    (Linha N · Descrição · Qty up to N · specs técnicas resumidas)
+  • Pedido de cotação por linha + lead time + condições de pagamento
+  • Compliance obrigatório (CE-MDR, NATO Mil-Std, EUR.1 conforme RFP)
+  • CTA com deadline em mente
+  • Assinatura PartYard
+
+REGRAS:
+  • NUNCA menciona o cliente final (NSPA, NCIA, NATO) — usar "RFP de
+    defesa europeu" se precisar de contexto
+  • Cada email é tailored ao portfolio do fornecedor — se Karl Storz só
+    cobre Linha 30 e 50, foca-se nessas; outras linhas marca como
+    "Adicionalmente, se também fornecem ENT microdebriders (Linha 40)
+    indiquem"
+  • Inclui valor estimado por linha quando a análise tenha (€X-Yk) como
+    referência de mercado — ajuda o fornecedor a calibrar a oferta
+  • Se a análise mencionar specs específicas da web (P/N, modelos), usa-as
+  • Devolve EXACTAMENTE no formato SHAPE B (objecto com array "emails"),
+    NUNCA SHAPE A
+
+{$note}
+PROMPT;
+
+        try {
+            $reply = $daniel->chat($prompt);
+        } catch (\Throwable $e) {
+            Log::warning('draftFromAnalysis failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+            return response()->json(['error' => 'agent_error', 'detail' => $e->getMessage()], 502);
+        }
+
+        // Parse output — mesma lógica do draft() normal
+        if (str_starts_with($reply, '__EMAILS__')) {
+            $payload = json_decode(substr($reply, strlen('__EMAILS__')), true);
+            return response()->json([
+                'shape'    => 'multi',
+                'emails'   => $payload['emails'] ?? [],
+                'language' => $payload['language'] ?? $language,
+                'source'   => 'analysis',
+            ]);
+        }
+        if (str_starts_with($reply, '__EMAIL__')) {
+            $single = json_decode(substr($reply, strlen('__EMAIL__')), true);
+            return response()->json([
+                'shape'  => 'single',
+                'emails' => [$single],
+                'language' => $single['language'] ?? $language,
+                'source' => 'analysis',
+            ]);
+        }
+        return response()->json([
+            'shape'  => 'fallback',
+            'text'   => $reply,
+            'source' => 'analysis',
+        ]);
+    }
+
     private function authorizeTender(Tender $tender): void
     {
         $user = Auth::user();

@@ -276,6 +276,14 @@
                                     </span>
                                 </div>
                                 <div class="flex gap-2">
+                                    {{-- 2026-05-18: gera 1 email POR FORNECEDOR mencionado
+                                         na análise (Karl Storz, Medtronic, etc.) com a
+                                         tabela das linhas/items que cada um cobre. --}}
+                                    <button type="button" id="ts-emails-from-analysis-btn"
+                                            class="inline-flex items-center gap-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 text-[11px] font-semibold"
+                                            title="Daniel gera 1 email por fornecedor mencionado na análise, com a tabela das linhas que cada um cobre. ~20-30s.">
+                                        ✉ Emails p/ Fornecedores
+                                    </button>
                                     <a href="{{ route('tenders.service-analysis.pdf', $tender) }}"
                                        class="inline-flex items-center gap-1 rounded bg-violet-600 hover:bg-violet-500 text-white px-2.5 py-1 text-[11px] font-semibold"
                                        title="Gera PDF + anexa automaticamente ao concurso">
@@ -316,8 +324,164 @@
                                     </li>
                                 @endif
                             </ol>
+                            <div id="ts-emails-from-analysis-dropbox" class="mt-3"></div>
                         </div>
                     @endif
+
+                    {{-- 2026-05-18: handler do novo botão "Emails p/ Fornecedores".
+                         Chama draft-emails-from-analysis e renderiza inline com
+                         o mesmo formato dos drafts normais. --}}
+                    <script>
+                    (function () {
+                        const btn = document.getElementById('ts-emails-from-analysis-btn');
+                        if (!btn) return;
+                        const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+                        const url  = "{{ route('tenders.draft-emails-from-analysis', $tender) }}";
+                        const box  = document.getElementById('ts-emails-from-analysis-dropbox');
+                        const esc  = (s) => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[m]);
+
+                        btn.addEventListener('click', async () => {
+                            btn.disabled = true;
+                            const orig = btn.innerHTML;
+                            btn.innerHTML = '⏳ Daniel a extrair fornecedores…';
+                            box.innerHTML = '<div class="text-xs text-gray-500 mt-2">Daniel está a ler a análise e a escrever 1 email por fornecedor mencionado. ~20-30s…</div>';
+                            try {
+                                const res = await fetch(url, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                                    body: JSON.stringify({ language: 'pt' }),
+                                    credentials: 'same-origin',
+                                });
+                                if (res.status === 401 && window.maybeRedirectOnOtp && await window.maybeRedirectOnOtp(res)) return;
+                                const data = await res.json();
+                                if (!res.ok) throw new Error(data.detail || ('HTTP ' + res.status));
+
+                                const emails = data.emails || [];
+                                if (!emails.length) {
+                                    box.innerHTML = `<div class="text-xs text-amber-700 mt-2">Daniel não conseguiu extrair fornecedores da análise. Verifica se a análise tem fornecedores candidatos mencionados.</div>`;
+                                    return;
+                                }
+
+                                let html = `<div class="text-xs font-semibold text-indigo-800 mb-2 mt-2">
+                                    📧 ${emails.length} email(s) gerado(s) a partir da análise — 1 por fornecedor com tabela de linhas
+                                </div><div class="space-y-3">`;
+                                emails.forEach((em, i) => {
+                                    const id = 'efa_' + i + '_' + Date.now();
+                                    html += `
+                                    <div class="rounded-md border border-indigo-200 bg-white">
+                                        <div class="px-3 py-2 bg-indigo-50 border-b border-indigo-100 text-xs font-semibold text-indigo-900">
+                                            ${i+1}/${emails.length} · ${esc(em.supplier || em.to || 'fornecedor')}
+                                        </div>
+                                        <div class="px-3 py-2 space-y-2" id="${id}_card">
+                                            <div class="flex items-center gap-2 text-xs">
+                                                <label class="text-gray-500 w-16">Para</label>
+                                                <input type="email" id="${id}_to" value="${esc(em.to || '')}" placeholder="email do fornecedor (preencher se em branco)"
+                                                       class="flex-1 rounded-md border-gray-300 text-xs font-mono">
+                                            </div>
+                                            <div class="flex items-center gap-2 text-xs">
+                                                <label class="text-gray-500 w-16">Assunto</label>
+                                                <input type="text" id="${id}_subject" value="${esc(em.subject || '')}"
+                                                       class="flex-1 rounded-md border-gray-300 text-xs">
+                                            </div>
+                                            <textarea id="${id}_body" rows="14"
+                                                      class="w-full rounded-md border-gray-300 text-xs font-mono leading-relaxed">${esc(em.body || '')}</textarea>
+                                            <input type="hidden" id="${id}_cc" value="${esc(em.cc || '')}">
+                                            <div class="flex items-center gap-2 pt-1 flex-wrap">
+                                                <button type="button" data-efa-id="${id}" data-efa-action="send"
+                                                        class="rounded-md bg-emerald-600 text-white px-3 py-1 text-xs font-semibold hover:bg-emerald-500">
+                                                    📤 Enviar via ClawYard
+                                                </button>
+                                                <button type="button" data-efa-id="${id}" data-efa-action="outlook"
+                                                        class="rounded-md bg-blue-600 text-white px-3 py-1 text-xs font-semibold hover:bg-blue-500">
+                                                    ✉ Abrir no Outlook
+                                                </button>
+                                                <button type="button" data-efa-id="${id}" data-efa-action="copy"
+                                                        class="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:bg-gray-50">
+                                                    📋 Copiar
+                                                </button>
+                                                <span class="text-[11px] text-gray-500" id="${id}_status"></span>
+                                            </div>
+                                        </div>
+                                    </div>`;
+                                });
+                                html += '</div>';
+                                box.innerHTML = html;
+
+                                // Re-use copy / outlook / send com os mesmos handlers
+                                box.querySelectorAll('[data-efa-id]').forEach(b => {
+                                    b.addEventListener('click', () => handleEfaAction(b));
+                                });
+                            } catch (e) {
+                                box.innerHTML = `<div class="text-sm text-red-700 mt-2">Erro: ${esc(e.message)}</div>`;
+                            } finally {
+                                btn.disabled = false;
+                                btn.innerHTML = orig;
+                            }
+                        });
+
+                        function handleEfaAction(btn) {
+                            const id     = btn.dataset.efaId;
+                            const action = btn.dataset.efaAction;
+                            const to     = document.getElementById(id+'_to')?.value.trim() || '';
+                            const cc     = document.getElementById(id+'_cc')?.value.trim() || '';
+                            const subject= document.getElementById(id+'_subject')?.value.trim() || '';
+                            const body   = document.getElementById(id+'_body')?.value.trim() || '';
+                            const status = document.getElementById(id+'_status');
+
+                            if (action === 'copy') {
+                                const text = (to ? 'Para: ' + to + '\n' : '') + 'Assunto: ' + subject + '\n\n' + body;
+                                navigator.clipboard.writeText(text).then(() => {
+                                    if (status) { status.textContent = '✅ Copiado'; setTimeout(() => status.textContent = '', 1800); }
+                                });
+                                return;
+                            }
+                            if (action === 'outlook') {
+                                let mailto = 'mailto:' + encodeURIComponent(to);
+                                const parts = [];
+                                if (cc) parts.push('cc=' + encodeURIComponent(cc));
+                                if (subject) parts.push('subject=' + encodeURIComponent(subject));
+                                if (body) parts.push('body=' + encodeURIComponent(body));
+                                if (parts.length) mailto += '?' + parts.join('&');
+                                window.location.href = mailto;
+                                return;
+                            }
+                            if (action === 'send') {
+                                if (!to || !subject || !body) {
+                                    if (status) { status.textContent = '⚠ Preenche Para + Assunto + Corpo'; status.style.color = '#b91c1c'; }
+                                    return;
+                                }
+                                if (!confirm(`Enviar email para ${to}?`)) return;
+                                btn.disabled = true;
+                                btn.textContent = '⏳';
+                                const fd = new FormData();
+                                fd.append('to', to);
+                                if (cc) fd.append('cc', cc);
+                                fd.append('subject', subject);
+                                fd.append('body', body);
+                                fetch('/api/email/send', {
+                                    method: 'POST',
+                                    headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                                    body: fd,
+                                    credentials: 'same-origin',
+                                })
+                                .then(r => r.json().then(d => ({ ok: r.ok, d })))
+                                .then(({ ok, d }) => {
+                                    if (!ok || d.error) throw new Error(d.error || d.detail || 'send_failed');
+                                    btn.style.background = '#16a34a';
+                                    btn.textContent = '✅ enviado';
+                                    if (status) { status.textContent = '✅ ' + to; status.style.color = '#15803d'; }
+                                    document.getElementById(id+'_card')?.style.setProperty('opacity', '0.55');
+                                })
+                                .catch(e => {
+                                    btn.disabled = false;
+                                    btn.textContent = '📤 Enviar via ClawYard';
+                                    if (status) { status.textContent = '❌ ' + (e.message || 'erro'); status.style.color = '#b91c1c'; }
+                                });
+                            }
+                        }
+                    })();
+                    </script>
+
                     <script>
                     (function () {
                         const btn = document.getElementById('ts-service-analysis-btn');
