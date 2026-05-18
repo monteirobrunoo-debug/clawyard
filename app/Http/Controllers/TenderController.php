@@ -686,12 +686,18 @@ class TenderController extends Controller
         }
 
         $deadline = $tender->deadline_lisbon?->format('d/m/Y H:i') ?? '—';
-        // 2026-05-18 — cap 240→800 (3.3x). Localmente tender.notes é
-        // ilimitado; o SAP B1 trunca em 254 sozinho. Dar à Marta espaço
-        // para 4-6 pontos críticos em vez de só 1-2.
-        $prompt = "Analisa este concurso e dá-me um RESUMO EXECUTIVO completo (≤700 caracteres) pronto para meter nas Notas do ClawYard. "
-            . "O resumo deve incluir: objecto/material com qtds, organização compradora, deadline, 3-5 pontos críticos (urgência, compliance NATO/CE/EUR.1, fornecedor preferido, prazo de entrega, valor estimado se inferível). "
-            . "Formato: texto plano, sem markdown, sem emojis, pontos separados por ' · '.\n\n"
+        // 2026-05-18 — cap removido. Localmente tender.notes é text
+        // ilimitado; o SAP B1 trunca em 254 sozinho ao fazer push.
+        // Marta dá resumo TÃO DETALHADO quanto necessário — operador
+        // vê tudo no dashboard, SAP recebe o essencial truncado.
+        $prompt = "Analisa este concurso e dá-me um RESUMO EXECUTIVO COMPLETO para meter nas Notas do ClawYard. "
+            . "Sem limite de caracteres — escreve tudo o que for relevante para o operador comercial decidir. "
+            . "Inclui: objecto/material com quantidades exactas e P/N quando disponível, organização compradora e contacto se identificável, "
+            . "deadline completo, condições de pagamento, prazo de entrega esperado, local de entrega, "
+            . "compliance (NATO/CE/EUR.1/Mil-Std), fornecedores candidatos, valor estimado se inferível, "
+            . "histórico do cliente se conhecido, e qualquer ponto crítico (urgência, dependências, riscos). "
+            . "Formato: texto plano, sem markdown, sem emojis, pontos separados por ' · ' OU em linhas (\\n) para tópicos longos. "
+            . "Não há limite — usa o espaço que precisares.\n\n"
             . "=== CONCURSO ===\n"
             . "• Título: {$tender->title}\n"
             . "• Referência: " . ($tender->reference ?: '—') . "\n"
@@ -711,9 +717,12 @@ class TenderController extends Controller
         }
 
         $prompt .= "\n=== INSTRUÇÃO ===\n"
-            . "Devolve APENAS o resumo (≤700 chars). Sem cabeçalhos, sem 'aqui está', sem markdown. "
-            . "Vai directo aos pontos. Se a deadline for ≤7 dias, começa com 'URGENTE · '. "
-            . "Exemplo de formato: 'Fornecimento de 50 reds NETGATE-7100 · NCIA Bélgica · deadline 25/05 · ref NSPA-2026-1234 · compliance NATO Mil-Std-461 · lead time 12-16 sem · valor estimado €120-150k · cliente prioritário (3 contratos 2025) · fornecedor preferido Cisco EU'.";
+            . "Devolve APENAS o resumo. Sem cabeçalhos do tipo 'aqui está', sem markdown, sem emojis. "
+            . "Se a deadline for ≤7 dias, começa com 'URGENTE · '. "
+            . "Escreve TUDO o que for relevante — o operador no ClawYard vê tudo, e o SAP B1 trunca sozinho em 254 chars (não te preocupes com isso). "
+            . "Exemplo de uma linha condensada:\n"
+            . "'URGENTE · Fornecimento 50 unidades NETGATE-7100 P/N NG-7100-D · NCIA Bélgica (NSPA - NATO SUPPORT AND PROCUREMENT AGENCY) · deadline 25/05 18:00 CET · ref NSPA-2026-1234 · pagamento 60 dias · entrega Bruxelas · compliance NATO Mil-Std-461 + CE · fornecedor preferido Cisco EU (lead time 12-16 sem) · valor estimado €120-150k baseado em contratos 2024-2025 · cliente prioritário (3 adjudicações em 2024-2025) · risco: stock Europa baixo, considerar Cisco USA como backup'\n\n"
+            . "Mas se for um concurso complexo com várias dependências, podes escrever 2-3 parágrafos separados por linhas em branco — desde que cada linha de pensamento esteja completa.";
 
         try {
             $marta = app(\App\Agents\CrmAgent::class);
@@ -726,14 +735,14 @@ class TenderController extends Controller
             return back()->with('error', 'Erro a contactar a Marta CRM: ' . $e->getMessage());
         }
 
-        // Cap defensivo se Marta ignorar o limite — corta no último ponto
-        // ou no carácter 800 (3.3x do antigo 240). O SAP B1 trunca em
-        // 254 sozinho ao fazer push; localmente preservamos toda a info.
-        if (mb_strlen($summary) > 800) {
-            $cut = mb_substr($summary, 0, 800);
-            $lastDot = mb_strrpos($cut, '·');
-            $summary = $lastDot !== false ? mb_substr($cut, 0, $lastDot) : $cut;
-            $summary = rtrim($summary, ' ·') . '…';
+        // 2026-05-18: cap local REMOVIDO. Pedido directo: "põe sem limite".
+        // O tender.notes é uma coluna text (ilimitada) e o SAP B1 trunca
+        // sozinho em 254 chars ao fazer push (SapService::createOpportunity
+        // → substr(0, 254)). Mantemos só um cap de segurança absoluto a
+        // 10k chars para evitar PostgreSQL row bloat acidental se a Marta
+        // tiver um bug raro de loop.
+        if (mb_strlen($summary) > 10000) {
+            $summary = mb_substr($summary, 0, 10000) . '… (cortado em 10k chars — Marta exagerou)';
         }
 
         // Bloco para meter nas notas. Marcado com data para o operador
@@ -842,10 +851,10 @@ class TenderController extends Controller
             }
             $remarks .= ' · ' . $okAttachments->count() . ' anexos';
         }
-        // Cap local 240→800 (3.3x). O SapService::createOpportunity trunca
-        // em 254 chars sozinho ao fazer push (SAP B1 OOPR.Remarks varchar
-        // hard limit). Localmente o tender.notes preserva tudo.
-        $remarks = mb_substr($remarks, 0, 800);
+        // 2026-05-18: sem cap local — SapService trunca em 254 sozinho
+        // ao fazer POST a SAP (hard limit OOPR.Remarks varchar). O Remarks
+        // construído aqui é só o payload da criação; a versão completa
+        // entra no tender.notes via martaSummarize() depois.
 
         // Deadline: se não houver, +30 dias a partir de hoje.
         $closingDate = $tender->deadline_at

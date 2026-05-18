@@ -80,9 +80,10 @@ class TenderServiceAnalysis extends Model
      * meter em tender.notes (local ilimitado). SapService trunca em
      * 254 chars sozinho ao fazer push para SAP B1 OOPR.Remarks.
      *
-     * 2026-05-18: cap padrão 240→800 (3.3x) para alinhar com a política
-     * "mais info nas notas" da feature martaSummarize. Quem queira o
-     * cap antigo passa explicitamente $maxChars=240.
+     * 2026-05-18: cap default REMOVIDO (null). Pedido directo: "põe sem
+     * limite". Localmente tender.notes é text ilimitado e o SapService
+     * trunca em 254 chars sozinho ao fazer push. Quem queira cap antigo
+     * passa explicitamente $maxChars=240.
      *
      * Formato:
      *   [Análise Multi-Agente · 18/05/2026]
@@ -90,7 +91,7 @@ class TenderServiceAnalysis extends Model
      *   • passo dois · acingov
      *   ...
      */
-    public function toSapNotesBlock(?int $maxChars = 800): string
+    public function toSapNotesBlock(?int $maxChars = null): string
     {
         $items = $this->extractActionItems();
         if (empty($items)) return '';
