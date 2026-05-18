@@ -827,27 +827,51 @@ class TenderController extends Controller
             return back()->with('error', 'SAP B1 não está configurado no servidor — não posso criar a oportunidade.');
         }
 
-        // Constrói Remarks pré-populados — título + ref + 1ª linha de cada anexo.
-        // O cap do SAP B1 é 254 chars; deixar margem.
+        // Constrói Remarks RICOS — mesmo nível de detalhe que a Marta CRM
+        // mete no chat-flow (P/N, quantidades, payment, ship-to, deadline).
+        // Pedido directo do operador: "aqui é o mesmo mas já tem tudo
+        // pdf info" — agora aproveitamos o extracted_text dos anexos
+        // para dar contexto material no Remarks.
         $tender->load('attachments');
+
         $remarks = $tender->title;
         if ($tender->reference) {
             $remarks .= ' · ref ' . $tender->reference;
         }
+        if ($tender->deadline_at) {
+            $remarks .= ' · deadline ' . $tender->deadline_at->format('d/m/Y H:i');
+        }
+
         $okAttachments = $tender->attachments->where('extraction_status', 'ok');
         if ($okAttachments->isNotEmpty()) {
             $first = $okAttachments->first();
-            // 2026-05-18 fix: mb_strtok não existe em PHP — usar preg_split.
-            // 2026-05-18: cap por linha 60→180 (3x) — mais detalhe do
-            // material/objecto do concurso vai já no Remarks.
-            $lines = preg_split('/\r?\n/', (string) $first->extracted_text) ?: [];
-            $firstLine = '';
+            $text  = (string) $first->extracted_text;
+            // Linhas candidatas — não-vazias, tamanho razoável, sem ruído
+            // tipográfico (page numbers, índices).
+            $lines = array_values(array_filter(
+                array_map('trim', preg_split('/\r?\n+/', $text) ?: []),
+                fn($l) => mb_strlen($l) >= 8 && mb_strlen($l) <= 300
+                    && !preg_match('/^\s*(page\s+\d+|table\s+of\s+contents|índice|sumário)/iu', $l)
+            ));
+            // Filtro por "signal" — linhas com P/N, qty, payment, ship,
+            // valores monetários, deadline. Estas vão primeiro.
+            $signalRe = '/(P\/N|Part\s*Number|Item\s*code|NSN|Qty|Quantity|€|US\$|EUR|USD|deadline|payment|pagamento|ship|delivery|entrega|prazo)/iu';
+            $signal = [];
+            $rest = [];
             foreach ($lines as $l) {
-                $t = trim((string) $l);
-                if ($t !== '') { $firstLine = $t; break; }
+                if (preg_match($signalRe, $l)) {
+                    $signal[] = mb_substr($l, 0, 140);
+                } else {
+                    $rest[] = mb_substr($l, 0, 140);
+                }
+                if (count($signal) >= 4) break;
             }
-            if ($firstLine !== '') {
-                $remarks .= ' · ' . mb_substr($firstLine, 0, 180);
+            // Se signal é fraco (≤1), completa com primeiras linhas substanciais.
+            if (count($signal) < 3) {
+                $signal = array_merge($signal, array_slice($rest, 0, 3 - count($signal)));
+            }
+            if (!empty($signal)) {
+                $remarks .= ' · ' . implode(' · ', $signal);
             }
             $remarks .= ' · ' . $okAttachments->count() . ' anexos';
         }
