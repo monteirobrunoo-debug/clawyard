@@ -53,8 +53,18 @@
 </head>
 <body>
 
+@php
+    // 2026-05-18: a referência mostrada ao fornecedor é o número da
+    // SAP Opportunity (#17509), não o título do tender nem o PYD interno.
+    // Pedido directo: "a referência não pode ser PROVISION OF
+    // OTOLARYNGOLOGY EQUIPMENT, é a refª do SAP". Fallback para PYD-NNNNNN
+    // se ainda não houver SAP Opp ligada ao concurso.
+    $displayRef = $tender->sap_opportunity_number
+        ? '#' . $tender->sap_opportunity_number
+        : 'PYD-' . str_pad((string) $tender->id, 6, '0', STR_PAD_LEFT);
+@endphp
 <div class="head-bar">
-    <div class="title">INQUIRY <span class="ref">{{ $tender->reference ?: '#'.$tender->id }} · {{ $today->format('d-m-Y') }}</span></div>
+    <div class="title">INQUIRY <span class="ref">Ref. {{ $displayRef }} · {{ $today->format('d-m-Y') }}</span></div>
     <div class="sub">PartYard — Defense Procurement · Pedido de Cotação ao Fornecedor</div>
 </div>
 
@@ -74,20 +84,14 @@
                 @if($supplier->primary_email) · {{ $supplier->primary_email }}@endif
                 @if(!empty($supplier->brands)) · Marcas: {{ implode(', ', (array) $supplier->brands) }}@endif
             @else
-                <em>Para qualquer fornecedor convidado a apresentar oferta</em>
+                {{-- 2026-05-18: pedido directo "deixar a linha de fornecedor
+                     com o nome por por" — quando não há supplier_id, deixa
+                     linha em branco para o operador escrever à mão antes
+                     de imprimir / enviar. --}}
+                <span style="display:inline-block;border-bottom:1px solid #94a3b8;min-width:280px;height:14px;">&nbsp;</span>
+                <span style="display:inline-block;border-bottom:1px solid #94a3b8;min-width:200px;height:14px;margin-left:8px;">&nbsp;</span>
+                <div style="font-size:8px;color:#94a3b8;margin-top:2px;">Nome · Email do destinatário (preencher antes de enviar)</div>
             @endif
-        </td>
-    </tr>
-    <tr>
-        <td class="label">PEDIDO</td>
-        <td>
-            {{-- 2026-05-18: cliente NUNCA é revelado ao fornecedor.
-                 Pedido directo do operador: "para enviar o inquiry não
-                 mencionas o nosso cliente". Por isso aqui mostra-se só
-                 o título do pedido (genericamente) e a nossa referência
-                 interna ClawYard, sem source nem purchasing_org. --}}
-            <strong>{{ $maskedTitle ?: $tender->title }}</strong><br>
-            Referência interna: PYD-{{ str_pad((string) $tender->id, 6, '0', STR_PAD_LEFT) }}
         </td>
     </tr>
     @if($tender->deadline_at)

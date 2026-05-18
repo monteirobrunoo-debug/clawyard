@@ -134,7 +134,13 @@ class TenderInquiryController extends Controller
             $existing->touch();
         }
 
-        $downloadName = 'Inquiry-PartYard-' . ($tender->reference ?: $tender->id) . ($supplier ? '-' . $supplier->slug : '') . '.pdf';
+        // 2026-05-18: filename usa SAP Opp se existir (referência limpa
+        // que o operador reconhece no SAP B1), fallback para tender id.
+        // Nunca usa $tender->reference porque pode revelar cliente final.
+        $refForFile = $tender->sap_opportunity_number
+            ? 'SAP' . $tender->sap_opportunity_number
+            : 'PYD' . str_pad((string) $tender->id, 6, '0', STR_PAD_LEFT);
+        $downloadName = 'Inquiry-PartYard-' . $refForFile . ($supplier ? '-' . $supplier->slug : '') . '.pdf';
 
         return response($bytes, 200, [
             'Content-Type'        => 'application/pdf',
