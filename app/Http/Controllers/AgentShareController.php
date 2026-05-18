@@ -1422,6 +1422,35 @@ HTML;
                 Log::warning('AgentShare: failed to persist trusted history — ' . $e->getMessage());
             }
 
+            // 2026-05-18 — TRUTH & AUTO-CRÍTICA (segunda camada):
+            // Pedido directo do operador: "O resultado dos agentes tem de
+            // ser sempre verdadeiro… cria mecanismos de crítica e
+            // auto-prompts". Após o stream completar, corre uma chamada
+            // extra ao Claude para validar o output contra hallucinations.
+            // Resultado vai como SSE event "critique" — o frontend
+            // mostra um badge no fim da mensagem ("Auto-validado ✓" ou
+            // "⚠️ N issues encontrados"). Opt-in via config flag para
+            // controlar custos (default ON apenas para agent shares).
+            try {
+                if (config('services.agent_critique.enabled_on_shares', true)
+                    && trim($fullResponse) !== '') {
+                    $criticPayload = app(\App\Services\AgentSelfCritique::class)
+                        ->critique($userText ?? '', $fullResponse, [
+                            'agent_context' => $agentName,
+                            'refine'        => false,
+                        ]);
+                    if (!($criticPayload['meta']['skipped'] ?? false)) {
+                        echo 'data: ' . json_encode(
+                            ['type' => 'critique', 'payload' => $criticPayload],
+                            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+                        ) . "\n\n";
+                        flush();
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::info('AgentShare: critique skipped — ' . $e->getMessage());
+            }
+
             echo "data: [DONE]\n\n";
             flush();
 

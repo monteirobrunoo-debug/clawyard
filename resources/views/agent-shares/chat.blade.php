@@ -702,6 +702,12 @@ async function sendMessage() {
                     if (evt.error) {
                         bubble.innerHTML = '<span style="color:#ef4444">❌ ' + evt.error + '</span>';
                     }
+                    // 2026-05-18: evento "critique" — server enviou o resultado
+                    // da auto-validação após o stream terminar. Anexa um badge
+                    // expansível no fim da bubble com o veredicto + issues.
+                    if (evt.type === 'critique' && evt.payload) {
+                        try { renderCritiqueBadge(bubble, evt.payload); } catch (_) {}
+                    }
                 } catch(e) {}
             }
         }
@@ -762,6 +768,50 @@ async function sendMessage() {
 function stopStreaming() {
     if (streamAbortCtrl) {
         try { streamAbortCtrl.abort(); } catch (e) {}
+    }
+}
+
+// 2026-05-18: badge de auto-crítica. Mostra resultado da second-pass de
+// validação contra hallucinations (ver app/Services/AgentSelfCritique).
+// payload: {verdict, confidence, issues[{severity,category,text}]}
+function renderCritiqueBadge(bubble, payload) {
+    const verdict = payload.verdict || 'ok';
+    const issues  = Array.isArray(payload.issues) ? payload.issues : [];
+    const conf    = typeof payload.confidence === 'number' ? payload.confidence : 1;
+
+    // Mapping veredicto → cor + ícone + label
+    const styles = {
+        ok:    { color: '#16a34a', bg: '#dcfce7', icon: '✓', label: 'Auto-validado' },
+        minor: { color: '#ca8a04', bg: '#fef9c3', icon: '⚠', label: 'Validado com ressalvas' },
+        major: { color: '#dc2626', bg: '#fee2e2', icon: '⚠', label: 'Atenção — issues importantes' },
+        block: { color: '#7f1d1d', bg: '#fecaca', icon: '⛔', label: 'Revisão humana recomendada' },
+    };
+    const s = styles[verdict] || styles.ok;
+
+    const badge = document.createElement('div');
+    badge.style.cssText = `margin-top:10px;padding:6px 10px;border-radius:6px;background:${s.bg};color:${s.color};font-size:11px;display:inline-flex;align-items:center;gap:6px;cursor:${issues.length?'pointer':'default'};user-select:none;`;
+    badge.innerHTML = `<span style="font-weight:700">${s.icon} ${s.label}</span>`
+                    + (issues.length ? `<span style="opacity:.75">· ${issues.length} ${issues.length===1?'nota':'notas'}</span>` : '')
+                    + `<span style="opacity:.6;font-size:10px">· conf ${Math.round(conf*100)}%</span>`;
+
+    if (issues.length) {
+        const details = document.createElement('div');
+        details.style.cssText = 'display:none;margin-top:8px;padding:8px 10px;background:rgba(0,0,0,.04);border-radius:6px;font-size:11px;color:var(--text);line-height:1.5;';
+        details.innerHTML = issues.map(it => {
+            const sev = (it.severity||'low').toUpperCase();
+            const cat = (it.category||'-').toUpperCase();
+            return `<div style="margin:4px 0"><strong style="color:${s.color}">${sev}</strong> · ${cat} — ${escapeHtml(it.text||'')}</div>`;
+        }).join('');
+        badge.addEventListener('click', () => {
+            details.style.display = details.style.display === 'none' ? 'block' : 'none';
+        });
+
+        const wrap = document.createElement('div');
+        wrap.appendChild(badge);
+        wrap.appendChild(details);
+        bubble.appendChild(wrap);
+    } else {
+        bubble.appendChild(badge);
     }
 }
 

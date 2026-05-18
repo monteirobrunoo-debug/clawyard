@@ -3,6 +3,7 @@
 namespace App\Agents;
 
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\SelfCritiqueDisciplineTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
@@ -36,6 +37,7 @@ class MarketingAgent implements AgentInterface
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use TechnicalBookSkillTrait;
+    use SelfCritiqueDisciplineTrait;
 
     protected string $systemPrompt = '';
 
@@ -458,6 +460,14 @@ TOKENS;
             PartYardProfileService::toPromptContext(),
             PromptLibrary::commercial($persona, $fullSpecialty)
         );
+
+        // 2026-05-18: disciplina de truth & auto-crítica.
+        // Bake-in zero-overhead rules sobre grounding, hedging, citations,
+        // alternativas e confidence labelling. Pedido directo do operador:
+        //   "O resultado dos agentes tem de ser sempre verdadeiro… cria
+        //    mecanismos de crítica e auto-prompts para melhores resultados".
+        // Ver app/Agents/Traits/SelfCritiqueDisciplineTrait.php.
+        $this->systemPrompt .= $this->criticalDisciplineBlock();
 
         $this->client = new Client([
             'base_uri'        => self::getAnthropicBaseUri(),

@@ -57,6 +57,11 @@ return [
         // haiku is still at 4.5. Pin to the dated 4.5 snapshot we validated
         // so the env-less fallback never explodes.
         'model_haiku' => env('ANTHROPIC_MODEL_HAIKU',  'claude-haiku-4-5-20251001'),
+        // 2026-05-18: modelo usado pelo AgentSelfCritique (segunda pass de
+        // validação contra hallucinations). Default = mesmo Sonnet do agente
+        // principal. Pode-se forçar Opus via env para validação mais rigorosa
+        // em troca de +latência e +custo. Ver app/Services/AgentSelfCritique.
+        'critique_model' => env('ANTHROPIC_CRITIQUE_MODEL', env('ANTHROPIC_MODEL', 'claude-sonnet-4-5')),
         // ── Egress control ────────────────────────────────────────────────
         // Upstream base URI. Defaults to Anthropic's public API. Override
         // with ANTHROPIC_BASE_URL to point every agent through the company
@@ -274,6 +279,30 @@ return [
         'cu_model'   => env('ROBODESK_MODEL',   'claude-3-5-sonnet-20241022'),// Computer Use model
         'cu_beta'    => env('ROBODESK_CU_BETA', 'computer-use-2024-10-22'),   // beta flag
         'cu_tool'    => env('ROBODESK_CU_TOOL', 'computer_20241022'),         // tool type
+    ],
+
+    // 2026-05-18: Auto-crítica / second-pass validation contra hallucinations.
+    // Quando ENABLED_ON_SHARES=true, cada turn de chat externo (agent share)
+    // termina com uma chamada Claude extra que avalia o output sob 5 critérios
+    // (factualidade, hedging, alternativas, citações, consistência). O frontend
+    // recebe um SSE event "critique" e mostra um badge no fim da resposta.
+    //
+    // Pedido directo do operador:
+    //   "O resultado dos agentes tem de ser sempre verdadeiro, e tentar
+    //    validar sempre a melhor opção, por isso cria mecanismos de crítica
+    //    e auto-prompts para ter os melhores resultados"
+    //
+    // Custo: +1 LLM call por turn (~+30-50% custo). Para evitar abusos:
+    //   • Drafts < 200 chars saltam automaticamente
+    //   • Drafts com tokens __TABLE__/__CHART__/__EMAIL__ saltam (já validados)
+    //   • Cache 5 min para mesmos (prompt, draft) idênticos
+    'agent_critique' => [
+        // Master switch — corre crítica em agent shares (canal externo, alto risco)
+        'enabled_on_shares' => env('AGENT_CRITIQUE_SHARES',  true),
+        // Também correr em chat interno do dashboard (sempre que NvidiaController
+        // termina um turn de Claude). Default OFF (poupar custos quando o
+        // utilizador é interno e pode verificar manualmente).
+        'enabled_on_internal' => env('AGENT_CRITIQUE_INTERNAL', false),
     ],
 
 ];
