@@ -1064,7 +1064,14 @@ class TenderController extends Controller
             'CardName'            => $resolvedCardName,
             'ExpectedClosingDate' => $closingDate,
             'MaxLocalTotal'       => 1.0,   // placeholder mínimo (SAP requer >0); operador acerta depois
-            'StageId'             => 1,     // Prospecção
+            // 2026-05-18: fase inicial passou de 1 (Prospecção) → 5 (Cotação de
+            // Compra). Pedido directo do operador: quando se abre uma Opp via
+            // ClawYard, é porque já chegou um RFP/RFQ — o concurso já passou da
+            // fase exploratória de "prospecção", está em "vamos cotar a compra
+            // aos fornecedores antes de propor ao cliente". Lifecycle SAP B1:
+            //   1 Prospecção → 5 Cotação Compra → 6 Cotação Venda → 7 Follow Up
+            //   → 8 Possível Venda → 9 Ordem Compra → 10 Ordem Venda
+            'StageId'             => 5,     // Cotação de Compra (era 1 Prospecção)
             'InformationSource'   => $informationSource,
         ];
 
