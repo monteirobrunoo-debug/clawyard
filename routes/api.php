@@ -23,6 +23,17 @@ Route::post('/a/{token}/stream', [AgentShareController::class, 'stream'])
 Route::get('/a/{token}/history', [AgentShareController::class, 'history'])
     ->middleware('throttle:60,1');
 
+// 2026-05-18: multi-conversation por browser. Sidebar mostra todas as
+// conversas que este browser teve com este share; cada uma pode ser
+// exportada para PDF independentemente.
+Route::get('/a/{token}/conversations', [AgentShareController::class, 'listConversations'])
+    ->middleware('throttle:60,1');
+Route::post('/a/{token}/conversations', [AgentShareController::class, 'newConversation'])
+    ->middleware('throttle:30,1');
+Route::get('/a/{token}/conversations/{convSlug}/pdf', [AgentShareController::class, 'conversationPdf'])
+    ->middleware('throttle:30,1')
+    ->where('convSlug', '[A-Za-z0-9_\-]{1,32}');
+
 // Company profile JSON — readable by AI agents, crawlers, and integrations
 Route::get('/company-profile', function () {
     return response()->json(PartYardProfileService::toPublicJson(), 200, [

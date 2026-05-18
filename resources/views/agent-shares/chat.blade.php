@@ -65,8 +65,83 @@
         .branding a:hover{color:var(--text)}
         @endif
 
+        /* MAIN ROW: sidebar (histórico) + chat */
+        .main-row{flex:1;display:flex;overflow:hidden;min-height:0}
+
+        /* SIDEBAR — histórico de conversas (2026-05-18) */
+        .conv-sidebar{
+            width:240px;flex-shrink:0;
+            background:var(--bg2);
+            border-right:1px solid var(--border);
+            display:flex;flex-direction:column;
+            overflow:hidden;
+            transition:margin-left .2s;
+        }
+        .conv-sidebar.hidden{margin-left:-240px}
+        .conv-sidebar-head{
+            padding:12px 14px;
+            font-size:11px;font-weight:700;
+            color:var(--muted);
+            text-transform:uppercase;letter-spacing:.6px;
+            display:flex;align-items:center;justify-content:space-between;
+            border-bottom:1px solid var(--border);
+            flex-shrink:0;
+        }
+        .conv-new-btn{
+            background:var(--agent-color);border:none;color:#fff;
+            width:24px;height:24px;border-radius:6px;cursor:pointer;
+            font-size:18px;line-height:1;display:flex;
+            align-items:center;justify-content:center;
+            transition:.15s;font-weight:700;
+        }
+        .conv-new-btn:hover{filter:brightness(1.1)}
+        .conv-list{flex:1;overflow-y:auto;padding:6px}
+        .conv-list::-webkit-scrollbar{width:4px}
+        .conv-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+        .conv-item{
+            padding:9px 10px;margin:2px 0;border-radius:6px;
+            cursor:pointer;font-size:12px;
+            border:1px solid transparent;
+            transition:.12s;
+            display:flex;align-items:flex-start;gap:8px;
+            position:relative;
+        }
+        .conv-item:hover{background:rgba(0,0,0,.06);border-color:var(--border)}
+        .conv-item.active{background:color-mix(in srgb,var(--agent-color) 12%,transparent);border-color:var(--agent-color)}
+        .conv-item .conv-text{flex:1;min-width:0;overflow:hidden}
+        .conv-item .conv-title{
+            color:var(--text);font-weight:600;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+            font-size:12px;line-height:1.3;
+        }
+        .conv-item .conv-meta{
+            color:var(--muted);font-size:10px;margin-top:2px;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+        }
+        .conv-item .conv-pdf-btn{
+            background:transparent;border:none;cursor:pointer;
+            color:var(--muted);font-size:14px;line-height:1;padding:2px;
+            opacity:0;transition:opacity .15s,color .15s;
+            flex-shrink:0;
+        }
+        .conv-item:hover .conv-pdf-btn{opacity:1}
+        .conv-item .conv-pdf-btn:hover{color:var(--agent-color)}
+        .conv-empty{padding:18px 12px;color:var(--muted);font-size:11px;text-align:center;font-style:italic}
+
+        .conv-sidebar-toggle{
+            position:absolute;top:62px;left:8px;z-index:10;
+            display:none;
+            background:var(--bg2);border:1px solid var(--border);
+            color:var(--text);width:32px;height:32px;border-radius:8px;
+            cursor:pointer;font-size:14px;
+        }
+        @media (max-width:780px){
+            .conv-sidebar{position:absolute;top:54px;left:0;bottom:0;z-index:9;box-shadow:2px 0 12px rgba(0,0,0,.15)}
+            .conv-sidebar-toggle{display:block}
+        }
+
         /* CHAT AREA */
-        .chat-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column}
+        .chat-wrap{flex:1;overflow:hidden;display:flex;flex-direction:column;min-width:0}
         .messages{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth}
         .messages::-webkit-scrollbar{width:4px}
         .messages::-webkit-scrollbar-track{background:transparent}
@@ -340,6 +415,23 @@
     </button>
 </div>
 
+<!-- MAIN ROW: sidebar (histórico) + chat -->
+<div class="main-row">
+
+<!-- 2026-05-18: SIDEBAR — histórico de conversas + export PDF
+     Pedido directo: "o user tem de conseguir aceder ao histórico de
+     conversas e o LLM também põe uma barra ao lado com os pdf de conversas" -->
+<aside class="conv-sidebar" id="convSidebar">
+    <div class="conv-sidebar-head">
+        <span>Conversas</span>
+        <button type="button" class="conv-new-btn" onclick="newConversation()" title="Nova conversa">+</button>
+    </div>
+    <div class="conv-list" id="convList">
+        <div class="conv-empty">A carregar…</div>
+    </div>
+</aside>
+<button type="button" class="conv-sidebar-toggle" id="convSidebarToggle" onclick="toggleSidebar()" title="Mostrar/ocultar histórico">☰</button>
+
 <!-- CHAT -->
 <div class="chat-wrap">
     <div class="messages" id="messages">
@@ -413,6 +505,8 @@
     </div>
 </div>
 
+</div>{{-- /main-row --}}
+
 <script>
 const TOKEN      = '{{ $share->token }}';
 const CSRF       = document.querySelector('meta[name="csrf-token"]').content;
@@ -426,6 +520,20 @@ const CSRF       = document.querySelector('meta[name="csrf-token"]').content;
 // forjar a partir de JS. Por compatibilidade enviamos um marker no
 // body/query, mas o backend descarta-o.
 const SESSION_ID = 'cookie-bound';
+
+// 2026-05-18: identificador local da conversa actual (multi-conversation
+// support). Vazio = conversa default. Slug = "c-xxxx" para conversas
+// criadas via "+ Nova conversa". Server combina com browser_id do cookie
+// (HttpOnly) para construir o session_id full.
+let CURRENT_CONV_SLUG = (() => {
+    try {
+        return localStorage.getItem('cy-share-conv-' + '{{ $share->token }}') || '';
+    } catch (e) { return ''; }
+})();
+function setCurrentConvSlug(slug) {
+    CURRENT_CONV_SLUG = slug || '';
+    try { localStorage.setItem('cy-share-conv-' + '{{ $share->token }}', CURRENT_CONV_SLUG); } catch (e) {}
+}
 const AGENT_EMOJI = '{{ $meta['emoji'] }}';
 // Public session id minted by show() — sent back as a header on every stream
 // call so the server can look up the authorised OTP session regardless of
@@ -626,6 +734,9 @@ async function sendMessage() {
         // session on every stream call (the cookie approach was unreliable
         // across the web→api middleware split).
         if (SHARE_SID) fetchHeaders['X-Share-SID'] = SHARE_SID;
+        // 2026-05-18: conv slug local (vazio = default). Server combina
+        // com browser_id do cookie HttpOnly para namespacing seguro.
+        if (CURRENT_CONV_SLUG) fetchHeaders['X-Share-Conv'] = CURRENT_CONV_SLUG;
 
         const resp = await fetch(`/api/a/${TOKEN}/stream`, {
             method: 'POST',
@@ -761,6 +872,10 @@ async function sendMessage() {
     document.getElementById('stop-btn').classList.remove('visible');
     isStreaming = false;
     streamAbortCtrl = null;
+
+    // 2026-05-18: refresca sidebar após stream — actualiza msg_count
+    // e mostra conversa nova se foi criada implicitamente.
+    refreshSidebarAfterStream();
 }
 
 // 2026-05-18: handler do botão Stop. Aborta o fetch SSE em curso via
@@ -1445,6 +1560,120 @@ function toggleClawTheme(){
 // e devolve até 50 mensagens. Pedido directo do operador:
 //   "cliente Dloren Wfit já consegue gravar as conversas, guarda
 //    vários anos" — agora SIM, persistência permanente em BD.
+// 2026-05-18: sidebar de histórico de conversas + new + export PDF.
+// Pedido directo: "o user tem de conseguir aceder ao histórico de
+// conversas e o LLM também põe uma barra ao lado com os pdf de conversas".
+async function loadConversationList() {
+    const list = document.getElementById('convList');
+    if (!list) return;
+    try {
+        const headers = { 'Accept': 'application/json' };
+        if (SHARE_SID) headers['X-Share-SID'] = SHARE_SID;
+        const res = await fetch('/api/a/' + encodeURIComponent(TOKEN) + '/conversations',
+                                { headers, credentials: 'include' });
+        if (!res.ok) {
+            list.innerHTML = '<div class="conv-empty">Erro a carregar histórico</div>';
+            return;
+        }
+        const data = await res.json();
+        const convs = data.conversations || [];
+        renderConvList(convs);
+    } catch (e) {
+        list.innerHTML = '<div class="conv-empty">Sem ligação</div>';
+    }
+}
+
+function renderConvList(convs) {
+    const list = document.getElementById('convList');
+    if (!list) return;
+    if (!convs.length) {
+        list.innerHTML = '<div class="conv-empty">Sem conversas anteriores. Começa a escrever!</div>';
+        return;
+    }
+    list.innerHTML = '';
+    convs.forEach(c => {
+        const slug    = c.slug || '';                  // '' = default
+        const slugKey = slug === '' ? 'default' : slug;
+        const isActive = (slug === CURRENT_CONV_SLUG);
+        const item = document.createElement('div');
+        item.className = 'conv-item' + (isActive ? ' active' : '');
+        item.dataset.slug = slug;
+        const when = c.updated_at ? new Date(c.updated_at).toLocaleDateString('pt-PT', {
+            day: '2-digit', month: 'short'
+        }) : '';
+        item.innerHTML = `
+            <div class="conv-text">
+                <div class="conv-title">${escapeHtml(c.title || 'Conversa')}</div>
+                <div class="conv-meta">${c.msg_count || 0} msg${(c.msg_count||0)===1?'':'s'} · ${when}</div>
+            </div>
+            <button type="button" class="conv-pdf-btn" title="Exportar PDF" data-slug="${slugKey}">📄</button>
+        `;
+        item.addEventListener('click', (e) => {
+            if (e.target.classList.contains('conv-pdf-btn')) return;
+            switchConversation(slug);
+        });
+        item.querySelector('.conv-pdf-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            exportConversationPdf(slugKey);
+        });
+        list.appendChild(item);
+    });
+}
+
+function switchConversation(slug) {
+    if (slug === CURRENT_CONV_SLUG) return;
+    setCurrentConvSlug(slug);
+    // Limpa as mensagens visíveis e recarrega histórico desta conversa
+    const msgsEl = document.getElementById('messages');
+    if (msgsEl) {
+        // Mantém o welcome se existir; caso contrário cria de novo
+        msgsEl.innerHTML = '<div class="welcome-placeholder" id="welcome-msg" style="text-align:center;padding:30px;color:var(--muted);font-size:12px">A carregar conversa…</div>';
+    }
+    history = [];
+    loadShareHistoryOnce().then(() => loadConversationList());
+}
+
+async function newConversation() {
+    try {
+        const headers = { 'Accept': 'application/json' };
+        if (SHARE_SID) headers['X-Share-SID'] = SHARE_SID;
+        const res = await fetch('/api/a/' + encodeURIComponent(TOKEN) + '/conversations',
+                                { method: 'POST', headers, credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.slug) return;
+        setCurrentConvSlug(data.slug);
+        // Limpa UI, mostra welcome novo
+        const msgsEl = document.getElementById('messages');
+        if (msgsEl) {
+            msgsEl.innerHTML = '<div class="welcome-placeholder" id="welcome-msg" style="text-align:center;padding:30px;color:var(--muted);font-size:13px">✨ Nova conversa iniciada. Pergunta qualquer coisa.</div>';
+        }
+        history = [];
+        loadConversationList();
+    } catch (e) {}
+}
+
+function exportConversationPdf(slugKey) {
+    const url = '/api/a/' + encodeURIComponent(TOKEN) + '/conversations/'
+              + encodeURIComponent(slugKey) + '/pdf';
+    // Abre em nova aba — o backend devolve PDF inline para preview e o
+    // user pode fazer download a partir daí. credentials: 'include'
+    // garante que o cookie de OTP viaja.
+    window.open(url, '_blank', 'noopener');
+}
+
+function toggleSidebar() {
+    const s = document.getElementById('convSidebar');
+    if (s) s.classList.toggle('hidden');
+}
+
+// Recarrega a lista de conversas sempre que uma resposta termina
+// (para reflectir msg_count actualizado e nova conversa criada
+// automaticamente quando o user manda 1ª mensagem em slot novo).
+function refreshSidebarAfterStream() {
+    setTimeout(loadConversationList, 800);
+}
+
 (async function loadShareHistoryOnce() {
     try {
         // session_id deliberadamente OMITIDO da query — o servidor usa
@@ -1453,6 +1682,7 @@ function toggleClawTheme(){
         const url = '/api/a/' + encodeURIComponent(TOKEN) + '/history';
         const headers = { 'Accept': 'application/json' };
         if (SHARE_SID) headers['X-Share-SID'] = SHARE_SID;
+        if (CURRENT_CONV_SLUG) headers['X-Share-Conv'] = CURRENT_CONV_SLUG;
         const res = await fetch(url, { headers, credentials: 'include' });
         if (!res.ok) return;   // 401 reauth ou 404 — silenciar
         const data = await res.json();
@@ -1478,6 +1708,9 @@ function toggleClawTheme(){
         // sem rede ou erro — não bloqueia o uso normal
     }
 })();
+
+// 2026-05-18: carrega lista de conversas no sidebar quando a página abre
+loadConversationList();
 </script>
 </body>
 </html>

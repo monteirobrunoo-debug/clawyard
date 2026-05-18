@@ -1158,10 +1158,168 @@ HTML;
         // (chatSessionId). O cliente NÃO pode forçar/forge um session_id
         // para ler conversas de outro browser. Query string session_id
         // (legacy) é ignorado.
-        $sessionId = $this->chatSessionId($share);
+        // 2026-05-18: suporte para múltiplas conversations por browser —
+        // se o cliente enviar header X-Share-Conv, anexa um sufixo
+        // namespaced ao cookie. Continua impossível ler conversas de
+        // outro browser porque o prefixo é o cookie deste browser.
+        $sessionId = $this->composeConvSessionId(
+            $share,
+            $this->safeConvSlug((string) $request->header('X-Share-Conv', ''))
+        );
 
         $messages = $this->loadTrustedHistory($share, $sessionId);
         return response()->json(['messages' => $messages]);
+    }
+
+    /**
+     * GET /api/a/{token}/conversations
+     *
+     * 2026-05-18 — pedido directo do operador:
+     *   "o user tem de conseguir aceder ao histórico de conversas e o LLM
+     *    também põe uma barra ao lado com os pdf de conversas"
+     *
+     * Lista TODAS as conversas deste browser para este share. A query
+     * usa LIKE 'share{id}_{browser_id}%' — impossível ver conversas de
+     * outro browser porque o browser_id vem do cookie HttpOnly. Cap a
+     * 50 conversas mais recentes para evitar listas gigantes.
+     */
+    public function listConversations(Request $request, string $token)
+    {
+        $share = AgentShare::where('token', $token)->where('is_active', true)->first();
+        if (!$share || !$share->isValid()) {
+            return response()->json(['error' => 'invalid_share'], 404);
+        }
+        $authErr = $this->ensureOtpForJson($share, $request);
+        if ($authErr) return $authErr;
+
+        $prefix = $this->composeConvSessionId($share); // "share{id}_{browser_id}"
+        $convs  = \App\Models\Conversation::query()
+            ->where(function ($q) use ($prefix) {
+                // ESCAPE para evitar interpretação de _ como wildcard
+                $like = str_replace('_', '\\_', $prefix) . '%';
+                $q->where('session_id', 'like', $like)
+                  ->orWhere('session_id', $prefix); // base sem sufixo
+            })
+            ->orderBy('updated_at', 'desc')
+            ->limit(50)
+            ->get(['id', 'session_id', 'title', 'updated_at', 'created_at']);
+
+        $items = [];
+        $msgCounts = \App\Models\Message::query()
+            ->whereIn('conversation_id', $convs->pluck('id'))
+            ->selectRaw('conversation_id, COUNT(*) as cnt')
+            ->groupBy('conversation_id')
+            ->pluck('cnt', 'conversation_id');
+
+        foreach ($convs as $c) {
+            $slug = '';
+            if (str_starts_with($c->session_id, $prefix . '__')) {
+                $slug = substr($c->session_id, strlen($prefix . '__'));
+            }
+            $items[] = [
+                'slug'       => $slug,                              // '' = default
+                'title'      => $c->title ?: 'Conversa ' . substr((string) $c->id, -4),
+                'msg_count'  => (int) ($msgCounts[$c->id] ?? 0),
+                'updated_at' => $c->updated_at?->toIso8601String(),
+                'created_at' => $c->created_at?->toIso8601String(),
+            ];
+        }
+
+        return response()->json(['conversations' => $items]);
+    }
+
+    /**
+     * POST /api/a/{token}/conversations
+     *
+     * Cria um novo "slot" de conversa (servidor só atribui o slug —
+     * a Conversation real só nasce quando o user manda a 1ª mensagem,
+     * via firstOrCreate em persistTurnToDb). O slug fica em localStorage
+     * do cliente e é enviado como X-Share-Conv nas próximas chamadas.
+     */
+    public function newConversation(Request $request, string $token)
+    {
+        $share = AgentShare::where('token', $token)->where('is_active', true)->first();
+        if (!$share || !$share->isValid()) {
+            return response()->json(['error' => 'invalid_share'], 404);
+        }
+        $authErr = $this->ensureOtpForJson($share, $request);
+        if ($authErr) return $authErr;
+
+        $slug = 'c' . bin2hex(random_bytes(4)); // e.g. "c1a2b3c4d5e6f708"
+        return response()->json(['slug' => $slug]);
+    }
+
+    /**
+     * GET /api/a/{token}/conversations/{convSlug}/pdf
+     *
+     * Gera um PDF da conversa específica (cap 200 mensagens). PDF é
+     * inline para preview; o cliente pode forçar download via
+     * Content-Disposition na UI.
+     *
+     * SECURITY: a conversa é encontrada por session_id construído com
+     * o browser_id do cookie + slug fornecido — impossível exportar
+     * conversa de outro browser.
+     */
+    public function conversationPdf(Request $request, string $token, string $convSlug)
+    {
+        $share = AgentShare::where('token', $token)->where('is_active', true)->first();
+        if (!$share || !$share->isValid()) abort(404);
+        $authErr = $this->ensureOtpForJson($share, $request);
+        if ($authErr) return $authErr;
+
+        $convSlug  = $this->safeConvSlug($convSlug);
+        // Convenção: "default" significa conversa sem sufixo
+        $effective = ($convSlug === 'default' || $convSlug === '') ? '' : $convSlug;
+        $sessionId = $this->composeConvSessionId($share, $effective);
+
+        $conv = \App\Models\Conversation::where('session_id', $sessionId)->first();
+        if (!$conv) abort(404, 'Conversa não encontrada');
+
+        $messages = $conv->messages()->orderBy('id')->limit(200)->get();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('agent-shares.conversation-pdf', [
+            'share'        => $share,
+            'conversation' => $conv,
+            'messages'     => $messages,
+            'agentMeta'    => AgentShare::agentMeta()[$share->agent_key] ?? null,
+            'now'          => now(),
+        ])->setPaper('A4', 'portrait');
+
+        $filename = 'conversa-' . substr($conv->session_id, -8) . '-'
+                  . now()->format('Ymd-Hi') . '.pdf';
+
+        return response($pdf->output(), 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . $filename . '"',
+            'Cache-Control'       => 'private, max-age=0, no-store',
+        ]);
+    }
+
+    /**
+     * Helper interno — replica o gate OTP que stream()/history() já fazem,
+     * mas devolve uma JsonResponse pronta caso falhe. Usado pelos endpoints
+     * de listagem/PDF para não duplicar o boilerplate.
+     */
+    private function ensureOtpForJson(AgentShare $share, Request $request)
+    {
+        if (!$share->require_otp) return null;
+
+        $publicSid = $request->header('X-Share-SID')
+                  ?: $this->sharePublicSessionId($share);
+        if (!is_string($publicSid) || !preg_match('/^[a-f0-9]{32}$/', $publicSid)) {
+            return response()->json(['error' => 'no_session', 'reauth' => true], 401);
+        }
+        $svc = app(AgentShareAccessService::class);
+
+        if ($share->portal_token) {
+            $portalSid = $this->sharePortalSessionId($share->portal_token);
+            if ($svc->portalCoversShare($share, $portalSid, $request)) return null;
+        }
+        $status = $svc->sessionStatus($share, $publicSid, $request);
+        if ($status !== 'ok') {
+            return response()->json(['error' => 'unauthorised', 'reauth' => true], 401);
+        }
+        return null;
     }
 
     public function stream(Request $request, string $token)
@@ -1223,7 +1381,13 @@ HTML;
         // continuar a enviar `session_id` no body, mas é ignorado para
         // não permitir que um browser autenticado leia/escreva no
         // histórico de outro browser autenticado para o mesmo share.
-        $sessionId = $this->chatSessionId($share);
+        // Suporta multi-conversation: o cliente pode enviar header
+        // X-Share-Conv com um slug local (e.g. "c-abc123") para
+        // diferenciar conversas dentro do mesmo browser.
+        $sessionId = $this->composeConvSessionId(
+            $share,
+            $this->safeConvSlug((string) $request->header('X-Share-Conv', ''))
+        );
 
         // SECURITY (C1): Public share-link clients CANNOT supply their own
         // history. An attacker with a valid share token would otherwise be
@@ -1605,6 +1769,33 @@ HTML;
             )
         );
         return $sid;
+    }
+
+    /**
+     * 2026-05-18: helpers para composição do session_id permitindo
+     * múltiplas conversations por browser.
+     *
+     *   Cookie share_chat_{share_id}   →  browser_id (32-char hex)
+     *   Optional header X-Share-Conv   →  conv slug local (e.g. "c-abc123")
+     *
+     *   session_id na BD =
+     *     "share{share_id}_{browser_id}"               (conversa default)
+     *     "share{share_id}_{browser_id}__{conv_slug}"  (multi-conv)
+     *
+     * O LIKE 'share{id}_{browser_id}%' devolve todas as conversas deste
+     * browser, sem nunca vazar conversas de outros browsers porque
+     * browser_id vem do cookie HttpOnly (impossível de forjar via JS).
+     */
+    private function safeConvSlug(string $raw): string
+    {
+        return preg_replace('/[^A-Za-z0-9_\-]/', '', mb_substr($raw, 0, 32)) ?? '';
+    }
+
+    private function composeConvSessionId(AgentShare $share, string $convSlug = ''): string
+    {
+        $browserId = $this->chatSessionId($share);
+        $base      = 'share' . $share->id . '_' . $browserId;
+        return $convSlug !== '' ? $base . '__' . $convSlug : $base;
     }
 
     /**
