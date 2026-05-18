@@ -25,7 +25,7 @@ class TenderServiceAnalysisController extends Controller
      * the multi-agent service analysis. Sync execution, takes ~30-60s
      * for 5 agents, returns the persisted analysis as JSON.
      */
-    public function generate(Request $request, Tender $tender, TenderServiceAnalysisService $svc): JsonResponse
+    public function generate(Request $request, Tender $tender, TenderServiceAnalysisService $svc): JsonResponse|\Illuminate\Http\Response
     {
         try {
             $this->authorizeTender($tender);
