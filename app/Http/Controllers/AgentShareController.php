@@ -1192,17 +1192,29 @@ HTML;
         $authErr = $this->ensureOtpForJson($share, $request);
         if ($authErr) return $authErr;
 
-        $prefix = $this->composeConvSessionId($share); // "share{id}_{browser_id}"
-        $convs  = \App\Models\Conversation::query()
-            ->where(function ($q) use ($prefix) {
-                // ESCAPE para evitar interpretação de _ como wildcard
-                $like = str_replace('_', '\\_', $prefix) . '%';
-                $q->where('session_id', 'like', $like)
-                  ->orWhere('session_id', $prefix); // base sem sufixo
+        // 2026-05-18: listagem inclui DOIS prefixos para sobrevivência
+        // de histórico após limpeza de cookies:
+        //   (a) email-based identity (novo) — "share{id}_em-{hmac}…"
+        //   (b) browser cookie (legacy)     — "share{id}_{cookie_hex}…"
+        // Pedido directo: "não ser só browser porque depois desaparece a info"
+        $emailPrefix  = $this->composeConvSessionId($share);        // gen 2
+        $cookiePrefix = $this->composeLegacyConvSessionId($share);  // gen 1
+
+        $escape = fn(string $s) => str_replace(['\\', '_', '%'], ['\\\\', '\\_', '\\%'], $s);
+
+        $convs = \App\Models\Conversation::query()
+            ->where(function ($q) use ($emailPrefix, $cookiePrefix, $escape) {
+                $q->where('session_id', 'like', $escape($emailPrefix) . '%')
+                  ->orWhere('session_id', $emailPrefix)
+                  ->orWhere('session_id', 'like', $escape($cookiePrefix) . '%')
+                  ->orWhere('session_id', $cookiePrefix);
             })
             ->orderBy('updated_at', 'desc')
             ->limit(50)
             ->get(['id', 'session_id', 'title', 'updated_at', 'created_at']);
+
+        // Resolve qual o prefixo aplicável a cada conversa para extrair o slug
+        $prefix = $emailPrefix; // default para extracção do slug
 
         $items = [];
         $msgCounts = \App\Models\Message::query()
@@ -1213,8 +1225,15 @@ HTML;
 
         foreach ($convs as $c) {
             $slug = '';
-            if (str_starts_with($c->session_id, $prefix . '__')) {
-                $slug = substr($c->session_id, strlen($prefix . '__'));
+            $source = 'email';
+            // Detecta qual o prefixo (email vs cookie) e extrai o slug
+            foreach ([$emailPrefix => 'email', $cookiePrefix => 'cookie'] as $p => $tag) {
+                if ($c->session_id === $p) { $source = $tag; break; }
+                if (str_starts_with($c->session_id, $p . '__')) {
+                    $slug   = substr($c->session_id, strlen($p . '__'));
+                    $source = $tag;
+                    break;
+                }
             }
             $items[] = [
                 'slug'       => $slug,                              // '' = default
@@ -1222,6 +1241,7 @@ HTML;
                 'msg_count'  => (int) ($msgCounts[$c->id] ?? 0),
                 'updated_at' => $c->updated_at?->toIso8601String(),
                 'created_at' => $c->created_at?->toIso8601String(),
+                'source'     => $source,    // "email" (persistente) ou "cookie" (legacy)
             ];
         }
 
@@ -1528,6 +1548,13 @@ HTML;
         // Record usage
         $share->recordUsage();
 
+        // 2026-05-18: garante que existe pasta filesystem deste share
+        // ANTES da 1ª mensagem (cria diretório + index.json vazio). O
+        // appendTurn em persistTurnToDb encarrega-se das mensagens.
+        try {
+            app(\App\Services\AgentShareFileStore::class)->ensureShareDir($share);
+        } catch (\Throwable $e) { /* best-effort */ }
+
         return response()->stream(function () use ($agent, $message, $history, $agentName, $agentModel, $sessionId, $share) {
             while (ob_get_level() > 0) { ob_end_flush(); }
             flush();
@@ -1772,26 +1799,73 @@ HTML;
     }
 
     /**
-     * 2026-05-18: helpers para composição do session_id permitindo
-     * múltiplas conversations por browser.
+     * 2026-05-18: composição do session_id em DUAS gerações coexistentes.
      *
-     *   Cookie share_chat_{share_id}   →  browser_id (32-char hex)
-     *   Optional header X-Share-Conv   →  conv slug local (e.g. "c-abc123")
+     * GERAÇÃO 1 (legacy, baseada no browser):
+     *   Cookie share_chat_{share_id} → browser_id (32-char hex, 365d)
+     *   session_id = "share{share_id}_{browser_id}[__{conv_slug}]"
+     *   Problema: se o user limpar cookies ou trocar de browser, perde
+     *   acesso visual ao histórico (as conversas ficam órfãs em BD).
      *
-     *   session_id na BD =
-     *     "share{share_id}_{browser_id}"               (conversa default)
-     *     "share{share_id}_{browser_id}__{conv_slug}"  (multi-conv)
+     * GERAÇÃO 2 (NOVA, baseada no email autenticado):
+     *   Pedido directo do operador (2026-05-18):
+     *     "para cada agente partilhado cria uma pasta no servidor para
+     *      não ser só browser porque depois desaparece a info"
+     *   HMAC(client_email + APP_KEY) → identity_hash (24-char hex)
+     *   session_id = "share{share_id}_em-{identity_hash}[__{conv_slug}]"
+     *   Vantagem: o user faz OTP de qualquer browser/máquina e vê o
+     *   mesmo histórico — só precisa do email + código OTP.
      *
-     * O LIKE 'share{id}_{browser_id}%' devolve todas as conversas deste
-     * browser, sem nunca vazar conversas de outros browsers porque
-     * browser_id vem do cookie HttpOnly (impossível de forjar via JS).
+     * COMPATIBILIDADE:
+     *   • Novas conversas usam Geração 2 (identidade por email)
+     *   • A listagem inclui AMBOS os prefixos: o user com cookie antigo
+     *     continua a ver conversas antigas + as novas
+     *   • Quando o cookie expirar/limpar, só ficam visíveis as
+     *     conversas da Geração 2 — que são as que realmente queremos
+     *     persistir longo prazo
      */
     private function safeConvSlug(string $raw): string
     {
         return preg_replace('/[^A-Za-z0-9_\-]/', '', mb_substr($raw, 0, 32)) ?? '';
     }
 
+    /**
+     * Identidade ESTÁVEL por share+user. Baseada no email do share (que
+     * é confirmado via OTP antes de qualquer acesso ao chat). Não é o
+     * próprio email — é um HMAC para não vazar PII no session_id da BD
+     * caso alguém faça dump da tabela.
+     *
+     * Multi-recipient shares: o share tem `client_email` (primário) +
+     * `additional_emails`. Por simplicidade usamos o `client_email`
+     * para todos — todos os teammates partilham as mesmas conversas
+     * neste share (acceptable trade-off pelo benefício de "follow me
+     * to any browser").
+     */
+    private function chatIdentityKey(AgentShare $share): string
+    {
+        $email = strtolower(trim((string) $share->client_email));
+        if ($email !== '') {
+            $appKey = (string) config('app.key', 'fallback');
+            return 'em-' . substr(hash_hmac('sha256', $email, $appKey), 0, 24);
+        }
+        // Fallback ao browser cookie (não deve acontecer — shares têm
+        // sempre client_email — mas previne crashes).
+        return $this->chatSessionId($share);
+    }
+
     private function composeConvSessionId(AgentShare $share, string $convSlug = ''): string
+    {
+        $identity = $this->chatIdentityKey($share);
+        $base     = 'share' . $share->id . '_' . $identity;
+        return $convSlug !== '' ? $base . '__' . $convSlug : $base;
+    }
+
+    /**
+     * Compõe a versão LEGACY do session_id (Geração 1, baseada no cookie
+     * do browser). Mantida apenas para que listConversations possa
+     * mostrar conversas antigas a users com cookie ainda válido.
+     */
+    private function composeLegacyConvSessionId(AgentShare $share, string $convSlug = ''): string
     {
         $browserId = $this->chatSessionId($share);
         $base      = 'share' . $share->id . '_' . $browserId;
@@ -1999,7 +2073,12 @@ HTML;
     private function persistTurnToDb(AgentShare $share, string $sessionId, array $turn): void
     {
         try {
-            $dbSessionId = 'share' . $share->id . '_' . $sessionId;
+            // NOTA 2026-05-18: $sessionId aqui já vem composto pelo caller
+            // (`composeConvSessionId` que retorna "share{id}_…"). Não
+            // re-prefixar com "share{id}_". Defensivo se vier sem prefix.
+            $dbSessionId = str_starts_with($sessionId, 'share' . $share->id . '_')
+                ? $sessionId
+                : 'share' . $share->id . '_' . $sessionId;
             $conv = \App\Models\Conversation::firstOrCreate(
                 ['session_id' => $dbSessionId],
                 [
@@ -2026,6 +2105,23 @@ HTML;
                 'session'  => $sessionId,
             ]);
         }
+
+        // 2026-05-18: filesystem mirror. Pedido directo do operador
+        //   "para cada agente partilhado cria uma pasta no servidor para
+        //    não ser só browser porque depois desaparece a info"
+        // Espelho plaintext em storage/app/agent-shares/{share_id}/
+        // — sobrevive a limpeza de cookies e a problemas de DB.
+        try {
+            $convSlug = '';
+            // session_id é "share{id}_{identity}[__{slug}]" — extrai slug
+            if (str_contains($sessionId, '__')) {
+                $convSlug = substr($sessionId, strrpos($sessionId, '__') + 2);
+            }
+            app(\App\Services\AgentShareFileStore::class)
+                ->appendTurn($share, $convSlug, $turn);
+        } catch (\Throwable $e) {
+            // best-effort — fallback DB já gravou
+        }
     }
 
     /**
@@ -2037,7 +2133,13 @@ HTML;
     private function loadHistoryFromDb(AgentShare $share, string $sessionId): array
     {
         try {
-            $dbSessionId = 'share' . $share->id . '_' . $sessionId;
+            // 2026-05-18: $sessionId já vem composto pelo caller
+            // (composeConvSessionId retorna "share{id}_…" full). Não
+            // re-prefixar — se vier sem prefix por algum caller legacy,
+            // adiciona-o.
+            $dbSessionId = str_starts_with($sessionId, 'share' . $share->id . '_')
+                ? $sessionId
+                : 'share' . $share->id . '_' . $sessionId;
             $conv = \App\Models\Conversation::where('session_id', $dbSessionId)->first();
             if (!$conv) return [];
 
