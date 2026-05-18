@@ -192,6 +192,61 @@
 
                     {{-- Status box for service-analysis button --}}
                     <div id="ts-service-analysis-status" class="mt-3 hidden text-xs"></div>
+
+                    {{-- 2026-05-18: se já existe análise concluída, mostra
+                         o plano de acção consolidado + atalhos para PDF e
+                         sync SAP. Isto vive aqui no dashboard do concurso
+                         para o operador não ter de abrir outra página. --}}
+                    @php
+                        $analysisRow = \App\Models\TenderServiceAnalysis::where('tender_id', $tender->id)
+                            ->where('status', 'done')->first();
+                        $actionItems = $analysisRow?->extractActionItems() ?? [];
+                    @endphp
+                    @if($analysisRow && !empty($actionItems))
+                        <div class="mt-4 rounded-md border-l-4 border-emerald-500 bg-emerald-50/50 p-3">
+                            <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                                <div class="text-xs font-semibold text-emerald-800">
+                                    📋 Plano de acção · {{ count($actionItems) }} passos
+                                    <span class="font-normal text-emerald-600 ml-1">
+                                        ({{ $analysisRow->generated_at?->diffForHumans() }})
+                                    </span>
+                                </div>
+                                <div class="flex gap-2">
+                                    <a href="{{ route('tenders.service-analysis.pdf', $tender) }}"
+                                       class="inline-flex items-center gap-1 rounded bg-violet-600 hover:bg-violet-500 text-white px-2.5 py-1 text-[11px] font-semibold"
+                                       title="Gera PDF + anexa automaticamente ao concurso">
+                                        📄 PDF
+                                    </a>
+                                    <form method="POST" action="{{ route('tenders.service-analysis.sync-todo', $tender) }}" class="inline">
+                                        @csrf
+                                        <button type="submit"
+                                                class="inline-flex items-center gap-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 text-[11px] font-semibold"
+                                                title="Mete o plano em Notas → sincroniza com SAP Opportunity Remarks">
+                                            🔄 SAP
+                                        </button>
+                                    </form>
+                                    <a href="{{ route('tenders.service-analysis.show', $tender) }}"
+                                       class="inline-flex items-center gap-1 rounded border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 px-2.5 py-1 text-[11px] font-semibold"
+                                       title="Abrir vista completa da análise">
+                                        Abrir
+                                    </a>
+                                </div>
+                            </div>
+                            <ol class="ml-5 list-decimal text-xs text-gray-800 space-y-0.5">
+                                @foreach(array_slice($actionItems, 0, 6) as $it)
+                                    <li>
+                                        {{ $it['text'] }}
+                                        <span class="ml-1 text-[10px] text-violet-600 font-semibold">· {{ $it['agent_name'] }}</span>
+                                    </li>
+                                @endforeach
+                                @if(count($actionItems) > 6)
+                                    <li class="list-none text-[11px] text-gray-500 italic">
+                                        … +{{ count($actionItems) - 6 }} mais — abre a análise para ver todos
+                                    </li>
+                                @endif
+                            </ol>
+                        </div>
+                    @endif
                     <script>
                     (function () {
                         const btn = document.getElementById('ts-service-analysis-btn');

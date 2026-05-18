@@ -3,12 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Models\Tender;
+use App\Models\TenderAttachment;
 use App\Models\TenderServiceAnalysis;
+use App\Services\SapService;
 use App\Services\TenderServiceAnalysisService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 
 class TenderServiceAnalysisController extends Controller
 {
@@ -76,6 +84,148 @@ class TenderServiceAnalysisController extends Controller
             'tender'   => $tender,
             'analysis' => $analysis,
         ]);
+    }
+
+    /**
+     * GET /tenders/{tender}/service-analysis/pdf — gera PDF (dompdf),
+     * anexa-o ao concurso na tabela `tender_attachments` (idempotente via
+     * file_hash) e devolve o PDF como download inline.
+     *
+     * Operador clica uma vez:
+     *   • Vê o PDF imediatamente no browser
+     *   • E o ficheiro fica permanente em /tenders/{id} → secção Anexos
+     *
+     * Se a análise for re-corrida, o próximo PDF tem hash diferente
+     * (executive_summary muda) e cria nova row em vez de duplicar.
+     */
+    public function pdf(Tender $tender): Response
+    {
+        $this->authorizeTender($tender);
+        $analysis = TenderServiceAnalysis::where('tender_id', $tender->id)
+            ->where('status', 'done')
+            ->firstOrFail();
+
+        // Renderiza a view PDF-friendly (sem @vite, fontes default, inline CSS)
+        $pdf = Pdf::loadView('tenders.service-analysis-pdf', [
+            'tender'   => $tender,
+            'analysis' => $analysis,
+        ])->setPaper('A4', 'portrait');
+
+        $bytes = $pdf->output();
+
+        // Hash + nome do ficheiro derivado do conteúdo (dedup automático
+        // — re-gerar com a mesma análise não cria nova row).
+        $hash = hash('sha256', $bytes);
+        $slug = Str::slug(($tender->reference ?: 'concurso-' . $tender->id) . '-analise');
+        $storedName = $slug . '-' . substr($hash, 0, 8) . '.pdf';
+        $relPath = 'tender-attachments/' . $tender->id . '/' . $storedName;
+
+        // Idempotência: se já existe um TenderAttachment com este hash,
+        // re-aproveita-o em vez de duplicar.
+        $existing = TenderAttachment::where('tender_id', $tender->id)
+            ->where('file_hash', $hash)
+            ->first();
+
+        if (!$existing) {
+            try {
+                Storage::disk('local')->put($relPath, $bytes);
+            } catch (\Throwable $e) {
+                Log::error('ServiceAnalysisPDF: storage failed', [
+                    'tender_id' => $tender->id,
+                    'error'     => $e->getMessage(),
+                ]);
+                return response('Erro ao guardar PDF: ' . $e->getMessage(), 500);
+            }
+
+            TenderAttachment::create([
+                'tender_id'           => $tender->id,
+                'original_name'       => "Analise-multi-agente-#{$tender->id}-" . now()->format('Ymd-His') . '.pdf',
+                'disk_path'           => $relPath,
+                'mime_type'           => 'application/pdf',
+                'size_bytes'          => strlen($bytes),
+                'file_hash'           => $hash,
+                'extraction_status'   => TenderAttachment::STATUS_OK,
+                'extracted_text'      => ($analysis->executive_summary ?? '') . "\n\n" .
+                                         collect($analysis->extractActionItems())->pluck('text')->implode("\n"),
+                'extracted_chars'     => mb_strlen($analysis->executive_summary ?? ''),
+                'uploaded_by_user_id' => Auth::id(),
+            ]);
+        } else {
+            // touch para subir no histórico
+            $existing->touch();
+        }
+
+        // Devolve o PDF imediatamente — o anexo fica guardado em background.
+        return response($bytes, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="Analise-#' . $tender->id . '.pdf"',
+            'Cache-Control'       => 'private, max-age=0, no-store',
+        ]);
+    }
+
+    /**
+     * POST /tenders/{tender}/service-analysis/sync-todo — extrai o plano
+     * de acção consolidado da análise e mete-o em `tender.notes`, que
+     * por sua vez sincroniza com `SAP Opportunity Remarks` (cap 254
+     * chars do SAP B1).
+     *
+     * Comportamento:
+     *   • Se já existe texto em tender.notes, faz APPEND (não substitui)
+     *     marcado com timestamp.
+     *   • Se não houver SAP opp num, guarda só localmente e avisa.
+     *   • Se houver, faz updateOpportunity() imediatamente.
+     */
+    public function syncTodoToSap(Tender $tender, SapService $sap): RedirectResponse
+    {
+        $this->authorizeTender($tender);
+        $analysis = TenderServiceAnalysis::where('tender_id', $tender->id)
+            ->where('status', 'done')
+            ->firstOrFail();
+
+        $block = $analysis->toSapNotesBlock();
+        if ($block === '') {
+            return redirect()
+                ->route('tenders.service-analysis.show', $tender)
+                ->with('error', 'Análise não tem recomendações — nada para sincronizar.');
+        }
+
+        // Mete o plano de acção no campo notes. Se já há notas, anexa
+        // por baixo separadas por linha em branco para preservar o que
+        // o utilizador escreveu manualmente.
+        $existing = (string) $tender->notes;
+        $existing = trim($existing);
+        $tender->notes = $existing === '' ? $block : ($existing . "\n\n" . $block);
+        $tender->save();
+
+        // SAP push — mesma lógica que TenderController::update()
+        $seqNo = $tender->getSapSequentialNo();
+        $sapConfigured = (bool) config('services.sap.username');
+
+        if (!$sapConfigured) {
+            return redirect()
+                ->route('tenders.service-analysis.show', $tender)
+                ->with('status', '✓ Plano de acção guardado em notas locais. SAP não está configurado — não houve push.');
+        }
+        if (!$seqNo) {
+            return redirect()
+                ->route('tenders.service-analysis.show', $tender)
+                ->with('status', '⚠ Plano de acção guardado em notas locais. Concurso não tem Nº Oportunidade SAP — preenche o campo para activar sincronização.');
+        }
+
+        try {
+            $ok = $sap->updateOpportunity($seqNo, ['Remarks' => (string) $tender->notes]);
+            $msg = $ok
+                ? "✓ Plano sincronizado com SAP Opp #{$seqNo}."
+                : "⚠ Plano guardado local mas falhou push ao SAP Opp #{$seqNo}: " . ($sap->getLastError() ?: 'erro desconhecido');
+        } catch (\Throwable $e) {
+            Log::warning('ServiceAnalysis sync-todo SAP failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+            $msg = "⚠ Plano guardado local, excepção ao sincronizar SAP Opp #{$seqNo}: {$e->getMessage()}";
+        }
+
+        return redirect()->route('tenders.service-analysis.show', $tender)->with('status', $msg);
     }
 
     /**

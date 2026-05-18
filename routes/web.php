@@ -671,6 +671,11 @@ Route::middleware(['auth'])->group(function () {
         ->name('tenders.service-analysis.generate');
     Route::get ('/tenders/{tender}/service-analysis', [\App\Http\Controllers\TenderServiceAnalysisController::class, 'show'])
         ->name('tenders.service-analysis.show');
+    // 2026-05-18: PDF auto-anexado + sync to-do para SAP Remarks
+    Route::get ('/tenders/{tender}/service-analysis/pdf', [\App\Http\Controllers\TenderServiceAnalysisController::class, 'pdf'])
+        ->name('tenders.service-analysis.pdf');
+    Route::post('/tenders/{tender}/service-analysis/sync-todo', [\App\Http\Controllers\TenderServiceAnalysisController::class, 'syncTodoToSap'])
+        ->name('tenders.service-analysis.sync-todo');
     // PDF attachments — upload + download + delete (manager+ to delete).
     Route::post  ('/tenders/{tender}/attachments',                    [\App\Http\Controllers\TenderAttachmentController::class, 'store'])
         ->name('tenders.attachments.store');
