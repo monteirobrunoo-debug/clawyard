@@ -114,3 +114,47 @@ async function networkFirst(request, cacheName) {
         );
     }
 }
+
+// ── Web Push handlers ────────────────────────────────────────────────
+// 'push' dispara quando o vendor entrega uma notification do nosso server.
+// Payload é JSON com {title, body, url, tag, icon, badge}.
+self.addEventListener('push', (event) => {
+    let payload = {};
+    try {
+        payload = event.data ? event.data.json() : {};
+    } catch (e) {
+        payload = { title: 'ClawYard', body: event.data?.text?.() ?? '' };
+    }
+
+    const title = payload.title || 'ClawYard';
+    const options = {
+        body:    payload.body  || '',
+        icon:    payload.icon  || '/images/clawyard-icon.svg',
+        badge:   payload.badge || '/images/clawyard-icon.svg',
+        tag:     payload.tag   || 'clawyard-notification',
+        data:    { url: payload.url || '/' },
+        // Vibrate em mobile (não interactivo em desktop).
+        vibrate: [180, 80, 180],
+    };
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// 'notificationclick' — abre o URL do payload ou foca uma tab já aberta.
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const target = (event.notification.data && event.notification.data.url) || '/';
+    event.waitUntil((async () => {
+        const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const c of all) {
+            // Se já existe uma tab da app aberta, foca-a e navega.
+            if (c.url.includes(self.location.origin)) {
+                await c.focus();
+                if ('navigate' in c) {
+                    try { await c.navigate(target); } catch (_) { /* cross-origin block */ }
+                }
+                return;
+            }
+        }
+        await self.clients.openWindow(target);
+    })());
+});

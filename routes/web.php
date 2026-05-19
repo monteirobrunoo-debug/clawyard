@@ -631,6 +631,12 @@ Route::middleware(['auth'])->group(function () {
     // Pedido 2026-05-20 "bulk actions com checkboxes".
     Route::post('/tenders/bulk-status', [TenderController::class, 'bulkStatus'])->name('tenders.bulkStatus');
 
+    // Web Push subscriptions (1 row por device por user). 2026-05-20.
+    Route::post  ('/push/subscribe',   [\App\Http\Controllers\PushSubscriptionController::class, 'store'])
+        ->name('push.subscribe');
+    Route::delete('/push/subscribe',   [\App\Http\Controllers\PushSubscriptionController::class, 'destroy'])
+        ->name('push.unsubscribe');
+
     // Dashboard + per-tender detail + edit + append-only observation.
     Route::get('/tenders',                      [TenderController::class, 'index'])->name('tenders.index');
     // 2026-05-19: Marine Department  separador paralelo aos concursos.

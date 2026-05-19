@@ -306,6 +306,16 @@ return [
     //   • Drafts < 200 chars saltam automaticamente
     //   • Drafts com tokens __TABLE__/__CHART__/__EMAIL__ saltam (já validados)
     //   • Cache 5 min para mesmos (prompt, draft) idênticos
+    // Web Push (VAPID keys + subject). 2026-05-20.
+    // Geradas 1× via `php artisan push:generate-vapid` e metidas no .env.
+    'push' => [
+        'vapid' => [
+            'public'  => env('VAPID_PUBLIC_KEY', ''),
+            'private' => env('VAPID_PRIVATE_KEY', ''),
+            'subject' => env('VAPID_SUBJECT', 'mailto:bruno.monteiro@hp-group.org'),
+        ],
+    ],
+
     'agent_critique' => [
         // Master switch — corre crítica em agent shares (canal externo, alto risco)
         'enabled_on_shares' => env('AGENT_CRITIQUE_SHARES',  true),

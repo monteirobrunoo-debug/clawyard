@@ -13,6 +13,7 @@
         "laravel/framework": "^13.0",
         "laravel/tinker": "^3.0",
         "league/flysystem-aws-s3-v3": "^3.0",
+        "minishlink/web-push": "^9.0",
         "phpoffice/phpspreadsheet": "^5.6",
         "phpoffice/phpword": "^1.4",
         "pragmarx/google2fa": "^8.0",

@@ -88,5 +88,8 @@
         {{-- Mobile UX: modais → bottom-sheet em viewport <sm, textarea
              auto-grow, 16px font para evitar iOS zoom. 2026-05-19. --}}
         @include('partials.mobile-ux')
+        {{-- Web Push subscribe CTA — só aparece em users autenticados,
+             1× por sessão (dispensável 24h). 2026-05-20. --}}
+        @include('partials.push-subscribe')
     </body>
 </html>

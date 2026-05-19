@@ -186,3 +186,12 @@ Schedule::command('tenders:send-deadline-alerts')
     ->timezone('Europe/Lisbon')
     ->withoutOverlapping()
     ->runInBackground();
+
+// ── Web Push deadline notifications — hourly, ~24h antes do deadline.
+// Complementa o email alert acima (que é 1×/lifetime). Push acorda o
+// telemóvel mesmo sem mail aberto. Janela 23-25h apanha cada tender 1×.
+Schedule::command('tenders:notify-deadlines --window-hours=24')
+    ->hourly()
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
