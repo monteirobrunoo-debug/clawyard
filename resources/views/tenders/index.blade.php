@@ -719,14 +719,19 @@
                         $isDefaultSort = !$sort;
                     @endphp
                     <header class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
-                        <h3 class="text-sm font-semibold text-gray-800">
-                            {{-- 2026-05-19: header unificado por pedido Monica
-                                 "dashboard de concursos põe igual para admin e users".
-                                 Antes mostrava "Os meus concursos" para users sem
-                                 view-all — agora todos vêem o mesmo título e a
-                                 visibility ja filtra os dados via Tender::scopeForUser. --}}
+                        <h3 class="text-sm font-semibold text-gray-800 flex items-center gap-2 flex-wrap">
+                            {{-- 2026-05-19 v3: header unificado + duplo contador
+                                 Pedido directo Monica: "em cima todos e os que esta
+                                 assigned". Mostra total visível + atribuídos a este user. --}}
                             Concursos
-                            <span class="ml-2 text-xs font-normal text-gray-500">({{ $all->total() }})</span>
+                            <span class="text-xs font-normal text-gray-500">({{ $all->total() }})</span>
+                            @if(!empty($myAssignedCount) && $myAssignedCount > 0)
+                                <a href="{{ route('tenders.index', ['collaborator_id' => collect($collaborators)->firstWhere('user_id', $currentUserId)?->id]) }}"
+                                   title="Filtrar só os concursos atribuídos a si"
+                                   class="inline-flex items-center gap-1 rounded-md bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-semibold px-2 py-0.5 hover:bg-emerald-200">
+                                    ✓ Atribuídos a mim · {{ $myAssignedCount }}
+                                </a>
+                            @endif
                         </h3>
 
                         <div class="flex items-center gap-2 flex-wrap">

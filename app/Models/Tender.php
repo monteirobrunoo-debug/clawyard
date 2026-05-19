@@ -589,16 +589,19 @@ class Tender extends Model
             self::$scopeForUserCache[$userId] = $collaborators;
         }
 
+        // 2026-05-19 v3 (Monica clarification): metodo scopeForUser
+        // mantido para back-compat (outros sitios ainda chamam, ex.
+        // dashboardStats), mas o controller principal /tenders ja NAO
+        // chama scopeForUser. Politica: todos os users autenticados
+        // veem todos os tenders. A regra abaixo so se aplica se este
+        // scope for invocado explicitamente.
         if ($collaborators->isEmpty()) {
-            // 2026-05-19 v2: user sem collab rows ve o pool aberto
-            // (tenders sem assignment). Refactor da regra anterior
-            // baseada em source.
+            // Sem collab rows -> retorna pool aberto (sem assignment) para
+            // back-compat. Quase nunca atingido em produç̃ao porque a
+            // index página deixou de chamar este scope.
             return $q->whereNull('assigned_collaborator_id');
         }
 
-        // 2026-05-19 v2: regra final = atribuido a mim OR sem atribuicao.
-        // Pedido directo Monica: "se for atribuido fica logo importado
-        // com o user, sem nome aparece em todos".
         $collabIds = $collaborators->pluck('id');
         $q->where(function ($w) use ($collabIds) {
             $w->whereIn('assigned_collaborator_id', $collabIds)

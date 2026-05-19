@@ -52,11 +52,14 @@ class TenderController extends Controller
         $perPage = (int) $request->input('per_page', 100);
         $perPage = max(25, min($perPage, 500));
 
-        // "All" list — manager+ sees every tender; user sees only their own.
+        // 2026-05-19 v3 — Monica clarificou: "catarina e jose iancio
+        // pode ver todos tambem, em cima todos e os que esta assigned,
+        // no entanto o normal e sempre concursos nspa, depois os users
+        // filtram para outro".
+        // Resultado: TODOS os users autenticados veem TODOS os tenders
+        // no dashboard principal. A coluna Colaborador + filtro
+        // collaborator_id permite ao user ver so os seus quando quiser.
         $allQuery = Tender::query()->with('collaborator');
-        if (!$canViewAll) {
-            $allQuery->forUser($user->id);
-        }
         $this->applyFilters($allQuery, $filters);
         $this->applySort($allQuery, $sort, $dir);
         $all = $allQuery->paginate($perPage)->withQueryString();
@@ -138,21 +141,35 @@ class TenderController extends Controller
             }
         }
 
+        // 2026-05-19 v3: contagem dos tenders atribuidos ao user actual.
+        // Mostrada no header como badge ao lado do total. Pedido directo:
+        //   "em cima todos e os que esta assigned"
+        $myAssignedCount = 0;
+        try {
+            $myCollabIds = TenderCollaborator::where('user_id', $user->id)
+                ->pluck('id');
+            if ($myCollabIds->isNotEmpty()) {
+                $myAssignedCount = Tender::whereIn('assigned_collaborator_id', $myCollabIds)->count();
+            }
+        } catch (\Throwable $e) { /* best-effort */ }
+
         return view('tenders.index', [
-            'all'           => $all,
-            'mine'          => $mine,
-            'filters'       => $filters,
-            'sort'          => $sort,
-            'dir'           => $dir,
-            'mineSort'      => $mineSort,
-            'mineDir'       => $mineDir,
-            'mineQ'         => $mineQ,
-            'collaborators' => $collaborators,
-            'canImport'     => $canImport,
-            'canAssign'     => $canAssign,
-            'canViewAll'    => $canViewAll,
-            'restriction'   => $restriction,
-            'stats'         => $this->dashboardStats($canViewAll ? null : $user->id),
+            'all'              => $all,
+            'mine'             => $mine,
+            'filters'          => $filters,
+            'sort'             => $sort,
+            'dir'              => $dir,
+            'mineSort'         => $mineSort,
+            'mineDir'          => $mineDir,
+            'mineQ'            => $mineQ,
+            'collaborators'    => $collaborators,
+            'canImport'        => $canImport,
+            'canAssign'        => $canAssign,
+            'canViewAll'       => $canViewAll,
+            'restriction'      => $restriction,
+            'stats'            => $this->dashboardStats($canViewAll ? null : $user->id),
+            'myAssignedCount'  => $myAssignedCount,
+            'currentUserId'    => $user->id,
         ]);
     }
 
@@ -1442,8 +1459,22 @@ class TenderController extends Controller
 
     private function parseFilters(Request $r): array
     {
+        // 2026-05-19 v3: Monica pediu "o normal e sempre concursos nspa".
+        // Quando o user chega à /tenders SEM nenhum filtro source/status/
+        // urgency/q/collab, o sistema aplica source=nspa como default.
+        // Se o user clica em "Todas as fontes" no dropdown, esse value=''
+        // chega como string vazia e nao re-activa o default.
+        $hasAnyFilter = $r->has('source')
+                     || $r->filled('status')
+                     || $r->filled('urgency')
+                     || $r->filled('collaborator_id')
+                     || $r->filled('q');
+        $sourceRaw = $r->string('source')->trim()->value();
+        $source    = $sourceRaw !== '' ? $sourceRaw
+                                       : ($hasAnyFilter ? null : 'nspa');
+
         return [
-            'source'           => $r->string('source')->trim()->value() ?: null,
+            'source'           => $source,
             'status'           => $r->string('status')->trim()->value() ?: null,
             'urgency'          => $r->string('urgency')->trim()->value() ?: null,
             'collaborator_id'  => $r->integer('collaborator_id') ?: null,
