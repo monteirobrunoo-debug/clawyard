@@ -15,12 +15,22 @@ Route::middleware('guest')->group(function () {
     Route::get('register', [RegisteredUserController::class, 'create'])
         ->name('register');
 
-    Route::post('register', [RegisteredUserController::class, 'store']);
+    // Throttle: 3 registos/min/IP — registo legítimo é raro, brute-force ou
+    // bot-spam de criação de contas é o que precisamos de bloquear.
+    // 2026-05-20: audit cybersec apontou que estas rotas vinham sem rate
+    // limit, viáveis para abuse mass-signup.
+    Route::post('register', [RegisteredUserController::class, 'store'])
+        ->middleware('throttle:3,1');
 
     Route::get('login', [AuthenticatedSessionController::class, 'create'])
         ->name('login');
 
-    Route::post('login', [AuthenticatedSessionController::class, 'store']);
+    // Throttle: 5 tentativas/min/IP. Brute force protection — credenciais
+    // são o vector de ataque mais comum. AuthenticatedSessionController
+    // já valida via Fortify-style throttle por email, isto adiciona
+    // camada per-IP para credential stuffing distribuído.
+    Route::post('login', [AuthenticatedSessionController::class, 'store'])
+        ->middleware('throttle:5,1');
 
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');

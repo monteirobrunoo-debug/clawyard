@@ -1,0 +1,52 @@
+name: Security audit
+
+# Daily composer audit + audit em cada push para detectar vulnerabilidades
+# em dependências PHP. Pedido directo da auditoria cybersec 2026-05-20.
+#
+# Falha o workflow se `composer audit` encontrar CVEs em production deps.
+# Para dev-only deps (phpunit, fakerphp, etc.) só faz warn — não bloqueia
+# deploy mas fica registado.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'composer.json'
+      - 'composer.lock'
+      - '.github/workflows/security.yml'
+  pull_request:
+    paths:
+      - 'composer.json'
+      - 'composer.lock'
+  schedule:
+    # Daily 06:00 UTC — apanha CVEs publicadas overnight
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  composer-audit:
+    name: composer audit (production deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ hashFiles('composer.lock') }}
+
+      - name: Install deps (no-dev) for audit
+        run: composer install --no-dev --no-interaction --prefer-dist --no-scripts
+
+      - name: Run composer audit (BLOCKING on prod CVEs)
+        run: composer audit --no-dev --format=plain
