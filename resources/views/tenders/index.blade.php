@@ -124,15 +124,21 @@
                 </a>
 
                 {{-- Criação manual — qualquer user autenticado pode criar 1
-                     concurso à mão (não precisa de gate `tenders.import`). --}}
+                     concurso à mão (não precisa de gate `tenders.import`).
+                     On /marine, the button reads "Novo concurso marítimo" and
+                     pre-fills source=marine in the modal. --}}
                 <button type="button"
                         onclick="document.getElementById('tender-manual-modal').classList.remove('hidden')"
-                        class="inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-500"
-                        title="Cria 1 concurso manualmente — para registos que não vêm de Excel">
+                        class="inline-flex items-center gap-2 rounded-md {{ ($isMarine ?? false) ? 'bg-blue-700 hover:bg-blue-600' : 'bg-amber-600 hover:bg-amber-500' }} px-4 py-2 text-sm font-semibold text-white shadow"
+                        title="Cria 1 concurso manualmente — depois Marta analisa o cliente, abre no SAP e o multi-agente faz análise técnica.">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
                     </svg>
-                    + Novo concurso
+                    @if($isMarine ?? false)
+                        + Novo concurso marítimo
+                    @else
+                        + Novo concurso
+                    @endif
                 </button>
             </div>
         </div>
@@ -144,7 +150,13 @@
     <div id="tender-manual-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 px-4">
         <div class="bg-white rounded-lg shadow-xl max-w-xl w-full">
             <div class="border-b border-gray-200 px-5 py-3 flex items-center justify-between">
-                <h3 class="text-base font-semibold text-gray-800">+ Novo concurso (manual)</h3>
+                <h3 class="text-base font-semibold text-gray-800">
+                    @if($isMarine ?? false)
+                        ⚓ + Novo concurso marítimo
+                    @else
+                        + Novo concurso (manual)
+                    @endif
+                </h3>
                 <button type="button"
                         onclick="document.getElementById('tender-manual-modal').classList.add('hidden')"
                         class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
@@ -159,8 +171,12 @@
                     </label>
                     <label class="block">
                         <span class="text-xs font-semibold text-gray-700">Fonte *</span>
+                        {{-- 2026-05-19: on /marine, pre-select source=marine so the
+                             button feels native to the section. User can still
+                             override via the dropdown. --}}
                         <select name="source" required class="mt-1 block w-full rounded border-gray-300 text-sm">
-                            <option value="manual">Manual</option>
+                            <option value="marine" @selected($isMarine ?? false)>⚓ Marine Department</option>
+                            <option value="manual" @selected(!($isMarine ?? false))>Manual</option>
                             <option value="email">Email</option>
                             <option value="acingov">AcinGov</option>
                             <option value="vortal">Vortal</option>

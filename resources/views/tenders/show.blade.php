@@ -34,9 +34,12 @@
     <x-slot name="header">
         <div class="flex items-center justify-between gap-3 flex-wrap">
             <div class="flex items-center gap-3 min-w-0">
-                <a href="{{ route('tenders.index') }}" class="text-sm text-indigo-600 hover:underline shrink-0">← Voltar</a>
+                {{-- Voltar: tenders marinhos voltam a /marine, restantes a /tenders.
+                     Mantém o user dentro da secção certa em vez de o jogar fora. --}}
+                <a href="{{ $tender->source === 'marine' ? route('marine.index') : route('tenders.index') }}"
+                   class="text-sm text-indigo-600 hover:underline shrink-0">← Voltar</a>
                 <h2 class="text-xl font-semibold leading-tight text-gray-800 truncate">
-                    {{ strtoupper($tender->source) }} · {{ $tender->reference }}
+                    @if($tender->source === 'marine') ⚓ @endif{{ strtoupper($tender->source) }} · {{ $tender->reference }}
                 </h2>
             </div>
             <button type="button"
