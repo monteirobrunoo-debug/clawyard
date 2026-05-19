@@ -263,7 +263,13 @@ class AcingovImporter implements TenderImporterInterface
                 'collaborator_name'      => $this->cellByCanonical($cells, $headerMap, 'collaborator_name'),
                 'raw_metadata'           => array_merge(
                     $this->buildRawMetadata($headers, $cells),
-                    ['source_sheet' => $sheetTitle]
+                    [
+                        'source_sheet' => $sheetTitle,
+                        // NIPC PT detectado no Ref. (10-digit puro com prefix
+                        // válido 1-3 ou 5-9). Guardado para futuro link ao
+                        // Supplier por VAT/NIF. Distinto de sap_opportunity_number.
+                        'nipc'         => $this->extractNipc($reference),
+                    ]
                 ),
             ];
         }
@@ -339,35 +345,69 @@ class AcingovImporter implements TenderImporterInterface
         $trimmed = trim($ref);
         if ($trimmed === '' || $trimmed === '-') return null;
 
-        // Pattern 1: NSPA-style "NNNNN/YYYY" (já tem ano)
+        // 2026-05-19 CORRECÇÃO IMPORTANTE — pedido directo do operador:
+        //   "5022019630 este número é um contribuinte"
+        // Resultado: refs PURAMENTE NUMÉRICAS de 10 dígitos em PT são
+        // NIPCs (Número de Identificação de Pessoa Colectiva), não SAP
+        // doc numbers. NIPCs PT começam por 1-3, 5-9. Capturar como
+        // sap_opportunity_number contaminava 200+ tenders. NIPCs vão
+        // para raw_metadata.nipc (ver extractNipc()) para futuro link
+        // ao Supplier por VAT.
+        //
+        // Patterns aceitáveis (só estes capturam):
+
+        // Pattern 1: NSPA-style "NNNNN/YYYY" (já tem ano, claramente SAP)
         if (preg_match('/^(\d{4,6}\/\d{4})$/', $trimmed, $m)) {
             return $m[1];
         }
 
-        // Pattern 2: pure numeric 8-12 digits (SAP B1 doc style)
-        if (preg_match('/^(\d{8,12})$/', $trimmed)) {
-            return $trimmed;
-        }
+        // Pattern 2 (removido): pure numeric 10-12 digits = NIPC PT, não SAP
 
-        // 2026-05-19 refine: separadores expandidos para acomodar
-        // variações reais do CONCURSOS_VICENCIO ("DMSA - 5026000749",
-        // "GTF16 5025017788", "3026000717-AMN", "3026003935_GM_EGM").
-        //
-        // Pattern 3: prefix alfanumérico + separador(\s, -, _) + 8-12 digits
+        // Pattern 3: prefix alfanumérico + separador + 8-12 digits.
+        // Este SIM é SAP doc ref interno PartYard (DMSA, NPD, DAT, CLAFA,
+        // GTF16, etc. são prefixos de departamento + número de documento).
         //   DAT 5026000970        DMSA - 5026001346
         //   CLAFA 5025018663      GTF16 5025017788
+        //   NPD 5026000155
         if (preg_match('/^[A-Z][A-Z0-9\.\-]*[\s\-_]+(\d{8,12})$/i', $trimmed, $m)) {
             return $m[1];
         }
 
-        // Pattern 4: numeric (8-12) seguido de separador (/_-\s) e metadata
-        //   4024015675/DA/Q0023/2024     3026004273/684
-        //   3026003935_GM_EGM            3026000717 - AMN
-        //   3026000735-AMN
-        if (preg_match('/^(\d{8,12})[\/_\-\s].+/', $trimmed, $m)) {
+        // Pattern 4 (removido na revisão): 10-digit + sufixo metadata
+        // era ambíguo (poderia ser NIPC + lixo). Refs tipo
+        // "4023006349/DA/A0088/2023" agora ficam null por segurança —
+        // o operador pode adicionar manualmente o SAP Opp depois.
+
+        return null;
+    }
+
+    /**
+     * 2026-05-19: detecta NIPC português embutido no campo Ref.
+     * NIPCs PT começam por:
+     *   1, 2, 3        → pessoa singular
+     *   5              → sociedade comercial
+     *   6              → pessoa colectiva
+     *   7              → administração pública
+     *   8              → empresário em nome individual
+     *   9              → entidade irregular
+     *
+     * Devolve o NIPC quando o trimmed reference é exactamente 10 dígitos
+     * começando por um destes prefixos. Os "4..." (10 dígitos) não são
+     * NIPCs válidos — são tratados como SAP doc refs internos via outras
+     * paths.
+     */
+    private function extractNipc(?string $ref): ?string
+    {
+        if (!$ref) return null;
+        $trimmed = trim($ref);
+        if (preg_match('/^([1-35-9]\d{8})$/', $trimmed, $m)) {
+            // 9 dígitos NIPC clássico
             return $m[1];
         }
-
+        if (preg_match('/^([1-35-9]\d{9})$/', $trimmed, $m)) {
+            // 10 dígitos — variante moderna (NIPC + check digit)
+            return $m[1];
+        }
         return null;
     }
 
