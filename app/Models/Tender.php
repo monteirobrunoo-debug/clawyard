@@ -159,7 +159,13 @@ class Tender extends Model
     /** Supported source keys — match TenderImport.source. */
     public const SOURCES = [
         'nspa', 'nato', 'sam_gov', 'ncia',
-        'acingov', 'vortal', 'anogov', 'ungm', 'unido', 'other',
+        'acingov', 'vortal', 'anogov', 'ungm', 'unido',
+        // 2026-05-19: Marine Department  separador paralelo para tenders
+        // maritimos (vessels, port operations, ship repair). Pedido directo
+        // da Monica. Mesma pipeline (multi-agent analysis, file upload, SAP
+        // sync) mas dashboard separado em /marine.
+        'marine',
+        'other',
     ];
 
     /**

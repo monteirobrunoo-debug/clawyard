@@ -33,6 +33,12 @@ class TenderImportService
     private const IMPORTERS = [
         'nspa'    => NspaImporter::class,
         'acingov' => AcingovImporter::class,  // alias unificado: Acingov/Vortal/PT Concursos
+        // 2026-05-19: Marine Department reusa o AcingovImporter (parser
+        // generico com header auto-detect que aguenta Excels PT-style com
+        // colunas Ref./Description/Deadline/Project/Entidade/Colaborador).
+        // Importer escreve source='acingov' por defeito; o caller
+        // overrida para 'marine' na route /marine ou no Excel header.
+        'marine'  => AcingovImporter::class,
         // future: 'nato' => NatoImporter::class,
         // future: 'sam_gov' => SamGovImporter::class,
     ];
@@ -90,11 +96,19 @@ class TenderImportService
         // OUTSIDE the transaction (above) so it survives for forensics if
         // the rollback fires.
         DB::transaction(function () use (
-            $importer, $filePath, $audit, $strictCollaborators,
+            $importer, $filePath, $audit, $strictCollaborators, $source,
             &$parsed, &$created, &$updated, &$skipped, &$errors
         ) {
             foreach ($importer->parse($filePath) as $row) {
                 $parsed++;
+
+                // 2026-05-19: garantir que $row['source'] reflicte o que
+                // o caller passou (ex. 'marine' quando o user escolheu
+                // Marine Department no form de import). Sem isto o
+                // AcingovImporter reusado para 'marine' escreveria sempre
+                // source='acingov' fazendo os tenders aparecerem no
+                // dashboard errado.
+                $row['source'] = $source;
 
                 $collabId = null;
                 if (!empty($row['collaborator_name'])) {

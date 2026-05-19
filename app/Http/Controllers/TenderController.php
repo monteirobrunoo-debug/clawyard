@@ -33,14 +33,34 @@ use Illuminate\Support\Facades\URL;
 class TenderController extends Controller
 {
     // ── Dashboard ─────────────────────────────────────────────────────────
-    public function index(Request $request)
+    /**
+     * 2026-05-19: route alternativa /marine para Marine Department.
+     * Reusa toda a logica do index() mas:
+     *   * Forca source=marine em todos os filtros
+     *   * Override do header title para "Marine Department"
+     *
+     * Pedido directo Monica: "agora cria um separador em vez de
+     * concursos, mas Marine Department, objectivo é colar e abrir
+     * analisar os processos como esta agora os concursos".
+     */
+    public function marine(Request $request)
+    {
+        return $this->index($request, [
+            'force_source' => 'marine',
+            'page_title'   => 'Marine Department',
+            'header_label' => 'Concursos Marítimos',
+            'is_marine'    => true,
+        ]);
+    }
+
+    public function index(Request $request, array $sectionOverride = [])
     {
         $user         = Auth::user();
         $canViewAll   = $user->can('tenders.view-all');
         $canImport    = $user->can('tenders.import');
         $canAssign    = $user->can('tenders.assign');
 
-        $filters = $this->parseFilters($request);
+        $filters = $this->parseFilters($request, $sectionOverride['force_source'] ?? null);
         $sort    = $this->validateSort($request->string('sort')->trim()->value() ?: null);
         $dir     = $request->string('dir')->trim()->value() === 'desc' ? 'desc' : 'asc';
 
@@ -170,6 +190,13 @@ class TenderController extends Controller
             'stats'            => $this->dashboardStats($canViewAll ? null : $user->id),
             'myAssignedCount'  => $myAssignedCount,
             'currentUserId'    => $user->id,
+            // 2026-05-19 v4: section override para sub-dashboards
+            // (Marine Department). Quando $sectionOverride['is_marine']
+            // a view mostra cabecalho diferente + esconde dropdown source
+            // (ja esta forcado a marine).
+            'sectionTitle'     => $sectionOverride['header_label'] ?? null,
+            'pageTitle'        => $sectionOverride['page_title']   ?? 'Concursos',
+            'isMarine'         => $sectionOverride['is_marine']    ?? false,
         ]);
     }
 
@@ -1457,13 +1484,27 @@ class TenderController extends Controller
         }
     }
 
-    private function parseFilters(Request $r): array
+    private function parseFilters(Request $r, ?string $forceSource = null): array
     {
         // 2026-05-19 v3: Monica pediu "o normal e sempre concursos nspa".
         // Quando o user chega à /tenders SEM nenhum filtro source/status/
         // urgency/q/collab, o sistema aplica source=nspa como default.
         // Se o user clica em "Todas as fontes" no dropdown, esse value=''
         // chega como string vazia e nao re-activa o default.
+        //
+        // $forceSource (2026-05-19 v4): quando o caller é a route /marine,
+        // forçar source=marine ignorando completamente o que vem na URL.
+        // Permite ter um sub-dashboard isolado para Marine Department.
+        if ($forceSource !== null) {
+            return [
+                'source'           => $forceSource,
+                'status'           => $r->string('status')->trim()->value() ?: null,
+                'urgency'          => $r->string('urgency')->trim()->value() ?: null,
+                'collaborator_id'  => $r->integer('collaborator_id') ?: null,
+                'q'                => $r->string('q')->trim()->value() ?: null,
+            ];
+        }
+
         $hasAnyFilter = $r->has('source')
                      || $r->filled('status')
                      || $r->filled('urgency')

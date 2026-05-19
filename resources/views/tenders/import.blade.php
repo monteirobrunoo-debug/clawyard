@@ -21,6 +21,7 @@
         'ncia'    => 'NCIA',
         'ungm'    => 'UNGM (UN Global Marketplace)',
         'unido'   => 'UNIDO',
+        'marine'  => '⚓ Marine Department (vessels, port operations, ship repair)',
         'other'   => 'Outra fonte',
     ];
 @endphp

@@ -19,8 +19,14 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         🏠 {{ __('Dashboard') }}
                     </x-nav-link>
-                    <x-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*')">
+                    <x-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*') && !request()->routeIs('marine.*')">
                         📋 {{ __('Concursos') }}
+                    </x-nav-link>
+                    {{-- 2026-05-19: Marine Department  separador paralelo
+                         aos Concursos para tenders maritimos (vessels,
+                         port ops, ship repair). Mesma pipeline + SAP sync. --}}
+                    <x-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
+                        ⚓ {{ __('Marine Dept.') }}
                     </x-nav-link>
                     <x-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
                         🏆 {{ __('Rewards') }}
@@ -143,8 +149,11 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 🏠 {{ __('Dashboard') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*')">
+            <x-responsive-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*') && !request()->routeIs('marine.*')">
                 📋 {{ __('Concursos') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
+                ⚓ {{ __('Marine Dept.') }}
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
                 🏆 {{ __('Rewards') }}

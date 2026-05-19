@@ -38,6 +38,7 @@
         'anogov'  => 'Acingov/Vortal/Anogov',
         'ungm'    => 'UNGM',
         'unido'   => 'UNIDO',
+        'marine'  => 'Marine Department',
         'other'   => 'Outras',
     ];
 
@@ -82,7 +83,10 @@
     <x-slot name="header">
         <div class="flex items-center justify-between gap-3 flex-wrap">
             <h2 class="text-xl font-semibold leading-tight text-gray-800">
-                Concursos
+                {{ $pageTitle ?? 'Concursos' }}
+                @if(!empty($isMarine))
+                    <span class="text-sm font-normal text-cyan-700 ml-2">⚓ Marine Department</span>
+                @endif
             </h2>
             <div class="flex items-center gap-2">
                 @if($canViewAll)

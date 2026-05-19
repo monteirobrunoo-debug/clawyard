@@ -630,6 +630,12 @@ Route::middleware(['auth'])->group(function () {
 
     // Dashboard + per-tender detail + edit + append-only observation.
     Route::get('/tenders',                      [TenderController::class, 'index'])->name('tenders.index');
+    // 2026-05-19: Marine Department  separador paralelo aos concursos.
+    // Pedido directo Monica: "cria um separador em vez de concursos, mas
+    // Marine Department, objectivo e colar e abrir analisar os processos
+    // como esta agora os concursos". Reusa toda a logica do index() com
+    // source=marine forcado.
+    Route::get('/marine',                       [TenderController::class, 'marine'])->name('marine.index');
     // CSV export — para abrir/integrar no Excel principal. Aplica os
     // mesmos filtros do dashboard. Registado ANTES do {tender} wildcard.
     Route::get('/tenders/export.csv',           [TenderController::class, 'export'])->name('tenders.export');
