@@ -138,6 +138,24 @@ class TenderAttachmentController extends Controller
             }
             $att->save();
             $created[] = $att->id;
+
+            // 2026-05-19: espelho para QNAP. Pedido directo do operador:
+            //   "quando envio pdf para analisar no dashboard de concursos,
+            //    ele ter maneira de criar pasta no nosso servidor interno…
+            //    cria um passo para gravar logo de uma vez no server qnap"
+            // Best-effort — falha não bloqueia upload. Config flag
+            // QNAP_MIRROR_ENABLED controla activação.
+            try {
+                $qnapDest = app(\App\Services\TenderQnapMirror::class)->mirrorAttachment($att);
+                if ($qnapDest) {
+                    Log::info('TenderAttachment: mirrored to QNAP', [
+                        'attachment_id' => $att->id,
+                        'dest'          => $qnapDest,
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                // best-effort
+            }
         }
 
         if (!empty($failed)) {

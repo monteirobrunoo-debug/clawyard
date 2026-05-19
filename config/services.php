@@ -281,6 +281,16 @@ return [
         'cu_tool'    => env('ROBODESK_CU_TOOL', 'computer_20241022'),         // tool type
     ],
 
+    // 2026-05-19: QNAP mirror — espelho dos anexos do tender dashboard
+    // para a árvore QNAP estruturada (PartYard_{Y}_SAP/CLIENTES/{SOURCE}/…).
+    // Pedido directo: "criar pasta no nosso servidor interno… gravar
+    // logo de uma vez no server qnap".
+    // Ver app/Services/TenderQnapMirror.php.
+    'qnap' => [
+        'base_path'      => env('QNAP_BACKUP_PATH', '/var/www/qnapbackup'),
+        'mirror_enabled' => filter_var(env('QNAP_MIRROR_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+    ],
+
     // 2026-05-18: Auto-crítica / second-pass validation contra hallucinations.
     // Quando ENABLED_ON_SHARES=true, cada turn de chat externo (agent share)
     // termina com uma chamada Claude extra que avalia o output sob 5 critérios

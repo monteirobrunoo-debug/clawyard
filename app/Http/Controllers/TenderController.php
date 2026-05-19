@@ -1059,16 +1059,19 @@ class TenderController extends Controller
         }
 
         buildPayload:
-        // 2026-05-18: Information Source inferido do título do tender.
-        // Pedido directo: "Information source deveria escolher um tipo
-        // de categoria conforme o título". Códigos 100-120 mapeados em
-        // Tender::SAP_SOURCE_CATEGORIES (engine, hydraulic, lubricant,
-        // medical, IT, …). Fallback 106 OUTROS/Defense Miscellaneous.
-        //
-        // Status Oportunidade "Em aberto" já é aplicado automaticamente
-        // pela SapService::createOpportunity via discoverStatusOportunidadeField()
-        // — não precisa de ser passado aqui.
+        // 2026-05-18: Information Source inferido do título + descrição
+        // + anexo extracted_text. Códigos 100-120 mapeados em
+        // Tender::SAP_SOURCE_CATEGORIES. Fallback 106 OUTROS.
         $informationSource = $tender->inferSapInformationSource();
+
+        // 2026-05-19: resolução do SalesPerson (OSLP.SlpCode). Pedido
+        // directo do operador "Marta não está a pôr o vendedor correto
+        // quando abre uma oportunidade no SAP". Política:
+        //   1. Se o tender tem collaborator com user_id → usa esse user
+        //   2. Senão → usa o operador autenticado que clicou "Pedir à Marta"
+        //   3. Tenta resolver o User name no SAP via searchSalesEmployee
+        //   4. Falha → não passa SalesPerson (SAP usa default)
+        $salesPersonCode = $this->resolveSalesPersonForTender($tender, $sap);
 
         $payload = [
             'OpportunityName'     => mb_substr($tender->title, 0, 100),
@@ -1087,6 +1090,10 @@ class TenderController extends Controller
             'StageId'             => 5,     // Cotação de Compra (era 1 Prospecção)
             'InformationSource'   => $informationSource,
         ];
+
+        if ($salesPersonCode !== null) {
+            $payload['SalesPerson'] = $salesPersonCode;
+        }
 
         try {
             $result = $sap->createOpportunity($payload);
@@ -1107,6 +1114,14 @@ class TenderController extends Controller
         $tender->sap_opportunity_number = (string) $result['SequentialNo'];
         $tender->last_sap_sync_at       = now();
         $tender->save();
+
+        // 2026-05-19: agora que o tender tem sap_opportunity_number, a
+        // pasta QNAP "PartYard_{Y}_SAP/CLIENTES/{SOURCE}/{SAP_NUM} - …"
+        // recebe o nome correcto. Re-espelha todos os anexos para a nova
+        // pasta (idempotente — não duplica os já lá presentes).
+        try {
+            app(\App\Services\TenderQnapMirror::class)->mirrorAll($tender);
+        } catch (\Throwable $e) { /* best-effort */ }
 
         $viaNote = match ($resolvedVia) {
             'source_cardcode_map' => " (BP mapeado directamente para a fonte {$tender->source})",
@@ -1273,6 +1288,109 @@ class TenderController extends Controller
      *   - no active shares match
      *   - the matching share has no portal_token (single-agent share)
      */
+    /**
+     * 2026-05-19 — pedido directo do operador
+     *   "Marta não está a pôr o vendedor correto quando abre uma
+     *    oportunidade no SAP"
+     *
+     * Resolve o SAP SalesEmployeeCode (OSLP.SlpCode) que deve ficar
+     * gravado na OOPR ao criar a Oportunidade via "Pedir à Marta".
+     *
+     * Política de selecção:
+     *   1. Se o tender tem collaborator com user_id → usa esse User
+     *      (a pessoa que foi atribuída ao concurso)
+     *   2. Caso contrário → o operador autenticado que clicou no botão
+     *
+     * O nome do User é depois procurado no SAP via searchSalesEmployee.
+     * Match exacto preferido; senão melhor parcial. Cache de 1h por nome
+     * via SapService::searchSalesEmployee (já implementado).
+     *
+     * Devolve null se:
+     *   - sem User identificável
+     *   - SAP devolve 0 matches para o nome
+     *   - SAP em erro (rede / 5xx)
+     * Nesse caso o SAP usa o default — não bloqueia a criação.
+     */
+    private function resolveSalesPersonForTender(Tender $tender, SapService $sap): ?int
+    {
+        // 1. Resolve User candidato — collaborator atribuído tem prioridade
+        $user = null;
+        try {
+            $collab = $tender->collaborator;
+            if ($collab && $collab->user_id) {
+                $user = \App\Models\User::find($collab->user_id);
+            }
+        } catch (\Throwable $e) { /* relação opcional */ }
+        if (!$user) {
+            $user = \Illuminate\Support\Facades\Auth::user();
+        }
+        if (!$user || !$user->name) {
+            Log::info('Tender createSapOpp: no user to resolve SalesPerson', [
+                'tender_id' => $tender->id,
+            ]);
+            return null;
+        }
+
+        // 2. Procura no SAP por nome (full name primeiro, depois apelido)
+        $userName = trim((string) $user->name);
+        $cleanedFull = preg_replace('/\s*\([^\)]*\)\s*/', ' ', $userName); // remove "(PartYard)"
+        $cleanedFull = trim(preg_replace('/\s+/', ' ', $cleanedFull) ?: $userName);
+
+        $tries = [$cleanedFull];
+        // Adicionar apenas apelido se nome tiver 2+ palavras (improves match)
+        $parts = preg_split('/\s+/', $cleanedFull) ?: [];
+        if (count($parts) >= 2) {
+            $tries[] = end($parts); // apelido único
+            $tries[] = $parts[0];   // primeiro nome
+        }
+
+        foreach (array_unique($tries) as $needle) {
+            try {
+                $matches = $sap->searchSalesEmployee($needle, 5);
+            } catch (\Throwable $e) {
+                Log::warning('Tender createSapOpp: searchSalesEmployee failed', [
+                    'needle' => $needle,
+                    'error'  => $e->getMessage(),
+                ]);
+                continue;
+            }
+            if (empty($matches)) continue;
+
+            // Match exacto (case-insensitive) preferido
+            $needleLow = mb_strtolower($needle);
+            foreach ($matches as $m) {
+                if (mb_strtolower((string) ($m['FullName'] ?? '')) === $needleLow) {
+                    Log::info('Tender createSapOpp: SalesPerson resolved (exact)', [
+                        'user'    => $userName,
+                        'needle'  => $needle,
+                        'sap_code'=> $m['EmployeeID'] ?? null,
+                        'sap_name'=> $m['FullName']   ?? null,
+                    ]);
+                    return (int) ($m['EmployeeID'] ?? 0) ?: null;
+                }
+            }
+            // Senão devolve o primeiro hit
+            $first = $matches[0];
+            $code  = (int) ($first['EmployeeID'] ?? 0);
+            if ($code > 0) {
+                Log::info('Tender createSapOpp: SalesPerson resolved (partial)', [
+                    'user'    => $userName,
+                    'needle'  => $needle,
+                    'sap_code'=> $code,
+                    'sap_name'=> $first['FullName'] ?? null,
+                ]);
+                return $code;
+            }
+        }
+
+        Log::warning('Tender createSapOpp: no SalesPerson match in SAP', [
+            'tender_id' => $tender->id,
+            'user_name' => $userName,
+            'tries'     => $tries,
+        ]);
+        return null;
+    }
+
     private function findPortalUrlFor(string $email): ?string
     {
         $email = strtolower(trim($email));

@@ -266,7 +266,33 @@ class Tender extends Model
      */
     public function inferSapInformationSource(): int
     {
-        $haystack = mb_strtolower($this->title ?? '');
+        // 2026-05-19: pedido directo do operador
+        //   "não põe a fonte de informação ou escolhe da tabela conforme
+        //    anexado anteriormente"
+        // Antes: matching só no título (perdia muitos casos quando o título
+        // era genérico tipo "PROVISION OF EQUIPMENT — Lot 17509"). Agora
+        // o haystack inclui: title + reference + description + primeiro
+        // bloco do extracted_text do primeiro anexo OK (até 4 KB).
+        $parts = [
+            (string) ($this->title ?? ''),
+            (string) ($this->reference ?? ''),
+            (string) ($this->description ?? ''),
+            (string) ($this->purchasing_org ?? ''),
+        ];
+
+        try {
+            $firstAtt = $this->attachments()
+                ->where('extraction_status', 'ok')
+                ->orderBy('id')
+                ->first();
+            if ($firstAtt && $firstAtt->extracted_text) {
+                $parts[] = mb_substr((string) $firstAtt->extracted_text, 0, 4000);
+            }
+        } catch (\Throwable $e) {
+            // attachments() pode não ter rows ou a relação falhar — fallback graceful
+        }
+
+        $haystack = mb_strtolower(implode("\n", array_filter($parts)));
         if ($haystack === '') return self::SAP_SOURCE_DEFAULT;
 
         $bestCode  = self::SAP_SOURCE_DEFAULT;
@@ -275,7 +301,17 @@ class Tender extends Model
         foreach (self::SAP_SOURCE_CATEGORIES as $code => $keywords) {
             $score = 0;
             foreach ($keywords as $kw) {
-                if (str_contains($haystack, mb_strtolower($kw))) {
+                // Word-boundary friendly: garante que "ar comprimido" não
+                // bate com "barbacomprimida" mas bate com "ar comprimido"
+                // ou "ar-comprimido". Para keywords curtos de 4+ chars
+                // usamos preg_match com \b; abaixo de 4 char (raro) fica
+                // str_contains.
+                $kwLow = mb_strtolower($kw);
+                if (mb_strlen($kwLow) >= 4) {
+                    if (preg_match('/\b' . preg_quote($kwLow, '/') . '/u', $haystack)) {
+                        $score++;
+                    }
+                } elseif (str_contains($haystack, $kwLow)) {
                     $score++;
                 }
             }
