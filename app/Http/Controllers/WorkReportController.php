@@ -119,6 +119,14 @@ class WorkReportController extends Controller
      * Recebe markdown do user (output do WorkReportAgent) e devolve
      * o ficheiro .docx para download. Usado pelo botão "📄 Download
      * Word" no chat após o agente gerar um relatório.
+     *
+     * 2026-05-19: pedido directo do operador
+     *   "todos os agentes, menos os partilhados usam este modelo [MOD_072_V3]"
+     *
+     * Agora gera via PhpWord + PartYardMilitaryWordTemplate quando os
+     * assets do template estão disponíveis em produção. Fallback para
+     * DocxBuilder (manual ZIP) quando assets ausentes — env dev sem
+     * o volume HP Group montado, ou se PhpWord falhar.
      */
     public function exportDocx(Request $request, DocxBuilder $builder): StreamedResponse
     {
@@ -128,7 +136,26 @@ class WorkReportController extends Controller
             'title'    => ['nullable', 'string', 'max:120'],
         ]);
 
-        $bytes = $builder->buildFromMarkdown($data['markdown'], $data['title'] ?? 'Work Report');
+        $title    = $data['title'] ?? 'Work Report';
+        $markdown = $data['markdown'];
+
+        // Preferência: template MOD_072_V3 (header/footer Defense branding).
+        $bytes = null;
+        if (\App\Services\PartYardMilitaryWordTemplate::isAvailable()) {
+            try {
+                $bytes = $this->buildBrandedWorkReport($markdown, $title);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning(
+                    'WorkReport: branded build failed, falling back to legacy — ' . $e->getMessage()
+                );
+            }
+        }
+
+        // Fallback: gerador legacy markdown→XML directo (sem branding).
+        if ($bytes === null) {
+            $bytes = $builder->buildFromMarkdown($markdown, $title);
+        }
+
         $filename = 'work-report-' . now()->format('Y-m-d-Hi') . '.docx';
 
         return response()->streamDownload(
@@ -139,5 +166,162 @@ class WorkReportController extends Controller
                 'Cache-Control'       => 'no-cache, no-store',
             ]
         );
+    }
+
+    /**
+     * Gera o docx do Work Report com layout PartYard Military
+     * (MOD_072_V3 header + footer + audit-line). Suporta markdown
+     * com #/##/### headings, **bold**, *italic*, listas e tabelas.
+     */
+    private function buildBrandedWorkReport(string $markdown, string $title): string
+    {
+        $phpWord = new \PhpOffice\PhpWord\PhpWord();
+        \App\Services\PartYardMilitaryWordTemplate::registerStyles($phpWord);
+
+        $section = $phpWord->addSection(\App\Services\PartYardMilitaryWordTemplate::sectionConfig());
+        \App\Services\PartYardMilitaryWordTemplate::apply($section, [
+            'document_kind' => 'Work Report',
+            'audit_ref'     => Auth::user()?->name
+                ? 'Eng. ' . Auth::user()->name . ' · ' . now()->format('Y-m-d H:i')
+                : 'Eng. Repair · ' . now()->format('Y-m-d H:i'),
+        ]);
+
+        // Título do relatório no topo (centrado, navy)
+        $section->addText(
+            \App\Services\PartYardMilitaryWordTemplate::xmlSafe($title),
+            ['name' => 'Calibri', 'size' => 16, 'bold' => true, 'color' => '0F1B4C'],
+            ['alignment' => \PhpOffice\PhpWord\SimpleType\Jc::CENTER]
+        );
+        $section->addText(
+            'Gerado em ' . now()->format('d-m-Y H:i') . ' · ClawYard',
+            ['size' => 8, 'color' => '94A3B8'],
+            ['alignment' => \PhpOffice\PhpWord\SimpleType\Jc::CENTER]
+        );
+        $section->addTextBreak(1);
+
+        $this->renderMarkdownToPhpWord($section, $markdown);
+
+        $tmp = tempnam(sys_get_temp_dir(), 'workrep_') . '.docx';
+        \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'Word2007')->save($tmp);
+        $bytes = (string) file_get_contents($tmp);
+        @unlink($tmp);
+        return $bytes;
+    }
+
+    /**
+     * Markdown → PhpWord renderer minimal, suporta:
+     *   • # H1, ## H2, ### H3
+     *   • Parágrafos
+     *   • **bold** e *italic*
+     *   • Listas com - ou *
+     *   • Tabelas pipe-markdown (| col | col |)
+     *   • Quebras de linha duplas → novo parágrafo
+     */
+    private function renderMarkdownToPhpWord(\PhpOffice\PhpWord\Element\Section $section, string $md): void
+    {
+        $xmlSafe = fn(string $s) => \App\Services\PartYardMilitaryWordTemplate::xmlSafe($s);
+
+        $blocks = preg_split("/\r?\n\r?\n+/", trim($md)) ?: [];
+        foreach ($blocks as $block) {
+            $block = trim($block);
+            if ($block === '') continue;
+
+            // Heading
+            if (preg_match('/^(#{1,3})\s+(.+)$/m', $block, $m)) {
+                $level    = strlen($m[1]);
+                $headStyle = ['h1', 'h2', 'h3'][$level - 1];
+                $section->addText($xmlSafe($this->stripInlineMd($m[2])), $headStyle);
+                continue;
+            }
+
+            // Markdown table
+            if (str_contains($block, '|') && preg_match('/^\s*\|/m', $block)) {
+                $this->renderMarkdownTable($section, $block);
+                continue;
+            }
+
+            // List
+            $lines = preg_split("/\r?\n/", $block) ?: [];
+            $isList = !empty(array_filter($lines, fn($l) => preg_match('/^\s*[-*]\s+/', $l)));
+            if ($isList) {
+                foreach ($lines as $line) {
+                    if (preg_match('/^\s*[-*]\s+(.+)$/', $line, $mi)) {
+                        $section->addListItem(
+                            $xmlSafe($this->stripInlineMd(trim($mi[1]))),
+                            0,
+                            ['size' => 10],
+                            'multilevel'
+                        );
+                    }
+                }
+                continue;
+            }
+
+            // Plain paragraph com soft line-breaks
+            $p = $section->addTextRun();
+            foreach ($lines as $idx => $line) {
+                if ($idx > 0) $p->addTextBreak();
+                $this->addInlineRun($p, $line, $xmlSafe);
+            }
+        }
+    }
+
+    /** Render inline com suporte a **bold** e *italic*. */
+    private function addInlineRun(\PhpOffice\PhpWord\Element\TextRun $p, string $line, callable $xmlSafe): void
+    {
+        $tokens = preg_split('/(\*\*[^*]+\*\*|\*[^*]+\*)/', $line, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [];
+        foreach ($tokens as $t) {
+            if ($t === '') continue;
+            $bold = false; $italic = false; $text = $t;
+            if (preg_match('/^\*\*(.+)\*\*$/', $t, $m)) { $bold = true;   $text = $m[1]; }
+            elseif (preg_match('/^\*(.+)\*$/', $t, $m)) { $italic = true; $text = $m[1]; }
+            $style = ['size' => 10];
+            if ($bold)   $style['bold']   = true;
+            if ($italic) $style['italic'] = true;
+            $p->addText($xmlSafe($text), $style);
+        }
+    }
+
+    /** Tabela markdown → PhpWord table. */
+    private function renderMarkdownTable(\PhpOffice\PhpWord\Element\Section $section, string $block): void
+    {
+        $xmlSafe = fn(string $s) => \App\Services\PartYardMilitaryWordTemplate::xmlSafe($s);
+        $lines  = array_values(array_filter(array_map('trim', preg_split("/\r?\n/", $block) ?: [])));
+        $rows   = [];
+        foreach ($lines as $line) {
+            if (preg_match('/^\|?\s*[-:|\s]+\|?\s*$/', $line)) continue; // separator row
+            $cells   = array_map('trim', explode('|', trim($line, '|')));
+            $rows[]  = $cells;
+        }
+        if (empty($rows)) return;
+
+        $table = $section->addTable([
+            'borderColor' => 'CBD5E1',
+            'borderSize'  => 4,
+            'cellMargin'  => 80,
+            'alignment'   => \PhpOffice\PhpWord\SimpleType\JcTable::CENTER,
+        ]);
+
+        $headerBg = ['bgColor' => '0F1B4C'];
+        foreach ($rows as $i => $row) {
+            $isHeader = ($i === 0);
+            $table->addRow($isHeader ? 320 : 280);
+            foreach ($row as $cell) {
+                $bg   = $isHeader ? $headerBg : ($i % 2 === 0 ? ['bgColor' => 'F8FAFC'] : null);
+                $cellNode = $table->addCell(2400, $bg);
+                $cellNode->addText(
+                    $xmlSafe($this->stripInlineMd($cell)),
+                    $isHeader ? 'th' : 'body'
+                );
+            }
+        }
+    }
+
+    private function stripInlineMd(string $s): string
+    {
+        $s = preg_replace('/\*\*(.+?)\*\*/', '$1', $s) ?? $s;
+        $s = preg_replace('/\*(.+?)\*/',     '$1', $s) ?? $s;
+        $s = preg_replace('/`(.+?)`/',       '$1', $s) ?? $s;
+        return $s;
     }
 }

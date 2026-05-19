@@ -555,55 +555,17 @@ class TenderInquiryController extends Controller
         $phpWord->addFontStyle('label', ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => '475569']);
         $phpWord->addFontStyle('muted', ['name' => 'Calibri', 'size' => 8, 'color' => '6B7280']);
 
-        // 2026-05-19 — pedido directo do operador:
-        //   "Usar os modelos da PartYard Military, quando exportas em word,
-        //    quando for Inquiry para fornecedores usa este [MOD_072_V3]"
-        // Assets extraídos do template em
-        //   resources/templates/inquiry-military/
-        //     partyard-military-header.jpg   ← banner com logo + contactos
-        //     partyard-military-footer.png   ← rodapé com NCAGE + ISO + H&P
-        $tmplDir       = resource_path('templates/inquiry-military');
-        $headerAsset   = $tmplDir . '/partyard-military-header.jpg';
-        $footerAsset   = $tmplDir . '/partyard-military-footer.png';
-        $hasHeaderAsset = is_readable($headerAsset);
-        $hasFooterAsset = is_readable($footerAsset);
-
-        $section = $phpWord->addSection([
-            'marginLeft'   => Converter::cmToTwip(1.5),
-            'marginRight'  => Converter::cmToTwip(1.5),
-            // Margem topo maior para o header com banner caber
-            'marginTop'    => $hasHeaderAsset ? Converter::cmToTwip(3.5) : Converter::cmToTwip(1.8),
-            'marginBottom' => $hasFooterAsset ? Converter::cmToTwip(2.8) : Converter::cmToTwip(1.8),
-            'headerHeight' => $hasHeaderAsset ? Converter::cmToTwip(3.0) : null,
-            'footerHeight' => $hasFooterAsset ? Converter::cmToTwip(2.5) : null,
+        // 2026-05-19: helper centralizado aplica o template MOD_072_V3
+        // (header + footer + audit line). Pedido directo do operador:
+        //   "Usar os modelos da PartYard Military, quando exportas em word…
+        //    todos os agentes, menos os partilhados usam este modelo"
+        $section = $phpWord->addSection(\App\Services\PartYardMilitaryWordTemplate::sectionConfig());
+        $templateApplied = \App\Services\PartYardMilitaryWordTemplate::apply($section, [
+            'document_kind' => 'Defense Inquiry',
+            'audit_ref'     => 'ClawYard #' . $tender->id . ' · RFQ ' . $rfqRef,
         ]);
-
-        // ── HEADER (Section) — banner PartYard Military MOD_072_V3 ────
-        if ($hasHeaderAsset) {
-            $headerObj = $section->addHeader();
-            $headerObj->addImage($headerAsset, [
-                'width'         => Converter::cmToPoint(18.0),
-                'height'        => Converter::cmToPoint(2.6),
-                'wrappingStyle' => 'inline',
-                'alignment'     => Jc::CENTER,
-            ]);
-        }
-
-        // ── FOOTER (Section) — NCAGE P3527 + ISO 9001 + H&P + MOD_072_V3 ──
-        if ($hasFooterAsset) {
-            $footerObj = $section->addFooter();
-            $footerObj->addImage($footerAsset, [
-                'width'         => Converter::cmToPoint(18.0),
-                'height'        => Converter::cmToPoint(2.0),
-                'wrappingStyle' => 'inline',
-                'alignment'     => Jc::CENTER,
-            ]);
-            $footerObj->addText(
-                $this->xmlSafe('MOD_072_V3 · PartYard Defense Inquiry · SGQ · ClawYard #' . $tender->id),
-                ['size' => 7, 'color' => '94A3B8'],
-                ['alignment' => Jc::CENTER]
-            );
-        }
+        $hasHeaderAsset = $templateApplied;
+        $hasFooterAsset = $templateApplied;
 
         // Quando temos o header image MOD_072_V3 activo, o navy-bar
         // textual seria redundante (a imagem já tem "Partyard military
