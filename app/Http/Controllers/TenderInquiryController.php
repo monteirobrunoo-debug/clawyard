@@ -555,36 +555,118 @@ class TenderInquiryController extends Controller
         $phpWord->addFontStyle('label', ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => '475569']);
         $phpWord->addFontStyle('muted', ['name' => 'Calibri', 'size' => 8, 'color' => '6B7280']);
 
+        // 2026-05-19 — pedido directo do operador:
+        //   "Usar os modelos da PartYard Military, quando exportas em word,
+        //    quando for Inquiry para fornecedores usa este [MOD_072_V3]"
+        // Assets extraídos do template em
+        //   resources/templates/inquiry-military/
+        //     partyard-military-header.jpg   ← banner com logo + contactos
+        //     partyard-military-footer.png   ← rodapé com NCAGE + ISO + H&P
+        $tmplDir       = resource_path('templates/inquiry-military');
+        $headerAsset   = $tmplDir . '/partyard-military-header.jpg';
+        $footerAsset   = $tmplDir . '/partyard-military-footer.png';
+        $hasHeaderAsset = is_readable($headerAsset);
+        $hasFooterAsset = is_readable($footerAsset);
+
         $section = $phpWord->addSection([
-            'marginLeft' => Converter::cmToTwip(1.6),
-            'marginRight' => Converter::cmToTwip(1.6),
-            'marginTop' => Converter::cmToTwip(1.8),
-            'marginBottom' => Converter::cmToTwip(1.8),
+            'marginLeft'   => Converter::cmToTwip(1.5),
+            'marginRight'  => Converter::cmToTwip(1.5),
+            // Margem topo maior para o header com banner caber
+            'marginTop'    => $hasHeaderAsset ? Converter::cmToTwip(3.5) : Converter::cmToTwip(1.8),
+            'marginBottom' => $hasFooterAsset ? Converter::cmToTwip(2.8) : Converter::cmToTwip(1.8),
+            'headerHeight' => $hasHeaderAsset ? Converter::cmToTwip(3.0) : null,
+            'footerHeight' => $hasFooterAsset ? Converter::cmToTwip(2.5) : null,
         ]);
 
-        // ── Corporate header bar — PARTYARD MILITAR + RFQ ref ──────────
-        $tblHdr = $section->addTable([
-            'borderSize' => 0,
-            'cellMargin' => 120,
-            'unit'       => 'pct',
-            'width'      => 100 * 50,
+        // ── HEADER (Section) — banner PartYard Military MOD_072_V3 ────
+        if ($hasHeaderAsset) {
+            $headerObj = $section->addHeader();
+            $headerObj->addImage($headerAsset, [
+                'width'         => Converter::cmToPoint(18.0),
+                'height'        => Converter::cmToPoint(2.6),
+                'wrappingStyle' => 'inline',
+                'alignment'     => Jc::CENTER,
+            ]);
+        }
+
+        // ── FOOTER (Section) — NCAGE P3527 + ISO 9001 + H&P + MOD_072_V3 ──
+        if ($hasFooterAsset) {
+            $footerObj = $section->addFooter();
+            $footerObj->addImage($footerAsset, [
+                'width'         => Converter::cmToPoint(18.0),
+                'height'        => Converter::cmToPoint(2.0),
+                'wrappingStyle' => 'inline',
+                'alignment'     => Jc::CENTER,
+            ]);
+            $footerObj->addText(
+                $this->xmlSafe('MOD_072_V3 · PartYard Defense Inquiry · SGQ · ClawYard #' . $tender->id),
+                ['size' => 7, 'color' => '94A3B8'],
+                ['alignment' => Jc::CENTER]
+            );
+        }
+
+        // Quando temos o header image MOD_072_V3 activo, o navy-bar
+        // textual seria redundante (a imagem já tem "Partyard military
+        // division" + contactos). Fallback continua para shares sem assets.
+        if (!$hasHeaderAsset) {
+            $tblHdr = $section->addTable([
+                'borderSize' => 0,
+                'cellMargin' => 120,
+                'unit'       => 'pct',
+                'width'      => 100 * 50,
+            ]);
+            $tblHdr->addRow(420);
+            $cellHL = $tblHdr->addCell(6500, ['bgColor' => '0F1B4C']);
+            $cellHL->addText($this->xmlSafe('PARTYARD MILITAR, LDA.'), 'corp');
+            $cellHR = $tblHdr->addCell(3500, ['bgColor' => '0F1B4C']);
+            $cellHR->addText($this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $subjectKeyword), 'corpR', ['alignment' => Jc::END]);
+            $cellHR->addText($this->xmlSafe('Portuguese Ministry of Defence Tender'), 'corpR', ['alignment' => Jc::END]);
+            $section->addTextBreak(1);
+        }
+
+        // ── MOD_072_V3 form fields (To/Att/Email · From/Telef/Email · Page/Date/Our Ref.)
+        //    Reproduz o layout do bloco branco do template (image2.jpg).
+        $tblFields = $section->addTable([
+            'borderColor' => 'CBD5E1',
+            'borderSize'  => 0,
+            'cellMargin'  => 80,
+            'alignment'   => JcTable::CENTER,
         ]);
-        $tblHdr->addRow(420);
-        $cellHL = $tblHdr->addCell(6500, ['bgColor' => '0F1B4C']);
-        $cellHL->addText($this->xmlSafe('PARTYARD MILITAR, LDA.'), 'corp');
-        $cellHR = $tblHdr->addCell(3500, ['bgColor' => '0F1B4C']);
-        $cellHR->addText($this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $subjectKeyword), 'corpR', ['alignment' => Jc::END]);
-        $cellHR->addText($this->xmlSafe('Portuguese Ministry of Defence Tender'), 'corpR', ['alignment' => Jc::END]);
+        $tblFields->addRow();
+        $cT = $tblFields->addCell(3300);
+        $cT->addText('To:',    ['bold' => true, 'size' => 10]);
+        $cT->addText($this->xmlSafe($supplierName), ['size' => 10]);
+        // Supplier model não tem contact_name dedicado — operador preenche
+        // manualmente o "Att:" depois de descarregar e editar o Word.
+        $cT->addText('Att: ____________________', ['size' => 9, 'color' => '475569']);
+        $cT->addText('Email: ' . $this->xmlSafe($supplier?->primary_email ?? '____________________'), ['size' => 9, 'color' => '475569']);
+
+        $cF = $tblFields->addCell(3300);
+        $cF->addText('From:',  ['bold' => true, 'size' => 10]);
+        $cF->addText($this->xmlSafe($contactName), ['size' => 10]);
+        $cF->addText('Telef.: +351 265 544 370', ['size' => 9, 'color' => '475569']);
+        $cF->addText('Email: ' . $this->xmlSafe($contactEmail), ['size' => 9, 'color' => '475569']);
+
+        $cP = $tblFields->addCell(3300);
+        $cP->addText('Page:',  ['bold' => true, 'size' => 10]);
+        $cP->addText('1 de 1',  ['size' => 10]);
+        $cP->addText('Date: ' . now()->format('d-m-Y'), ['size' => 9, 'color' => '475569']);
+        $cP->addText('Our Ref.: RFQ ' . $rfqRef, ['size' => 9, 'color' => '475569']);
+
         $section->addTextBreak(1);
 
-        // Title
-        $section->addText($this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $supplierTitle), 'h1');
+        // Title — "INQUIRY" centrado (como o template) + subtítulo RFQ
+        $section->addText($this->xmlSafe('INQUIRY'), ['size' => 22, 'bold' => true, 'color' => '0F1B4C'], ['alignment' => Jc::CENTER]);
+        $section->addText(
+            $this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $supplierTitle),
+            ['size' => 12, 'color' => '475569'],
+            ['alignment' => Jc::CENTER]
+        );
         $section->addTextBreak(1);
 
-        // To/CC/Subject block
-        $section->addText($this->xmlSafe('To: ') . $this->xmlSafe($toLine), 'body');
-        $section->addText($this->xmlSafe('CC: procurement@partyard.eu'), 'body');
+        // Subject (mantido — útil para o operador quando reenvia por email)
         $section->addText($this->xmlSafe('Subject: ' . $subject), ['bold' => true, 'size' => 10]);
+        $section->addText($this->xmlSafe('CC: procurement@partyard.eu'), ['size' => 9, 'color' => '6B7280']);
         $section->addTextBreak(1);
 
         // Greeting + tender context paragraph
@@ -756,12 +838,16 @@ class TenderInquiryController extends Controller
 
         $section->addTextBreak(1);
 
-        // ── Corporate footer ──────────────────────────────────────────
-        $section->addText(
-            $this->xmlSafe('PartYard Militar, Lda. · Setúbal, Portugal · NCAGE P3527 · ISO 9001:2015 · AS9120 Rev B · www.partyard.eu  |  RFQ ' . $rfqRef),
-            ['size' => 7, 'color' => '94A3B8'],
-            ['alignment' => Jc::CENTER]
-        );
+        // ── Corporate footer no body (redundante se o footer image
+        //    do MOD_072_V3 já está activo via section footer). Mantido
+        //    como fallback quando os assets do template não existem.
+        if (!$hasFooterAsset) {
+            $section->addText(
+                $this->xmlSafe('PartYard Militar, Lda. · Setúbal, Portugal · NCAGE P3527 · ISO 9001:2015 · AS9120 Rev B · www.partyard.eu  |  RFQ ' . $rfqRef),
+                ['size' => 7, 'color' => '94A3B8'],
+                ['alignment' => Jc::CENTER]
+            );
+        }
 
         // ── Stream the docx ────────────────────────────────────────────
         $refForFile = $tender->sap_opportunity_number
