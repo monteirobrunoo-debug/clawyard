@@ -63,5 +63,8 @@
              welcome.blade.php → fileInputChangeHandler. --}}
         @include('partials.presence')
         @include('partials.activity-meter')
+        {{-- Mobile UX: modais → bottom-sheet em viewport <sm, textarea
+             auto-grow, 16px font para evitar iOS zoom. 2026-05-19. --}}
+        @include('partials.mobile-ux')
     </body>
 </html>

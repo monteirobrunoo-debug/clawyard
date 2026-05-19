@@ -239,6 +239,7 @@
                 <label class="block">
                     <span class="text-xs font-semibold text-gray-700">Notas</span>
                     <textarea name="notes" rows="3" maxlength="5000"
+                              data-autogrow
                               placeholder="Detalhes adicionais — equipamentos, contactos, etc."
                               class="mt-1 block w-full rounded border-gray-300 text-sm"></textarea>
                 </label>

@@ -1,0 +1,153 @@
+{{--
+    Mobile UX improvements — incluído globalmente em app.blade.php.
+
+    Resolve o problema reportado 2026-05-19:
+      "versao mobile nao dá apra escerever quase"
+
+    Três fixes:
+      1. Modais → bottom-sheet em viewport <640px (sm:). Antes flutuavam ao
+         centro e o teclado virtual escondia o submit.
+      2. Textareas com [data-autogrow] crescem conforme o user escreve, em
+         vez de obrigar a scroll dentro do input.
+      3. Inputs/selects/textareas com font-size <16px viram 16px em mobile,
+         para o iOS não dar zoom forçado quando o user toca no campo.
+
+    Não toca em desktop. Anything com class "no-mobile-bottomsheet" é
+    excluído (caso algum modal não funcione bem em fullscreen mobile).
+--}}
+<style>
+    @media (max-width: 639px) {
+        /* ── Inputs: previne iOS zoom-on-focus ─────────────────────────
+           iOS Safari faz zoom-in automático quando um input/textarea/
+           select tem font-size <16px e recebe focus. O zoom estraga o
+           layout e o user fica preso até dar pinch-out. Forçando 16px
+           o zoom não acontece. */
+        input[type="text"], input[type="email"], input[type="password"],
+        input[type="number"], input[type="tel"], input[type="url"],
+        input[type="search"], input[type="date"], input[type="datetime-local"],
+        textarea, select {
+            font-size: 16px !important;
+        }
+
+        /* ── Modais → bottom-sheet ──────────────────────────────────────
+           Detecta qualquer container fixed-overlay e converte para slide
+           from bottom: anchored ao fundo da viewport, max-height 90vh,
+           interior scrollable, submit fica visível mesmo com teclado
+           aberto graças ao position:sticky no .modal-actions. */
+        .fixed.inset-0[class*="z-50"]:not(.no-mobile-bottomsheet) {
+            align-items: flex-end !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+
+        .fixed.inset-0[class*="z-50"]:not(.no-mobile-bottomsheet) > div {
+            max-width: 100% !important;
+            width: 100% !important;
+            max-height: 92vh;
+            overflow-y: auto;
+            border-radius: 1rem 1rem 0 0 !important;
+            animation: cy-bottomsheet-up 0.18s ease-out;
+        }
+
+        @keyframes cy-bottomsheet-up {
+            from { transform: translateY(20%); opacity: 0.6; }
+            to   { transform: translateY(0);    opacity: 1;   }
+        }
+
+        /* Submit row sticky no fundo da modal — sempre visível mesmo
+           com o keyboard a ocupar 50% do écran. */
+        .modal-actions, .fixed.inset-0[class*="z-50"]:not(.no-mobile-bottomsheet) form > div:last-child {
+            position: sticky;
+            bottom: 0;
+            background: white;
+            padding-top: 0.5rem;
+            padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+            border-top: 1px solid rgb(229 231 235);
+        }
+
+        /* Botões em modais ganham touch target maior. */
+        .fixed.inset-0[class*="z-50"]:not(.no-mobile-bottomsheet) button[type="submit"],
+        .fixed.inset-0[class*="z-50"]:not(.no-mobile-bottomsheet) button[type="button"] {
+            min-height: 44px;
+        }
+    }
+
+    /* ── Auto-grow textarea base styles ────────────────────────────────
+       Aplicado a qualquer <textarea data-autogrow>. O JS abaixo trata
+       do resize; este só põe overflow hidden para esconder o scroll
+       que apareceria durante o crescimento. */
+    textarea[data-autogrow] {
+        overflow-y: hidden;
+        resize: none;
+        transition: height 0.05s linear;
+        min-height: 2.5rem;
+    }
+</style>
+
+<script>
+(function () {
+    'use strict';
+
+    // ── Auto-grow textareas ────────────────────────────────────────────
+    // Encontra todos <textarea data-autogrow> e faz height = scrollHeight
+    // a cada input. Funciona com textareas adicionadas dinamicamente via
+    // MutationObserver.
+    const grow = (ta) => {
+        if (!ta || ta.tagName !== 'TEXTAREA') return;
+        ta.style.height = 'auto';
+        // +2px buffer para evitar o "1-px shake" em alguns browsers
+        ta.style.height = (ta.scrollHeight + 2) + 'px';
+    };
+
+    const wireUp = (ta) => {
+        if (ta._cyAutogrowWired) return;
+        ta._cyAutogrowWired = true;
+        // Init: definir altura logo (se já tem conteúdo)
+        requestAnimationFrame(() => grow(ta));
+        ta.addEventListener('input', () => grow(ta));
+        // Quando o user cola texto, focus, ou o form é reset
+        ta.addEventListener('focus', () => grow(ta));
+    };
+
+    const scan = (root) => {
+        (root || document).querySelectorAll('textarea[data-autogrow]').forEach(wireUp);
+    };
+
+    // Init em DOMContentLoaded + scan ao mudar o DOM (modais que abrem,
+    // etc.)
+    document.addEventListener('DOMContentLoaded', () => scan());
+    if (document.readyState !== 'loading') scan();
+
+    const mo = new MutationObserver((muts) => {
+        for (const m of muts) {
+            for (const n of m.addedNodes) {
+                if (n.nodeType === 1) {
+                    if (n.matches && n.matches('textarea[data-autogrow]')) wireUp(n);
+                    scan(n);
+                }
+            }
+        }
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+
+    // ── Mobile: scroll input focado para a viewport ────────────────────
+    // Em iOS quando o teclado abre, o navegador às vezes não faz scroll
+    // do input focado para acima do teclado. Forçamos manualmente.
+    if (window.matchMedia('(max-width: 639px)').matches) {
+        document.addEventListener('focusin', (e) => {
+            const t = e.target;
+            if (!t || !t.matches) return;
+            if (t.matches('input, textarea, select')) {
+                // delay pequeno para o teclado já estar a abrir antes do scroll
+                setTimeout(() => {
+                    try {
+                        t.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    } catch (_) { /* old browsers */ }
+                }, 280);
+            }
+        });
+    }
+})();
+</script>

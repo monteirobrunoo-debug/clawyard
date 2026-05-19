@@ -1617,6 +1617,7 @@
                                 @endif
                             </label>
                             <textarea name="notes" rows="4"
+                                      data-autogrow
                                       class="w-full rounded-md border-gray-300 text-sm shadow-sm font-mono">{{ old('notes', $tender->notes) }}</textarea>
                             <p class="mt-1 text-xs text-gray-500">
                                 Para histórico inalterável, use o painel de Observações abaixo.
@@ -1695,6 +1696,7 @@
                 <form method="POST" action="{{ route('tenders.observe', $tender) }}" class="space-y-3">
                     @csrf
                     <textarea name="body" rows="3" maxlength="5000" required
+                              data-autogrow
                               placeholder="Adicionar observação…"
                               class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></textarea>
                     <div class="flex justify-end">
