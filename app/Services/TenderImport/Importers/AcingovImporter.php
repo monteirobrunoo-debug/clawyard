@@ -38,9 +38,10 @@ class AcingovImporter implements TenderImporterInterface
     private const MAX_ROWS           = 50_000;
     private const EMPTY_TAIL_STOP    = 50;
 
-    // Mapeamento canónico → lista de aliases (case-insensitive, trimmed).
-    // Primeira ocorrência ganha. Acomoda múltiplas variantes encontradas
-    // em exports diferentes do Acingov/Vortal.
+    // Mapeamento canónico → lista de aliases (case-insensitive, trimmed,
+    // pontuação trailing removida em mapHeaders). Primeira ocorrência ganha.
+    // Acomoda múltiplas variantes encontradas em exports diferentes do
+    // Acingov/Vortal + planilhas internas PartYard tipo CONCURSOS_VICENCIO.
     private const COLUMN_ALIASES = [
         'reference' => [
             'procedimento', 'referência', 'referencia', 'nº procedimento',
@@ -50,8 +51,8 @@ class AcingovImporter implements TenderImporterInterface
         ],
         'title' => [
             'designação', 'designacao', 'objecto', 'objeto', 'título',
-            'titulo', 'descrição', 'descricao', 'rfp_title', 'name',
-            'concurso', 'tender title',
+            'titulo', 'descrição', 'descricao', 'description',
+            'rfp_title', 'name', 'concurso', 'tender title',
         ],
         'purchasing_org' => [
             'entidade', 'entidade adjudicante', 'adjudicante', 'comprador',
@@ -76,6 +77,7 @@ class AcingovImporter implements TenderImporterInterface
         ],
         'status' => [
             'estado', 'status', 'situação', 'situacao', 'fase',
+            'estado concurso',
         ],
         'offer_value' => [
             'valor base', 'preço base', 'preco base', 'valor estimado',
@@ -92,12 +94,22 @@ class AcingovImporter implements TenderImporterInterface
         'notes' => [
             'observações', 'observacoes', 'notas', 'notes', 'remarks',
             'coluna1', 'comentário', 'comentario',
+            // Planilhas internas PartYard usam "Project"/"Projecto" como
+            // tracking interno (números de projeto, "NÃO TRATAR" etc).
+            // Vai para notes para não se perder a informação.
+            'project', 'projecto',
         ],
         'priority' => [
             'nível', 'nivel', 'prioridade', 'priority', 'urgência', 'urgencia',
         ],
         'url' => [
             'url', 'link', 'endereço', 'endereco', 'web', 'permalink',
+        ],
+        // Planilhas internas PartYard têm coluna "Colaborador" — mapeia
+        // directamente para o auto-link de TenderCollaborator no service.
+        'collaborator_name' => [
+            'colaborador', 'colaboradora', 'collaborator', 'collab',
+            'responsável', 'responsavel', 'assignee',
         ],
     ];
 
@@ -119,8 +131,32 @@ class AcingovImporter implements TenderImporterInterface
         $reader = IOFactory::createReaderForFile($filePath);
         $reader->setReadDataOnly(true);
         $spreadsheet = $reader->load($filePath);
-        $sheet       = $spreadsheet->getActiveSheet();
 
+        // 2026-05-19 — pedido directo do operador:
+        //   CONCURSOS_VICENCIO.xlsx tem 4 sheets (Folha1/2024/2025/2026)
+        //   com ~700 concursos no total. Antes lia só a sheet activa  e
+        //   ignorava as outras 3. Agora iteramos todas as sheets.
+        $allSheets = $spreadsheet->getAllSheets();
+        \Illuminate\Support\Facades\Log::info('AcingovImporter: starting parse', [
+            'sheet_count' => count($allSheets),
+            'sheet_names' => array_map(fn($s) => $s->getTitle(), $allSheets),
+        ]);
+
+        foreach ($allSheets as $sheet) {
+            $sheetTitle = $sheet->getTitle();
+            yield from $this->parseSheet($sheet, $sheetTitle);
+        }
+
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+    }
+
+    /**
+     * Parseia UMA worksheet. Extraído de parse() em 2026-05-19 para
+     * suportar ficheiros com múltiplas sheets (ex. uma sheet por ano).
+     */
+    private function parseSheet(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, string $sheetTitle): iterable
+    {
         $headers        = [];
         $headerMap      = []; // canonical_key → column_index
         $emptyRunLength = 0;
@@ -219,13 +255,13 @@ class AcingovImporter implements TenderImporterInterface
                                             ?? 'EUR', // default PT
                 'notes'                  => $this->cellByCanonical($cells, $headerMap, 'notes'),
                 'result'                 => $this->cellByCanonical($cells, $headerMap, 'result'),
-                'collaborator_name'      => null,
-                'raw_metadata'           => $this->buildRawMetadata($headers, $cells),
+                'collaborator_name'      => $this->cellByCanonical($cells, $headerMap, 'collaborator_name'),
+                'raw_metadata'           => array_merge(
+                    $this->buildRawMetadata($headers, $cells),
+                    ['source_sheet' => $sheetTitle]
+                ),
             ];
         }
-
-        $spreadsheet->disconnectWorksheets();
-        unset($spreadsheet);
     }
 
     /**
@@ -234,17 +270,26 @@ class AcingovImporter implements TenderImporterInterface
      */
     private function mapHeaders(array $headers): array
     {
+        // 2026-05-19: normalização agressiva — remove trim, lowercase,
+        // strip trailing punctuation ('.', ':') e colapsa whitespace.
+        // Necessário para que "Ref." bata com alias "ref", "Estado:"
+        // com "estado", "NOTAS  " com "notas", etc.
+        $normalise = function ($h): string {
+            if (!is_string($h)) return '';
+            $s = mb_strtolower(trim($h));
+            $s = rtrim($s, ".:; \t\n\r");
+            return preg_replace('/\s+/u', ' ', $s) ?: '';
+        };
+
         $normHeaders = [];
         foreach ($headers as $i => $h) {
-            if (is_string($h)) {
-                $normHeaders[$i] = mb_strtolower(trim($h));
-            }
+            $normHeaders[$i] = $normalise($h);
         }
 
         $map = [];
         foreach (self::COLUMN_ALIASES as $canonical => $aliases) {
             foreach ($aliases as $alias) {
-                $needle = mb_strtolower($alias);
+                $needle = $normalise($alias);
                 $idx    = array_search($needle, $normHeaders, true);
                 if ($idx !== false) {
                     $map[$canonical] = $idx;
