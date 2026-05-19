@@ -128,6 +128,41 @@ class TenderImportService
             }
         });
 
+        // 2026-05-19 — pedido directo do operador:
+        //   "User importou Excel e não deu em nada, ele não consegue ver"
+        // Causa raiz: parser desistiu silenciosamente em header detection.
+        // Fix: quando rows_parsed=0 sem outros erros, adiciona uma
+        // mensagem explicativa para o operador ver na UI.
+        if ($parsed === 0 && empty($errors)) {
+            $errors[] = [
+                'reference' => '(import-level)',
+                'error'     => 'Nenhuma linha foi detectada no ficheiro. '
+                              . 'Verifica que a planilha tem cabeçalhos reconhecidos '
+                              . '("Procedimento"/"Referência", "Designação"/"Objecto", '
+                              . '"Entidade", etc.) nas primeiras 20 linhas e dados '
+                              . 'logo a seguir. Logs detalhados em storage/logs/laravel.log.',
+            ];
+        }
+
+        // 2026-05-19: guardar o ficheiro original em disco para debugging
+        // futuro / re-processamento. Idempotente — file_hash garante que
+        // o mesmo ficheiro não duplica. Path: tender-imports/{id}/{name}
+        try {
+            $storedName = 'import-' . $audit->id . '-' . preg_replace('/[^A-Za-z0-9._\-]/', '_', $fileName);
+            $relStore   = 'tender-imports/' . $audit->id . '/' . $storedName;
+            \Illuminate\Support\Facades\Storage::disk('local')->putFileAs(
+                'tender-imports/' . $audit->id,
+                new \Illuminate\Http\File($filePath),
+                $storedName
+            );
+            Log::info('TenderImport: file stored for forensics', [
+                'import_id' => $audit->id,
+                'path'      => $relStore,
+            ]);
+        } catch (\Throwable $e) {
+            Log::info('TenderImport: file storage failed (non-blocking) — ' . $e->getMessage());
+        }
+
         $audit->update([
             'rows_parsed'  => $parsed,
             'rows_created' => $created,

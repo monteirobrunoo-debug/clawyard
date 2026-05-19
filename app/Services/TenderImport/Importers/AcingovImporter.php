@@ -125,6 +125,8 @@ class AcingovImporter implements TenderImporterInterface
         $headerMap      = []; // canonical_key → column_index
         $emptyRunLength = 0;
         $rowIndex       = 0;
+        $headerRow      = 0;     // 0 = ainda não encontrado
+        $scannedRows    = [];    // buffer das primeiras 20 rows p/ relatório
 
         foreach ($sheet->getRowIterator() as $row) {
             $rowIndex++;
@@ -137,10 +139,43 @@ class AcingovImporter implements TenderImporterInterface
                 $cells[] = $cell->getValue();
             }
 
-            if ($rowIndex === 1) {
-                $headers   = array_map(fn($h) => is_string($h) ? trim($h) : $h, $cells);
-                $headerMap = $this->mapHeaders($headers);
-                continue;
+            // 2026-05-19 — pedido directo do operador:
+            //   "User eduardo.rio importou CONCURSOS_VICENCIO.xlsx e não
+            //    deu em nada, ele não consegue ver"
+            // Causa raiz: o parser assumia headers em row 1, mas Acingov
+            // exports podem ter 1-3 linhas de preâmbulo (filename, data,
+            // totais) antes da linha de headers.
+            //
+            // Fix: scan as primeiras 20 rows à procura de uma que tenha
+            // pelo menos 3 aliases canónicos reconhecidos. Aceita também
+            // a row 1 quando bate (comportamento antigo).
+            if ($headerRow === 0) {
+                if ($rowIndex <= 20) {
+                    $scannedRows[$rowIndex] = $cells;
+                    $tryHeaders   = array_map(fn($h) => is_string($h) ? trim($h) : $h, $cells);
+                    $tryHeaderMap = $this->mapHeaders($tryHeaders);
+                    // Heurística: header row precisa de mapear ≥3 canónicos
+                    // OU ter pelo menos 'reference' + 'title' (mínimo essential).
+                    $hasMin = count($tryHeaderMap) >= 3
+                          || (isset($tryHeaderMap['reference']) && isset($tryHeaderMap['title']));
+                    if ($hasMin) {
+                        $headers   = $tryHeaders;
+                        $headerMap = $tryHeaderMap;
+                        $headerRow = $rowIndex;
+                        \Illuminate\Support\Facades\Log::info('AcingovImporter: header row detected', [
+                            'header_row'    => $headerRow,
+                            'matched_keys'  => array_keys($headerMap),
+                            'header_sample' => array_slice($tryHeaders, 0, 8),
+                        ]);
+                    }
+                    continue;
+                }
+                // Passámos 20 linhas sem detectar — desistimos e logamos
+                // para forensics. O caller verá rows_parsed=0 e mostra UI msg.
+                \Illuminate\Support\Facades\Log::warning('AcingovImporter: no header row detected in first 20 rows', [
+                    'sampled_rows' => array_slice($scannedRows, 0, 5, true),
+                ]);
+                break;
             }
 
             $reference = $this->cellByCanonical($cells, $headerMap, 'reference');
