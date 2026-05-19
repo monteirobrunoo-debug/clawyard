@@ -245,9 +245,14 @@ class AcingovImporter implements TenderImporterInterface
                 'source_modified_at'     => $this->toUtc(
                     $this->cellByCanonicalRaw($cells, $headerMap, 'source_modified_at')
                 ),
-                // sap_opportunity_number — Acingov não exporta este campo
-                // (é interno PartYard). Fica null e o user preenche depois.
-                'sap_opportunity_number' => null,
+                // 2026-05-19: extrai candidato a SAP Opp number do Ref.
+                // Planilhas internas PartYard (VICENCIO) têm refs SAP-style
+                // (5022019630, DMSA 5026006042) no Ref. — antes ficavam só
+                // em `reference` e o dashboard mostrava "⚠ sem nº" mesmo
+                // quando o concurso JÁ existia em SAP. Pedido directo:
+                //   "ficheiro tem as referências em SAP mas não aparece
+                //    na tabela; tem de ser igual à da NSPA"
+                'sap_opportunity_number' => $this->extractSapOppCandidate($reference),
                 'offer_value'            => $this->numeric(
                     $this->cellByCanonicalRaw($cells, $headerMap, 'offer_value')
                 ),
@@ -310,6 +315,51 @@ class AcingovImporter implements TenderImporterInterface
     {
         if (!isset($map[$key])) return null;
         return $cells[$map[$key]] ?? null;
+    }
+
+    /**
+     * 2026-05-19: extrai candidato a SAP Opportunity Number do campo
+     * Ref. das planilhas PartYard internas. Heurística calibrada contra
+     * o ficheiro CONCURSOS_VICENCIO.xlsx do Eduardo (4 sheets, ~700 refs).
+     *
+     * Patterns suportados:
+     *   1) NSPA-style `NNNNN/YYYY`   → 15461/2025, 17122/2026         → keep as-is
+     *   2) Pure numeric 8-12 digits  → 5022019630, 5023000051        → keep as-is
+     *   3) Prefix + numeric         → DMSA 5026006042, CLAFA 5025018663 → extrai os dígitos
+     *   4) Numeric / metadata       → 4024015675/DA/Q0023/2024       → extrai prefix numeric
+     *   5) Numeric com slashes       → 3026004273/684                 → extrai primeiro grupo numeric ≥ 6
+     *
+     * Devolve null para refs que claramente não são SAP-style
+     * (CPI/02/BA5/2026, 821623 com 6 dígitos é ambiguous → null,
+     * "-", etc.). Conservador — preferimos "sem nº" a um falso positivo.
+     */
+    private function extractSapOppCandidate(?string $ref): ?string
+    {
+        if (!$ref) return null;
+        $trimmed = trim($ref);
+        if ($trimmed === '' || $trimmed === '-') return null;
+
+        // Pattern 1: NSPA-style "NNNNN/YYYY" (já tem ano)
+        if (preg_match('/^(\d{4,6}\/\d{4})$/', $trimmed, $m)) {
+            return $m[1];
+        }
+
+        // Pattern 2: pure numeric 8-12 digits (SAP B1 doc style)
+        if (preg_match('/^(\d{8,12})$/', $trimmed)) {
+            return $trimmed;
+        }
+
+        // Pattern 3: prefix (DMSA, CLAFA, DCSI, DAT, etc.) + 8-12 digits
+        if (preg_match('/^[A-Z][A-Z\.\-]+\s+(\d{8,12})$/i', $trimmed, $m)) {
+            return $m[1];
+        }
+
+        // Pattern 4: numeric (8-12) seguido de / e metadata
+        if (preg_match('/^(\d{8,12})\/.+/', $trimmed, $m)) {
+            return $m[1];
+        }
+
+        return null;
     }
 
     private function buildRawMetadata(array $headers, array $cells): array
