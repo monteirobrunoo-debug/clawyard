@@ -6,9 +6,15 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $share->custom_title ?: $meta['name'] }}</title>
     <!-- Structured token rendering (TABLE/CHART/PPT) — partilhado com welcome.blade -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js" defer></script>
+    {{-- 2026-05-19: self-hosted xlsx — o CDN externo era bloqueado pelo
+         CSP (script-src 'self' 'unsafe-inline' não permite cdn.jsdelivr.net).
+         Sintoma: botão "📊 Excel" do Coronel Rodrigues (e qualquer agente
+         que emita __TABLE__) caía silenciosamente para CSV porque
+         typeof XLSX === 'undefined'. Servir do mesmo origin resolve. --}}
+    <script src="{{ asset('vendor/xlsx/xlsx-0.18.5.min.js') }}" defer></script>
+    {{-- 2026-05-19: chart.js + pptxgenjs também self-hosted (mesma razão CSP). --}}
+    <script src="{{ asset('vendor/chartjs/chart.umd-4.4.6.min.js') }}" defer></script>
+    <script src="{{ asset('vendor/pptxgenjs/pptxgen-3.12.0.bundle.js') }}" defer></script>
     <style>
         *{box-sizing:border-box;margin:0;padding:0}
         :root{

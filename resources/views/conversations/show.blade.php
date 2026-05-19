@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Conversa — ClawYard</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
-    <!-- Structured token rendering: Excel/CSV/PDF/Chart/PPT exports nas conversas históricas -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js" defer></script>
+    {{-- Structured token rendering: Excel/CSV/PDF/Chart/PPT exports nas conversas históricas.
+         2026-05-19: self-hosted — CSP "script-src 'self' 'unsafe-inline'" bloqueava
+         cdn.jsdelivr; export de Excel caía silenciosamente para CSV. --}}
+    <script src="{{ asset('vendor/xlsx/xlsx-0.18.5.min.js') }}" defer></script>
+    <script src="{{ asset('vendor/chartjs/chart.umd-4.4.6.min.js') }}" defer></script>
+    <script src="{{ asset('vendor/pptxgenjs/pptxgen-3.12.0.bundle.js') }}" defer></script>
     <script>
         (function () {
             try {

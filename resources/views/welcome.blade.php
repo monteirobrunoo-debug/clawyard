@@ -812,12 +812,15 @@
             return false;
         };
     </script>
-    {{-- SheetJS for real .xlsx export (preserves formatação, bold headers, auto-width) --}}
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    {{-- SheetJS for real .xlsx export (preserves formatação, bold headers, auto-width).
+         2026-05-19: self-hosted — CSP "script-src 'self' 'unsafe-inline'" bloqueava
+         cdn.jsdelivr; sintoma reportado: botão Excel do Coronel Rodrigues caía
+         silenciosamente para CSV porque typeof XLSX === 'undefined'. --}}
+    <script src="{{ asset('vendor/xlsx/xlsx-0.18.5.min.js') }}" defer></script>
     <!-- Chart.js — render gráficos de KPI/OKR/turnover (Dr.ª Ana RH + outros agentes) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+    <script src="{{ asset('vendor/chartjs/chart.umd-4.4.6.min.js') }}" defer></script>
     <!-- PptxGenJS — gerar .pptx client-side (decks de KPI per pessoa, briefings) -->
-    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js" defer></script>
+    <script src="{{ asset('vendor/pptxgenjs/pptxgen-3.12.0.bundle.js') }}" defer></script>
 </head>
 <body>
 
