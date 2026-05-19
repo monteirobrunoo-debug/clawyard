@@ -41,13 +41,39 @@ use PhpOffice\PhpWord\SimpleType\Jc;
  */
 class PartYardMilitaryWordTemplate
 {
+    /** Filename do template original .docx (SGQ MOD_072_V3). */
+    public const TEMPLATE_DOCX = 'Inquiry_MILITARY_MOD_072_V3.docx';
+
     /**
      * Path do directório com os 3 assets do template (header.jpg,
-     * footer.png, defense-banner.png).
+     * footer.png, defense-banner.png) + o próprio .docx original.
      */
     public static function assetsDir(): string
     {
         return resource_path('templates/inquiry-military');
+    }
+
+    /**
+     * Path absoluto do .docx original do SGQ. Pedido directo do operador
+     * (2026-05-19): "O ficheiro inquiry militar tem de ser este". Em vez
+     * de reconstruir o layout via PhpWord, usamos LITERALMENTE este .docx
+     * como base e apenas anexamos no fim a parte técnica (items table +
+     * compliance matrix). Garante 100% de fidelidade visual ao MOD_072_V3
+     * porque é o próprio ficheiro do SGQ.
+     */
+    public static function templateDocxPath(): string
+    {
+        return self::assetsDir() . '/' . self::TEMPLATE_DOCX;
+    }
+
+    /**
+     * True se o .docx original está acessível no servidor. Quando true,
+     * os geradores devem preferir o approach "load template + append"
+     * em vez de reconstruir layout via PhpWord do zero.
+     */
+    public static function hasOriginalTemplate(): bool
+    {
+        return is_readable(self::templateDocxPath());
     }
 
     /**
@@ -60,6 +86,30 @@ class PartYardMilitaryWordTemplate
         $dir = self::assetsDir();
         return is_readable($dir . '/partyard-military-header.jpg')
             && is_readable($dir . '/partyard-military-footer.png');
+    }
+
+    /**
+     * 2026-05-19: cria um PhpWord pré-carregado com o template MOD_072_V3
+     * original do SGQ. O caller adiciona uma nova section com o conteúdo
+     * dinâmico (items, compliance matrix, signature) — essa section
+     * herda o header/footer corporativo do template e arranca em página
+     * nova depois da capa.
+     *
+     * Devolve null se o template não existe — caller deve fazer fallback
+     * para PhpWord::new() + ::apply($section).
+     */
+    public static function loadOriginalAsPhpWord(): ?\PhpOffice\PhpWord\PhpWord
+    {
+        if (!self::hasOriginalTemplate()) return null;
+        try {
+            $reader = \PhpOffice\PhpWord\IOFactory::createReader('Word2007');
+            return $reader->load(self::templateDocxPath());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning(
+                'PartYardMilitaryWordTemplate: falha a carregar .docx original — ' . $e->getMessage()
+            );
+            return null;
+        }
     }
 
     /**

@@ -539,33 +539,73 @@ class TenderInquiryController extends Controller
             : '____________________________________';
 
         // ── Build docx ─────────────────────────────────────────────────
-        $phpWord = new PhpWord();
+        // 2026-05-19 — pedido directo do operador:
+        //   "O ficheiro inquiry militar tem de ser este [MOD_072_V3]"
+        //
+        // Preferência: ABRIR o .docx original do SGQ (Inquiry_MILITARY_MOD_072_V3.docx)
+        // e ANEXAR o body técnico no fim. Garante 100% fidelidade visual da
+        // capa (logo "Partyard military division", contactos, INQUIRY title,
+        // form fields To/Att/Email/From/Telef/Email/Page/Date/Our Ref.,
+        // footer NCAGE/ISO/H&P).
+        //
+        // Fallback: se o .docx do template não estiver acessível, cai para
+        // o approach antigo de reconstruir o layout via PhpWord do zero
+        // usando os assets PNG/JPG isolados.
+        $phpWord = \App\Services\PartYardMilitaryWordTemplate::loadOriginalAsPhpWord();
+        $usingOriginalTemplate = ($phpWord !== null);
+
+        if (!$usingOriginalTemplate) {
+            $phpWord = new PhpWord();
+        }
         $phpWord->getCompatibility()->setOoxmlVersion(15);
 
-        // Estilos PartYard Militar — navy corporativo + Calibri
-        $phpWord->addFontStyle('corp',  ['name' => 'Calibri', 'size' => 11, 'bold' => true, 'color' => 'FFFFFF']);
-        $phpWord->addFontStyle('corpR', ['name' => 'Calibri', 'size' => 8,  'color' => 'C7D2FE']);
-        $phpWord->addFontStyle('h1',    ['name' => 'Calibri', 'size' => 15, 'bold' => true, 'color' => '0F1B4C']);
-        $phpWord->addFontStyle('h2',    ['name' => 'Calibri', 'size' => 12, 'bold' => true, 'color' => '0F1B4C']);
-        $phpWord->addFontStyle('h3',    ['name' => 'Calibri', 'size' => 10, 'bold' => true, 'color' => '0F1B4C']);
-        $phpWord->addFontStyle('body',  ['name' => 'Calibri', 'size' => 10]);
-        $phpWord->addFontStyle('mono',  ['name' => 'Consolas','size' => 9]);
-        $phpWord->addFontStyle('th',    ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => 'FFFFFF']);
-        $phpWord->addFontStyle('thMx',  ['name' => 'Calibri', 'size' => 8, 'bold' => true, 'color' => '1E3A8A']);
-        $phpWord->addFontStyle('label', ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => '475569']);
-        $phpWord->addFontStyle('muted', ['name' => 'Calibri', 'size' => 8, 'color' => '6B7280']);
+        // Estilos PartYard Militar — navy corporativo + Calibri.
+        // try/catch porque se o template original já registou estilos com
+        // o mesmo nome, PhpWord lança exception "Style 'X' already exists".
+        $stylesToRegister = [
+            'corp'  => ['name' => 'Calibri', 'size' => 11, 'bold' => true, 'color' => 'FFFFFF'],
+            'corpR' => ['name' => 'Calibri', 'size' => 8,  'color' => 'C7D2FE'],
+            'h1'    => ['name' => 'Calibri', 'size' => 15, 'bold' => true, 'color' => '0F1B4C'],
+            'h2'    => ['name' => 'Calibri', 'size' => 12, 'bold' => true, 'color' => '0F1B4C'],
+            'h3'    => ['name' => 'Calibri', 'size' => 10, 'bold' => true, 'color' => '0F1B4C'],
+            'body'  => ['name' => 'Calibri', 'size' => 10],
+            'mono'  => ['name' => 'Consolas','size' => 9],
+            'th'    => ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => 'FFFFFF'],
+            'thMx'  => ['name' => 'Calibri', 'size' => 8, 'bold' => true, 'color' => '1E3A8A'],
+            'label' => ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => '475569'],
+            'muted' => ['name' => 'Calibri', 'size' => 8, 'color' => '6B7280'],
+        ];
+        foreach ($stylesToRegister as $key => $style) {
+            try { $phpWord->addFontStyle($key, $style); } catch (\Throwable $e) {}
+        }
 
-        // 2026-05-19: helper centralizado aplica o template MOD_072_V3
-        // (header + footer + audit line). Pedido directo do operador:
-        //   "Usar os modelos da PartYard Military, quando exportas em word…
-        //    todos os agentes, menos os partilhados usam este modelo"
-        $section = $phpWord->addSection(\App\Services\PartYardMilitaryWordTemplate::sectionConfig());
-        $templateApplied = \App\Services\PartYardMilitaryWordTemplate::apply($section, [
-            'document_kind' => 'Defense Inquiry',
-            'audit_ref'     => 'ClawYard #' . $tender->id . ' · RFQ ' . $rfqRef,
-        ]);
-        $hasHeaderAsset = $templateApplied;
-        $hasFooterAsset = $templateApplied;
+        // Quando usamos o template original, NÃO chamamos apply() — já tem
+        // header/footer próprios. Adicionamos uma section nova vazia e
+        // anexamos o body técnico aí (Word coloca-a a seguir à capa).
+        // Quando NÃO temos template, chamamos apply() para emitir header/
+        // footer via PhpWord (fallback do dev environment).
+        if ($usingOriginalTemplate) {
+            // Page break antes da nova section para o body arrancar em
+            // página nova depois da capa MOD_072_V3.
+            $section = $phpWord->addSection([
+                'marginLeft'   => Converter::cmToTwip(1.5),
+                'marginRight'  => Converter::cmToTwip(1.5),
+                'marginTop'    => Converter::cmToTwip(2.0),
+                'marginBottom' => Converter::cmToTwip(2.0),
+                // Type "nextPage" — Word começa a section nova em página nova
+                'breakType'    => 'nextPage',
+            ]);
+            $hasHeaderAsset = true;
+            $hasFooterAsset = true;
+        } else {
+            $section = $phpWord->addSection(\App\Services\PartYardMilitaryWordTemplate::sectionConfig());
+            $templateApplied = \App\Services\PartYardMilitaryWordTemplate::apply($section, [
+                'document_kind' => 'Defense Inquiry',
+                'audit_ref'     => 'ClawYard #' . $tender->id . ' · RFQ ' . $rfqRef,
+            ]);
+            $hasHeaderAsset = $templateApplied;
+            $hasFooterAsset = $templateApplied;
+        }
 
         // Quando temos o header image MOD_072_V3 activo, o navy-bar
         // textual seria redundante (a imagem já tem "Partyard military
@@ -588,6 +628,19 @@ class TenderInquiryController extends Controller
 
         // ── MOD_072_V3 form fields (To/Att/Email · From/Telef/Email · Page/Date/Our Ref.)
         //    Reproduz o layout do bloco branco do template (image2.jpg).
+        //    Quando usamos o template original, esta tabela é ÚTIL como
+        //    versão "pré-preenchida" — o operador pode copiar daqui para
+        //    a capa (que tem os campos em branco do SGQ) OU enviar o
+        //    .docx tal-e-qual com a página 2 a complementar.
+        if ($usingOriginalTemplate) {
+            $section->addText(
+                $this->xmlSafe('Detalhes do RFQ — pré-preenchidos automaticamente'),
+                ['size' => 9, 'italic' => true, 'color' => '6B7280'],
+                ['alignment' => Jc::CENTER]
+            );
+            $section->addTextBreak(1);
+        }
+
         $tblFields = $section->addTable([
             'borderColor' => 'CBD5E1',
             'borderSize'  => 0,
@@ -617,14 +670,25 @@ class TenderInquiryController extends Controller
 
         $section->addTextBreak(1);
 
-        // Title — "INQUIRY" centrado (como o template) + subtítulo RFQ
-        $section->addText($this->xmlSafe('INQUIRY'), ['size' => 22, 'bold' => true, 'color' => '0F1B4C'], ['alignment' => Jc::CENTER]);
-        $section->addText(
-            $this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $supplierTitle),
-            ['size' => 12, 'color' => '475569'],
-            ['alignment' => Jc::CENTER]
-        );
-        $section->addTextBreak(1);
+        // Title — só repetir "INQUIRY" no body quando NÃO temos a capa
+        // do template (a capa já tem o título em destaque).
+        if (!$usingOriginalTemplate) {
+            $section->addText($this->xmlSafe('INQUIRY'), ['size' => 22, 'bold' => true, 'color' => '0F1B4C'], ['alignment' => Jc::CENTER]);
+            $section->addText(
+                $this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $supplierTitle),
+                ['size' => 12, 'color' => '475569'],
+                ['alignment' => Jc::CENTER]
+            );
+            $section->addTextBreak(1);
+        } else {
+            // Com capa: só o subtítulo da página de detalhes
+            $section->addText(
+                $this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $supplierTitle),
+                ['size' => 13, 'bold' => true, 'color' => '0F1B4C'],
+                ['alignment' => Jc::CENTER]
+            );
+            $section->addTextBreak(1);
+        }
 
         // Subject (mantido — útil para o operador quando reenvia por email)
         $section->addText($this->xmlSafe('Subject: ' . $subject), ['bold' => true, 'size' => 10]);

@@ -175,16 +175,35 @@ class WorkReportController extends Controller
      */
     private function buildBrandedWorkReport(string $markdown, string $title): string
     {
-        $phpWord = new \PhpOffice\PhpWord\PhpWord();
+        // 2026-05-19 — pedido directo do operador "O ficheiro inquiry
+        // militar tem de ser este" (MOD_072_V3). Mesma política para
+        // o WorkReport — usa o .docx original do SGQ como base e anexa
+        // o relatório técnico no fim.
+        $phpWord = \App\Services\PartYardMilitaryWordTemplate::loadOriginalAsPhpWord();
+        $usingOriginal = ($phpWord !== null);
+        if (!$usingOriginal) {
+            $phpWord = new \PhpOffice\PhpWord\PhpWord();
+        }
+
         \App\Services\PartYardMilitaryWordTemplate::registerStyles($phpWord);
 
-        $section = $phpWord->addSection(\App\Services\PartYardMilitaryWordTemplate::sectionConfig());
-        \App\Services\PartYardMilitaryWordTemplate::apply($section, [
-            'document_kind' => 'Work Report',
-            'audit_ref'     => Auth::user()?->name
-                ? 'Eng. ' . Auth::user()->name . ' · ' . now()->format('Y-m-d H:i')
-                : 'Eng. Repair · ' . now()->format('Y-m-d H:i'),
-        ]);
+        if ($usingOriginal) {
+            $section = $phpWord->addSection([
+                'marginLeft'   => \PhpOffice\PhpWord\Shared\Converter::cmToTwip(1.5),
+                'marginRight'  => \PhpOffice\PhpWord\Shared\Converter::cmToTwip(1.5),
+                'marginTop'    => \PhpOffice\PhpWord\Shared\Converter::cmToTwip(2.0),
+                'marginBottom' => \PhpOffice\PhpWord\Shared\Converter::cmToTwip(2.0),
+                'breakType'    => 'nextPage',
+            ]);
+        } else {
+            $section = $phpWord->addSection(\App\Services\PartYardMilitaryWordTemplate::sectionConfig());
+            \App\Services\PartYardMilitaryWordTemplate::apply($section, [
+                'document_kind' => 'Work Report',
+                'audit_ref'     => Auth::user()?->name
+                    ? 'Eng. ' . Auth::user()->name . ' · ' . now()->format('Y-m-d H:i')
+                    : 'Eng. Repair · ' . now()->format('Y-m-d H:i'),
+            ]);
+        }
 
         // Título do relatório no topo (centrado, navy)
         $section->addText(
