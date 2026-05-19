@@ -380,16 +380,20 @@
             @endif
 
             {{-- ─── "Os meus concursos" mini-table ──────────────────────────
-                 Same column structure as the full /tenders table (fonte,
-                 título, colaborador, estado, deadline) so a regular user
-                 sees a consistent layout regardless of role. Asked for
-                 explicitly 2026-04-27 — users were getting a different,
-                 less informative strip than the managers' view. --}}
-            {{-- Render the mine section whenever the user has at least
-                 one mine tender OR is currently searching (so the search
-                 box doesn't disappear with an empty result set, which
-                 would trap the user). --}}
-            @if($mine->count() > 0 || !empty($mineQ))
+                 2026-05-19: REMOVIDA por pedido directo da admin Monica:
+                 "dashboard de concursos põe igual para administrador e
+                  users. exatamente igual as tabelas, alteraste tudo e
+                  ficou diferente no user jose ou rio, vai ficar igual
+                  para administrador".
+
+                 Antes do refactor de visibility, regular users so viam
+                 seus tenders via forUser scope, e a mini-tabela era util
+                 como atalho. Depois do refactor (assignment-based), o
+                 main table ja inclui (assigned-to-me + pool aberto sem
+                 assignment), pelo que a mini-tabela passou a ser duplicacao.
+
+                 Para reactivar: trocar @if(false) por o predicado original. --}}
+            @if(false && ($mine->count() > 0 || !empty($mineQ)))
                 <section class="rounded-lg bg-white shadow-sm border border-gray-100 overflow-hidden">
                     <header class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap bg-gray-50">
                         <h3 class="text-sm font-semibold text-gray-800">
@@ -716,11 +720,12 @@
                     @endphp
                     <header class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
                         <h3 class="text-sm font-semibold text-gray-800">
-                            @if($canViewAll)
-                                Todos os concursos
-                            @else
-                                Os meus concursos
-                            @endif
+                            {{-- 2026-05-19: header unificado por pedido Monica
+                                 "dashboard de concursos põe igual para admin e users".
+                                 Antes mostrava "Os meus concursos" para users sem
+                                 view-all — agora todos vêem o mesmo título e a
+                                 visibility ja filtra os dados via Tender::scopeForUser. --}}
+                            Concursos
                             <span class="ml-2 text-xs font-normal text-gray-500">({{ $all->total() }})</span>
                         </h3>
 
