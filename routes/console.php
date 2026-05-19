@@ -11,6 +11,21 @@ Artisan::command('inspire', function () {
 // ── PSI Intelligence Bus — prune expired entries every hour ──────────────────
 Schedule::command('shared-context:prune')->hourly();
 
+// ── Queue worker via scheduler (fallback enquanto não há supervisor daemon) ──
+// 2026-05-19 — pedido directo do operador para fazer as recomendações ASAP.
+// Sem Forge API token não posso criar daemon Supervisor; entretanto o
+// scheduler corre 'queue:work --stop-when-empty' a cada minuto via cron
+// schedule:run. withoutOverlapping(60) impede 2 instâncias em paralelo.
+// Quando tiveres tempo, adicionar daemon Supervisor via Forge UI:
+//   Site → Daemons → Add → command: `php artisan queue:work --queue=high,default --tries=3 --timeout=120 --memory=256`
+//   user: forge · directory: /home/forge/clawyard.partyard.eu/current
+// Aí remove este Schedule (ou mantém como safety net).
+Schedule::command('queue:work --queue=high,default --tries=3 --timeout=110 --max-time=55 --stop-when-empty')
+    ->everyMinute()
+    ->withoutOverlapping(60)
+    ->runInBackground()
+    ->onOneServer();
+
 // ── Agent-share retention — strip access logs older than the configured
 // window (AGENT_SHARE_LOG_RETENTION_DAYS, default 90d) plus spent/expired
 // OTP rows, so we don't hold PII (email, IP, UA) indefinitely.
