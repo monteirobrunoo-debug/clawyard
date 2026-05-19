@@ -8,6 +8,7 @@ use App\Mail\TenderAssignedNotification;
 use App\Models\AgentShare;
 use App\Models\Tender;
 use App\Models\TenderCollaborator;
+use App\Models\TenderSavedView;
 use App\Services\SapService;
 use App\Services\TenderSimilarityService;
 use Illuminate\Http\JsonResponse;
@@ -190,6 +191,9 @@ class TenderController extends Controller
             'stats'            => $this->dashboardStats($canViewAll ? null : $user->id),
             'myAssignedCount'  => $myAssignedCount,
             'currentUserId'    => $user->id,
+            // Saved views deste user (até 12) — chips clicáveis no header.
+            'savedViews'       => TenderSavedView::where('user_id', $user->id)
+                                    ->orderBy('sort_order')->orderBy('id')->get(),
             // 2026-05-19 v4: section override para sub-dashboards
             // (Marine Department). Quando $sectionOverride['is_marine']
             // a view mostra cabecalho diferente + esconde dropdown source

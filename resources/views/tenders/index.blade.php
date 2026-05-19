@@ -720,6 +720,69 @@
                 </section>
             @endif
 
+            {{-- ─── Saved views (chips) ────────────────────────────────────
+                 Filtros guardados por user. Click no chip → aplica os
+                 filtros via GET (link recarrega a página com os params).
+                 Botão "💾 Guardar como…" abre prompt que cria nova view
+                 com os filtros actualmente activos.
+                 2026-05-19. --}}
+            @if(($savedViews ?? collect())->isNotEmpty() || !empty(array_filter($filters)))
+                <section class="rounded-lg bg-white shadow-sm border border-gray-100 px-4 py-3">
+                    <div class="flex items-start gap-2 flex-wrap">
+                        <span class="text-xs font-semibold text-gray-500 self-center shrink-0">📌 Saved views:</span>
+                        @forelse($savedViews ?? collect() as $sv)
+                            @php
+                                $svUrl = ($isMarine ?? false ? route('marine.index') : route('tenders.index')) . $sv->toQueryString();
+                                $svActive = (function() use ($sv, $filters) {
+                                    foreach ((array) $sv->filters as $k => $v) {
+                                        if (($filters[$k] ?? null) != $v) return false;
+                                    }
+                                    return true;
+                                })();
+                            @endphp
+                            <a href="{{ $svUrl }}"
+                               class="group inline-flex items-center gap-1 rounded-full border {{ $svActive ? 'border-indigo-500 bg-indigo-50 text-indigo-800' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50' }} px-3 py-1 text-xs font-medium"
+                               title="Aplicar esta view (filtros guardados)">
+                                {{ $sv->name }}
+                                <button type="button"
+                                        onclick="event.preventDefault();event.stopPropagation();if(confirm('Apagar view «{{ $sv->name }}»?'))document.getElementById('sv-del-{{ $sv->id }}').submit();"
+                                        class="ml-1 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition"
+                                        title="Apagar view">✕</button>
+                            </a>
+                            <form id="sv-del-{{ $sv->id }}" method="POST"
+                                  action="{{ route('tenders.savedViews.destroy', $sv) }}" class="hidden">
+                                @csrf @method('DELETE')
+                            </form>
+                        @empty
+                            <span class="text-xs text-gray-400 italic">(nenhuma view guardada — usa o botão abaixo)</span>
+                        @endforelse
+
+                        {{-- Guardar a combinação actual de filtros como nova view --}}
+                        <form method="POST" action="{{ route('tenders.savedViews.store') }}"
+                              class="inline ml-auto"
+                              onsubmit="
+                                  const n = prompt('Nome para esta view (ex: minhas marítimas urgentes):');
+                                  if (!n || n.trim().length < 2) { event.preventDefault(); return false; }
+                                  this.querySelector('input[name=name]').value = n.trim();
+                              ">
+                            @csrf
+                            <input type="hidden" name="name" value="">
+                            <input type="hidden" name="source"          value="{{ $filters['source']          ?? '' }}">
+                            <input type="hidden" name="status"          value="{{ $filters['status']          ?? '' }}">
+                            <input type="hidden" name="urgency"         value="{{ $filters['urgency']         ?? '' }}">
+                            <input type="hidden" name="collaborator_id" value="{{ $filters['collaborator_id'] ?? '' }}">
+                            <input type="hidden" name="q"               value="{{ $filters['q']               ?? '' }}">
+                            <input type="hidden" name="sort"            value="{{ $sort ?? '' }}">
+                            <input type="hidden" name="dir"             value="{{ $dir  ?? '' }}">
+                            <button type="submit"
+                                    class="inline-flex items-center gap-1 rounded-full border border-dashed border-indigo-400 text-indigo-700 hover:bg-indigo-50 px-3 py-1 text-xs font-semibold">
+                                💾 Guardar filtros actuais
+                            </button>
+                        </form>
+                    </div>
+                </section>
+            @endif
+
             {{-- ─── Filters ───────────────────────────────────────────────── --}}
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
                 <form method="GET" action="{{ route('tenders.index') }}" class="grid grid-cols-1 gap-3 sm:grid-cols-6">

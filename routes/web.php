@@ -649,6 +649,13 @@ Route::middleware(['auth'])->group(function () {
     // tem o RFP em PDF e quer evitar preencher campos à mão).
     Route::post('/tenders/quick-pdf',           [TenderController::class, 'quickPdfAnalyse'])->name('tenders.quickPdfAnalyse');
 
+    // Saved views — chips clicáveis no header /tenders. Cada user gere
+    // as suas (max 12). Pedido 2026-05-19 "saved views / favoritos".
+    Route::post   ('/tenders/saved-views',         [\App\Http\Controllers\TenderSavedViewController::class, 'store'])
+        ->name('tenders.savedViews.store');
+    Route::delete ('/tenders/saved-views/{view}',  [\App\Http\Controllers\TenderSavedViewController::class, 'destroy'])
+        ->name('tenders.savedViews.destroy');
+
     // Eng. Repair / Work Report integrations
     // - Bridge HTTP para o app Python standalone (vision)
     // - Pesquisa biblioteca técnica indexada
