@@ -25,17 +25,29 @@
     $justAssignedLabel = session('just_assigned_label');
 
     // Source labels — globais (usados em vários blocos da view).
-    // 2026-05-15: acingov + vortal unificados sob "Acingov/Vortal/PT Concursos".
+    // 2026-05-19: acingov + vortal + anogov unificados sob "Acingov/Vortal/Anogov"
+    // (pedido directo do operador). São 3 plataformas PT equivalentes
+    // (procurement publico) — team trata-as como um único bucket.
     $sourceLabels = [
         'nspa'    => 'NSPA',
         'nato'    => 'NATO',
         'sam_gov' => 'SAM.gov',
         'ncia'    => 'NCIA',
-        'acingov' => 'Acingov/Vortal/PT Concursos',
-        'vortal'  => 'Acingov/Vortal/PT Concursos',
+        'acingov' => 'Acingov/Vortal/Anogov',
+        'vortal'  => 'Acingov/Vortal/Anogov',
+        'anogov'  => 'Acingov/Vortal/Anogov',
         'ungm'    => 'UNGM',
         'unido'   => 'UNIDO',
         'other'   => 'Outras',
+    ];
+
+    // 2026-05-19: keys a mostrar no dropdown de filtros. Grupos colapsados:
+    // só 'acingov' (cabeça de grupo) aparece, e o filtro expande no backend
+    // para WHERE source IN (acingov,vortal,anogov) via Tender::SOURCE_GROUPS.
+    $sourceFilterKeys = [
+        'nspa', 'nato', 'sam_gov', 'ncia',
+        'acingov', // grupo Acingov/Vortal/Anogov
+        'ungm', 'unido', 'other',
     ];
 
     $statusLabels = [
@@ -610,8 +622,8 @@
 
                     <select name="source" class="rounded-md border-gray-300 text-sm shadow-sm">
                         <option value="">Todas as fontes</option>
-                        @foreach(\App\Models\Tender::SOURCES as $src)
-                            <option value="{{ $src }}" @selected($filters['source'] === $src)>{{ strtoupper($src) }}</option>
+                        @foreach($sourceFilterKeys as $src)
+                            <option value="{{ $src }}" @selected($filters['source'] === $src)>{{ $sourceLabels[$src] ?? strtoupper($src) }}</option>
                         @endforeach
                     </select>
 

@@ -159,8 +159,35 @@ class Tender extends Model
     /** Supported source keys — match TenderImport.source. */
     public const SOURCES = [
         'nspa', 'nato', 'sam_gov', 'ncia',
-        'acingov', 'vortal', 'ungm', 'unido', 'other',
+        'acingov', 'vortal', 'anogov', 'ungm', 'unido', 'other',
     ];
+
+    /**
+     * 2026-05-19: agrupamento de sources equivalentes para o dropdown
+     * de filtros. Pedido directo do operador:
+     *   "Junta o Acingov e Vortal e Anogov tudo Acingov/Vortal/Anogov"
+     *
+     * acingov.pt / vortal.pt / anogov.pt são 3 plataformas PT distintas
+     * mas equivalentes (procurement public). O team trata-as como um
+     * único bucket "PT Concursos públicos". Quando o user filtra por
+     * 'acingov' a query expande para WHERE source IN (acingov,vortal,anogov).
+     *
+     * Key = canonical source key (o que vai na URL).
+     * Value = lista de sources que pertencem ao grupo.
+     */
+    public const SOURCE_GROUPS = [
+        'acingov' => ['acingov', 'vortal', 'anogov'],
+    ];
+
+    /**
+     * Devolve a lista de sources a usar no filtro WHERE quando o user
+     * selecciona um source que é cabeça de grupo. Para sources sem
+     * grupo, devolve [source] (singleton).
+     */
+    public static function expandSourceFilter(string $source): array
+    {
+        return self::SOURCE_GROUPS[$source] ?? [$source];
+    }
 
     /**
      * Mapping source → canonical Business Partner name no SAP B1.

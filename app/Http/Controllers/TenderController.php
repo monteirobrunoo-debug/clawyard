@@ -1603,7 +1603,13 @@ class TenderController extends Controller
 
     private function applyFilters($query, array $f): void
     {
-        if ($f['source'])          $query->where('source', $f['source']);
+        // 2026-05-19: source agora pode ser cabeça de grupo. Pedido
+        // directo: "Junta o Acingov e Vortal e Anogov tudo Acingov/
+        // Vortal/Anogov". Filtro expande para WHERE source IN (...).
+        if ($f['source']) {
+            $expanded = Tender::expandSourceFilter($f['source']);
+            $query->whereIn('source', $expanded);
+        }
         if ($f['status'])          $query->where('status', $f['status']);
         if ($f['collaborator_id']) $query->where('assigned_collaborator_id', $f['collaborator_id']);
         if ($f['q']) {
