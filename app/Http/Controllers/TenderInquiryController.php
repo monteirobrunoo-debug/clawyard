@@ -925,6 +925,8 @@ class TenderInquiryController extends Controller
         $user = Auth::user();
         if (!$user) abort(401);
         if ($user->can('tenders.view-all')) return;
+        // 2026-05-19: Acingov/Vortal/Anogov sao pool publico interno.
+        if (in_array($tender->source, Tender::PUBLIC_SOURCES, true)) return;
         $collab = $tender->collaborator;
         if (!$collab || $collab->user_id !== $user->id) abort(403);
     }

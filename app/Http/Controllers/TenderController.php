@@ -1430,6 +1430,10 @@ class TenderController extends Controller
     {
         if ($user->can('tenders.view-all')) return;
 
+        // 2026-05-19: sources públicos internos (Acingov/Vortal/Anogov)
+        // são visíveis a todos. Pedido directo da admin Monica.
+        if (in_array($tender->source, Tender::PUBLIC_SOURCES, true)) return;
+
         $collab = $tender->collaborator;
         if (!$collab || $collab->user_id !== $user->id) {
             abort(403, 'Este concurso não está atribuído a si.');

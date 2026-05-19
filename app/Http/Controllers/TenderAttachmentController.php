@@ -212,6 +212,10 @@ class TenderAttachmentController extends Controller
         if (!$u) abort(401);
         if ($requireManager && !$u->isManager()) abort(403);
         if ($u->can('tenders.view-all')) return;
+        // 2026-05-19: Acingov/Vortal/Anogov = pool publico interno  qualquer
+        // user autenticado pode ver (e descarregar/upload anexos). Pedido
+        // directo da admin Monica.
+        if (in_array($tender->source, \App\Models\Tender::PUBLIC_SOURCES, true)) return;
         $collab = $tender->collaborator;
         if (!$collab || $collab->user_id !== $u->id) abort(403);
     }

@@ -281,6 +281,24 @@ class Tender extends Model
     public const SAP_SOURCE_DEFAULT = 106;   // OUTROS/Defense Miscellaneous
 
     /**
+     * 2026-05-19: sources considerados PÚBLICOS INTERNOS — visíveis a
+     * todos os utilizadores do ClawYard independentemente do
+     * assigned_collaborator_id. Pedido directo da admin Monica:
+     *   "mostrar a todos os concursos acingov/Vortal/anogov, quando
+     *    for atribuido nome de user fica a mostrar a todos"
+     *
+     * NSPA + NCIA + SAM_GOV ficam DE FORA porque são concursos militares
+     * onde a atribuição importa para confidencialidade (cada user vê
+     * apenas o que está a tratar).
+     *
+     * scopeForUser e enforceVisibility consultam esta lista para
+     * decidir se um regular user (sem tenders.view-all) pode ver
+     * o tender — se source está aqui, vê SEMPRE; senão, só se for
+     * o collaborator atribuído.
+     */
+    public const PUBLIC_SOURCES = ['acingov', 'vortal', 'anogov'];
+
+    /**
      * Infere o InformationSource code (100-120 ou SAP_SOURCE_DEFAULT)
      * a partir do título do tender. Usado por createSapOpp() para
      * pré-popular o campo "Information source" no SAP B1 — pedido
@@ -572,13 +590,22 @@ class Tender extends Model
         }
 
         if ($collaborators->isEmpty()) {
-            // No roster row → no tenders are theirs. `whereRaw('1=0')`
-            // guarantees an empty result without the query planner
-            // evaluating anything downstream.
-            return $q->whereRaw('1=0');
+            // 2026-05-19: mesmo sem collaborator rows, o user vê o
+            // pool PÚBLICO (Acingov/Vortal/Anogov). Pedido directo da
+            // admin Monica: "mostrar a todos os concursos acingov/
+            // Vortal/anogov, quando for atribuido nome de user fica a
+            // mostrar a todos".
+            return $q->whereIn('source', self::PUBLIC_SOURCES);
         }
 
-        $q->whereIn('assigned_collaborator_id', $collaborators->pluck('id'));
+        // 2026-05-19: visibilidade = (atribuído a mim) OR (source público).
+        // PUBLIC_SOURCES (acingov/vortal/anogov) vê-se SEMPRE; só
+        // assigned restringe os outros sources (NSPA, NATO, etc.).
+        $collabIds = $collaborators->pluck('id');
+        $q->where(function ($w) use ($collabIds) {
+            $w->whereIn('assigned_collaborator_id', $collabIds)
+              ->orWhereIn('source', self::PUBLIC_SOURCES);
+        });
 
         // Source whitelist (added 2026-04-24). Each collaborator row has an
         // `allowed_sources` JSON array:
