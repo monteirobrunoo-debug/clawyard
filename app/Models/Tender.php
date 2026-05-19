@@ -281,20 +281,20 @@ class Tender extends Model
     public const SAP_SOURCE_DEFAULT = 106;   // OUTROS/Defense Miscellaneous
 
     /**
-     * 2026-05-19: sources considerados PÚBLICOS INTERNOS — visíveis a
-     * todos os utilizadores do ClawYard independentemente do
-     * assigned_collaborator_id. Pedido directo da admin Monica:
-     *   "mostrar a todos os concursos acingov/Vortal/anogov, quando
-     *    for atribuido nome de user fica a mostrar a todos"
+     * 2026-05-19 v2: REGRA FINAL DE VISIBILIDADE (refactor).
+     * Pedido directo da admin Monica (clarificacao 2026-05-19):
+     *   "se for atribuido fica logo importado com o user,
+     *    sem nome aparece em todos"
      *
-     * NSPA + NCIA + SAM_GOV ficam DE FORA porque são concursos militares
-     * onde a atribuição importa para confidencialidade (cada user vê
-     * apenas o que está a tratar).
+     * Source NAO determina visibilidade. So importa o assigned_collaborator_id:
+     *   * assigned_collaborator_id IS NULL  -> pool aberto, todos veem
+     *   * assigned_collaborator_id IS NOT NULL  -> so user atribuido + managers
      *
-     * scopeForUser e enforceVisibility consultam esta lista para
-     * decidir se um regular user (sem tenders.view-all) pode ver
-     * o tender — se source está aqui, vê SEMPRE; senão, só se for
-     * o collaborator atribuído.
+     * PUBLIC_SOURCES mantido para retro-compatibilidade em codigo que
+     * ja o referenciava, mas a logica agora ignora-a. As sources
+     * Acingov/Vortal/Anogov continuam a beneficiar da regra porque na
+     * sua maioria sao importadas sem coluna Colaborador (pool aberto),
+     * mas tenders com Colaborador preenchido sao privados.
      */
     public const PUBLIC_SOURCES = ['acingov', 'vortal', 'anogov'];
 
@@ -590,21 +590,19 @@ class Tender extends Model
         }
 
         if ($collaborators->isEmpty()) {
-            // 2026-05-19: mesmo sem collaborator rows, o user vê o
-            // pool PÚBLICO (Acingov/Vortal/Anogov). Pedido directo da
-            // admin Monica: "mostrar a todos os concursos acingov/
-            // Vortal/anogov, quando for atribuido nome de user fica a
-            // mostrar a todos".
-            return $q->whereIn('source', self::PUBLIC_SOURCES);
+            // 2026-05-19 v2: user sem collab rows ve o pool aberto
+            // (tenders sem assignment). Refactor da regra anterior
+            // baseada em source.
+            return $q->whereNull('assigned_collaborator_id');
         }
 
-        // 2026-05-19: visibilidade = (atribuído a mim) OR (source público).
-        // PUBLIC_SOURCES (acingov/vortal/anogov) vê-se SEMPRE; só
-        // assigned restringe os outros sources (NSPA, NATO, etc.).
+        // 2026-05-19 v2: regra final = atribuido a mim OR sem atribuicao.
+        // Pedido directo Monica: "se for atribuido fica logo importado
+        // com o user, sem nome aparece em todos".
         $collabIds = $collaborators->pluck('id');
         $q->where(function ($w) use ($collabIds) {
             $w->whereIn('assigned_collaborator_id', $collabIds)
-              ->orWhereIn('source', self::PUBLIC_SOURCES);
+              ->orWhereNull('assigned_collaborator_id');
         });
 
         // Source whitelist (added 2026-04-24). Each collaborator row has an
@@ -624,16 +622,19 @@ class Tender extends Model
                 ->values()
                 ->all();
 
-            // 2026-05-19: PUBLIC_SOURCES sao sempre visiveis, sobrepondo
-            // a whitelist allowed_sources de cada collaborator. Pedido
-            // directo da Monica  Acingov/Vortal/Anogov sao pool publico
-            // interno, ninguem deve estar bloqueado de ver.
-            $allowed = array_values(array_unique(array_merge($allowed, self::PUBLIC_SOURCES)));
-
-            // Como agora sempre temos PUBLIC_SOURCES na lista, $allowed
-            // nunca fica empty. Mantemos o whereIn como filtro
-            // permissivo  user ve whatever source esta no allowed set.
-            $q->whereIn('source', $allowed);
+            if (empty($allowed)) {
+                // Explicitly blocked from every source.
+                $q->whereRaw('1=0');
+            } else {
+                // 2026-05-19 v2: allowed_sources continua a restringir
+                // o que o user pode ver POR SOURCE, mas pool aberto
+                // (sem assignment) ainda passa pelo whereIn -- isto
+                // permite admins configurarem "user X so faz Acingov"
+                // se quiserem. PUBLIC_SOURCES nao se mescla mais aqui
+                // porque a regra de visibilidade ja foi resolvida no
+                // bloco anterior via assigned_collaborator_id.
+                $q->whereIn('source', $allowed);
+            }
         }
 
         // Status whitelist (added 2026-04-25). Same NULL/[]/array
