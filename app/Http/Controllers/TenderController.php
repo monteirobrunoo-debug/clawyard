@@ -1267,6 +1267,54 @@ class TenderController extends Controller
             ->with('status', 'Observação adicionada.');
     }
 
+    /**
+     * Bulk status change. Manager+ only (mesmo gate da bulk assign).
+     * Aceita N tender_ids + 1 status novo, faz UPDATE en masse + audit log.
+     *
+     * Pedido directo 2026-05-20: "bulk actions com checkboxes + barra
+     * para atribuir / mudar status / exportar selecção". Atribuição já
+     * existia (assign()); este endpoint cobre mudança de estado.
+     */
+    public function bulkStatus(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        $user = Auth::user();
+        if (!$user || !$user->can('tenders.assign')) {
+            abort(403, 'Apenas manager+ pode mudar status em massa.');
+        }
+
+        $allowedStatuses = [
+            Tender::STATUS_PENDING,
+            Tender::STATUS_EM_TRATAMENTO,
+            Tender::STATUS_SUBMETIDO,
+            Tender::STATUS_AVALIACAO,
+            Tender::STATUS_CANCELADO,
+            Tender::STATUS_NAO_TRATAR,
+            Tender::STATUS_GANHO,
+            Tender::STATUS_PERDIDO,
+        ];
+
+        $data = $request->validate([
+            'tender_ids'   => ['required', 'array', 'min:1', 'max:500'],
+            'tender_ids.*' => ['integer'],
+            'status'       => ['required', 'string', 'in:' . implode(',', $allowedStatuses)],
+        ]);
+
+        $ids     = array_values(array_map('intval', $data['tender_ids']));
+        $newSt   = $data['status'];
+        $updated = Tender::whereIn('id', $ids)->update([
+            'status'     => $newSt,
+            'updated_at' => now(),
+        ]);
+
+        \App\Models\AuditLog::record('tender.bulk_status', null, [
+            'tender_ids' => $ids,
+            'count'      => $updated,
+            'status'     => $newSt,
+        ]);
+
+        return back()->with('status', "✓ {$updated} concurso(s) marcados como «{$newSt}».");
+    }
+
     // ── Bulk assign ──────────────────────────────────────────────────────
     public function assign(TenderAssignRequest $request)
     {

@@ -923,6 +923,7 @@
                             </a>
 
                             @if($canAssign)
+                                {{-- Bulk acção 1: atribuir colaborador --}}
                                 <select name="collaborator_id" class="rounded-md border-gray-300 text-xs shadow-sm">
                                     <option value="">(sem atribuição)</option>
                                     @foreach($collaborators as $c)
@@ -933,6 +934,33 @@
                                         onclick="return confirm('Atribuir os seleccionados?')"
                                         class="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
                                     Atribuir seleccionados
+                                </button>
+
+                                {{-- Bulk acção 2: mudar status. Partilha o mesmo
+                                     form (mesmas checkboxes), mas o submit usa
+                                     formaction= para apontar a outra route.
+                                     Pedido 2026-05-20 "bulk actions". --}}
+                                <span class="mx-1 h-5 w-px bg-gray-300 self-center"></span>
+                                <select name="status" class="rounded-md border-gray-300 text-xs shadow-sm">
+                                    <option value="" selected disabled>Mudar status para…</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_PENDING }}">Pendente</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_EM_TRATAMENTO }}">Em tratamento</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_SUBMETIDO }}">Submetido</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_AVALIACAO }}">Avaliação</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_CANCELADO }}">Cancelado</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_NAO_TRATAR }}">Não tratar</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_GANHO }}">Ganho</option>
+                                    <option value="{{ \App\Models\Tender::STATUS_PERDIDO }}">Perdido</option>
+                                </select>
+                                <button type="submit"
+                                        formaction="{{ route('tenders.bulkStatus') }}"
+                                        onclick="
+                                            const sel = this.previousElementSibling;
+                                            if (!sel.value) { alert('Escolhe um status no dropdown.'); return false; }
+                                            return confirm('Mudar status dos seleccionados para «' + sel.options[sel.selectedIndex].textContent + '»?');
+                                        "
+                                        class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500">
+                                    Aplicar status
                                 </button>
                             @endif
                         </div>

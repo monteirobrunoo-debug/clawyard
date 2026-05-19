@@ -627,6 +627,9 @@ Route::middleware(['auth'])->group(function () {
 
     // Bulk assign — also manager+ only (enforced in TenderAssignRequest::authorize).
     Route::post('/tenders/assign', [TenderController::class, 'assign'])->name('tenders.assign');
+    // Bulk status change (manager+) — companion ao /tenders/assign.
+    // Pedido 2026-05-20 "bulk actions com checkboxes".
+    Route::post('/tenders/bulk-status', [TenderController::class, 'bulkStatus'])->name('tenders.bulkStatus');
 
     // Dashboard + per-tender detail + edit + append-only observation.
     Route::get('/tenders',                      [TenderController::class, 'index'])->name('tenders.index');
