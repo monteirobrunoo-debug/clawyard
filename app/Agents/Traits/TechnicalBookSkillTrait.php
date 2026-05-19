@@ -89,6 +89,26 @@ trait TechnicalBookSkillTrait
         'autoridade tributária','spend analysis','category management',
         'negotiation','negociação','negociacao',
 
+        // ── Negotiation / Persuasion / Objection handling (Voss · 2026-05-19) ──
+        // Activadores genéricos — qualquer query sobre persuadir, negociar,
+        // gerir objecções ou fechar deal traz contexto do livro Voss
+        // (ou outros de negociação que sejam ingeridos no futuro).
+        'persuasion','persuasão','persuasao','persuade','persuadir',
+        'objection','objeção','objecção','objecções','objeções','objection handling',
+        'gestão de objecções','gestao de objeccoes',
+        'closing','fechar deal','fechar venda','close the deal',
+        'tactical empathy','empatia táctica','empatia tática',
+        'mirroring','espelhar','espelhamento','label','labeling','rotular',
+        'calibrated question','calibrated questions','perguntas calibradas',
+        'how am i supposed','no-oriented','accusation audit','black swan',
+        'anchoring','ancoragem','bargain','barganha','barganhar','regatear',
+        'counteroffer','contra-proposta','contraproposta','contraoferta',
+        'walkaway','batna','zopa','reserve price','preço de reserva',
+        'price negotiation','desconto','discount','rebate','concessão','concessao',
+        'win-win','ganha-ganha','hostage','hostage negotiator','difficult conversation',
+        'conversa difícil','conversa dificil','dealmaker','deal','fechar acordo',
+        'rapport','establishing rapport','listening','escuta activa','escuta ativa',
+
         // ── Commercial / CRM / Sales ──
         'crm','customer relationship','lead','prospect','pipeline','funnel','outreach',
         'sales','vendas','closing','quota','commission','comissão','target',
