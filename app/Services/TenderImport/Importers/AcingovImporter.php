@@ -349,13 +349,22 @@ class AcingovImporter implements TenderImporterInterface
             return $trimmed;
         }
 
-        // Pattern 3: prefix (DMSA, CLAFA, DCSI, DAT, etc.) + 8-12 digits
-        if (preg_match('/^[A-Z][A-Z\.\-]+\s+(\d{8,12})$/i', $trimmed, $m)) {
+        // 2026-05-19 refine: separadores expandidos para acomodar
+        // variações reais do CONCURSOS_VICENCIO ("DMSA - 5026000749",
+        // "GTF16 5025017788", "3026000717-AMN", "3026003935_GM_EGM").
+        //
+        // Pattern 3: prefix alfanumérico + separador(\s, -, _) + 8-12 digits
+        //   DAT 5026000970        DMSA - 5026001346
+        //   CLAFA 5025018663      GTF16 5025017788
+        if (preg_match('/^[A-Z][A-Z0-9\.\-]*[\s\-_]+(\d{8,12})$/i', $trimmed, $m)) {
             return $m[1];
         }
 
-        // Pattern 4: numeric (8-12) seguido de / e metadata
-        if (preg_match('/^(\d{8,12})\/.+/', $trimmed, $m)) {
+        // Pattern 4: numeric (8-12) seguido de separador (/_-\s) e metadata
+        //   4024015675/DA/Q0023/2024     3026004273/684
+        //   3026003935_GM_EGM            3026000717 - AMN
+        //   3026000735-AMN
+        if (preg_match('/^(\d{8,12})[\/_\-\s].+/', $trimmed, $m)) {
             return $m[1];
         }
 
