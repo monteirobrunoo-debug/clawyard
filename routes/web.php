@@ -643,6 +643,12 @@ Route::middleware(['auth'])->group(function () {
     // Form vive numa modal no /tenders dashboard ou inline em /tenders/show.
     Route::post('/tenders/manual',              [TenderController::class, 'storeManual'])->name('tenders.storeManual');
 
+    // "📄 Inserir PDF — análise automática": upload 1 PDF e Marta extrai
+    // cliente/data/serviço/peças/fornecedores + dispara painel multi-agente.
+    // Pedido 2026-05-19 (alternativa ao /tenders/manual quando o operador
+    // tem o RFP em PDF e quer evitar preencher campos à mão).
+    Route::post('/tenders/quick-pdf',           [TenderController::class, 'quickPdfAnalyse'])->name('tenders.quickPdfAnalyse');
+
     // Eng. Repair / Work Report integrations
     // - Bridge HTTP para o app Python standalone (vision)
     // - Pesquisa biblioteca técnica indexada

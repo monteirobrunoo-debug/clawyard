@@ -123,22 +123,36 @@
                     Exportar Excel (CSV)
                 </a>
 
-                {{-- Criação manual — qualquer user autenticado pode criar 1
-                     concurso à mão (não precisa de gate `tenders.import`).
-                     On /marine, the button reads "Novo concurso marítimo" and
-                     pre-fills source=marine in the modal. --}}
+                {{-- 2026-05-19 — pedido directo do operador:
+                       "nao quero botao concurso, quero outro a dizr para
+                        isnerir o pdf apartid ai analisar cliente data, o
+                        que é o serviço o upeça e fornecesore"
+                     Substitui o + Novo concurso pela acção PDF-first:
+                     larga o PDF → Marta extrai cliente/data/serviço/peças/
+                     fornecedores → painel multi-agente (Cor. Rodrigues +
+                     Marco Sales + …) corre logo. O modal manual antigo
+                     continua acessível via "criar manualmente" secundário. --}}
                 <button type="button"
-                        onclick="document.getElementById('tender-manual-modal').classList.remove('hidden')"
-                        class="inline-flex items-center gap-2 rounded-md {{ ($isMarine ?? false) ? 'bg-blue-700 hover:bg-blue-600' : 'bg-amber-600 hover:bg-amber-500' }} px-4 py-2 text-sm font-semibold text-white shadow"
-                        title="Cria 1 concurso manualmente — depois Marta analisa o cliente, abre no SAP e o multi-agente faz análise técnica.">
+                        onclick="document.getElementById('tender-quick-pdf-modal').classList.remove('hidden')"
+                        class="inline-flex items-center gap-2 rounded-md {{ ($isMarine ?? false) ? 'bg-blue-700 hover:bg-blue-600' : 'bg-violet-700 hover:bg-violet-600' }} px-4 py-2 text-sm font-semibold text-white shadow"
+                        title="Larga 1 PDF (RFP/RFQ). Marta extrai cliente, data, serviço, peças e fornecedores prováveis. Painel multi-agente corre logo.">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-3-3v6M7 4h10a2 2 0 012 2v14l-7-3-7 3V6a2 2 0 012-2z"/>
                     </svg>
                     @if($isMarine ?? false)
-                        + Novo concurso marítimo
+                        📄 Inserir PDF marítimo — análise auto
                     @else
-                        + Novo concurso
+                        📄 Inserir PDF — análise auto
                     @endif
+                </button>
+
+                {{-- Fallback secundário: criação 100% manual sem PDF.
+                     Texto pequeno para não competir visualmente. --}}
+                <button type="button"
+                        onclick="document.getElementById('tender-manual-modal').classList.remove('hidden')"
+                        class="text-xs text-gray-500 hover:text-gray-700 underline self-center"
+                        title="Cria concurso manualmente sem PDF (form com campos a preencher).">
+                    criar manualmente
                 </button>
             </div>
         </div>
@@ -243,6 +257,83 @@
             </form>
         </div>
     </div>
+
+    {{-- ─── Modal "Inserir PDF — análise automática" ─────────────────────
+         Único campo: 1 PDF. Após submit, o server cria o Tender, anexa
+         o PDF, extrai cliente / data / serviço / peças / fornecedores
+         via Marta CRM, e corre análise multi-agente. Demora 15-30s
+         por isso o submit mostra spinner com aviso explícito. --}}
+    <div id="tender-quick-pdf-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 px-4">
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
+            <div class="border-b border-gray-200 px-5 py-3 flex items-center justify-between">
+                <h3 class="text-base font-semibold text-gray-800">
+                    📄 Inserir PDF · análise automática
+                </h3>
+                <button type="button"
+                        onclick="document.getElementById('tender-quick-pdf-modal').classList.add('hidden')"
+                        class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+            </div>
+            <form method="POST" action="{{ route('tenders.quickPdfAnalyse') }}" enctype="multipart/form-data"
+                  class="px-5 py-4 space-y-4 text-sm"
+                  id="tender-quick-pdf-form">
+                @csrf
+                <input type="hidden" name="source" value="{{ ($isMarine ?? false) ? 'marine' : 'manual' }}">
+
+                <div class="rounded-md bg-violet-50 border border-violet-200 p-3 text-xs text-violet-900">
+                    Larga 1 PDF (RFP/RFQ/spec) e a Marta CRM extrai automaticamente:
+                    <ul class="mt-1 ml-4 list-disc">
+                        <li><strong>Cliente</strong> (entidade compradora) + NIPC se aparecer</li>
+                        <li><strong>Data limite</strong> da proposta</li>
+                        <li><strong>Serviço</strong> a executar (o que é o concurso)</li>
+                        <li><strong>Peças / equipamentos</strong> mencionados</li>
+                        <li><strong>Fornecedores prováveis</strong> (OEM ecosystem)</li>
+                    </ul>
+                    Em seguida, o painel multi-agente — 🎖️ Cor. Rodrigues, 💼 Marco Sales,
+                    🔩 Eng. Victor, 🚚 Logística @if($isMarine ?? false), ⚓ Capt. Porto, ⚓ Capt. Vasco @endif —
+                    corre análise técnica completa.
+                </div>
+
+                <label class="block">
+                    <span class="text-xs font-semibold text-gray-700">PDF do concurso *</span>
+                    <input type="file" name="file" accept=".pdf,application/pdf"
+                           required
+                           class="mt-1 block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-violet-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-violet-700 hover:file:bg-violet-100">
+                    <span class="mt-1 block text-[11px] text-gray-500">Máx. 30 MB · só PDF (xlsx/docx anexam-se depois)</span>
+                </label>
+
+                <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                    <button type="button"
+                            onclick="document.getElementById('tender-quick-pdf-modal').classList.add('hidden')"
+                            class="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            id="tender-quick-pdf-submit"
+                            class="px-4 py-2 text-sm rounded bg-violet-700 text-white font-semibold hover:bg-violet-600 disabled:opacity-60 disabled:cursor-wait">
+                        Analisar PDF →
+                    </button>
+                </div>
+
+                <p id="tender-quick-pdf-pending" class="hidden text-xs text-violet-700 text-right">
+                    ⏳ Marta a ler PDF + painel multi-agente a correr… 15-30s.
+                </p>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        const f = document.getElementById('tender-quick-pdf-form');
+        const btn = document.getElementById('tender-quick-pdf-submit');
+        const pending = document.getElementById('tender-quick-pdf-pending');
+        if (!f || !btn) return;
+        f.addEventListener('submit', () => {
+            btn.disabled = true;
+            btn.textContent = '⏳ A analisar…';
+            pending?.classList.remove('hidden');
+        });
+    })();
+    </script>
 
     {{-- ─── Just-assigned pulse animation ──────────────────────────────
          Runs ~5s (4 iterations × 1.2s), then settles into a persistent

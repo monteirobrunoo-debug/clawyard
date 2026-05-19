@@ -426,6 +426,68 @@ class TenderController extends Controller
             ->with('status', "✓ Concurso #{$tender->id} criado manualmente.");
     }
 
+    /**
+     * "📄 Inserir PDF — análise automática":
+     *   User larga 1 PDF, sistema cria o Tender stub, extrai cliente / data /
+     *   serviço / peças / fornecedores via Marta CRM, dispara análise
+     *   multi-agente, e redirecciona ao /tenders/{id} com tudo pronto.
+     *
+     * Pedido directo 2026-05-19:
+     *   "nao quero botao concurso, quero outro a dizr para isnerir o pdf
+     *    apartid ai analisar cliente data, o que é o serviço o upeça e
+     *    fornecesore"
+     */
+    public function quickPdfAnalyse(
+        Request $request,
+        \App\Services\TenderQuickPdfService $quickPdf
+    ): \Illuminate\Http\RedirectResponse {
+        $user = Auth::user();
+        if (!$user || (method_exists($user, 'isGuest') && $user->isGuest())) {
+            abort(403, 'Guests não podem criar concursos.');
+        }
+
+        $request->validate([
+            'file'   => ['required', 'file', 'mimes:pdf', 'max:30720'], // 30 MB
+            'source' => ['nullable', 'string', 'in:manual,marine,acingov,vortal,anogov,nspa,sam_gov,nato,ungm,other'],
+        ], [
+            'file.required' => 'Selecciona um PDF.',
+            'file.mimes'    => 'Só PDFs são aceites para a análise automática.',
+            'file.max'      => 'PDF máximo 30 MB.',
+        ]);
+
+        $source = (string) $request->input('source', 'manual');
+
+        try {
+            $result = $quickPdf->handle($request->file('file'), $source);
+        } catch (\Throwable $e) {
+            Log::error('TenderController::quickPdfAnalyse failed', [
+                'user_id' => $user->id,
+                'source'  => $source,
+                'error'   => $e->getMessage(),
+            ]);
+            return back()->with('error', 'Falha na análise automática: ' . $e->getMessage());
+        }
+
+        $tender = $result['tender'];
+        $extracted = $result['extracted'];
+        $hasFields = !empty(array_filter([
+            $extracted['cliente']     ?? null,
+            $extracted['servico']     ?? null,
+            $extracted['pecas']       ?? null,
+            $extracted['fornecedores'] ?? null,
+        ]));
+
+        $status = "✓ Concurso #{$tender->id} criado a partir do PDF. ";
+        $status .= $hasFields
+            ? 'Marta extraiu cliente, serviço, peças e fornecedores prováveis. '
+            : 'Marta não conseguiu extrair campos estruturados — verifica manualmente. ';
+        $status .= $result['analysis_triggered']
+            ? 'Painel multi-agente (Cor. Rodrigues + Marco Sales + …) já corrido em baixo.'
+            : 'Painel multi-agente não disponível agora — clica "🎯 Análise do serviço" para correr.';
+
+        return redirect()->route('tenders.show', $tender)->with('status', $status);
+    }
+
     // ── Detail view ───────────────────────────────────────────────────────
     public function show(Tender $tender, TenderSimilarityService $similarity)
     {
