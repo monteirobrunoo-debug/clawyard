@@ -901,7 +901,72 @@
                         };
                     @endphp
 
-                    <div class="overflow-x-auto">
+                    {{-- ─── Mobile cards (viewport <sm) ─────────────────────
+                         A tabela tem 7-8 colunas e em mobile ficava com scroll
+                         horizontal — illegível. Cards verticais mostram a
+                         mesma info essencial empilhada: ref + título + status
+                         + colaborador + deadline + chip atribuído. Tocar no
+                         título abre o /tenders/{id} como na tabela.
+                         2026-05-19. --}}
+                    <div class="block sm:hidden divide-y divide-gray-100">
+                        @forelse($all as $t)
+                            @php
+                                $wasJustAssigned = in_array($t->id, $justAssigned, true);
+                                $hasAssignee     = !empty($t->assigned_collaborator_id);
+                                $deadlinePT      = $t->deadline_lisbon?->format('d/m/Y H:i');
+                            @endphp
+                            <article class="p-3 hover:bg-gray-50 {{ $wasJustAssigned ? 'just-assigned' : '' }}">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center gap-2 text-xs">
+                                            <span class="font-semibold uppercase text-gray-600">{{ $sourceLabels[$t->source] ?? strtoupper($t->source) }}</span>
+                                            <span class="font-mono text-gray-500 truncate">{{ $t->reference }}</span>
+                                        </div>
+                                        <a href="{{ route('tenders.show', $t) }}"
+                                           class="block mt-1 text-sm font-medium text-indigo-700 hover:underline leading-snug">
+                                            {{ \Illuminate\Support\Str::limit($t->title, 110) }}
+                                        </a>
+                                    </div>
+                                    @if($canAssign)
+                                        <input type="checkbox" name="tender_ids[]" value="{{ $t->id }}"
+                                               class="row-check mt-1 rounded border-gray-300">
+                                    @endif
+                                </div>
+
+                                <div class="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                    @if($t->collaborator?->name)
+                                        <span class="rounded bg-gray-100 px-1.5 py-0.5 text-gray-700">
+                                            👤 {{ $t->collaborator->name }}
+                                        </span>
+                                    @endif
+                                    @if($wasJustAssigned)
+                                        <span class="just-assigned-chip">✨ atribuído</span>
+                                    @elseif($hasAssignee)
+                                        <span class="rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800">
+                                            ✓ atribuído
+                                        </span>
+                                    @endif
+                                    @if($t->sap_opportunity_number)
+                                        <span class="rounded border border-cyan-300 bg-cyan-50 px-1.5 py-0.5 font-mono text-cyan-800">
+                                            SAP #{{ $t->sap_opportunity_number }}
+                                        </span>
+                                    @endif
+                                    @if($deadlinePT)
+                                        <span class="rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-amber-900">
+                                            ⏰ {{ $deadlinePT }}
+                                        </span>
+                                    @endif
+                                </div>
+                            </article>
+                        @empty
+                            <div class="p-6 text-center text-sm text-gray-500">
+                                Nenhum concurso corresponde aos filtros.
+                            </div>
+                        @endforelse
+                    </div>
+
+                    {{-- ─── Desktop / tablet table (sm+) ──────────────────── --}}
+                    <div class="hidden sm:block overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr class="text-xs font-medium text-gray-500 uppercase tracking-wider">

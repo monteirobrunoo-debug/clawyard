@@ -5,6 +5,16 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
+        {{-- PWA: manifest + theme colour + apple-touch icon. O service
+             worker é registado mais abaixo (após @vite) para evitar
+             race com os assets. 2026-05-19. --}}
+        <link rel="manifest" href="/manifest.json">
+        <meta name="theme-color" content="#4f46e5">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="ClawYard">
+        <link rel="apple-touch-icon" href="/images/clawyard-icon.svg">
+
         <title>{{ config('app.name', 'Laravel') }}</title>
 
         <!-- Fonts -->
@@ -30,6 +40,18 @@
                 } catch (_) { /* not JSON or no body — fall through */ }
                 return false;
             };
+
+            // PWA: regista o service worker para offline read-only nos
+            // dashboards principais. Só corre em contextos seguros
+            // (HTTPS ou localhost) — em http puro o registo falharia
+            // silenciosamente, por isso checamos isSecureContext primeiro.
+            if ('serviceWorker' in navigator && window.isSecureContext) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker
+                        .register('/sw.js', { scope: '/' })
+                        .catch((e) => console.warn('SW registration failed:', e));
+                });
+            }
         </script>
     </head>
     <body class="font-sans antialiased">

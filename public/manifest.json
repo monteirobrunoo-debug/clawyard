@@ -1,0 +1,43 @@
+{
+  "name": "ClawYard — PartYard / HP-Group",
+  "short_name": "ClawYard",
+  "description": "Multi-agente para concursos, SAP B1, CRM e operações PartYard.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f3f4f6",
+  "theme_color": "#4f46e5",
+  "lang": "pt-PT",
+  "icons": [
+    {
+      "src": "/images/clawyard-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Concursos",
+      "short_name": "Concursos",
+      "description": "Dashboard dos concursos activos",
+      "url": "/tenders",
+      "icons": [{ "src": "/images/clawyard-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Marine Dept.",
+      "short_name": "Marine",
+      "description": "Concursos marítimos",
+      "url": "/marine",
+      "icons": [{ "src": "/images/clawyard-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Chat agentes",
+      "short_name": "Agentes",
+      "description": "Pergunta directa aos agentes",
+      "url": "/",
+      "icons": [{ "src": "/images/clawyard-icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ]
+}

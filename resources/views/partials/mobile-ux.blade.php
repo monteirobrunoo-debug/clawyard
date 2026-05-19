@@ -84,6 +84,51 @@
         transition: height 0.05s linear;
         min-height: 2.5rem;
     }
+
+    /* ── Voice input button (wrapping) ─────────────────────────────────
+       O JS abaixo envolve cada textarea[data-voice] num wrapper relativo
+       e injecta um botão 🎤 no canto superior-direito. */
+    .cy-voice-wrap {
+        position: relative;
+    }
+    .cy-voice-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        z-index: 2;
+        width: 32px;
+        height: 32px;
+        border-radius: 9999px;
+        background: white;
+        border: 1px solid rgb(209 213 219);
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: rgb(75 85 99);
+        transition: all 0.15s ease;
+    }
+    .cy-voice-btn:hover {
+        background: rgb(243 244 246);
+        border-color: rgb(99 102 241);
+        color: rgb(67 56 202);
+    }
+    .cy-voice-btn.recording {
+        background: rgb(220 38 38);
+        border-color: rgb(185 28 28);
+        color: white;
+        animation: cy-voice-pulse 1s ease-in-out infinite;
+    }
+    @keyframes cy-voice-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.5); }
+        50%      { box-shadow: 0 0 0 8px rgba(220, 38, 38, 0); }
+    }
+    .cy-voice-btn[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
 </style>
 
 <script>
@@ -131,6 +176,113 @@
         }
     });
     mo.observe(document.body, { childList: true, subtree: true });
+
+    // ── Voice input (Web Speech API) ───────────────────────────────────
+    // Para cada <textarea data-voice>, envolve no .cy-voice-wrap e
+    // injecta botão 🎤. Click → SpeechRecognition arranca em pt-PT,
+    // append do transcript ao value. Click de novo → para.
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const voiceSupported = typeof SpeechRecognition === 'function';
+
+    const wireVoice = (ta) => {
+        if (!ta || ta.tagName !== 'TEXTAREA') return;
+        if (ta._cyVoiceWired) return;
+        ta._cyVoiceWired = true;
+
+        // Garante o wrapper relativo (preserva qualquer label/classes externas).
+        let wrap = ta.parentElement;
+        if (!wrap || !wrap.classList.contains('cy-voice-wrap')) {
+            wrap = document.createElement('div');
+            wrap.className = 'cy-voice-wrap';
+            ta.parentNode.insertBefore(wrap, ta);
+            wrap.appendChild(ta);
+        }
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'cy-voice-btn';
+        btn.title = voiceSupported
+            ? 'Ditar texto (pt-PT) · clica para começar/parar'
+            : 'Voice input não suportado neste browser';
+        btn.textContent = '🎤';
+        if (!voiceSupported) btn.disabled = true;
+        wrap.appendChild(btn);
+
+        // Padding-right na textarea para o texto não ficar por baixo do botão.
+        const cs = window.getComputedStyle(ta);
+        const cur = parseInt(cs.paddingRight, 10) || 0;
+        if (cur < 44) ta.style.paddingRight = '44px';
+
+        if (!voiceSupported) return;
+
+        let rec = null;
+        let baseValue = '';
+
+        const stop = () => {
+            try { rec && rec.stop(); } catch (_) { /* ignore */ }
+            btn.classList.remove('recording');
+        };
+
+        btn.addEventListener('click', () => {
+            if (btn.classList.contains('recording')) {
+                stop();
+                return;
+            }
+
+            try {
+                rec = new SpeechRecognition();
+            } catch (e) {
+                console.warn('SpeechRecognition init failed', e);
+                return;
+            }
+
+            rec.lang = 'pt-PT';
+            rec.interimResults = true;
+            rec.continuous = true;
+
+            baseValue = ta.value;
+            const prefix = baseValue && !/\s$/.test(baseValue) ? baseValue + ' ' : baseValue;
+
+            rec.onresult = (e) => {
+                let final = '';
+                let interim = '';
+                for (let i = e.resultIndex; i < e.results.length; i++) {
+                    const r = e.results[i];
+                    if (r.isFinal) final += r[0].transcript;
+                    else interim += r[0].transcript;
+                }
+                ta.value = prefix + final + interim;
+                ta.dispatchEvent(new Event('input', { bubbles: true }));
+            };
+            rec.onerror = (e) => {
+                console.warn('SpeechRecognition error', e.error);
+                stop();
+            };
+            rec.onend = () => { btn.classList.remove('recording'); };
+
+            try {
+                rec.start();
+                btn.classList.add('recording');
+                btn.title = 'A gravar… clica para parar';
+            } catch (e) {
+                console.warn('SpeechRecognition start failed', e);
+            }
+        });
+    };
+
+    const scanVoice = (root) => {
+        (root || document).querySelectorAll('textarea[data-voice]').forEach(wireVoice);
+    };
+    document.addEventListener('DOMContentLoaded', () => scanVoice());
+    if (document.readyState !== 'loading') scanVoice();
+    new MutationObserver((muts) => {
+        for (const m of muts) for (const n of m.addedNodes) {
+            if (n.nodeType === 1) {
+                if (n.matches && n.matches('textarea[data-voice]')) wireVoice(n);
+                scanVoice(n);
+            }
+        }
+    }).observe(document.body, { childList: true, subtree: true });
 
     // ── Mobile: scroll input focado para a viewport ────────────────────
     // Em iOS quando o teclado abre, o navegador às vezes não faz scroll

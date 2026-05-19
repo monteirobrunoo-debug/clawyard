@@ -634,10 +634,27 @@
                             <span class="font-semibold text-indigo-600">Arrasta para aqui</span> ou clica para escolher
                         </p>
                         <p class="mt-1 text-[11px] text-gray-500">
-                            PDF apenas · máx. 10 ficheiros &middot; 10 MB cada
+                            PDF, imagens (JPG/PNG) e outros · máx. 10 ficheiros · 50 MB cada
                         </p>
-                        <input id="ta-file" type="file" accept=".pdf,application/pdf" multiple class="hidden">
+                        <input id="ta-file" type="file"
+                               accept=".pdf,application/pdf,image/*,.docx,.xlsx,.eml"
+                               multiple class="hidden">
                     </div>
+
+                    {{-- 📷 Capturar com câmara do telemóvel — em mobile abre
+                         directamente a câmara traseira (capture="environment").
+                         No desktop chrome também abre como upload. Mesma
+                         pipeline: vai para /attachments e o backend chama
+                         Claude Vision para OCR se for imagem. 2026-05-19. --}}
+                    <div class="mt-3 flex items-center gap-2 sm:hidden">
+                        <button type="button" id="ta-camera-btn"
+                                class="inline-flex items-center gap-1.5 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+                            📷 Capturar com câmara
+                        </button>
+                        <span class="text-[11px] text-gray-500">OCR automático via Claude Vision</span>
+                    </div>
+                    <input id="ta-camera-file" type="file" accept="image/*" capture="environment" class="hidden">
+
                     <div id="ta-status" class="mt-3 hidden text-xs"></div>
                 </section>
 
@@ -690,6 +707,14 @@
 
                     drop.addEventListener('click', () => input.click());
                     input.addEventListener('change', (e) => uploadFiles(e.target.files));
+
+                    // ── Camera capture (mobile) → mesma uploadFiles ─────
+                    const camBtn = document.getElementById('ta-camera-btn');
+                    const camIn  = document.getElementById('ta-camera-file');
+                    if (camBtn && camIn) {
+                        camBtn.addEventListener('click', () => camIn.click());
+                        camIn.addEventListener('change', (e) => uploadFiles(e.target.files));
+                    }
 
                     // ── Local zone highlight while dragging ─────────────
                     ['dragenter','dragover'].forEach(ev =>
@@ -1618,6 +1643,7 @@
                             </label>
                             <textarea name="notes" rows="4"
                                       data-autogrow
+                                      data-voice
                                       class="w-full rounded-md border-gray-300 text-sm shadow-sm font-mono">{{ old('notes', $tender->notes) }}</textarea>
                             <p class="mt-1 text-xs text-gray-500">
                                 Para histórico inalterável, use o painel de Observações abaixo.
@@ -1697,6 +1723,7 @@
                     @csrf
                     <textarea name="body" rows="3" maxlength="5000" required
                               data-autogrow
+                              data-voice
                               placeholder="Adicionar observação…"
                               class="w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"></textarea>
                     <div class="flex justify-end">

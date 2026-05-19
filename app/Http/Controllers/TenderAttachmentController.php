@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Tender;
 use App\Models\TenderAttachment;
+use App\Services\ImageOcrService;
 use App\Services\PdfTextExtractor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,8 +40,12 @@ class TenderAttachmentController extends Controller
     private const MAX_BYTES_PER   = 50 * 1024 * 1024;   // 50 MB (2026-05-18 bump: 10→50)
     private const MAX_FILES_PER   = 10;
 
-    public function store(Request $request, Tender $tender, PdfTextExtractor $extractor): JsonResponse
-    {
+    public function store(
+        Request $request,
+        Tender $tender,
+        PdfTextExtractor $extractor,
+        ImageOcrService $ocr
+    ): JsonResponse {
         $this->authorizeView($tender);
 
         // 2026-05-18: sem restrição de mime — operador pode anexar
@@ -114,10 +119,17 @@ class TenderAttachmentController extends Controller
                 'uploaded_by_user_id' => Auth::id(),
             ]);
 
-            // Extracção apenas para PDFs. Outros formatos (xlsx, docx,
-            // eml, imagens, …) ficam em STATUS_SKIPPED — guardados para
-            // download mas sem texto extraído. O suggester / Marta CRM
-            // já filtram por STATUS_OK antes de injectar no contexto.
+            // Extracção:
+            //   • PDF   → smalot/pdfparser
+            //   • Imagens (jpg/jpeg/png/webp/gif/heic) → Claude Vision OCR
+            //   • Outros (xlsx/docx/eml/...) → STATUS_SKIPPED
+            //
+            // 2026-05-19: imagens deixaram de ficar SKIPPED. O operador
+            // pode tirar foto a um documento via "📷 Capturar" no mobile
+            // e o texto fica extraído automaticamente (Marta CRM + agentes
+            // depois já o vêem como qualquer outro PDF).
+            $isImage = in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'], true);
+
             if ($ext === 'pdf') {
                 $absolutePath = Storage::disk(self::DISK)->path($relPath);
                 $res = $extractor->extract($absolutePath);
@@ -130,9 +142,26 @@ class TenderAttachmentController extends Controller
                     $att->extraction_status = TenderAttachment::STATUS_FAILED;
                     $att->extraction_error  = mb_substr((string) ($res['error'] ?? 'unknown'), 0, 500);
                 }
+            } elseif ($isImage) {
+                $absolutePath = Storage::disk(self::DISK)->path($relPath);
+                $res = $ocr->extract($absolutePath, $f->getClientMimeType() ?: null);
+                if ($res['ok']) {
+                    $att->extracted_text    = $res['text'];
+                    $att->extracted_chars   = mb_strlen((string) $res['text']);
+                    $att->extraction_status = TenderAttachment::STATUS_OK;
+                    $att->extraction_error  = $res['text'] === ''
+                        ? 'OCR via Claude Vision concluído — imagem sem texto legível.'
+                        : null;
+                    Log::info('TenderAttachment: image OCR done', [
+                        'attachment_id' => $att->id,
+                        'chars'         => $att->extracted_chars,
+                    ]);
+                } else {
+                    $att->extraction_status = TenderAttachment::STATUS_FAILED;
+                    $att->extraction_error  = mb_substr('OCR falhou: ' . (string) ($res['error'] ?? 'unknown'), 0, 500);
+                }
             } else {
                 $att->extraction_status = TenderAttachment::STATUS_SKIPPED;
-                $att->extraction_error  = null;
                 // Nota descritiva para o operador saber porque ficou "skipped".
                 $att->extraction_error  = 'Formato ' . strtoupper($ext) . ' — guardado sem extracção de texto. Disponível para download.';
             }
