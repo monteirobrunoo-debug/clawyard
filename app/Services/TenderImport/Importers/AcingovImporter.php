@@ -345,38 +345,41 @@ class AcingovImporter implements TenderImporterInterface
         $trimmed = trim($ref);
         if ($trimmed === '' || $trimmed === '-') return null;
 
-        // 2026-05-19 CORRECÇÃO IMPORTANTE — pedido directo do operador:
-        //   "5022019630 este número é um contribuinte"
-        // Resultado: refs PURAMENTE NUMÉRICAS de 10 dígitos em PT são
-        // NIPCs (Número de Identificação de Pessoa Colectiva), não SAP
-        // doc numbers. NIPCs PT começam por 1-3, 5-9. Capturar como
-        // sap_opportunity_number contaminava 200+ tenders. NIPCs vão
-        // para raw_metadata.nipc (ver extractNipc()) para futuro link
-        // ao Supplier por VAT.
+        // 2026-05-19 v2 CORRECÇÃO REFINADA — pedido directo do operador:
+        //   "O nº SAP está incorreto, analisa este número porque
+        //    corresponde ao contribuinte"
         //
-        // Patterns aceitáveis (só estes capturam):
+        // Mesmo refs com PREFIX (DMSA 5026006042, DAT 5026000970) afinal
+        // estavam a expor o NIPC do fornecedor — o prefixo é o departamento
+        // PartYard e o número é o contribuinte do adjudicatário. O Pattern
+        // 3 capturava esses números e metia em sap_opportunity_number,
+        // contaminando o dashboard.
+        //
+        // Estratégia segura: depois de qualquer captura, validar que o
+        // resultado NÃO é um NIPC PT (10-digit puro 1-3 ou 5-9). Se for,
+        // devolver null. O caller usa extractNipc() em paralelo para
+        // guardar o valor em raw_metadata.nipc para link a Supplier.
 
-        // Pattern 1: NSPA-style "NNNNN/YYYY" (já tem ano, claramente SAP)
+        // Pattern 1: NSPA-style "NNNNN/YYYY" (já tem ano + barra → claramente SAP, não NIPC)
         if (preg_match('/^(\d{4,6}\/\d{4})$/', $trimmed, $m)) {
             return $m[1];
         }
 
-        // Pattern 2 (removido): pure numeric 10-12 digits = NIPC PT, não SAP
-
         // Pattern 3: prefix alfanumérico + separador + 8-12 digits.
-        // Este SIM é SAP doc ref interno PartYard (DMSA, NPD, DAT, CLAFA,
-        // GTF16, etc. são prefixos de departamento + número de documento).
-        //   DAT 5026000970        DMSA - 5026001346
-        //   CLAFA 5025018663      GTF16 5025017788
-        //   NPD 5026000155
+        // CUIDADO: o número extraído pode ser NIPC (`DMSA 5026006042`).
+        // Após captura, validar contra o NIPC pattern e rejeitar se bater.
+        $captured = null;
         if (preg_match('/^[A-Z][A-Z0-9\.\-]*[\s\-_]+(\d{8,12})$/i', $trimmed, $m)) {
-            return $m[1];
+            $captured = $m[1];
         }
 
-        // Pattern 4 (removido na revisão): 10-digit + sufixo metadata
-        // era ambíguo (poderia ser NIPC + lixo). Refs tipo
-        // "4023006349/DA/A0088/2023" agora ficam null por segurança —
-        // o operador pode adicionar manualmente o SAP Opp depois.
+        if ($captured !== null) {
+            // Rejeita se o captured number bate em NIPC PT
+            if (preg_match('/^[1-35-9]\d{8,9}$/', $captured)) {
+                return null;  // é NIPC, não SAP
+            }
+            return $captured;
+        }
 
         return null;
     }
