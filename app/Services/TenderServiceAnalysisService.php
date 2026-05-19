@@ -32,24 +32,46 @@ class TenderServiceAnalysisService
     /**
      * Mapa de agentes a consultar consoante as categorias do concurso.
      * Os 'core' agents correm sempre; os 'conditional' só quando
-     * a categoria está nas inferidas.
+     * a categoria está nas inferidas; os 'source' só quando a source
+     * do tender corresponde (ex.: marine adiciona Captain Porto + Capitao
+     * Vasco + Eng. Repair).
+     *
+     * 2026-05-19 — pedido directo do operador:
+     *   "analise com cor. rodrigues e marco sales e todos os agentes
+     *    para analise"
+     * Promove Cor. Rodrigues (mildef) a core porque ~todos os tenders
+     * HP-Group/PartYard são dual-use militar/civil — vale a pena ter a
+     * leitura defence sempre, mesmo quando a categoria não está
+     * explicitamente classificada como 13/14. Também adiciona o painel
+     * marítimo (capitao + vessel + workreport) automaticamente quando
+     * o tender vem do Marine Department.
      */
     private const AGENT_PLAYBOOK = [
         // Sempre — domínios universais
         'core' => [
-            'sales',     // Marco Sales — strategy, OEM ecosystem
+            'mildef',    // Cor. Rodrigues — defesa & procurement militar (sempre)
+            'sales',     // Marco Sales — strategy, OEM ecosystem (sempre)
             'engineer',  // Eng. Victor R&D — technical interpretation
             'shipping',  // Logística — Incoterms, freight, customs
+            'acingov',   // Dr. Ana Contracts — procurement PT/EU
         ],
         // Por categoria — só corre se a categoria está nas inferidas
         'conditional' => [
-            '13' => 'mildef',    // Militar/Defesa → Cor. Rodrigues
-            '14' => 'mildef',    // PartYard Systems → Cor. Rodrigues
             '11' => 'capitao',   // Portos → Captain Porto
-            '12' => 'acingov',   // Maritime services PT → Dr. Ana Contracts
-            '15' => 'acingov',   // Industrial → Dr. Ana Contracts (procurement PT)
+            '12' => 'capitao',   // Maritime services PT → Captain Porto
+            // 13/14 (militar) já cobertos por mildef no core
+            // 15 (industrial PT) já coberto por acingov no core
+        ],
+        // Por source — só corre se a source do tender corresponde
+        'source' => [
+            'marine' => ['capitao', 'vessel', 'workreport'],  // operações navais
+            'nspa'   => [],         // mildef já no core, basta
+            'ncia'   => [],
         ],
     ];
+
+    /** Tecto de agentes a consultar por análise (controlo de custo). */
+    private const MAX_AGENTS = 8;
 
     public function __construct(
         private AgentDispatcher $dispatcher,
@@ -69,7 +91,7 @@ class TenderServiceAnalysisService
 
         try {
             $categories = $this->suggester->inferCategories($tender);
-            $agentKeys  = $this->pickAgents($categories);
+            $agentKeys  = $this->pickAgents($categories, $tender->source);
 
             $sections   = [];
             $totalCost  = 0.0;
@@ -134,16 +156,32 @@ class TenderServiceAnalysisService
         return $analysis;
     }
 
-    /** Decide o agent panel consoante as categorias inferidas. */
-    private function pickAgents(array $categories): array
+    /**
+     * Decide o agent panel consoante:
+     *   1. core fixo (mildef, sales, engineer, shipping, acingov)
+     *   2. categorias inferidas (conditional)
+     *   3. source do tender (source-aware: marine → +capitao/vessel/workreport)
+     *
+     * O resultado é ordered de forma estável (core primeiro, depois
+     * conditional, depois source) para que o operador veja sempre os
+     * mesmos agentes nas mesmas posições — útil ao re-correr análise.
+     */
+    private function pickAgents(array $categories, ?string $source = null): array
     {
         $picked = self::AGENT_PLAYBOOK['core'];
+
         foreach ($categories as $cat) {
-            $key = self::AGENT_PLAYBOOK['conditional'][$cat] ?? null;
+            $key = self::AGENT_PLAYBOOK['conditional'][(string) $cat] ?? null;
             if ($key && !in_array($key, $picked, true)) $picked[] = $key;
         }
-        // Cap ao tamanho razoável (não queremos 8 calls sequenciais)
-        return array_slice($picked, 0, 6);
+
+        $sourceKey = mb_strtolower((string) $source);
+        $extraBySource = self::AGENT_PLAYBOOK['source'][$sourceKey] ?? [];
+        foreach ($extraBySource as $key) {
+            if (!in_array($key, $picked, true)) $picked[] = $key;
+        }
+
+        return array_slice($picked, 0, self::MAX_AGENTS);
     }
 
     /** Junta tender + categorias + PDFs num blob de contexto. */

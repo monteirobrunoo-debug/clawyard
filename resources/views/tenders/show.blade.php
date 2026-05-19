@@ -251,7 +251,7 @@
                         @unless($tender->is_confidential)
                         <button type="button" id="ts-service-analysis-btn"
                                 class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-500"
-                                title="Multi-agente: Cor. Rodrigues + Sales + Engineer + Logística + Capitao consoante o concurso. Gera relatório imprimível.">
+                                title="Painel multi-agente — sempre: 🎖️ Cor. Rodrigues · 💼 Marco Sales · 🔩 Eng. Victor · 🚚 Logística · 🏛️ Dr. Ana Contracts. Marítimo: + ⚓ Capt. Porto + ⚓ Capt. Vasco + 🛠️ Eng. Repair. Gera relatório imprimível e plano de acção para SAP.">
                             🎯 Análise do serviço (multi-agente)
                         </button>
                         @endunless
