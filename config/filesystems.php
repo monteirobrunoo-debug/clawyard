@@ -60,6 +60,38 @@ return [
             'report' => false,
         ],
 
+        // 2026-05-19: DigitalOcean Spaces (compatível S3) para anexos
+        // de tenders + biblioteca técnica + filesystem mirror de agent
+        // shares. Activar mudando FILESYSTEM_DISK=spaces no .env, depois
+        // correr `php artisan tenders:migrate-attachments-to-spaces`.
+        //
+        // Setup (uma vez):
+        //   1. DO Panel → Spaces → Create Space (ex.: nome "clawyard-prod",
+        //      região "fra1" ou "ams3" para baixa latência da Europa)
+        //   2. DO Panel → API → Spaces Keys → Generate New Key
+        //      → guarda access_key + secret
+        //   3. No .env do Forge:
+        //      DO_SPACES_KEY=<access_key>
+        //      DO_SPACES_SECRET=<secret>
+        //      DO_SPACES_REGION=fra1
+        //      DO_SPACES_BUCKET=clawyard-prod
+        //      DO_SPACES_ENDPOINT=https://fra1.digitaloceanspaces.com
+        //   4. composer require league/flysystem-aws-s3-v3 (já testado 3.x)
+        //   5. php artisan config:cache
+        'spaces' => [
+            'driver'   => 's3',
+            'key'      => env('DO_SPACES_KEY'),
+            'secret'   => env('DO_SPACES_SECRET'),
+            'region'   => env('DO_SPACES_REGION', 'fra1'),
+            'bucket'   => env('DO_SPACES_BUCKET'),
+            'endpoint' => env('DO_SPACES_ENDPOINT', 'https://fra1.digitaloceanspaces.com'),
+            // Path-style addressing porque o endpoint não tem o bucket no DNS
+            'use_path_style_endpoint' => false,
+            'visibility' => 'private',
+            'throw'      => false,
+            'report'     => false,
+        ],
+
     ],
 
     /*
