@@ -120,13 +120,22 @@ class AppServiceProvider extends ServiceProvider
      */
     private function registerTenderGates(): void
     {
-        Gate::define('tenders.view-all',         fn(User $u) => $u->isManager());
-        Gate::define('tenders.import',           fn(User $u) => $u->isManager());
-        Gate::define('tenders.assign',           fn(User $u) => $u->isManager());
+        // 2026-05-19: gates passam a aceitar TANTO role manager+ COMO
+        // grants finos via User::extra_permissions JSON. Pedido directo
+        // do operador: "dá acesso ao user eduardo.rio@hp-group.org de
+        // importar tabelas da NSPA ou acingov/Vortal" — sem o promover
+        // a manager (não precisa de view-all / assign / collaborators).
+        Gate::define('tenders.view-all',
+            fn(User $u) => $u->isManager() || $u->hasExtraPermission('tenders.view-all'));
+        Gate::define('tenders.import',
+            fn(User $u) => $u->isManager() || $u->hasExtraPermission('tenders.import'));
+        Gate::define('tenders.assign',
+            fn(User $u) => $u->isManager() || $u->hasExtraPermission('tenders.assign'));
         Gate::define('tenders.delete',           fn(User $u) => $u->isAdmin());
         // Manage the TenderCollaborator roster — add names, set emails,
         // link to User accounts, deactivate. Super-user only.
-        Gate::define('tenders.collaborators',    fn(User $u) => $u->isManager());
+        Gate::define('tenders.collaborators',
+            fn(User $u) => $u->isManager() || $u->hasExtraPermission('tenders.collaborators'));
 
         // Manager+ can edit anything. Regular users can edit tenders
         // assigned to a collaborator linked to their User account.

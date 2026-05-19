@@ -11,7 +11,7 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents', 'allowed_nav', 'last_verified_ip', 'last_otp_at', 'weekly_digest_enabled'];
+    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents', 'allowed_nav', 'extra_permissions', 'last_verified_ip', 'last_otp_at', 'weekly_digest_enabled'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -27,6 +27,11 @@ class User extends Authenticatable
             // [] = blocked, [...] = explicit whitelist.
             // Controlled via /admin/nav-access matrix.
             'allowed_nav'       => 'array',
+            // 2026-05-19: grants finos de permissões SEM promover o user
+            // a manager/admin. Array de gate names ['tenders.import',
+            // 'tenders.assign']. null = sem grants extra. Verificado em
+            // AppServiceProvider::registerTenderGates via hasExtraPermission().
+            'extra_permissions' => 'array',
             // IP-bound OTP trust state. last_verified_ip = the IP the
             // user successfully OTP'd from; cleared on Login/Logout so
             // every fresh session re-verifies. See RequireIpVerification
@@ -158,6 +163,50 @@ class User extends Authenticatable
     public function isAdmin(): bool     { return $this->role === 'admin'; }
     public function isManager(): bool   { return in_array($this->role, ['admin', 'manager']); }
     public function isGuest(): bool     { return $this->role === 'guest'; }
+
+    /**
+     * 2026-05-19: verifica se o user tem um gate específico via
+     * extra_permissions (grants finos, sem promoção a manager).
+     *
+     * Política:
+     *   • admins têm tudo (early-return true)
+     *   • caso contrário, lê a coluna extra_permissions JSON
+     *
+     * Exemplo de uso em Gate::define:
+     *   fn(User $u) => $u->isManager() || $u->hasExtraPermission('tenders.import')
+     */
+    public function hasExtraPermission(string $gate): bool
+    {
+        if ($this->isAdmin()) return true;
+        $perms = (array) ($this->extra_permissions ?? []);
+        return in_array($gate, $perms, true);
+    }
+
+    /**
+     * Adiciona um grant ao extra_permissions sem duplicar.
+     * Útil em admin commands / seeders.
+     */
+    public function grantExtraPermission(string $gate): self
+    {
+        $perms = (array) ($this->extra_permissions ?? []);
+        if (!in_array($gate, $perms, true)) {
+            $perms[] = $gate;
+            $this->extra_permissions = array_values($perms);
+            $this->save();
+        }
+        return $this;
+    }
+
+    public function revokeExtraPermission(string $gate): self
+    {
+        $perms = array_values(array_filter(
+            (array) ($this->extra_permissions ?? []),
+            fn($g) => $g !== $gate
+        ));
+        $this->extra_permissions = $perms ?: null;
+        $this->save();
+        return $this;
+    }
 
     /**
      * Per-agent access check. Mirrors TenderCollaborator::canSeeSource:
