@@ -624,12 +624,16 @@ class Tender extends Model
                 ->values()
                 ->all();
 
-            if (empty($allowed)) {
-                // Explicitly blocked from every source.
-                $q->whereRaw('1=0');
-            } else {
-                $q->whereIn('source', $allowed);
-            }
+            // 2026-05-19: PUBLIC_SOURCES sao sempre visiveis, sobrepondo
+            // a whitelist allowed_sources de cada collaborator. Pedido
+            // directo da Monica  Acingov/Vortal/Anogov sao pool publico
+            // interno, ninguem deve estar bloqueado de ver.
+            $allowed = array_values(array_unique(array_merge($allowed, self::PUBLIC_SOURCES)));
+
+            // Como agora sempre temos PUBLIC_SOURCES na lista, $allowed
+            // nunca fica empty. Mantemos o whereIn como filtro
+            // permissivo  user ve whatever source esta no allowed set.
+            $q->whereIn('source', $allowed);
         }
 
         // Status whitelist (added 2026-04-25). Same NULL/[]/array
