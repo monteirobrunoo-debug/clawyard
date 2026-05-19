@@ -22,12 +22,6 @@
                     <x-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*') && !request()->routeIs('marine.*')">
                         📋 {{ __('Concursos') }}
                     </x-nav-link>
-                    {{-- 2026-05-19: Marine Department  separador paralelo
-                         aos Concursos para tenders maritimos (vessels,
-                         port ops, ship repair). Mesma pipeline + SAP sync. --}}
-                    <x-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
-                        ⚓ {{ __('Marine Dept.') }}
-                    </x-nav-link>
                     <x-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
                         🏆 {{ __('Rewards') }}
                     </x-nav-link>
@@ -36,6 +30,14 @@
                     </x-nav-link>
                     <x-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
                         🏭 {{ __('Fornecedores') }}
+                    </x-nav-link>
+                    {{-- 2026-05-19 v2: pedido directo do operador
+                         "o departaneto marine tira o para fora dos concurso"
+                         Marine Department é departamento próprio, não filho dos
+                         Concursos. Movido para depois de Fornecedores (zona
+                         operacional) para deixar claro que é independente. --}}
+                    <x-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
+                        ⚓ {{ __('Marine Dept.') }}
                     </x-nav-link>
                     @if(Auth::user()?->isManager())
                         <x-nav-link :href="route('mission')" :active="request()->routeIs('mission')"
@@ -152,9 +154,6 @@
             <x-responsive-nav-link :href="route('tenders.index')" :active="request()->routeIs('tenders.*') && !request()->routeIs('marine.*')">
                 📋 {{ __('Concursos') }}
             </x-responsive-nav-link>
-            <x-responsive-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
-                ⚓ {{ __('Marine Dept.') }}
-            </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('rewards.me')" :active="request()->routeIs('rewards.*')">
                 🏆 {{ __('Rewards') }}
             </x-responsive-nav-link>
@@ -163,6 +162,10 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
                 🏭 {{ __('Fornecedores') }}
+            </x-responsive-nav-link>
+            {{-- Marine Department — departamento autónomo, ver desktop nav --}}
+            <x-responsive-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
+                ⚓ {{ __('Marine Dept.') }}
             </x-responsive-nav-link>
             @if(Auth::user()?->isManager())
                 <x-responsive-nav-link :href="route('mission')" :active="request()->routeIs('mission')">
