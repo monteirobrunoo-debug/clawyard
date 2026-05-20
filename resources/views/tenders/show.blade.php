@@ -68,6 +68,59 @@
                 </div>
             @endif
 
+            {{-- ─── 3-Phase Stepper ─────────────────────────────────────────
+                 Pedido 2026-05-20: dividir o dashboard do tender em 3 fases:
+                   1. Selecção fornecedores + emails + Ref SAP + notas
+                   2. Cotações dos fornecedores + Excel comparativo (em construção)
+                   3. Oferta ao cliente + insights de preços + push SAP (em construção)
+                 Stepper é apenas visual; os anchors levam o user ao bloco. --}}
+            @php
+                $phase1Done = !empty($tender->sap_opportunity_number);
+                $hasQuotes  = false;  // futuro: tender_supplier_quotations
+                $hasOffer   = false;  // futuro: tender_sales_offers
+                $phase = $hasOffer ? 3 : ($hasQuotes ? 2 : 1);
+            @endphp
+            <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
+                <ol class="grid grid-cols-1 gap-3 sm:grid-cols-3 text-sm">
+                    @foreach([
+                        ['n'=>1, 'icon'=>'📨', 'label'=>'Fornecedores + Emails + SAP', 'anchor'=>'#phase-1',
+                            'sub'=>'Seleccionar fornecedores, enviar inquiries, abrir SAP Opp, anotar.'],
+                        ['n'=>2, 'icon'=>'💰', 'label'=>'Cotações + comparativo Excel',  'anchor'=>'#phase-2',
+                            'sub'=>'Inserir cotações recebidas, gerar Excel comparativo.'],
+                        ['n'=>3, 'icon'=>'🎯', 'label'=>'Oferta cliente + push SAP',     'anchor'=>'#phase-3',
+                            'sub'=>'Preparar oferta usando comparativo, insights de preço, push directo a SAP.'],
+                    ] as $st)
+                        @php
+                            $isActive = $phase === $st['n'];
+                            $isDone   = $phase > $st['n'];
+                            $bg     = $isDone ? 'bg-emerald-50 border-emerald-300' :
+                                      ($isActive ? 'bg-indigo-50 border-indigo-300' : 'bg-gray-50 border-gray-200');
+                            $badge  = $isDone ? 'bg-emerald-600 text-white' :
+                                      ($isActive ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-700');
+                            $label  = $isDone ? '✓' : $st['n'];
+                        @endphp
+                        <li>
+                            <a href="{{ $st['anchor'] }}"
+                               class="block rounded-md border {{ $bg }} px-3 py-2 hover:shadow-sm transition">
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold {{ $badge }}">{{ $label }}</span>
+                                    <span class="text-xs uppercase tracking-wider font-semibold text-gray-500">Fase {{ $st['n'] }}</span>
+                                </div>
+                                <div class="mt-1 text-sm font-semibold text-gray-800">
+                                    {{ $st['icon'] }} {{ $st['label'] }}
+                                </div>
+                                <div class="text-xs text-gray-600">{{ $st['sub'] }}</div>
+                            </a>
+                        </li>
+                    @endforeach
+                </ol>
+            </section>
+
+            {{-- anchor para o stepper Fase 1 (a maior parte do conteúdo
+                 existente cai aqui — PDFs, Marta, Inquiry, multi-agente,
+                 fornecedores, attribuição, notas, SAP Opp). --}}
+            <div id="phase-1"></div>
+
             {{-- ─── Header card ───────────────────────────────────────────── --}}
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-6">
                 <div class="flex items-start justify-between gap-4 flex-wrap">
@@ -1225,7 +1278,11 @@
                             ).join(' ');
                             html += `
                                 <label class="flex items-start gap-3 px-3 py-2 hover:bg-indigo-50 cursor-pointer">
-                                    <input type="checkbox" name="supplier_ids[]" value="${s.id}" ${s.has_email ? 'checked' : ''}
+                                    {{-- 2026-05-20: removido auto-check. Pedido: "está sempre
+                                         a seleccionar os primeiros 4 da lista, nao fazer isso".
+                                         User passa a marcar manualmente os fornecedores que
+                                         quer convidar. --}}
+                                    <input type="checkbox" name="supplier_ids[]" value="${s.id}"
                                            class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center gap-2 flex-wrap">
@@ -1929,6 +1986,82 @@
                     ({{ $tender->lastImport->source }})
                 </section>
             @endif
+
+            {{-- ─── Fase 2: Cotações + comparativo Excel (skeleton) ────────────
+                 Pedido 2026-05-20 — Fase 2 inserir cotações dos fornecedores +
+                 ficheiros, gerar Excel comparativo. UI completa virá em sessão
+                 dedicada; este skeleton já reserva o espaço + explica o flow. --}}
+            <section id="phase-2" class="rounded-lg bg-white shadow-sm border border-gray-100 p-5">
+                <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-800">
+                            💰 Fase 2 — Cotações dos fornecedores
+                        </h2>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            Recolher as respostas dos fornecedores convidados na Fase 1, organizar e
+                            comparar lado-a-lado.
+                        </p>
+                    </div>
+                    <span class="rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-[11px] font-semibold px-2.5 py-1">
+                        🚧 EM CONSTRUÇÃO
+                    </span>
+                </div>
+
+                <div class="rounded-md border border-dashed border-amber-300 bg-amber-50/40 p-4 text-sm text-gray-700 space-y-3">
+                    <div class="font-semibold text-gray-800">O que vai existir aqui (próxima sessão):</div>
+                    <ol class="ml-5 list-decimal space-y-1.5">
+                        <li>Tabela das cotações recebidas — 1 linha por fornecedor convidado em Fase 1, com colunas: <strong>preço unitário · prazo de entrega · validade · Incoterm · notas</strong>.</li>
+                        <li>Botão <kbd class="rounded border bg-white px-1 text-xs">📤 Carregar PDF de cotação</kbd> por linha — Marta extrai preços + datas automaticamente do PDF que receberes do fornecedor e preenche a linha.</li>
+                        <li>Inserção manual rápida (sem PDF) — formulário inline para meter valores à mão.</li>
+                        <li>Botão <kbd class="rounded border bg-white px-1 text-xs">📊 Exportar Excel comparativo</kbd> — gera xlsx com a tabela + colunas extra (margem estimada, ranking por preço, melhor lead time).</li>
+                        <li>Atalho <kbd class="rounded border bg-white px-1 text-xs">→ Ir para Fase 3</kbd> assim que haja ≥1 cotação registada.</li>
+                    </ol>
+                    <div class="text-xs text-gray-500 mt-2">
+                        Backend: nova migration <code class="font-mono">tender_supplier_quotations</code> (tender_id, supplier_id, unit_price, currency, delivery_days, validity_days, incoterm, notes, pdf_attachment_id, parsed_by_marta_at). Tudo agnóstico ao tipo de tender — funciona em Concursos e Marine.
+                    </div>
+                </div>
+            </section>
+
+            {{-- ─── Fase 3: Oferta cliente + insights + push SAP (skeleton) ────
+                 Pedido 2026-05-20 — Fase 3 gerar oferta de venda ao cliente
+                 usando o comparativo da Fase 2, com insights de preços e push
+                 directo a SAP. UI completa virá depois da Fase 2. --}}
+            <section id="phase-3" class="rounded-lg bg-white shadow-sm border border-gray-100 p-5">
+                <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-800">
+                            🎯 Fase 3 — Oferta ao cliente + push SAP
+                        </h2>
+                        <p class="text-xs text-gray-500 mt-0.5">
+                            Construir a cotação de venda usando o comparativo da Fase 2 + insights
+                            de preço, e fazer push directo para a SAP Opportunity Lines.
+                        </p>
+                    </div>
+                    <span class="rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-[11px] font-semibold px-2.5 py-1">
+                        🚧 EM CONSTRUÇÃO
+                    </span>
+                </div>
+
+                <div class="rounded-md border border-dashed border-amber-300 bg-amber-50/40 p-4 text-sm text-gray-700 space-y-3">
+                    <div class="font-semibold text-gray-800">O que vai existir aqui (sessão depois da Fase 2):</div>
+                    <ol class="ml-5 list-decimal space-y-1.5">
+                        <li><strong>Tabela "Oferta ao cliente"</strong> — 1 linha por item; cada linha tem campos: descrição, qty, custo (do melhor fornecedor da Fase 2), <em>markup %</em> editável, preço de venda calculado, total.</li>
+                        <li><strong>Painel "💡 Insights de preço"</strong> — agente autónomo (#65 já feito) consulta tools <code class="font-mono">tender_search</code> + <code class="font-mono">web_search</code> para sugerir markup baseado em:
+                            <ul class="ml-5 mt-0.5 list-disc text-xs">
+                                <li>Margens praticadas em tenders ganhos com este cliente (histórico).</li>
+                                <li>Benchmark web do produto/serviço (preço público se houver).</li>
+                                <li>Sazonalidade / urgência da deadline.</li>
+                            </ul>
+                        </li>
+                        <li><strong>Botão <kbd class="rounded border bg-white px-1 text-xs">📤 Push para SAP Opportunity Lines</kbd></strong> — cria as linhas da Opp directamente em SAP B1 via Service Layer; ao mesmo tempo actualiza <code class="font-mono">tender.offer_value</code> e marca status=<code>submetido</code>.</li>
+                        <li><strong>PDF da oferta</strong> com layout PartYard (igual ao Inquiry simples mas com preços) para enviar/imprimir.</li>
+                    </ol>
+                    <div class="text-xs text-gray-500 mt-2">
+                        Backend: nova migration <code class="font-mono">tender_sales_offers</code> (tender_id, line_no, description, qty, supplier_quotation_id, cost_unit, markup_pct, sale_price_unit, sale_total) + endpoint POST <code class="font-mono">/tenders/{tender}/sales-offer/push-sap</code>. Reutiliza <code class="font-mono">AutonomousAgentRunner</code> para o painel de insights.
+                    </div>
+                </div>
+            </section>
+
         </div>
     </div>
 
