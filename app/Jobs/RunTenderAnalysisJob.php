@@ -35,12 +35,21 @@ class RunTenderAnalysisJob implements ShouldQueue
 
     public int $tries = 1;
     public int $timeout = 240;       // 4min — 5-8 agentes × ~20s média
-    public string $queue = 'default';
 
     public function __construct(
         public int $tenderId,
         public ?int $userId = null,
-    ) {}
+    ) {
+        // 2026-05-20 FIX CRÍTICO: a trait Queueable já define
+        // ?string $queue protegido — declarar "public string $queue
+        // = 'default'" cria colisão fatal em PHP 8.x ("define the
+        // same property in composition"). Isto fez com que NENHUMA
+        // chamada a este job desde a criação tenha funcionado
+        // (TenderQuickPdfService::handle*, etc) — todos os "Marta
+        // a analisar em background" davam silent fatal no worker.
+        // Setar via onQueue() é a forma idiomática.
+        $this->onQueue('default');
+    }
 
     public function handle(TenderServiceAnalysisService $analyser): void
     {
