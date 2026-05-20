@@ -660,6 +660,13 @@ Route::middleware(['auth'])->group(function () {
     // Pedido 2026-05-20 "poe um botao par apagar".
     Route::delete('/tenders/{tender}', [TenderController::class, 'destroy'])->name('tenders.destroy');
 
+    // "⚓ Plano Marine" — só para source=marine. 1 LLM call → serviço +
+    // peças + fornecedores + drafts de email prontos a enviar.
+    // Pedido 2026-05-20 "para o marine basta explicar o serviço… Daniel
+    // prepara os emails para clicar e enviar".
+    Route::post('/tenders/{tender}/marine-action-pack', [TenderController::class, 'marineActionPack'])
+        ->name('tenders.marineActionPack');
+
     // Web Push subscriptions (1 row por device por user). 2026-05-20.
     Route::post  ('/push/subscribe',   [\App\Http\Controllers\PushSubscriptionController::class, 'store'])
         ->name('push.subscribe');

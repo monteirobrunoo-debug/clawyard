@@ -1340,6 +1340,41 @@ class TenderController extends Controller
     }
 
     /**
+     * "⚓ Plano Marine" — alternativa leve ao multi-agente para tenders
+     * marítimos. 1 LLM call extrai serviço + peças + fornecedores +
+     * drafts de email prontos a enviar. Pedido directo 2026-05-20.
+     */
+    public function marineActionPack(
+        Tender $tender,
+        \App\Services\MarineActionPackService $service
+    ): \Illuminate\Http\JsonResponse {
+        $user = Auth::user();
+        $this->enforceVisibility($tender, $user);
+
+        if ($tender->source !== 'marine') {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Plano Marine é só para tenders source=marine. Usa o painel multi-agente em Concursos.',
+            ], 422);
+        }
+
+        try {
+            $result = $service->generate($tender);
+        } catch (\Throwable $e) {
+            Log::error('marineActionPack failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+            return response()->json([
+                'ok' => false,
+                'error' => 'Erro: ' . $e->getMessage(),
+            ], 500);
+        }
+
+        return response()->json($result);
+    }
+
+    /**
      * Soft-delete de 1 tender. Manager+ only.
      * Reversível via `Tender::withTrashed()->restore()` se for engano.
      *

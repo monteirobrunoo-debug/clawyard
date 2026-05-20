@@ -231,34 +231,192 @@
                                 ✨ Auto-resumo → Notas+SAP
                             </button>
                         </form>
-                        {{-- 2026-05-18: Inquiry PartYard Defense — gera PDF
-                             conforme modelo MOD_072_V3 (Sistema_Gestão_Qualidade
-                             /QUALIDADE/MODELOS/PY Military). Inclui items do
-                             SoR + termos NATO/NSPA + bloco assinatura. Anexa
-                             automaticamente ao concurso. --}}
-                        <a href="{{ route('tenders.inquiry-pdf', $tender) }}"
-                           target="_blank"
-                           class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
-                           title="Gera PDF Inquiry PartYard Defense (modelo MOD_072_V3) com items do SoR, termos NATO/NSPA e bloco assinatura. Anexa automaticamente.">
-                            📋 Inquiry PDF
-                        </a>
-                        <a href="{{ route('tenders.inquiry-word', $tender) }}"
-                           class="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-500"
-                           title="Gera Inquiry PartYard como Word editável (.docx) — para revisar/ajustar antes de enviar ao fornecedor. Anexa automaticamente.">
-                            📝 Inquiry Word
-                        </a>
+                        {{-- 2026-05-20: Marine = template + flow diferente.
+                             Esconde-se Inquiry militar + multi-agente pesado
+                             em /marine; em Concursos mantém-se tudo. --}}
+                        @if($tender->source !== 'marine')
+                            {{-- Inquiry MOD_072_V3 (PartYard Defense) — só Concursos. --}}
+                            <a href="{{ route('tenders.inquiry-pdf', $tender) }}"
+                               target="_blank"
+                               class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                               title="Gera PDF Inquiry PartYard Defense (MOD_072_V3) com items do SoR, termos NATO/NSPA. Anexa automaticamente.">
+                                📋 Inquiry PDF
+                            </a>
+                            <a href="{{ route('tenders.inquiry-word', $tender) }}"
+                               class="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-500"
+                               title="Gera Inquiry como Word editável (.docx).">
+                                📝 Inquiry Word
+                            </a>
+                        @endif
                         @endif
                         @unless($tender->is_confidential)
-                        <button type="button" id="ts-service-analysis-btn"
-                                class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-500"
-                                title="Painel multi-agente — sempre: 🎖️ Cor. Rodrigues · 💼 Marco Sales · 🔩 Eng. Victor · 🚚 Logística · 🏛️ Dr. Ana Contracts. Marítimo: + ⚓ Capt. Porto + ⚓ Capt. Vasco + 🛠️ Eng. Repair. Gera relatório imprimível e plano de acção para SAP.">
-                            🎯 Análise do serviço (multi-agente)
-                        </button>
+                            @if($tender->source !== 'marine')
+                                {{-- Multi-agente pesado (~30-60s) — só Concursos. --}}
+                                <button type="button" id="ts-service-analysis-btn"
+                                        class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-500"
+                                        title="Painel multi-agente — Cor. Rodrigues + Marco Sales + Eng. Victor + Logística + Dr. Ana Contracts. ~30-60s, ~$0.04.">
+                                    🎯 Análise do serviço (multi-agente)
+                                </button>
+                            @else
+                                {{-- ⚓ Plano Marine — alternativa leve (1 LLM call,
+                                     ~$0.01, ~5-10s). Extrai serviço + peças +
+                                     fornecedores + drafts de email prontos. --}}
+                                <button type="button" id="marine-action-pack-btn"
+                                        class="rounded-md bg-blue-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-600"
+                                        title="⚓ Daniel analisa o RFQ marítimo: extrai serviço + peças + fornecedores prováveis + drafta 1 email por fornecedor pronto a enviar. ~5-10s, ~$0.01.">
+                                    ⚓ Plano Marine — Daniel prepara emails
+                                </button>
+                            @endif
                         @endunless
                     </div>
 
                     {{-- Status box for service-analysis button --}}
                     <div id="ts-service-analysis-status" class="mt-3 hidden text-xs"></div>
+
+                    {{-- ⚓ Marine action pack — status + panel de drafts.
+                         Pedido 2026-05-20 (marine): "Daniel prepara os emails
+                         para clicar e enviar". 2026-05-20. --}}
+                    @if($tender->source === 'marine')
+                        <div id="marine-pack-status" class="mt-3 hidden text-xs"></div>
+                        <div id="marine-pack-panel" class="mt-4 hidden space-y-3"></div>
+
+                        <script>
+                        (function () {
+                            const btn   = document.getElementById('marine-action-pack-btn');
+                            const stat  = document.getElementById('marine-pack-status');
+                            const panel = document.getElementById('marine-pack-panel');
+                            if (!btn) return;
+
+                            const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+                            const url  = "{{ route('tenders.marineActionPack', $tender) }}";
+
+                            const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
+                                '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+                            })[c]);
+
+                            const setStatus = (msg, tone) => {
+                                stat.classList.remove('hidden');
+                                stat.className = 'mt-3 text-xs ' + (tone === 'err' ? 'text-red-700' :
+                                                                   tone === 'ok'  ? 'text-emerald-700' :
+                                                                                    'text-blue-700');
+                                stat.textContent = msg;
+                            };
+
+                            const renderPanel = (data) => {
+                                const plan   = data.plan   || {};
+                                const emails = data.emails || [];
+                                const pecas  = (plan.pecas || []).filter(Boolean);
+                                const fornes = (plan.fornecedores || []);
+
+                                let html = '<div class="rounded-lg border border-blue-200 bg-blue-50/40 p-4">';
+                                html += '<h4 class="text-sm font-semibold text-blue-900">⚓ Plano Marine</h4>';
+                                if (plan.servico) {
+                                    html += '<p class="mt-2 text-sm text-gray-800"><strong>Serviço:</strong> ' + esc(plan.servico) + '</p>';
+                                }
+                                if (pecas.length) {
+                                    html += '<div class="mt-3 text-sm"><strong>Peças/Equipamentos:</strong>';
+                                    html += '<ul class="ml-5 mt-1 list-disc text-gray-800">';
+                                    pecas.forEach(p => { html += '<li>' + esc(p) + '</li>'; });
+                                    html += '</ul></div>';
+                                }
+                                if (fornes.length) {
+                                    html += '<div class="mt-3 text-sm"><strong>Fornecedores prováveis:</strong>';
+                                    html += '<ul class="ml-5 mt-1 space-y-1 text-gray-800">';
+                                    fornes.forEach(f => {
+                                        let line = '<li><strong>' + esc(f.nome) + '</strong>';
+                                        if (f.sector)   line += ' · <span class="text-gray-600">' + esc(f.sector) + '</span>';
+                                        if (f.email)    line += ' · <a href="mailto:' + esc(f.email) + '" class="text-indigo-700 hover:underline">' + esc(f.email) + '</a>';
+                                        if (f.telefone) line += ' · ' + esc(f.telefone);
+                                        line += '</li>';
+                                        html += line;
+                                    });
+                                    html += '</ul></div>';
+                                }
+                                html += '</div>';
+
+                                if (emails.length) {
+                                    html += '<div class="mt-4 space-y-3">';
+                                    html += '<h4 class="text-sm font-semibold text-gray-900">✉️ Daniel: drafts prontos a enviar (' + emails.length + ')</h4>';
+                                    emails.forEach((em, idx) => {
+                                        const mailto = 'mailto:' + encodeURIComponent(em.para || '') +
+                                                       '?subject=' + encodeURIComponent(em.assunto || '') +
+                                                       '&body=' + encodeURIComponent(em.corpo || '');
+                                        html += '<article class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">';
+                                        html += '<header class="flex items-start justify-between gap-2 flex-wrap mb-2">';
+                                        html += '<div class="min-w-0">';
+                                        html += '<div class="text-xs font-semibold text-gray-800">' + esc(em.fornecedor || '(sem nome)') + '</div>';
+                                        html += '<div class="text-[11px] text-gray-500 font-mono">para: ' + esc(em.para || '—') + '</div>';
+                                        html += '<div class="text-[11px] text-gray-700 mt-0.5">Assunto: ' + esc(em.assunto || '—') + '</div>';
+                                        html += '</div>';
+                                        html += '<div class="flex gap-2">';
+                                        html += '<button type="button" data-copy-idx="' + idx + '" class="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] hover:bg-gray-50">📋 Copiar</button>';
+                                        if (em.para) {
+                                            html += '<a href="' + mailto + '" class="rounded bg-blue-700 px-2 py-1 text-[11px] font-semibold text-white hover:bg-blue-600">✉️ Abrir email</a>';
+                                        }
+                                        html += '</div></header>';
+                                        html += '<textarea readonly rows="6" class="w-full rounded border border-gray-200 bg-gray-50 p-2 text-xs font-mono leading-relaxed">' + esc(em.corpo || '') + '</textarea>';
+                                        html += '</article>';
+                                    });
+                                    html += '</div>';
+                                }
+
+                                panel.innerHTML = html;
+                                panel.classList.remove('hidden');
+
+                                // Wire-up copy buttons
+                                panel.querySelectorAll('[data-copy-idx]').forEach(b => {
+                                    b.addEventListener('click', async () => {
+                                        const i = parseInt(b.dataset.copyIdx, 10);
+                                        const em = emails[i];
+                                        if (!em) return;
+                                        const text = 'Para: ' + (em.para || '') + '\n' +
+                                                     'Assunto: ' + (em.assunto || '') + '\n\n' +
+                                                     (em.corpo || '');
+                                        try {
+                                            await navigator.clipboard.writeText(text);
+                                            b.textContent = '✓ Copiado';
+                                            setTimeout(() => { b.textContent = '📋 Copiar'; }, 1500);
+                                        } catch (e) {
+                                            alert('Não consegui copiar — copia manualmente do textarea.');
+                                        }
+                                    });
+                                });
+                            };
+
+                            btn.addEventListener('click', async () => {
+                                btn.disabled = true;
+                                const orig = btn.textContent;
+                                btn.textContent = '⏳ Daniel a ler RFQ + a draftar emails (~5-15s)...';
+                                setStatus('Daniel a extrair serviço + fornecedores + a preparar emails...', '');
+                                try {
+                                    const res = await fetch(url, {
+                                        method: 'POST',
+                                        headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                                        credentials: 'same-origin',
+                                    });
+                                    if (res.status === 401 && await window.maybeRedirectOnOtp(res)) return;
+
+                                    const ct = res.headers.get('content-type') || '';
+                                    if (!ct.includes('application/json')) {
+                                        const txt = await res.text();
+                                        const m = txt.match(/<title>([^<]+)<\/title>/i);
+                                        throw new Error(m ? m[1].trim() : ('HTTP ' + res.status));
+                                    }
+                                    const data = await res.json();
+                                    if (!res.ok || !data.ok) throw new Error(data.error || 'HTTP ' + res.status);
+
+                                    setStatus('✓ ' + (data.emails?.length || 0) + ' draft(s) prontos. Notas do tender actualizadas.', 'ok');
+                                    renderPanel(data);
+                                } catch (e) {
+                                    setStatus('Erro: ' + e.message, 'err');
+                                } finally {
+                                    btn.disabled = false;
+                                    btn.textContent = orig;
+                                }
+                            });
+                        })();
+                        </script>
+                    @endif
 
                     {{-- 2026-05-18: se já existe análise concluída, mostra
                          o plano de acção consolidado + atalhos para PDF e
