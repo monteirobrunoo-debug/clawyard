@@ -667,6 +667,20 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/tenders/{tender}/marine-action-pack', [TenderController::class, 'marineActionPack'])
         ->name('tenders.marineActionPack');
 
+    // Fase B do dashboard tender — cotações dos fornecedores. Pedido
+    // 2026-05-20 (3-phase split). CRUD inline + Marta PDF extract +
+    // Excel comparativo.
+    Route::post  ('/tenders/{tender}/quotations',             [\App\Http\Controllers\TenderSupplierQuotationController::class, 'store'])
+        ->name('tenders.quotations.store');
+    Route::post  ('/tenders/{tender}/quotations/extract',     [\App\Http\Controllers\TenderSupplierQuotationController::class, 'extract'])
+        ->name('tenders.quotations.extract');
+    Route::patch ('/tenders/{tender}/quotations/{quotation}', [\App\Http\Controllers\TenderSupplierQuotationController::class, 'update'])
+        ->name('tenders.quotations.update');
+    Route::delete('/tenders/{tender}/quotations/{quotation}', [\App\Http\Controllers\TenderSupplierQuotationController::class, 'destroy'])
+        ->name('tenders.quotations.destroy');
+    Route::get   ('/tenders/{tender}/quotations/export',      [\App\Http\Controllers\TenderSupplierQuotationController::class, 'export'])
+        ->name('tenders.quotations.export');
+
     // Web Push subscriptions (1 row por device por user). 2026-05-20.
     Route::post  ('/push/subscribe',   [\App\Http\Controllers\PushSubscriptionController::class, 'store'])
         ->name('push.subscribe');

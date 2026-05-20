@@ -1987,40 +1987,331 @@
                 </section>
             @endif
 
-            {{-- ─── Fase 2: Cotações + comparativo Excel (skeleton) ────────────
-                 Pedido 2026-05-20 — Fase 2 inserir cotações dos fornecedores +
-                 ficheiros, gerar Excel comparativo. UI completa virá em sessão
-                 dedicada; este skeleton já reserva o espaço + explica o flow. --}}
+            {{-- ─── Fase 2: Cotações + comparativo Excel ─────────────────── --}}
+            @php
+                $quotations = \App\Models\TenderSupplierQuotation::where('tender_id', $tender->id)
+                    ->with('supplier')->orderBy('unit_price', 'asc')->get();
+                $bestPrice = $quotations->whereNotNull('unit_price')->min('unit_price');
+            @endphp
             <section id="phase-2" class="rounded-lg bg-white shadow-sm border border-gray-100 p-5">
-                <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+                <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
                     <div>
                         <h2 class="text-base font-semibold text-gray-800">
                             💰 Fase 2 — Cotações dos fornecedores
+                            <span class="ml-2 text-sm font-normal text-gray-500">
+                                ({{ $quotations->count() }} cotação{{ $quotations->count() === 1 ? '' : 'ões' }})
+                            </span>
                         </h2>
                         <p class="text-xs text-gray-500 mt-0.5">
-                            Recolher as respostas dos fornecedores convidados na Fase 1, organizar e
-                            comparar lado-a-lado.
+                            Recolhe as respostas dos fornecedores convidados na Fase 1 + exporta Excel comparativo.
                         </p>
                     </div>
-                    <span class="rounded-full bg-amber-100 border border-amber-300 text-amber-800 text-[11px] font-semibold px-2.5 py-1">
-                        🚧 EM CONSTRUÇÃO
-                    </span>
-                </div>
-
-                <div class="rounded-md border border-dashed border-amber-300 bg-amber-50/40 p-4 text-sm text-gray-700 space-y-3">
-                    <div class="font-semibold text-gray-800">O que vai existir aqui (próxima sessão):</div>
-                    <ol class="ml-5 list-decimal space-y-1.5">
-                        <li>Tabela das cotações recebidas — 1 linha por fornecedor convidado em Fase 1, com colunas: <strong>preço unitário · prazo de entrega · validade · Incoterm · notas</strong>.</li>
-                        <li>Botão <kbd class="rounded border bg-white px-1 text-xs">📤 Carregar PDF de cotação</kbd> por linha — Marta extrai preços + datas automaticamente do PDF que receberes do fornecedor e preenche a linha.</li>
-                        <li>Inserção manual rápida (sem PDF) — formulário inline para meter valores à mão.</li>
-                        <li>Botão <kbd class="rounded border bg-white px-1 text-xs">📊 Exportar Excel comparativo</kbd> — gera xlsx com a tabela + colunas extra (margem estimada, ranking por preço, melhor lead time).</li>
-                        <li>Atalho <kbd class="rounded border bg-white px-1 text-xs">→ Ir para Fase 3</kbd> assim que haja ≥1 cotação registada.</li>
-                    </ol>
-                    <div class="text-xs text-gray-500 mt-2">
-                        Backend: nova migration <code class="font-mono">tender_supplier_quotations</code> (tender_id, supplier_id, unit_price, currency, delivery_days, validity_days, incoterm, notes, pdf_attachment_id, parsed_by_marta_at). Tudo agnóstico ao tipo de tender — funciona em Concursos e Marine.
+                    <div class="flex gap-2 flex-wrap">
+                        <button type="button"
+                                onclick="document.getElementById('quote-add-modal').classList.remove('hidden')"
+                                class="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500">
+                            ➕ Adicionar manual
+                        </button>
+                        <button type="button"
+                                onclick="document.getElementById('quote-pdf-modal').classList.remove('hidden')"
+                                class="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-500"
+                                title="Upload do PDF do fornecedor — Marta extrai preço/prazo/Incoterm automaticamente.">
+                            📤 Carregar PDF (Marta extrai)
+                        </button>
+                        @if($quotations->isNotEmpty())
+                            <a href="{{ route('tenders.quotations.export', $tender) }}"
+                               class="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500">
+                                📊 Excel comparativo
+                            </a>
+                        @endif
                     </div>
                 </div>
+
+                @if($quotations->isEmpty())
+                    <div class="rounded-md border-2 border-dashed border-gray-200 bg-gray-50/60 p-6 text-center text-sm text-gray-500">
+                        Nenhuma cotação registada ainda. Carrega num dos botões acima para começar.
+                    </div>
+                @else
+                    <div class="overflow-x-auto rounded-md border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200 text-sm">
+                            <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">#</th>
+                                    <th class="px-3 py-2 text-left">Fornecedor</th>
+                                    <th class="px-3 py-2 text-right">Preço Unit.</th>
+                                    <th class="px-3 py-2 text-right">Qty</th>
+                                    <th class="px-3 py-2 text-right">Total</th>
+                                    <th class="px-3 py-2 text-right">Entrega</th>
+                                    <th class="px-3 py-2 text-right">Validade</th>
+                                    <th class="px-3 py-2 text-left">Incoterm</th>
+                                    <th class="px-3 py-2 text-left">PDF</th>
+                                    <th class="px-3 py-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 bg-white">
+                                @foreach($quotations as $idx => $q)
+                                    @php
+                                        $isBest = $bestPrice !== null && (float) $q->unit_price === (float) $bestPrice;
+                                    @endphp
+                                    <tr class="{{ $isBest ? 'bg-emerald-50/40' : 'hover:bg-gray-50' }}">
+                                        <td class="px-3 py-2 text-xs text-gray-500">{{ $idx + 1 }}</td>
+                                        <td class="px-3 py-2">
+                                            <div class="font-medium text-gray-900">
+                                                {{ $q->supplierName() }}
+                                                @if($isBest)
+                                                    <span class="ml-1 inline-flex rounded bg-emerald-100 border border-emerald-300 px-1 py-0.5 text-[10px] font-bold text-emerald-800">melhor preço</span>
+                                                @endif
+                                            </div>
+                                            @if($q->parsed_by_marta_at)
+                                                <div class="text-[10px] text-violet-600">🎯 Marta auto-extracted</div>
+                                            @endif
+                                        </td>
+                                        <td class="px-3 py-2 text-right font-mono">
+                                            {{ $q->unit_price !== null ? number_format((float) $q->unit_price, 2, ',', '.') : '—' }}
+                                            <span class="text-[10px] text-gray-500">{{ $q->currency }}</span>
+                                        </td>
+                                        <td class="px-3 py-2 text-right">{{ $q->quantity }}</td>
+                                        <td class="px-3 py-2 text-right font-mono font-semibold">
+                                            @php $tot = $q->total_price ?? $q->effectiveTotal(); @endphp
+                                            {{ $tot !== null ? number_format((float) $tot, 2, ',', '.') : '—' }}
+                                        </td>
+                                        <td class="px-3 py-2 text-right text-xs">{{ $q->delivery_days ? $q->delivery_days . 'd' : '—' }}</td>
+                                        <td class="px-3 py-2 text-right text-xs">{{ $q->validity_days ? $q->validity_days . 'd' : '—' }}</td>
+                                        <td class="px-3 py-2 text-xs font-mono">{{ $q->incoterm ?: '—' }}</td>
+                                        <td class="px-3 py-2 text-xs">
+                                            @if($q->pdf_attachment_id)
+                                                <a href="{{ route('tenders.attachments.download', [$tender, $q->pdf_attachment_id]) }}"
+                                                   class="text-indigo-600 hover:underline" title="Descarregar PDF original">
+                                                    📎 PDF
+                                                </a>
+                                            @else
+                                                <span class="text-gray-400">—</span>
+                                            @endif
+                                        </td>
+                                        <td class="px-3 py-2 text-right">
+                                            <button type="button"
+                                                    onclick="deleteQuotation({{ $q->id }}, '{{ addslashes($q->supplierName()) }}')"
+                                                    class="text-gray-400 hover:text-red-600" title="Apagar cotação">
+                                                🗑
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    @if($q->notes)
+                                        <tr class="{{ $isBest ? 'bg-emerald-50/30' : '' }}">
+                                            <td></td>
+                                            <td colspan="9" class="px-3 py-1 text-xs text-gray-600 italic">
+                                                💬 {{ $q->notes }}
+                                            </td>
+                                        </tr>
+                                    @endif
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
             </section>
+
+            {{-- ─── Modal: adicionar cotação manual ───────────────────────── --}}
+            <div id="quote-add-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 px-4">
+                <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] flex flex-col">
+                    <div class="border-b border-gray-200 px-5 py-3 flex items-center justify-between shrink-0">
+                        <h3 class="text-base font-semibold text-gray-800">➕ Nova cotação manual</h3>
+                        <button type="button" onclick="document.getElementById('quote-add-modal').classList.add('hidden')"
+                                class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+                    </div>
+                    <form id="quote-add-form" class="px-5 py-4 space-y-3 text-sm overflow-y-auto">
+                        @csrf
+                        <label class="block">
+                            <span class="text-xs font-semibold text-gray-700">Fornecedor *</span>
+                            <input type="text" name="supplier_name_freetext" required
+                                   placeholder="Ex: Wärtsilä, MTU EU Distribuidor, etc."
+                                   class="mt-1 block w-full rounded border-gray-300 text-sm">
+                        </label>
+                        <div class="grid grid-cols-3 gap-2">
+                            <label class="block col-span-2">
+                                <span class="text-xs font-semibold text-gray-700">Preço unitário</span>
+                                <input type="number" step="0.01" min="0" name="unit_price"
+                                       class="mt-1 block w-full rounded border-gray-300 text-sm">
+                            </label>
+                            <label class="block">
+                                <span class="text-xs font-semibold text-gray-700">Moeda</span>
+                                <select name="currency" class="mt-1 block w-full rounded border-gray-300 text-sm">
+                                    <option value="EUR" selected>EUR</option>
+                                    <option value="USD">USD</option>
+                                    <option value="GBP">GBP</option>
+                                    <option value="CHF">CHF</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <label class="block">
+                                <span class="text-xs font-semibold text-gray-700">Qty</span>
+                                <input type="number" min="1" name="quantity" value="1"
+                                       class="mt-1 block w-full rounded border-gray-300 text-sm">
+                            </label>
+                            <label class="block">
+                                <span class="text-xs font-semibold text-gray-700">Entrega (dias)</span>
+                                <input type="number" min="0" name="delivery_days"
+                                       class="mt-1 block w-full rounded border-gray-300 text-sm">
+                            </label>
+                            <label class="block">
+                                <span class="text-xs font-semibold text-gray-700">Validade (dias)</span>
+                                <input type="number" min="0" name="validity_days"
+                                       class="mt-1 block w-full rounded border-gray-300 text-sm">
+                            </label>
+                        </div>
+                        <label class="block">
+                            <span class="text-xs font-semibold text-gray-700">Incoterm</span>
+                            <input type="text" name="incoterm" maxlength="10"
+                                   placeholder="CIF, FCA, DAP, EXW, DDP…"
+                                   class="mt-1 block w-full rounded border-gray-300 text-sm">
+                        </label>
+                        <label class="block">
+                            <span class="text-xs font-semibold text-gray-700">Notas</span>
+                            <textarea name="notes" rows="2" maxlength="5000" data-autogrow
+                                      class="mt-1 block w-full rounded border-gray-300 text-sm"></textarea>
+                        </label>
+                        <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                            <button type="button" onclick="document.getElementById('quote-add-modal').classList.add('hidden')"
+                                    class="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+                            <button type="submit"
+                                    class="px-4 py-2 text-sm rounded bg-indigo-600 text-white font-semibold hover:bg-indigo-500">
+                                Guardar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {{-- ─── Modal: carregar PDF + Marta extrai ────────────────────── --}}
+            <div id="quote-pdf-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 px-4">
+                <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] flex flex-col">
+                    <div class="border-b border-gray-200 px-5 py-3 flex items-center justify-between shrink-0">
+                        <h3 class="text-base font-semibold text-gray-800">📤 PDF do fornecedor — Marta extrai</h3>
+                        <button type="button" onclick="document.getElementById('quote-pdf-modal').classList.add('hidden')"
+                                class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+                    </div>
+                    <form id="quote-pdf-form" class="px-5 py-4 space-y-3 text-sm overflow-y-auto" enctype="multipart/form-data">
+                        @csrf
+                        <div class="rounded-md bg-violet-50 border border-violet-200 p-3 text-xs text-violet-900">
+                            Larga o PDF da cotação. Marta extrai automaticamente:
+                            preço unitário · quantidade · prazo de entrega · validade · Incoterm · notas.
+                            Podes editar a row resultante a seguir se algo ficar errado.
+                        </div>
+                        <label class="block">
+                            <span class="text-xs font-semibold text-gray-700">Fornecedor *</span>
+                            <input type="text" name="supplier_name_freetext" required
+                                   placeholder="Nome do fornecedor que enviou o PDF"
+                                   class="mt-1 block w-full rounded border-gray-300 text-sm">
+                        </label>
+                        <label class="block">
+                            <span class="text-xs font-semibold text-gray-700">PDF da cotação *</span>
+                            <input type="file" name="file" accept=".pdf,application/pdf" required
+                                   class="mt-1 block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-violet-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-violet-700 hover:file:bg-violet-100">
+                            <span class="mt-1 block text-[11px] text-gray-500">Máx. 30 MB · só PDF</span>
+                        </label>
+                        <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                            <button type="button" onclick="document.getElementById('quote-pdf-modal').classList.add('hidden')"
+                                    class="px-4 py-2 text-sm rounded border border-gray-300 hover:bg-gray-50">Cancelar</button>
+                            <button type="submit" id="quote-pdf-submit"
+                                    class="px-4 py-2 text-sm rounded bg-violet-700 text-white font-semibold hover:bg-violet-600 disabled:opacity-60">
+                                Carregar + Marta extrai →
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <script>
+            (function () {
+                'use strict';
+                const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+                const storeUrl   = "{{ route('tenders.quotations.store',   $tender) }}";
+                const extractUrl = "{{ route('tenders.quotations.extract', $tender) }}";
+
+                // Manual add
+                const addForm = document.getElementById('quote-add-form');
+                if (addForm) {
+                    addForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const fd = new FormData(addForm);
+                        try {
+                            const r = await fetch(storeUrl, {
+                                method: 'POST', body: fd,
+                                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                                credentials: 'same-origin',
+                            });
+                            if (r.status === 401 && await window.maybeRedirectOnOtp(r)) return;
+                            const ct = r.headers.get('content-type') || '';
+                            if (!ct.includes('application/json')) throw new Error('HTTP ' + r.status);
+                            const data = await r.json();
+                            if (!r.ok || !data.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                            if (window.cyToast) window.cyToast({ title: '✓ Cotação adicionada', tone: 'success', duration: 1800 });
+                            window.location.reload();
+                        } catch (err) {
+                            alert('Erro: ' + err.message);
+                        }
+                    });
+                }
+
+                // PDF upload + Marta extract
+                const pdfForm = document.getElementById('quote-pdf-form');
+                const pdfBtn  = document.getElementById('quote-pdf-submit');
+                if (pdfForm && pdfBtn) {
+                    pdfForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        pdfBtn.disabled = true;
+                        pdfBtn.textContent = '⏳ A extrair com Marta…';
+                        try {
+                            const fd = new FormData(pdfForm);
+                            const r = await fetch(extractUrl, {
+                                method: 'POST', body: fd,
+                                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                                credentials: 'same-origin',
+                            });
+                            if (r.status === 401 && await window.maybeRedirectOnOtp(r)) return;
+                            const ct = r.headers.get('content-type') || '';
+                            if (!ct.includes('application/json')) {
+                                const txt = await r.text();
+                                const m = txt.match(/<title>([^<]+)<\/title>/i);
+                                throw new Error(m ? m[1].trim() : ('HTTP ' + r.status));
+                            }
+                            const data = await r.json();
+                            if (!r.ok || !data.ok) throw new Error(data.error || 'HTTP ' + r.status);
+                            const msg = data.parsed_ok
+                                ? '✓ Marta extraiu campos — verifica a linha nova'
+                                : '✓ Cotação criada com PDF anexado · Marta não extraiu campos (PDF sem texto?)';
+                            if (window.cyToast) window.cyToast({ title: msg, tone: 'success', duration: 2800 });
+                            window.location.reload();
+                        } catch (err) {
+                            alert('Erro: ' + err.message);
+                        } finally {
+                            pdfBtn.disabled = false;
+                            pdfBtn.textContent = 'Carregar + Marta extrai →';
+                        }
+                    });
+                }
+
+                // Delete row
+                window.deleteQuotation = async function (qid, supplier) {
+                    if (!confirm('Apagar cotação de «' + supplier + '»?')) return;
+                    const fd = new FormData();
+                    fd.append('_method', 'DELETE');
+                    fd.append('_token', csrf);
+                    try {
+                        const r = await fetch('/tenders/{{ $tender->id }}/quotations/' + qid, {
+                            method: 'POST', body: fd,
+                            headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                            credentials: 'same-origin',
+                        });
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        window.location.reload();
+                    } catch (e) {
+                        alert('Erro: ' + e.message);
+                    }
+                };
+            })();
+            </script>
 
             {{-- ─── Fase 3: Oferta cliente + insights + push SAP (skeleton) ────
                  Pedido 2026-05-20 — Fase 3 gerar oferta de venda ao cliente
