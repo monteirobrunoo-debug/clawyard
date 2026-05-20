@@ -1454,8 +1454,17 @@
                         if (!confirm('Apagar concurso «' + ref + '»? (Soft-delete — pode ser recuperado via DB withTrashed.)')) return;
                         const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
                         try {
+                            // 2026-05-20: POST + _method=DELETE em vez de DELETE
+                            // directo. Compat universal: alguns proxy/CDN/nginx
+                            // configs bloqueiam métodos não-CRUD; Laravel
+                            // suporta method spoofing via field _method desde
+                            // forever.
+                            const fd = new FormData();
+                            fd.append('_method', 'DELETE');
+                            fd.append('_token', csrf);
                             const r = await fetch('/tenders/' + tenderId, {
-                                method: 'DELETE',
+                                method: 'POST',
+                                body: fd,
                                 headers: {
                                     'X-CSRF-TOKEN': csrf,
                                     'Accept': 'application/json, text/html',
