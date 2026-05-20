@@ -132,15 +132,18 @@ class TenderQuickPdfService
         // 4. Aplicar valores extraídos ao tender (se não estiver vazio).
         $this->applyExtractedFields($tender, $extracted);
 
-        // 5. Disparar análise multi-agente. Faz-se síncrono — o user paga
-        //    o tempo do POST mas chega ao /tenders/{id} com o painel
-        //    Cor. Rodrigues+Marco Sales+resto já pronto.
+        // 5. Disparar análise multi-agente em BACKGROUND via queue.
+        //    2026-05-20 — pedido directo: "deixa carregar os ficheiros todos
+        //    se depois os agentes marco sales, marta, porto e outros do
+        //    marine analisam". O panel autónomo (#65) demora 60-120s e
+        //    excede nginx timeout (60s → 504). Dispatch async resolve.
         $analysisTriggered = false;
         try {
-            $this->analyser->analyse($tender, $user->id);
+            \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
+                ->afterCommit();
             $analysisTriggered = true;
         } catch (\Throwable $e) {
-            Log::warning('TenderQuickPdf: multi-agent analysis failed (non-blocking)', [
+            Log::warning('TenderQuickPdf: failed to dispatch analysis job', [
                 'tender_id' => $tender->id,
                 'error'     => $e->getMessage(),
             ]);
@@ -150,6 +153,151 @@ class TenderQuickPdfService
             'tender'             => $tender->fresh(),
             'extracted'          => $extracted,
             'analysis_triggered' => $analysisTriggered,
+        ];
+    }
+
+    /**
+     * Variante de handle() que aceita múltiplos PDFs num único submit.
+     * Pedido 2026-05-20: "deixa carregar os ficheiros todos se depois
+     * os agentes marco sales, marta, porto e outros do marine analisam".
+     *
+     * Flow:
+     *   1. Cria Tender stub (uma única vez)
+     *   2. Anexa TODOS os PDFs ao tender (com extracção individual)
+     *   3. Concatena os snippets para a Marta extrair campos no global
+     *   4. Aplica fields ao tender
+     *   5. Dispatch async do multi-agent panel
+     *
+     * @param  array<\Illuminate\Http\UploadedFile>  $files
+     * @return array{tender:Tender, extracted:array, analysis_triggered:bool, files_attached:int}
+     */
+    public function handleMultiple(array $files, string $source = 'manual'): array
+    {
+        $user = Auth::user();
+        if (!$user) {
+            throw new \RuntimeException('Auth required for quick PDF analysis.');
+        }
+        $files = array_values(array_filter($files, fn ($f) => $f instanceof UploadedFile));
+        if (empty($files)) {
+            throw new \InvalidArgumentException('Nenhum ficheiro válido recebido.');
+        }
+        foreach ($files as $f) {
+            if (strtolower($f->getClientOriginalExtension()) !== 'pdf') {
+                throw new \InvalidArgumentException('Multi-PDF analysis aceita apenas PDFs (recebido: ' . $f->getClientOriginalName() . ').');
+            }
+        }
+
+        // 1. Stub Tender — título inicial = nome do 1º ficheiro
+        $first = $files[0];
+        $stubTitle = mb_substr(pathinfo($first->getClientOriginalName(), PATHINFO_FILENAME), 0, 200);
+
+        $tender = new Tender();
+        $tender->source             = $source;
+        $tender->reference          = $this->autoReference('PDF');
+        $tender->title              = $stubTitle ?: 'Análise PDFs — ' . now()->format('Y-m-d H:i');
+        $tender->type               = 'pdf-auto-multi';
+        $tender->status             = Tender::STATUS_PENDING;
+        $tender->priority           = 'normal';
+        $tender->source_modified_at = now();
+        $tender->save();
+
+        // Auto-link collaborator
+        try {
+            $collab = TenderCollaborator::where('user_id', $user->id)
+                ->orWhere('email', $user->email)
+                ->first();
+            if ($collab) {
+                $tender->assigned_collaborator_id = $collab->id;
+                $tender->assigned_at              = now();
+                $tender->assigned_by_user_id      = $user->id;
+                $tender->save();
+            }
+        } catch (\Throwable $e) { /* best-effort */ }
+
+        // 2. Anexar todos os PDFs + extrair texto individualmente
+        $attachedCount = 0;
+        $combinedText  = '';
+        foreach ($files as $file) {
+            $originalName = $file->getClientOriginalName();
+            $hash         = hash_file('sha256', $file->getRealPath());
+            $slug         = Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) ?: 'doc';
+            $storedName   = $slug . '-' . substr($hash, 0, 8) . '.pdf';
+            $relPath      = 'tender-attachments/' . $tender->id . '/' . $storedName;
+
+            try {
+                Storage::disk('local')->putFileAs(
+                    'tender-attachments/' . $tender->id,
+                    $file,
+                    $storedName,
+                );
+            } catch (\Throwable $e) {
+                Log::warning('TenderQuickPdf::handleMultiple: storage failed', [
+                    'tender_id' => $tender->id,
+                    'file'      => $originalName,
+                    'error'     => $e->getMessage(),
+                ]);
+                continue;
+            }
+
+            $att = TenderAttachment::create([
+                'tender_id'           => $tender->id,
+                'original_name'       => $originalName,
+                'disk_path'           => $relPath,
+                'mime_type'           => $file->getClientMimeType(),
+                'size_bytes'          => $file->getSize(),
+                'file_hash'           => $hash,
+                'extraction_status'   => TenderAttachment::STATUS_PENDING,
+                'uploaded_by_user_id' => $user->id,
+            ]);
+
+            $absolute = Storage::disk('local')->path($relPath);
+            $res = $this->extractor->extract($absolute);
+            if (($res['ok'] ?? false) === true) {
+                $att->extracted_text    = $res['text'];
+                $att->extracted_chars   = mb_strlen($res['text']);
+                $att->extraction_status = TenderAttachment::STATUS_OK;
+                $combinedText .= "\n\n=== {$originalName} ===\n" . mb_substr($res['text'], 0, 8000);
+            } else {
+                $att->extraction_status = TenderAttachment::STATUS_FAILED;
+                $att->extraction_error  = mb_substr((string) ($res['error'] ?? 'unknown'), 0, 500);
+            }
+            $att->save();
+            $attachedCount++;
+        }
+
+        // 3. Marta extrai campos a partir do texto combinado (todos os PDFs)
+        $extracted = [];
+        if (mb_strlen($combinedText) > 100) {
+            try {
+                $extracted = $this->extractFieldsFromPdf($combinedText);
+            } catch (\Throwable $e) {
+                Log::warning('TenderQuickPdf::handleMultiple: LLM extraction failed', [
+                    'tender_id' => $tender->id,
+                    'error'     => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $this->applyExtractedFields($tender, $extracted);
+
+        // 4. Multi-agent panel em background
+        $analysisTriggered = false;
+        try {
+            \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
+                ->afterCommit();
+            $analysisTriggered = true;
+        } catch (\Throwable $e) {
+            Log::warning('TenderQuickPdf::handleMultiple: failed to dispatch job', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+
+        return [
+            'tender'             => $tender->fresh(),
+            'extracted'          => $extracted,
+            'analysis_triggered' => $analysisTriggered,
+            'files_attached'     => $attachedCount,
         ];
     }
 
@@ -258,14 +406,16 @@ class TenderQuickPdfService
 
         $this->applyExtractedFields($tender, $extracted);
 
-        // 4. Painel multi-agente síncrono — vê o "anexo virtual" via
-        //    extracted_text e produz análise igual ao flow PDF.
+        // 4. Painel multi-agente em background — vê o "anexo virtual" via
+        //    extracted_text e produz análise. Async via queue para evitar
+        //    504 do nginx (panel demora 60-120s).
         $analysisTriggered = false;
         try {
-            $this->analyser->analyse($tender, $user->id);
+            \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
+                ->afterCommit();
             $analysisTriggered = true;
         } catch (\Throwable $e) {
-            Log::warning('TenderQuickPdf::handleFromText: multi-agent analysis failed', [
+            Log::warning('TenderQuickPdf::handleFromText: failed to dispatch job', [
                 'tender_id' => $tender->id,
                 'error'     => $e->getMessage(),
             ]);

@@ -460,28 +460,41 @@ class TenderController extends Controller
             abort(403, 'Guests não podem criar concursos.');
         }
 
-        // Aceita 2 modos de input (1 deles obrigatório):
-        //   • file → PDF clássico (drag-drop ou click no Explorar)
-        //   • text → paste de texto cru no textarea
-        // Pedido 2026-05-20: "quero possibilidade de arrastar o pdf e
-        // possibilidade de arrastar os caracteres para uma caixa de texto"
+        // Aceita 3 modos de input (1 deles obrigatório):
+        //   • files[] → múltiplos PDFs num único submit (multi-attach + análise conjunta)
+        //   • file    → 1 PDF clássico (backward compat com drag-drop existente)
+        //   • text    → paste de texto cru no textarea
+        // Pedido 2026-05-20: "deixa carregar os ficheiros todos se depois
+        // os agentes marco sales, marta, porto e outros do marine analisam"
         $request->validate([
-            'file'   => ['required_without:text', 'nullable', 'file', 'mimes:pdf', 'max:30720'], // 30 MB
-            'text'   => ['required_without:file', 'nullable', 'string', 'min:50', 'max:200000'],
-            'source' => ['nullable', 'string', 'in:manual,marine,acingov,vortal,anogov,nspa,sam_gov,nato,ungm,other'],
+            'files'   => ['nullable', 'array', 'max:10'],
+            'files.*' => ['file', 'mimes:pdf', 'max:30720'],
+            'file'    => ['nullable', 'file', 'mimes:pdf', 'max:30720'], // backward compat
+            'text'    => ['nullable', 'string', 'min:50', 'max:200000'],
+            'source'  => ['nullable', 'string', 'in:manual,marine,acingov,vortal,anogov,nspa,sam_gov,nato,ungm,other'],
         ], [
-            'file.required_without' => 'Selecciona um PDF ou cola texto.',
-            'text.required_without' => 'Cola texto ou selecciona um PDF.',
-            'file.mimes'    => 'Só PDFs são aceites como ficheiro.',
-            'file.max'      => 'PDF máximo 30 MB.',
-            'text.min'      => 'Texto demasiado curto — mete pelo menos uma frase com algum contexto.',
-            'text.max'      => 'Texto excede 200k chars; corta o essencial e tenta de novo.',
+            'files.max'    => 'Máximo 10 PDFs por análise.',
+            'files.*.mimes'=> 'Só PDFs aceites.',
+            'files.*.max'  => 'Cada PDF máximo 30 MB.',
+            'file.mimes'   => 'Só PDFs aceites como ficheiro.',
+            'file.max'     => 'PDF máximo 30 MB.',
+            'text.min'     => 'Texto demasiado curto — mete pelo menos uma frase com algum contexto.',
+            'text.max'     => 'Texto excede 200k chars; corta o essencial e tenta de novo.',
         ]);
+
+        $hasFiles = $request->hasFile('files');
+        $hasFile  = $request->hasFile('file');
+        $hasText  = (string) $request->input('text', '') !== '';
+        if (!$hasFiles && !$hasFile && !$hasText) {
+            return back()->with('error', 'Anexa PDF(s) ou cola texto para analisar.');
+        }
 
         $source = (string) $request->input('source', 'manual');
 
         try {
-            if ($request->hasFile('file')) {
+            if ($hasFiles) {
+                $result = $quickPdf->handleMultiple($request->file('files'), $source);
+            } elseif ($hasFile) {
                 $result = $quickPdf->handle($request->file('file'), $source);
             } else {
                 $result = $quickPdf->handleFromText((string) $request->input('text'), $source);

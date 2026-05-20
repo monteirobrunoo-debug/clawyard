@@ -177,13 +177,14 @@
                         onclick="document.getElementById('tender-manual-modal').classList.add('hidden')"
                         class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
             </div>
-            {{-- ─── Drag-drop zone (atalho para análise auto) ──────────────
-                 Pedido 2026-05-20:
-                   "no marine quando for para criar manualmente põe um sitio
-                    para drag and drop de ficheiros para analisar logo"
-                 Aceita PDF; submete para o mesmo endpoint /tenders/quick-pdf
-                 que o botão principal "📄 Inserir PDF" usa. Modal fecha-se
-                 assim que o user larga o ficheiro. --}}
+            {{-- ─── Drag-drop zone multi-PDF ───────────────────────────────
+                 Pedido 2026-05-20 v2:
+                   "a marta está a analisar logo, deixa carregar os ficheiros
+                    todos se depois os agentes marco sales, marta, porto e
+                    outros do marine analisam"
+                 Acumula múltiplos PDFs antes de submeter. Marta extrai
+                 campos do conteúdo combinado; multi-agente corre em
+                 background via queue (não bloqueia o response). --}}
             <div class="px-5 pt-4 pb-3 border-b border-gray-100">
                 <form id="manual-modal-quick-pdf-form" method="POST"
                       action="{{ route('tenders.quickPdfAnalyse') }}"
@@ -191,20 +192,33 @@
                     @csrf
                     <input type="hidden" name="source" value="{{ ($isMarine ?? false) ? 'marine' : 'manual' }}">
                     <label id="manual-modal-dropzone"
-                           class="block cursor-pointer rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/40 px-4 py-5 text-center transition hover:bg-violet-100">
+                           class="block cursor-pointer rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/40 px-4 py-4 text-center transition hover:bg-violet-100">
                         <svg class="mx-auto h-7 w-7 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-3-3v6M7 4h10a2 2 0 012 2v14l-7-3-7 3V6a2 2 0 012-2z"/>
                         </svg>
-                        <div class="mt-1 text-sm font-semibold text-violet-800">📄 Arrasta PDF aqui (Marta analisa logo)</div>
+                        <div class="mt-1 text-sm font-semibold text-violet-800">📄 Arrasta vários PDFs aqui</div>
                         <div class="text-[11px] text-gray-600 mt-0.5">
-                            Cliente, data, serviço, peças e fornecedores prováveis extraídos automaticamente.
-                            Ou continua a preencher o form abaixo para criar manualmente sem ficheiro.
+                            Acumula tudo (RFQ + anexos + specs). Quando estiver completo, clica
+                            <strong>"Analisar com agentes Marine"</strong> em baixo. Multi-agente corre em
+                            background — não vais ficar à espera.
                         </div>
-                        <input type="file" name="file" id="manual-modal-quick-pdf-file"
-                               accept=".pdf,application/pdf" class="hidden">
+                        <input type="file" name="files[]" id="manual-modal-quick-pdf-files"
+                               accept=".pdf,application/pdf" multiple class="hidden">
                     </label>
-                    <p id="manual-modal-quick-pdf-status" class="hidden text-[11px] text-violet-700 text-center">
-                        ⏳ Marta a ler PDF + painel multi-agente… 15-30s.
+
+                    {{-- Lista dos ficheiros acumulados --}}
+                    <ul id="manual-modal-files-list" class="hidden space-y-1 text-xs"></ul>
+
+                    <div class="flex items-center justify-between gap-2 pt-1">
+                        <span id="manual-modal-files-count" class="text-[11px] text-gray-500">0 ficheiros</span>
+                        <button type="submit" id="manual-modal-quick-pdf-submit"
+                                disabled
+                                class="rounded-md bg-violet-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                            ⚓ Analisar com agentes Marine →
+                        </button>
+                    </div>
+                    <p id="manual-modal-quick-pdf-status" class="hidden text-[11px] text-violet-700 text-right">
+                        ⏳ A guardar ficheiros + Marta a extrair campos… ~5-15s. Multi-agente continua em background.
                     </p>
                 </form>
             </div>
@@ -555,37 +569,96 @@
         });
     })();
 
-    // ── Manual modal: drag-drop atalho que vai pelo flow quick-pdf ──────
-    // Pedido 2026-05-20: "no marine quando for para criar manualmente põe
-    // um sitio para drag and drop de ficheiros para analisar logo".
+    // ── Manual modal: drag-drop multi-PDF (acumula + submit explícito) ──
+    // Pedido 2026-05-20 v2: "a marta está a analisar logo, deixa carregar
+    // os ficheiros todos se depois os agentes marco sales, marta, porto
+    // e outros do marine analisam".
     (function () {
         const dz     = document.getElementById('manual-modal-dropzone');
-        const fInput = document.getElementById('manual-modal-quick-pdf-file');
+        const fInput = document.getElementById('manual-modal-quick-pdf-files');
         const form   = document.getElementById('manual-modal-quick-pdf-form');
+        const submit = document.getElementById('manual-modal-quick-pdf-submit');
+        const list   = document.getElementById('manual-modal-files-list');
+        const count  = document.getElementById('manual-modal-files-count');
         const status = document.getElementById('manual-modal-quick-pdf-status');
-        if (!dz || !fInput || !form) return;
+        if (!dz || !fInput || !form || !submit || !list || !count) return;
 
-        const submitWithFile = (file) => {
-            if (!file) return;
-            // Valida PDF
-            if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
-                alert('Só PDFs são aceites por drag-drop. Para outros formatos preenche manualmente abaixo.');
+        // Estado: array acumulado de File. Sincronizamos com fInput.files
+        // antes do submit usando DataTransfer.
+        let accumulated = [];
+
+        const MAX_FILES = 10;
+        const MAX_MB    = 30;
+
+        const renderList = () => {
+            count.textContent = accumulated.length + ' ficheiro' + (accumulated.length === 1 ? '' : 's');
+            submit.disabled = accumulated.length === 0;
+            if (!accumulated.length) {
+                list.classList.add('hidden');
+                list.innerHTML = '';
                 return;
             }
-            // Passa o file para o input + submit
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            fInput.files = dt.files;
-            status?.classList.remove('hidden');
-            dz.classList.add('opacity-60', 'cursor-wait');
-            form.submit();
+            list.classList.remove('hidden');
+            list.innerHTML = accumulated.map((f, i) => {
+                const kb = (f.size / 1024).toFixed(0);
+                return '<li class="flex items-center justify-between rounded border border-violet-200 bg-white px-2 py-1">' +
+                       '<span class="truncate text-violet-800 font-mono">📎 ' + escapeHtml(f.name) + '</span>' +
+                       '<span class="flex items-center gap-2 shrink-0">' +
+                       '<span class="text-gray-500">' + kb + ' KB</span>' +
+                       '<button type="button" data-remove="' + i + '" class="text-gray-400 hover:text-red-600" title="Remover">✕</button>' +
+                       '</span></li>';
+            }).join('');
+            // Bind remove buttons
+            list.querySelectorAll('[data-remove]').forEach(b => {
+                b.addEventListener('click', () => {
+                    accumulated.splice(parseInt(b.dataset.remove, 10), 1);
+                    syncInput();
+                    renderList();
+                });
+            });
         };
 
-        // Click no zone → file picker
-        dz.addEventListener('click', () => fInput.click());
-        fInput.addEventListener('change', (e) => submitWithFile(e.target.files?.[0]));
+        const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => (
+            { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+        ));
 
-        // Drag-over highlight
+        const syncInput = () => {
+            const dt = new DataTransfer();
+            accumulated.forEach(f => dt.items.add(f));
+            fInput.files = dt.files;
+        };
+
+        const addFiles = (fileList) => {
+            const incoming = Array.from(fileList || []);
+            for (const f of incoming) {
+                if (accumulated.length >= MAX_FILES) {
+                    alert('Máximo ' + MAX_FILES + ' ficheiros por análise.');
+                    break;
+                }
+                if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') {
+                    alert('Só PDFs aceites — ignorado: ' + f.name);
+                    continue;
+                }
+                if (f.size > MAX_MB * 1024 * 1024) {
+                    alert('Máx ' + MAX_MB + ' MB — ignorado: ' + f.name);
+                    continue;
+                }
+                // Evita duplicados pelo (name, size)
+                if (accumulated.some(x => x.name === f.name && x.size === f.size)) continue;
+                accumulated.push(f);
+            }
+            syncInput();
+            renderList();
+        };
+
+        dz.addEventListener('click', () => fInput.click());
+        fInput.addEventListener('change', (e) => {
+            addFiles(e.target.files);
+            // reset input para permitir re-selecionar mesmo ficheiro depois
+            // de remover (browsers ignoram change com mesmo value).
+            e.target.value = '';
+        });
+
         ['dragenter', 'dragover'].forEach(ev =>
             dz.addEventListener(ev, (e) => {
                 e.preventDefault();
@@ -598,7 +671,14 @@
             }));
         dz.addEventListener('drop', (e) => {
             const files = e.dataTransfer?.files;
-            if (files && files.length) submitWithFile(files[0]);
+            if (files && files.length) addFiles(files);
+        });
+
+        form.addEventListener('submit', () => {
+            // accumulated já está sincronizado com fInput.files via syncInput()
+            submit.disabled = true;
+            submit.textContent = '⏳ A analisar…';
+            status?.classList.remove('hidden');
         });
     })();
     </script>
