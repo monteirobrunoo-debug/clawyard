@@ -289,7 +289,46 @@
                 @foreach(($sec['compliance'] ?? []) as $flag)
                     <span class="badge compliance">🛡 {{ $flag }}</span>
                 @endforeach
+                @if(!empty($sec['iterations']) && $sec['iterations'] > 0)
+                    <span class="badge" style="background:#eef;color:#558;border-color:#bbe;">
+                        🔄 {{ $sec['iterations'] }} iter
+                    </span>
+                @endif
             </div>
+
+            {{-- 2026-05-20 (#65): tool trace do agente autónomo. Se houver
+                 tool_use durante a análise, mostramos as chamadas em
+                 detalhe colapsável para transparência. --}}
+            @if(!empty($sec['tool_trace']))
+                <details class="tool-trace" style="margin-top:8px;padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;">
+                    <summary style="cursor:pointer;color:#475569;font-weight:600;">
+                        🔧 {{ count($sec['tool_trace']) }} tool call(s) — clica para ver raciocínio
+                    </summary>
+                    <ol style="margin:8px 0 0 18px;padding:0;color:#334155;">
+                        @foreach($sec['tool_trace'] as $tc)
+                            <li style="margin-bottom:6px;">
+                                <strong>{{ $tc['tool'] ?? '?' }}</strong>
+                                @if(!empty($tc['ok']))
+                                    <span style="color:#16a34a;">✓</span>
+                                @else
+                                    <span style="color:#dc2626;">✗</span>
+                                @endif
+                                <span style="color:#94a3b8;">· {{ $tc['ms'] ?? 0 }}ms</span>
+                                @if(!empty($tc['input']))
+                                    <div style="color:#64748b;font-family:monospace;font-size:10px;margin-top:2px;">
+                                        input: {{ \Illuminate\Support\Str::limit(json_encode($tc['input'], JSON_UNESCAPED_UNICODE), 120) }}
+                                    </div>
+                                @endif
+                                @if(!empty($tc['output']))
+                                    <div style="color:#475569;margin-top:2px;white-space:pre-wrap;">
+                                        {{ \Illuminate\Support\Str::limit($tc['output'], 280) }}
+                                    </div>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ol>
+                </details>
+            @endif
         </div>
     @endforeach
 

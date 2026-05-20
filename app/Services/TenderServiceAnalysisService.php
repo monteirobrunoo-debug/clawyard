@@ -5,6 +5,11 @@ namespace App\Services;
 use App\Models\Tender;
 use App\Models\TenderServiceAnalysis;
 use App\Services\AgentSwarm\AgentDispatcher;
+use App\Services\AgentTools\AgentToolInterface;
+use App\Services\AgentTools\BookSearchTool;
+use App\Services\AgentTools\TenderAttachmentsTool;
+use App\Services\AgentTools\TenderSearchTool;
+use App\Services\AgentTools\WebSearchTool;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -76,7 +81,36 @@ class TenderServiceAnalysisService
     public function __construct(
         private AgentDispatcher $dispatcher,
         private TenderSupplierSuggesterService $suggester,
+        private AutonomousAgentRunner $runner,
+        private TenderSearchTool $tenderSearch,
+        private TenderAttachmentsTool $tenderAttachments,
+        private BookSearchTool $bookSearch,
+        private WebSearchTool $webSearch,
     ) {}
+
+    /**
+     * Tools allow-list por agent_key. Define que ferramentas cada agente
+     * pode invocar durante o seu loop autónomo.
+     *
+     * Política: tender_search + tender_attachments_read + book_search são
+     * grátis (Postgres/embedding interno), liberalmente disponíveis. O
+     * web_search (Tavily, ~$0.005/call) só para agentes onde info actual
+     * importa: defesa, comercial, marketing, research.
+     *
+     * @return list<AgentToolInterface>
+     */
+    private function toolsForAgent(string $agentKey): array
+    {
+        // Base universal — todos têm.
+        $tools = [$this->tenderSearch, $this->tenderAttachments, $this->bookSearch];
+
+        // Web search só para agents que precisam de info actual externa
+        $webAllowed = ['mildef', 'sales', 'marketing', 'research', 'engineer'];
+        if (in_array($agentKey, $webAllowed, true)) {
+            $tools[] = $this->webSearch;
+        }
+        return $tools;
+    }
 
     /**
      * Run the full analysis. Idempotente: cria/sobrepõe a row de
@@ -114,6 +148,11 @@ class TenderServiceAnalysisService
                         'lead_time'   => $res['parsed']['lead_time_estimate'] ?? '',
                         'compliance'  => $res['parsed']['compliance_flags']   ?? [],
                         'cost_usd'    => $res['cost_usd']                     ?? 0,
+                        // 2026-05-20 (#65): metadata da execução autónoma para
+                        // a UI mostrar transparência do raciocínio.
+                        'iterations'   => $res['iterations']   ?? 0,
+                        'tool_trace'   => $res['tool_trace']   ?? [],
+                        'agent_run_id' => $res['agent_run_id'] ?? null,
                     ];
                     $totalCost += (float) ($res['cost_usd'] ?? 0);
                 }
@@ -213,12 +252,21 @@ class TenderServiceAnalysisService
         return $ctx;
     }
 
-    /** Consulta um agente e parseia a resposta JSON. */
+    /**
+     * Consulta um agente autónomo (tool-use loop) e parseia o JSON final.
+     *
+     * 2026-05-20 (#65): substitui o flow 1-shot pela versão autónoma —
+     * cada agente recebe tools (tender_search / book_search / web_search /
+     * tender_attachments_read) e decide quando chamar durante o seu loop.
+     * Cap: 8 iterações, $0.25/agent (≈$1.25 num panel de 5-8 agentes).
+     */
     private function consultAgent(string $agentKey, array $meta, Tender $tender, string $context): array
     {
         $name     = $meta['name'] ?? $agentKey;
         $role     = $meta['role'] ?? '';
         $domain   = $this->domainFraming($agentKey);
+        $tools    = $this->toolsForAgent($agentKey);
+        $toolList = implode(', ', array_map(fn($t) => $t->name(), $tools));
 
         $system = <<<PROMPT
 És o {$name} ({$role}) do PartYard / HP-Group. {$domain}
@@ -227,10 +275,27 @@ Outro agente (Marta CRM) está a preparar uma proposta para um concurso
 e quer a tua análise técnica do SERVIÇO a executar — não fornecedores,
 não emails. Foco: o que é preciso fazer, riscos, lead time, compliance.
 
+TENS FERRAMENTAS DISPONÍVEIS ({$toolList}):
+  • tender_search: procura nos 779+ tenders ClawYard para precedentes
+    (ex: ver tenders anteriores do mesmo cliente, lead times reais
+    praticados, valores históricos).
+  • tender_attachments_read: lê o texto completo de um anexo PDF do tender
+    actual quando precisas de specs específicas que não estão no contexto.
+  • book_search: cita normas/técnicas da biblioteca PartYard.
+  • web_search (se disponível): info actual da web (preços OEM, fornecedores
+    certificados, regulamentação 2026). Custo ~\$0.005/call — usa quando
+    a info que precisas é externa e actual.
+
+ESTRATÉGIA:
+  1. Pensa: que info crítica te falta para uma resposta forte?
+  2. Chama 1-3 tools (não mais — cada call custa tempo e dinheiro)
+  3. Sintetiza o que descobriste com o teu conhecimento de domínio
+  4. Devolve o JSON FINAL — sem mais tool calls
+
 DEVOLVE APENAS este JSON (sem markdown, sem comentário antes ou depois):
 
 {
-  "summary": "≤200 chars · uma frase com a tua leitura estratégica",
+  "summary": "≤200 chars · uma frase com a tua leitura estratégica (cita dados específicos das tools quando relevante)",
   "key_points": ["ponto-chave do teu domínio · ≤120 chars cada", ...max 5...],
   "risks": ["risco a sinalizar · ≤120 chars cada", ...max 4...],
   "recommendations": ["próximo passo concreto · ≤120 chars cada", ...max 5...],
@@ -240,29 +305,45 @@ DEVOLVE APENAS este JSON (sem markdown, sem comentário antes ou depois):
 
 REGRAS:
   • Foca-te apenas no teu domínio (não atravesses para o domínio de outros agentes).
-  • NÃO inventes dados (NCAGE, números, prazos) — se o concurso não diz, omite.
+  • NÃO inventes dados — se uma tool não confirmar, omite.
+  • Cita o tender_id/livro/URL quando uses dados de uma tool (transparência).
   • NUNCA escrevas fornecedores chineses/russos como recomendação.
   • Recomenda Setúbal/Lisboa hub se logística passar por PT.
-  • Português europeu, max ~600 tokens output total.
+  • Português europeu.
 PROMPT;
 
-        $user = "Concurso a analisar:\n{$context}\n\nDevolve o JSON.";
+        $userMsg = "Concurso a analisar:\n{$context}\n\nUsa tools se precisares de dados específicos, depois devolve APENAS o JSON.";
 
-        $res = $this->dispatcher->dispatch(
-            systemPrompt: $system,
-            userMessage:  $user,
-            maxTokens:    1200,
-        );
+        $res = $this->runner->run([
+            'agent_key'         => $agentKey,
+            'agent_name'        => $name,
+            'system_prompt'     => $system,
+            'user_message'      => $userMsg,
+            'tools'             => $tools,
+            'context'           => [
+                'tender_id' => $tender->id,
+                'user_id'   => optional(auth()->user())->id,
+            ],
+            'max_iterations'    => 8,
+            'cost_cap_usd'      => 0.25,   // por agent. Panel 5-8 agentes ≈ $1-2 total
+            'max_output_tokens' => 2000,
+        ]);
 
         if (!($res['ok'] ?? false)) {
-            return ['ok' => false, 'error' => $res['error'] ?? 'dispatch_error'];
+            return [
+                'ok' => false,
+                'error' => $res['error'] ?? ('agent_runner status=' . ($res['status'] ?? 'unknown')),
+            ];
         }
 
-        $parsed = $this->parseJson((string) ($res['text'] ?? ''));
+        $parsed = $this->parseJson((string) ($res['final_text'] ?? ''));
         return [
-            'ok'       => true,
-            'parsed'   => $parsed,
-            'cost_usd' => $res['cost_usd'] ?? 0,
+            'ok'         => true,
+            'parsed'     => $parsed,
+            'cost_usd'   => $res['cost_usd']   ?? 0,
+            'iterations' => $res['iterations'] ?? 0,
+            'tool_trace' => $res['tool_trace'] ?? [],
+            'agent_run_id' => $res['agent_run_id'] ?? null,
         ];
     }
 
