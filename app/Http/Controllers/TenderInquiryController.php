@@ -96,15 +96,22 @@ class TenderInquiryController extends Controller
         // quando muda o equipamento — pedido directo do operador).
         $items = $this->parseItems($sor ?? '', $supplier);
 
-        $contactName  = Auth::user()?->name  ?? 'PartYard Defense';
-        $contactEmail = Auth::user()?->email ?? config('mail.from.address', 'defense@hp-group.org');
+        $contactName  = Auth::user()?->name  ?? 'PartYard';
+        $contactEmail = Auth::user()?->email ?? config('mail.from.address', 'info@partyard.eu');
 
-        $pdf = Pdf::loadView('tenders.inquiry-partyard-pdf', [
-            'tender'        => $tender,
-            'supplier'      => $supplier,
+        // 2026-05-20: layout simplificado
+        //   "poe apenas o Nome PartYard - Refº Sap e descicao e item do
+        //    equiapamento a pedir, apenas mencionar, Dear Sirs, Please
+        //    inform us your Best Price and Delivery time for the following:"
+        // Sem branding militar, sem campos complexos.
+        $rfqRef = $tender->sap_opportunity_number
+            ? $tender->sap_opportunity_number . '/' . now()->format('Y')
+            : 'PY-' . str_pad((string) $tender->id, 6, '0', STR_PAD_LEFT);
+
+        $pdf = Pdf::loadView('tenders.inquiry-simple', [
+            'rfqRef'        => $rfqRef,
+            'description'   => mb_substr($maskedTitle ?: ($tender->title ?? ''), 0, 300),
             'items'         => $items,
-            'sor'           => $sor,
-            'maskedTitle'   => $maskedTitle,
             'today'         => now(),
             'contactName'   => $contactName,
             'contactEmail'  => $contactEmail,
@@ -538,342 +545,101 @@ class TenderInquiryController extends Controller
             ? implode(' ; ', array_slice($toEmails, 0, 3))
             : '____________________________________';
 
-        // ── Build docx ─────────────────────────────────────────────────
-        // 2026-05-19 — pedido directo do operador:
-        //   "O ficheiro inquiry militar tem de ser este [MOD_072_V3]"
-        //
-        // Preferência: ABRIR o .docx original do SGQ (Inquiry_MILITARY_MOD_072_V3.docx)
-        // e ANEXAR o body técnico no fim. Garante 100% fidelidade visual da
-        // capa (logo "Partyard military division", contactos, INQUIRY title,
-        // form fields To/Att/Email/From/Telef/Email/Page/Date/Our Ref.,
-        // footer NCAGE/ISO/H&P).
-        //
-        // Fallback: se o .docx do template não estiver acessível, cai para
-        // o approach antigo de reconstruir o layout via PhpWord do zero
-        // usando os assets PNG/JPG isolados.
-        $phpWord = \App\Services\PartYardMilitaryWordTemplate::loadOriginalAsPhpWord();
-        $usingOriginalTemplate = ($phpWord !== null);
-
-        if (!$usingOriginalTemplate) {
-            $phpWord = new PhpWord();
-        }
-        $phpWord->getCompatibility()->setOoxmlVersion(15);
-
-        // Estilos PartYard Militar — navy corporativo + Calibri.
-        // try/catch porque se o template original já registou estilos com
-        // o mesmo nome, PhpWord lança exception "Style 'X' already exists".
-        $stylesToRegister = [
-            'corp'  => ['name' => 'Calibri', 'size' => 11, 'bold' => true, 'color' => 'FFFFFF'],
-            'corpR' => ['name' => 'Calibri', 'size' => 8,  'color' => 'C7D2FE'],
-            'h1'    => ['name' => 'Calibri', 'size' => 15, 'bold' => true, 'color' => '0F1B4C'],
-            'h2'    => ['name' => 'Calibri', 'size' => 12, 'bold' => true, 'color' => '0F1B4C'],
-            'h3'    => ['name' => 'Calibri', 'size' => 10, 'bold' => true, 'color' => '0F1B4C'],
-            'body'  => ['name' => 'Calibri', 'size' => 10],
-            'mono'  => ['name' => 'Consolas','size' => 9],
-            'th'    => ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => 'FFFFFF'],
-            'thMx'  => ['name' => 'Calibri', 'size' => 8, 'bold' => true, 'color' => '1E3A8A'],
-            'label' => ['name' => 'Calibri', 'size' => 9, 'bold' => true, 'color' => '475569'],
-            'muted' => ['name' => 'Calibri', 'size' => 8, 'color' => '6B7280'],
-        ];
-        foreach ($stylesToRegister as $key => $style) {
-            try { $phpWord->addFontStyle($key, $style); } catch (\Throwable $e) {}
-        }
-
-        // Quando usamos o template original, NÃO chamamos apply() — já tem
-        // header/footer próprios. Adicionamos uma section nova vazia e
-        // anexamos o body técnico aí (Word coloca-a a seguir à capa).
-        // Quando NÃO temos template, chamamos apply() para emitir header/
-        // footer via PhpWord (fallback do dev environment).
-        if ($usingOriginalTemplate) {
-            // Page break antes da nova section para o body arrancar em
-            // página nova depois da capa MOD_072_V3.
-            $section = $phpWord->addSection([
-                'marginLeft'   => Converter::cmToTwip(1.5),
-                'marginRight'  => Converter::cmToTwip(1.5),
-                'marginTop'    => Converter::cmToTwip(2.0),
-                'marginBottom' => Converter::cmToTwip(2.0),
-                // Type "nextPage" — Word começa a section nova em página nova
-                'breakType'    => 'nextPage',
-            ]);
-            $hasHeaderAsset = true;
-            $hasFooterAsset = true;
-        } else {
-            $section = $phpWord->addSection(\App\Services\PartYardMilitaryWordTemplate::sectionConfig());
-            $templateApplied = \App\Services\PartYardMilitaryWordTemplate::apply($section, [
-                'document_kind' => 'Defense Inquiry',
-                'audit_ref'     => 'ClawYard #' . $tender->id . ' · RFQ ' . $rfqRef,
-            ]);
-            $hasHeaderAsset = $templateApplied;
-            $hasFooterAsset = $templateApplied;
-        }
-
-        // Quando temos o header image MOD_072_V3 activo, o navy-bar
-        // textual seria redundante (a imagem já tem "Partyard military
-        // division" + contactos). Fallback continua para shares sem assets.
-        if (!$hasHeaderAsset) {
-            $tblHdr = $section->addTable([
-                'borderSize' => 0,
-                'cellMargin' => 120,
-                'unit'       => 'pct',
-                'width'      => 100 * 50,
-            ]);
-            $tblHdr->addRow(420);
-            $cellHL = $tblHdr->addCell(6500, ['bgColor' => '0F1B4C']);
-            $cellHL->addText($this->xmlSafe('PARTYARD MILITAR, LDA.'), 'corp');
-            $cellHR = $tblHdr->addCell(3500, ['bgColor' => '0F1B4C']);
-            $cellHR->addText($this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $subjectKeyword), 'corpR', ['alignment' => Jc::END]);
-            $cellHR->addText($this->xmlSafe('Portuguese Ministry of Defence Tender'), 'corpR', ['alignment' => Jc::END]);
-            $section->addTextBreak(1);
-        }
-
-        // ── MOD_072_V3 form fields (To/Att/Email · From/Telef/Email · Page/Date/Our Ref.)
-        //    Reproduz o layout do bloco branco do template (image2.jpg).
-        //    Quando usamos o template original, esta tabela é ÚTIL como
-        //    versão "pré-preenchida" — o operador pode copiar daqui para
-        //    a capa (que tem os campos em branco do SGQ) OU enviar o
-        //    .docx tal-e-qual com a página 2 a complementar.
-        if ($usingOriginalTemplate) {
-            $section->addText(
-                $this->xmlSafe('Detalhes do RFQ — pré-preenchidos automaticamente'),
-                ['size' => 9, 'italic' => true, 'color' => '6B7280'],
-                ['alignment' => Jc::CENTER]
-            );
-            $section->addTextBreak(1);
-        }
-
-        $tblFields = $section->addTable([
-            'borderColor' => 'CBD5E1',
-            'borderSize'  => 0,
-            'cellMargin'  => 80,
-            'alignment'   => JcTable::CENTER,
+        // ── Build docx (simple layout) ─────────────────────────────────
+        // 2026-05-20 pedido directo:
+        //   "poe apenas o Nome PartYard - Refº Sap e descicao e item do
+        //    equiapamento a pedir, apenas mencionar, Dear Sirs, Please
+        //    inform us your Best Price and Delivery time for the following:"
+        // Sem MOD_072_V3, sem branding militar. PhpWord from-scratch
+        // mantendo só o essencial: cabeçalho PartYard, ref. SAP, descrição,
+        // saudação, tabela de items, assinatura.
+        $phpWord = new PhpWord();
+        $section = $phpWord->addSection([
+            'marginLeft'   => Converter::cmToTwip(2.2),
+            'marginRight'  => Converter::cmToTwip(2.2),
+            'marginTop'    => Converter::cmToTwip(2.8),
+            'marginBottom' => Converter::cmToTwip(2.5),
         ]);
-        $tblFields->addRow();
-        $cT = $tblFields->addCell(3300);
-        $cT->addText('To:',    ['bold' => true, 'size' => 10]);
-        $cT->addText($this->xmlSafe($supplierName), ['size' => 10]);
-        // Supplier model não tem contact_name dedicado — operador preenche
-        // manualmente o "Att:" depois de descarregar e editar o Word.
-        $cT->addText('Att: ____________________', ['size' => 9, 'color' => '475569']);
-        $cT->addText('Email: ' . $this->xmlSafe($supplier?->primary_email ?? '____________________'), ['size' => 9, 'color' => '475569']);
 
-        $cF = $tblFields->addCell(3300);
-        $cF->addText('From:',  ['bold' => true, 'size' => 10]);
-        $cF->addText($this->xmlSafe($contactName), ['size' => 10]);
-        $cF->addText('Telef.: +351 265 544 370', ['size' => 9, 'color' => '475569']);
-        $cF->addText('Email: ' . $this->xmlSafe($contactEmail), ['size' => 9, 'color' => '475569']);
-
-        $cP = $tblFields->addCell(3300);
-        $cP->addText('Page:',  ['bold' => true, 'size' => 10]);
-        $cP->addText('1 de 1',  ['size' => 10]);
-        $cP->addText('Date: ' . now()->format('d-m-Y'), ['size' => 9, 'color' => '475569']);
-        $cP->addText('Our Ref.: RFQ ' . $rfqRef, ['size' => 9, 'color' => '475569']);
-
+        // Brand header
+        $section->addText('PartYard', ['size' => 22, 'bold' => true, 'color' => '1E3A8A']);
         $section->addTextBreak(1);
 
-        // Title — só repetir "INQUIRY" no body quando NÃO temos a capa
-        // do template (a capa já tem o título em destaque).
-        if (!$usingOriginalTemplate) {
-            $section->addText($this->xmlSafe('INQUIRY'), ['size' => 22, 'bold' => true, 'color' => '0F1B4C'], ['alignment' => Jc::CENTER]);
-            $section->addText(
-                $this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $supplierTitle),
-                ['size' => 12, 'color' => '475569'],
-                ['alignment' => Jc::CENTER]
-            );
-            $section->addTextBreak(1);
-        } else {
-            // Com capa: só o subtítulo da página de detalhes
-            $section->addText(
-                $this->xmlSafe('RFQ ' . $rfqRef . ' — ' . $supplierTitle),
-                ['size' => 13, 'bold' => true, 'color' => '0F1B4C'],
-                ['alignment' => Jc::CENTER]
-            );
-            $section->addTextBreak(1);
-        }
-
-        // Subject (mantido — útil para o operador quando reenvia por email)
-        $section->addText($this->xmlSafe('Subject: ' . $subject), ['bold' => true, 'size' => 10]);
-        $section->addText($this->xmlSafe('CC: procurement@partyard.eu'), ['size' => 9, 'color' => '6B7280']);
-        $section->addTextBreak(1);
-
-        // Greeting + tender context paragraph
-        $section->addText($this->xmlSafe('Dear ' . $supplierName . ' Sales Team,'), 'body');
-        $section->addTextBreak(1);
-        $section->addText(
-            $this->xmlSafe('PartYard Militar, Lda. (NCAGE P3527, Portugal) is bidding for '
-                . $tenderContext . ' and requests your binding quotation for:'),
-            'body'
-        );
-        $section->addTextBreak(1);
-
-        // ── Items table (Line | Equipment | Qty up to | Reference) ──
-        $tblItems = $section->addTable([
-            'borderColor' => 'E2E8F0',
-            'borderSize'  => 4,
-            'cellMargin'  => 80,
-            'alignment'   => JcTable::CENTER,
-        ]);
-        $headerBg = ['bgColor' => '2563EB'];
-        $tblItems->addRow(280);
-        $tblItems->addCell( 800, $headerBg)->addText('Line',              'th');
-        $tblItems->addCell(4400, $headerBg)->addText('Equipment',         'th');
-        $tblItems->addCell(1400, $headerBg)->addText('Qty (up to)',       'th');
-        $tblItems->addCell(3400, $headerBg)->addText('Reference product', 'th');
-
-        if (empty($items)) {
-            $tblItems->addRow();
-            $tblItems->addCell(10000, ['gridSpan' => 4])
-                ->addText($this->xmlSafe('Detailed item specifications are provided in the attached RFP package.'),
-                          ['italic' => true, 'size' => 9, 'color' => '6B7280']);
-        } else {
-            foreach ($items as $i => $it) {
-                $tblItems->addRow();
-                $bg = $i % 2 === 0 ? null : ['bgColor' => 'F8FAFC'];
-                $line = $it['line'] ?? (($i + 1) * 10);
-                $tblItems->addCell( 800, $bg)->addText((string) $line, ['bold' => true]);
-                $tblItems->addCell(4400, $bg)->addText($this->xmlSafe($it['desc'] ?? '—'), 'body');
-                $tblItems->addCell(1400, $bg)->addText($this->xmlSafe($it['qty']  ?? '—'), 'body');
-                $tblItems->addCell(3400, $bg)->addText(
-                    $this->xmlSafe($it['reference'] ?? ($it['pn'] ?? '—')),
-                    'body'
-                );
-            }
-        }
-
-        $section->addTextBreak(1);
-
-        // ── PER-ITEM BLOCKS: spec + compliance matrix ──────────────────
-        // Pedido directo do operador: "por por baixo de cada item a
-        // especificação e matrix request". Cada item ganha bullets +
-        // tabela Comply/Not Comply/Partial/Remarks.
-        foreach ($items as $i => $it) {
-            $line = $it['line'] ?? (($i + 1) * 10);
-            $section->addText(
-                $this->xmlSafe('Line ' . $line . ' — ' . ($it['desc'] ?? 'Item ' . ($i + 1))),
-                'h3'
-            );
-
-            // Constrói bullets de specs
-            $bullets = [];
-            if (!empty($it['specs'])) {
-                foreach (preg_split('/[·;]|\s—\s/', (string) $it['specs']) as $b) {
-                    $b = trim($b);
-                    if ($b !== '' && mb_strlen($b) > 3) $bullets[] = $b;
-                }
-            }
-            if (!empty($it['norms'])) $bullets[] = 'Compliance: ' . $it['norms'];
-            if (empty($bullets)) {
-                $bullets[] = 'Specifications per RFP attachments. Confirm compatibility with reference product.';
-            }
-            $bullets[] = '220V / 50Hz, European plug';
-            $bullets[] = 'Accessories ready for immediate use';
-
-            $section->addText($this->xmlSafe('Technical specification'), 'h3');
-            foreach ($bullets as $b) {
-                $section->addListItem($this->xmlSafe($b), 0, ['size' => 9], 'multilevel');
-            }
-
-            $section->addTextBreak(1);
-
-            // Compliance Matrix
-            $section->addText($this->xmlSafe('Compliance Matrix (please complete)'), 'h3');
-            $tblMx = $section->addTable([
-                'borderColor' => 'C7D2FE',
-                'borderSize'  => 4,
-                'cellMargin'  => 60,
-                'alignment'   => JcTable::CENTER,
-            ]);
-            $mxHeadBg = ['bgColor' => 'E0E7FF'];
-            $tblMx->addRow(260);
-            $tblMx->addCell(4600, $mxHeadBg)->addText('Requirement', 'thMx');
-            $tblMx->addCell(1300, $mxHeadBg)->addText('Comply',      'thMx');
-            $tblMx->addCell(1300, $mxHeadBg)->addText('Not Comply',  'thMx');
-            $tblMx->addCell(1100, $mxHeadBg)->addText('Partial',     'thMx');
-            $tblMx->addCell(1700, $mxHeadBg)->addText('Remarks',     'thMx');
-
-            $fill = ['bgColor' => 'FFFBEB'];
-            foreach ($bullets as $b) {
-                $tblMx->addRow();
-                $tblMx->addCell(4600)->addText($this->xmlSafe($b), ['size' => 9]);
-                $tblMx->addCell(1300, $fill)->addText('☐', ['size' => 10]);
-                $tblMx->addCell(1300, $fill)->addText('☐', ['size' => 10]);
-                $tblMx->addCell(1100, $fill)->addText('☐', ['size' => 10]);
-                $tblMx->addCell(1700, $fill)->addText('', 'body');
-            }
-
-            $section->addTextBreak(1);
-        }
-
-        // ── What we need in your response ──────────────────────────────
-        $section->addText($this->xmlSafe('What we need in your response'), 'h2');
-        $responseItems = [
-            'Unit price EXW (your facility) and DAP Lisbon, Portugal (Incoterms 2020), EUR excl. VAT',
-            'Lead time PO → DAP Lisbon',
-            'Offer validity: minimum 120 days',
-            'MoQ, payment terms, warranty (period + coverage)',
-            'Consumables (reusable vs disposable) — pricing for 24 months',
-            'On-site training (days, language)',
-        ];
-        $idx = 1;
-        foreach ($responseItems as $r) {
-            $section->addText($this->xmlSafe($idx . '. ' . $r), ['size' => 10]);
-            $idx++;
-        }
-        $section->addTextBreak(1);
-
-        // ── Mandatory documentation ────────────────────────────────────
-        $section->addText($this->xmlSafe('Mandatory documentation'), 'h2');
+        // Meta (ref + description)
+        $tblStyle = ['borderTopSize' => 6, 'borderTopColor' => 'DDDDDD',
+                     'borderBottomSize' => 6, 'borderBottomColor' => 'DDDDDD',
+                     'cellMargin' => 80];
+        $phpWord->addTableStyle('metaTable', $tblStyle);
+        $meta = $section->addTable('metaTable');
         foreach ([
-            'CE MDR certificate (Reg. EU 2017/745)',
-            'EU Declaration of Conformity',
-            'ISO 13485:2016 certificate (Medical devices QMS)',
-            'Country of Origin',
-            'IEC 60601 compliance (electrical safety, medical electrical equipment)',
-            'Datasheets and operator manuals (English)',
-        ] as $doc) {
-            $section->addListItem($this->xmlSafe($doc), 0, ['size' => 10], 'multilevel');
+            ['Ref. SAP:',     $rfqRef],
+            ['Description:',  $this->xmlSafe(mb_substr($maskedTitle ?: ($tender->title ?? ''), 0, 300))],
+            ['Date:',         now()->format('d M Y')],
+        ] as [$lbl, $val]) {
+            $meta->addRow();
+            $c1 = $meta->addCell(Converter::cmToTwip(3.8));
+            $c1->addText($lbl, ['size' => 10, 'bold' => true, 'color' => '475569']);
+            $c2 = $meta->addCell(Converter::cmToTwip(11));
+            $c2->addText($val, ['size' => 11]);
         }
         $section->addTextBreak(1);
 
-        // ── Deadline block ─────────────────────────────────────────────
-        $tblDeadline = $section->addTable([
-            'borderSize' => 0,
-            'cellMargin' => 120,
-        ]);
-        $tblDeadline->addRow();
-        $cellDl = $tblDeadline->addCell(10000, ['bgColor' => 'FEF3C7']);
-        $deadlineLabel = $tender->deadline_at
-            ? $tender->deadline_at->format('l, Y-m-d, H:i') . ' WET.'
-            : 'Please indicate your earliest response timeline.';
-        $cellDl->addText(
-            $this->xmlSafe('Response deadline: ' . $deadlineLabel),
-            ['bold' => true, 'color' => '92400E', 'size' => 10]
-        );
-        $cellDl->addText(
-            $this->xmlSafe('Send to procurement@partyard.eu, copy ' . $contactEmail),
-            ['size' => 9, 'color' => '92400E']
-        );
+        // Greeting + request (addTextRun para misturar bold/regular)
+        $section->addText('Dear Sirs,', ['size' => 11]);
+        $section->addTextBreak(1);
+        $run = $section->addTextRun(['size' => 11]);
+        $run->addText('Please inform us your ', ['size' => 11]);
+        $run->addText('Best Price', ['size' => 11, 'bold' => true]);
+        $run->addText(' and ', ['size' => 11]);
+        $run->addText('Delivery time', ['size' => 11, 'bold' => true]);
+        $run->addText(' for the following:', ['size' => 11]);
         $section->addTextBreak(1);
 
-        // ── Signature ─────────────────────────────────────────────────
-        $section->addText($this->xmlSafe('Best regards,'), 'body');
-        $section->addText($this->xmlSafe($contactName), ['bold' => true, 'color' => '0F1B4C', 'size' => 11]);
-        $section->addText($this->xmlSafe('Military Procurement Lead'), ['italic' => true, 'color' => '4B5563', 'size' => 10]);
-        $section->addText($this->xmlSafe('PartYard Militar, Lda.'), 'body');
-        $section->addText($this->xmlSafe($contactEmail), 'muted');
-        $section->addText($this->xmlSafe('NCAGE P3527 · ISO 9001:2015 · AS9120 Rev B'), 'muted');
-
-        $section->addTextBreak(1);
-
-        // ── Corporate footer no body (redundante se o footer image
-        //    do MOD_072_V3 já está activo via section footer). Mantido
-        //    como fallback quando os assets do template não existem.
-        if (!$hasFooterAsset) {
-            $section->addText(
-                $this->xmlSafe('PartYard Militar, Lda. · Setúbal, Portugal · NCAGE P3527 · ISO 9001:2015 · AS9120 Rev B · www.partyard.eu  |  RFQ ' . $rfqRef),
-                ['size' => 7, 'color' => '94A3B8'],
+        // Items table
+        $itemsStyle = [
+            'borderSize'  => 6,
+            'borderColor' => 'CBD5E1',
+            'cellMargin'  => 80,
+        ];
+        $phpWord->addTableStyle('itemsTable', $itemsStyle);
+        $itemsTbl = $section->addTable('itemsTable');
+        // Header row
+        $itemsTbl->addRow(null, ['tblHeader' => true]);
+        $head = ['#', 'Equipment / Item', 'Qty'];
+        $widths = [Converter::cmToTwip(1.4), Converter::cmToTwip(11.6), Converter::cmToTwip(2.5)];
+        foreach ($head as $i => $h) {
+            $cell = $itemsTbl->addCell($widths[$i], ['bgColor' => 'F1F5F9']);
+            $cell->addText($h, ['size' => 9, 'bold' => true, 'color' => '334155']);
+        }
+        // Body rows — fallback para 1 linha "description" se items vazio
+        $rows = !empty($items) ? $items : [[
+            'desc' => mb_substr($maskedTitle ?: ($tender->title ?? '—'), 0, 300),
+            'qty'  => '—',
+        ]];
+        foreach ($rows as $idx => $it) {
+            $itemsTbl->addRow();
+            $itemsTbl->addCell($widths[0])->addText(
+                (string) ($idx + 1),
+                ['size' => 10, 'color' => '64748B'],
+                ['alignment' => Jc::CENTER]
+            );
+            $itemsTbl->addCell($widths[1])->addText(
+                $this->xmlSafe((string) ($it['desc'] ?? '—')),
+                ['size' => 10.5]
+            );
+            $itemsTbl->addCell($widths[2])->addText(
+                $this->xmlSafe((string) ($it['qty'] ?? '—')),
+                ['size' => 10],
                 ['alignment' => Jc::CENTER]
             );
         }
+        $section->addTextBreak(2);
+
+        // Signature
+        $section->addText('Best regards,', ['size' => 10.5]);
+        $section->addText($this->xmlSafe($contactName), ['size' => 10.5, 'bold' => true]);
+        $section->addText('PartYard', ['size' => 10.5, 'color' => '64748B']);
+        $section->addText($this->xmlSafe($contactEmail), ['size' => 10.5]);
 
         // ── Stream the docx ────────────────────────────────────────────
         $refForFile = $tender->sap_opportunity_number
