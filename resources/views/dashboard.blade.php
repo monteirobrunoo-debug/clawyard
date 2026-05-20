@@ -918,9 +918,10 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
     // something. Hidden entirely for admins with no assignments so the
     // dashboard stays clean. The agent catalog lookup lets us render the
     // shared agents with the same name/emoji/colour as the main grid.
-    $hasTenders = !empty($myTenderStats) && ($myTenderStats['total'] ?? 0) > 0;
+    $hasTenders      = !empty($myTenderStats) && ($myTenderStats['total'] ?? 0) > 0;
+    $hasMarine       = !empty($myMarineStats) && ($myMarineStats['total'] ?? 0) > 0;
     $hasSharedAgents = isset($mySharedAgents) && $mySharedAgents->isNotEmpty();
-    $showMineStrip = $hasTenders || $hasSharedAgents;
+    $showMineStrip   = $hasTenders || $hasMarine || $hasSharedAgents;
 @endphp
 
 {{-- E2 — Rewards strip — points + level + streak + last 3 events.
@@ -1133,11 +1134,12 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
     <div class="recent-header">
         <span class="recent-title">🎯 Partilhados comigo</span>
         <span class="recent-view-all" style="pointer-events:none;opacity:0.7;">
-            {{ ($hasTenders ? 1 : 0) + ($hasSharedAgents ? $mySharedAgents->count() : 0) }} atribuído(s)
+            {{ ($hasTenders ? 1 : 0) + ($hasMarine ? 1 : 0) + ($hasSharedAgents ? $mySharedAgents->count() : 0) }} atribuído(s)
         </span>
     </div>
     <div class="recent-strip">
-        {{-- Tender bucket card: links to /tenders filtered to mine. --}}
+        {{-- Tender bucket card: links to /tenders filtered to mine.
+             2026-05-20: agora source!=marine (Marine é card separado abaixo). --}}
         @if($hasTenders)
             @php
                 $deadline = $myTenderStats['next_deadline'] ?? null;
@@ -1152,6 +1154,29 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                         {{ $myTenderStats['total'] }} activo{{ $myTenderStats['total'] === 1 ? '' : 's' }}
                         @if($overdue > 0) · <span style="color:#f87171">{{ $overdue }} em atraso</span> @endif
                         @if($deadlineTxt) · próxima {{ $deadlineTxt }} @endif
+                    </div>
+                </div>
+            </a>
+        @endif
+
+        {{-- Marine Department card: parallel ao Concursos, mas só source=marine.
+             Pedido directo 2026-05-20: "tira mesmo dep marine dos concursos
+             ou seja no dashboard principal". Marine é departamento autónomo,
+             card separado. --}}
+        @if($hasMarine)
+            @php
+                $marineDeadline = $myMarineStats['next_deadline'] ?? null;
+                $marineDeadlineTxt = $marineDeadline ? \Illuminate\Support\Carbon::parse($marineDeadline)->setTimezone('Europe/Lisbon')->format('d/m H:i') : null;
+                $marineOverdue = $myMarineStats['overdue'] ?? 0;
+            @endphp
+            <a href="{{ route('marine.index') }}" class="recent-card" style="--card-color: #38bdf8">
+                <div class="recent-avatar" style="background:#001220;border-color:#0a2a3a;">⚓</div>
+                <div class="recent-body">
+                    <div class="recent-agent-name">Os meus marítimos</div>
+                    <div class="recent-meta">
+                        {{ $myMarineStats['total'] }} activo{{ $myMarineStats['total'] === 1 ? '' : 's' }}
+                        @if($marineOverdue > 0) · <span style="color:#f87171">{{ $marineOverdue }} em atraso</span> @endif
+                        @if($marineDeadlineTxt) · próxima {{ $marineDeadlineTxt }} @endif
                     </div>
                 </div>
             </a>

@@ -197,20 +197,29 @@ Route::get('/dashboard', function () {
     //   2) Agent shares — AgentShare rows where this user's email is
     //      either the primary client_email or in the additional_emails
     //      JSON array. Active + non-revoked + non-expired only.
-    $myTenderStats = ['total' => 0, 'overdue' => 0, 'next_deadline' => null];
+    // 2026-05-20: Marine Department é departamento próprio (separador
+    // distinto no nav + dashboard /marine). NÃO conta para o widget
+    // "Concursos" no dashboard principal — pedido directo do operador:
+    //   "tira mesmo dep marine dos concursos ou seja no dashboard principal"
+    // Calculamos os 2 stats em separado e a view mostra 2 cards distintos.
+    $myTenderStats  = ['total' => 0, 'overdue' => 0, 'next_deadline' => null];
+    $myMarineStats  = ['total' => 0, 'overdue' => 0, 'next_deadline' => null];
     $mySharedAgents = collect();
     if ($user && $user->email) {
         $expiredCut = now()->copy()->subDays(\App\Models\Tender::OVERDUE_WINDOW_DAYS);
         // Excluir submetidos / em avaliação — proposta entregue já não
         // é "trabalho a fazer" do ponto de vista do user. Aparecem em
         // /tenders?status=submetido se quiseres ver explicitamente.
-        $tendersQuery = \App\Models\Tender::query()
+        $baseQuery = \App\Models\Tender::query()
             ->active()
             ->whereNotIn('status', \App\Models\Tender::DONE_FROM_USER_POV)
             ->forUser($userId)
             ->where(function ($q) use ($expiredCut) {
                 $q->whereNull('deadline_at')->orWhere('deadline_at', '>=', $expiredCut);
             });
+
+        // Concursos = TUDO menos marine.
+        $tendersQuery = (clone $baseQuery)->where('source', '!=', 'marine');
         $total = (clone $tendersQuery)->count();
         if ($total > 0) {
             $myTenderStats['total'] = $total;
@@ -219,6 +228,21 @@ Route::get('/dashboard', function () {
                 ->where('deadline_at', '<', now())
                 ->count();
             $myTenderStats['next_deadline'] = (clone $tendersQuery)
+                ->whereNotNull('deadline_at')
+                ->orderBy('deadline_at')
+                ->value('deadline_at');
+        }
+
+        // Marine Department = só source=marine.
+        $marineQuery = (clone $baseQuery)->where('source', '=', 'marine');
+        $marineTotal = (clone $marineQuery)->count();
+        if ($marineTotal > 0) {
+            $myMarineStats['total'] = $marineTotal;
+            $myMarineStats['overdue'] = (clone $marineQuery)
+                ->whereNotNull('deadline_at')
+                ->where('deadline_at', '<', now())
+                ->count();
+            $myMarineStats['next_deadline'] = (clone $marineQuery)
                 ->whereNotNull('deadline_at')
                 ->orderBy('deadline_at')
                 ->value('deadline_at');
@@ -261,6 +285,7 @@ Route::get('/dashboard', function () {
         'agentCount'          => $agentCount,
         'recentConversations' => $recentConversations,
         'myTenderStats'       => $myTenderStats,
+        'myMarineStats'       => $myMarineStats,
         'mySharedAgents'      => $mySharedAgents,
         'myPoints'            => $myPoints,
         'myRecentRewards'     => $myRecentRewards,
