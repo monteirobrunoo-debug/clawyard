@@ -151,6 +151,104 @@ class TenderQuickPdfService
     }
 
     /**
+     * Mesmo flow do handle() mas a partir de texto cru (paste/drag-text na
+     * UI). Cria o Tender stub, salta o storage do PDF (não há ficheiro),
+     * cria 1 TenderAttachment "virtual" com extracted_text=$text para a
+     * análise multi-agente o ver, e o resto do flow é idêntico (Marta
+     * extrai campos + analyser corre).
+     *
+     * @return array{tender:Tender, extracted:array, analysis_triggered:bool}
+     */
+    public function handleFromText(string $text, string $source = 'manual'): array
+    {
+        $user = Auth::user();
+        if (!$user) {
+            throw new \RuntimeException('Auth required for quick text analysis.');
+        }
+
+        $text = trim($text);
+        if (mb_strlen($text) < 50) {
+            throw new \InvalidArgumentException('Texto demasiado curto (mín 50 chars).');
+        }
+
+        // 1. Stub Tender — sem nome de ficheiro, usa primeira linha do texto.
+        $firstLine = preg_split('/\R/', $text)[0] ?? '';
+        $stubTitle = mb_substr(trim($firstLine), 0, 200);
+
+        $tender = new Tender();
+        $tender->source             = $source;
+        $tender->reference          = null;
+        $tender->title              = $stubTitle ?: 'Análise texto — ' . now()->format('Y-m-d H:i');
+        $tender->type               = 'text-auto';
+        $tender->status             = Tender::STATUS_PENDING;
+        $tender->priority           = 'normal';
+        $tender->source_modified_at = now();
+        $tender->save();
+
+        // Auto-link ao collaborator do user.
+        try {
+            $collab = TenderCollaborator::where('user_id', $user->id)
+                ->orWhere('email', $user->email)
+                ->first();
+            if ($collab) {
+                $tender->assigned_collaborator_id = $collab->id;
+                $tender->assigned_at              = now();
+                $tender->assigned_by_user_id      = $user->id;
+                $tender->save();
+            }
+        } catch (\Throwable $e) { /* best-effort */ }
+
+        // 2. Persistir o texto como um anexo "virtual" para o analyser
+        //    multi-agente o conseguir ler via $tender->attachments. Não
+        //    grava ficheiro físico no Storage — disk_path fica NULL.
+        $hash = hash('sha256', $text);
+        TenderAttachment::create([
+            'tender_id'           => $tender->id,
+            'original_name'       => 'paste-' . substr($hash, 0, 8) . '.txt',
+            'disk_path'           => null,                       // sem ficheiro físico
+            'mime_type'           => 'text/plain',
+            'size_bytes'          => mb_strlen($text),
+            'file_hash'           => $hash,
+            'extraction_status'   => TenderAttachment::STATUS_OK,
+            'extracted_text'      => $text,
+            'extracted_chars'     => mb_strlen($text),
+            'uploaded_by_user_id' => $user->id,
+        ]);
+
+        // 3. Marta extrai campos a partir do texto directamente.
+        $extracted = [];
+        try {
+            $extracted = $this->extractFieldsFromPdf($text);
+        } catch (\Throwable $e) {
+            Log::warning('TenderQuickPdf::handleFromText: LLM extraction failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+
+        $this->applyExtractedFields($tender, $extracted);
+
+        // 4. Painel multi-agente síncrono — vê o "anexo virtual" via
+        //    extracted_text e produz análise igual ao flow PDF.
+        $analysisTriggered = false;
+        try {
+            $this->analyser->analyse($tender, $user->id);
+            $analysisTriggered = true;
+        } catch (\Throwable $e) {
+            Log::warning('TenderQuickPdf::handleFromText: multi-agent analysis failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+
+        return [
+            'tender'             => $tender->fresh(),
+            'extracted'          => $extracted,
+            'analysis_triggered' => $analysisTriggered,
+        ];
+    }
+
+    /**
      * Pede à Marta CRM um JSON com os campos relevantes para preencher
      * o concurso. Tudo num único call para minimizar custo.
      *

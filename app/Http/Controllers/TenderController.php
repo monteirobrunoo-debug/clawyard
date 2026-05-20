@@ -450,23 +450,37 @@ class TenderController extends Controller
             abort(403, 'Guests não podem criar concursos.');
         }
 
+        // Aceita 2 modos de input (1 deles obrigatório):
+        //   • file → PDF clássico (drag-drop ou click no Explorar)
+        //   • text → paste de texto cru no textarea
+        // Pedido 2026-05-20: "quero possibilidade de arrastar o pdf e
+        // possibilidade de arrastar os caracteres para uma caixa de texto"
         $request->validate([
-            'file'   => ['required', 'file', 'mimes:pdf', 'max:30720'], // 30 MB
+            'file'   => ['required_without:text', 'nullable', 'file', 'mimes:pdf', 'max:30720'], // 30 MB
+            'text'   => ['required_without:file', 'nullable', 'string', 'min:50', 'max:200000'],
             'source' => ['nullable', 'string', 'in:manual,marine,acingov,vortal,anogov,nspa,sam_gov,nato,ungm,other'],
         ], [
-            'file.required' => 'Selecciona um PDF.',
-            'file.mimes'    => 'Só PDFs são aceites para a análise automática.',
+            'file.required_without' => 'Selecciona um PDF ou cola texto.',
+            'text.required_without' => 'Cola texto ou selecciona um PDF.',
+            'file.mimes'    => 'Só PDFs são aceites como ficheiro.',
             'file.max'      => 'PDF máximo 30 MB.',
+            'text.min'      => 'Texto demasiado curto — mete pelo menos uma frase com algum contexto.',
+            'text.max'      => 'Texto excede 200k chars; corta o essencial e tenta de novo.',
         ]);
 
         $source = (string) $request->input('source', 'manual');
 
         try {
-            $result = $quickPdf->handle($request->file('file'), $source);
+            if ($request->hasFile('file')) {
+                $result = $quickPdf->handle($request->file('file'), $source);
+            } else {
+                $result = $quickPdf->handleFromText((string) $request->input('text'), $source);
+            }
         } catch (\Throwable $e) {
             Log::error('TenderController::quickPdfAnalyse failed', [
                 'user_id' => $user->id,
                 'source'  => $source,
+                'mode'    => $request->hasFile('file') ? 'pdf' : 'text',
                 'error'   => $e->getMessage(),
             ]);
             return back()->with('error', 'Falha na análise automática: ' . $e->getMessage());

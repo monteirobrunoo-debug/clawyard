@@ -296,13 +296,51 @@
                     corre análise técnica completa.
                 </div>
 
-                <label class="block">
-                    <span class="text-xs font-semibold text-gray-700">PDF do concurso *</span>
-                    <input type="file" name="file" accept=".pdf,application/pdf"
-                           required
-                           class="mt-1 block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-violet-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-violet-700 hover:file:bg-violet-100">
-                    <span class="mt-1 block text-[11px] text-gray-500">Máx. 30 MB · só PDF (xlsx/docx anexam-se depois)</span>
-                </label>
+                {{-- ─── Tabs: PDF | Texto ──────────────────────────────────
+                     Pedido 2026-05-20: "quero possibilidade de arrastar o
+                     pdf e possibilidade de arrastar os caracteres para uma
+                     caixa de texto grande". Default abre na tab PDF. --}}
+                <div class="flex gap-1 border-b border-gray-200 -mt-1">
+                    <button type="button" data-tab-trigger="pdf"
+                            class="qp-tab px-3 py-2 text-xs font-semibold border-b-2 border-violet-600 text-violet-700">
+                        📄 PDF
+                    </button>
+                    <button type="button" data-tab-trigger="text"
+                            class="qp-tab px-3 py-2 text-xs font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                        ✏️ Texto
+                    </button>
+                </div>
+
+                {{-- Tab 1: PDF (drag-drop + click) --}}
+                <div data-tab-pane="pdf" class="space-y-1">
+                    <span class="text-xs font-semibold text-gray-700">PDF do concurso</span>
+                    <div id="qp-dropzone"
+                         class="mt-1 cursor-pointer rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/30 px-6 py-8 text-center transition hover:bg-violet-50">
+                        <svg class="mx-auto h-9 w-9 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 7.5h-.75A2.25 2.25 0 0 0 4.5 9.75v7.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-7.5a2.25 2.25 0 0 0-2.25-2.25h-.75m-9 4.5 3.75-3.75m0 0 3.75 3.75M12 7.5v9" />
+                        </svg>
+                        <p class="mt-2 text-sm text-gray-700" id="qp-dropzone-label">
+                            <span class="font-semibold text-violet-700">Arrasta o PDF para aqui</span> ou clica para escolher
+                        </p>
+                        <p class="mt-1 text-[11px] text-gray-500">Máx. 30 MB · só PDF (xlsx/docx anexam-se depois)</p>
+                        <input type="file" name="file" id="qp-file" accept=".pdf,application/pdf" class="hidden">
+                    </div>
+                </div>
+
+                {{-- Tab 2: Texto cru (paste / drag-text) --}}
+                <div data-tab-pane="text" class="space-y-1 hidden">
+                    <label for="qp-text" class="text-xs font-semibold text-gray-700 block">
+                        Cola texto do concurso
+                    </label>
+                    <textarea id="qp-text" name="text" rows="12" minlength="50" maxlength="200000"
+                              data-autogrow data-voice
+                              placeholder="Cola aqui o texto do RFP/RFQ, e-mail recebido, especificação, etc. — mínimo 50 caracteres. Podes também arrastar texto seleccionado de outra janela para aqui."
+                              class="w-full rounded-md border border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 text-sm font-mono leading-relaxed"></textarea>
+                    <p class="text-[11px] text-gray-500 flex items-center justify-between">
+                        <span><span id="qp-text-count">0</span> caracteres</span>
+                        <span>50 mín · 200.000 máx</span>
+                    </p>
+                </div>
 
                 <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
                     <button type="button"
@@ -313,12 +351,12 @@
                     <button type="submit"
                             id="tender-quick-pdf-submit"
                             class="px-4 py-2 text-sm rounded bg-violet-700 text-white font-semibold hover:bg-violet-600 disabled:opacity-60 disabled:cursor-wait">
-                        Analisar PDF →
+                        Analisar →
                     </button>
                 </div>
 
                 <p id="tender-quick-pdf-pending" class="hidden text-xs text-violet-700 text-right">
-                    ⏳ Marta a ler PDF + painel multi-agente a correr… 15-30s.
+                    ⏳ Marta a ler + painel multi-agente a correr… 15-30s.
                 </p>
             </form>
         </div>
@@ -326,11 +364,88 @@
 
     <script>
     (function () {
-        const f = document.getElementById('tender-quick-pdf-form');
-        const btn = document.getElementById('tender-quick-pdf-submit');
+        const f       = document.getElementById('tender-quick-pdf-form');
+        const btn     = document.getElementById('tender-quick-pdf-submit');
         const pending = document.getElementById('tender-quick-pdf-pending');
         if (!f || !btn) return;
-        f.addEventListener('submit', () => {
+
+        // ── Tabs PDF | Texto ────────────────────────────────────────────
+        const tabs  = f.querySelectorAll('[data-tab-trigger]');
+        const panes = f.querySelectorAll('[data-tab-pane]');
+        const fileInput = document.getElementById('qp-file');
+        const textInput = document.getElementById('qp-text');
+
+        const activate = (key) => {
+            tabs.forEach(t => {
+                const on = t.dataset.tabTrigger === key;
+                t.classList.toggle('border-violet-600', on);
+                t.classList.toggle('text-violet-700', on);
+                t.classList.toggle('border-transparent', !on);
+                t.classList.toggle('text-gray-500', !on);
+            });
+            panes.forEach(p => p.classList.toggle('hidden', p.dataset.tabPane !== key));
+            // Limpa o input da outra tab para não falhar o required_without
+            if (key === 'pdf')  { textInput.value = ''; textInput.dispatchEvent(new Event('input')); }
+            if (key === 'text') { fileInput.value = ''; updateDropzoneLabel(null); }
+        };
+        tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tabTrigger)));
+
+        // ── Drag-drop zone para o PDF ───────────────────────────────────
+        const drop = document.getElementById('qp-dropzone');
+        const label = document.getElementById('qp-dropzone-label');
+        const updateDropzoneLabel = (file) => {
+            if (!file) {
+                label.innerHTML = '<span class="font-semibold text-violet-700">Arrasta o PDF para aqui</span> ou clica para escolher';
+                return;
+            }
+            const kb = (file.size / 1024).toFixed(0);
+            label.innerHTML = '✓ <span class="font-mono text-violet-800">' + file.name + '</span> <span class="text-gray-500">(' + kb + ' KB)</span>';
+        };
+        drop.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => updateDropzoneLabel(e.target.files?.[0]));
+
+        ['dragenter','dragover'].forEach(ev =>
+            drop.addEventListener(ev, (e) => {
+                e.preventDefault();
+                drop.classList.add('bg-violet-100','border-violet-500');
+            }));
+        ['dragleave','drop'].forEach(ev =>
+            drop.addEventListener(ev, (e) => {
+                e.preventDefault();
+                drop.classList.remove('bg-violet-100','border-violet-500');
+            }));
+        drop.addEventListener('drop', (e) => {
+            const files = e.dataTransfer?.files;
+            if (!files || !files.length) return;
+            const f0 = files[0];
+            // Só PDF passa
+            if (!/\.pdf$/i.test(f0.name) && f0.type !== 'application/pdf') {
+                alert('Só PDFs são aceites por drag-drop. Para texto, abre a tab "✏️ Texto".');
+                return;
+            }
+            // Reassign FileList ao input via DataTransfer (proper IE-free way)
+            const dt = new DataTransfer();
+            dt.items.add(f0);
+            fileInput.files = dt.files;
+            updateDropzoneLabel(f0);
+        });
+
+        // ── Live char counter no textarea ────────────────────────────────
+        const counter = document.getElementById('qp-text-count');
+        textInput.addEventListener('input', () => {
+            counter.textContent = textInput.value.length.toLocaleString('pt-PT');
+        });
+
+        // ── Submit: disable button + pending message ────────────────────
+        f.addEventListener('submit', (e) => {
+            // Validação client-side simples: pelo menos 1 das 2 tabs tem input
+            const hasFile = fileInput.files && fileInput.files.length > 0;
+            const hasText = textInput.value.trim().length >= 50;
+            if (!hasFile && !hasText) {
+                e.preventDefault();
+                alert('Larga um PDF ou cola texto (mín 50 chars) antes de analisar.');
+                return;
+            }
             btn.disabled = true;
             btn.textContent = '⏳ A analisar…';
             pending?.classList.remove('hidden');
