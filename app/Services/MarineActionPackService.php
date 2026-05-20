@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Tender;
 use App\Services\AgentSwarm\AgentDispatcher;
+use App\Services\SapService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -27,6 +28,7 @@ class MarineActionPackService
 {
     public function __construct(
         private AgentDispatcher $dispatcher,
+        private SapService $sap,
     ) {}
 
     /**
@@ -109,15 +111,61 @@ PROMPT;
         // 3. Save plan to tender.notes (markdown-friendly)
         $this->saveToNotes($tender, $parsed);
 
+        // 4. 2026-05-20: pedido directo "a análise a info no sap tudo
+        //    tem de conectar". Push para SAP Opp Remarks se houver
+        //    SequentialNo. Best-effort: falha não bloqueia.
+        $sapSync = $this->pushToSapRemarks($tender);
+
         return [
-            'ok'     => true,
-            'plan'   => [
+            'ok'        => true,
+            'plan'      => [
                 'servico'      => (string) ($parsed['servico'] ?? ''),
                 'pecas'        => array_values((array) ($parsed['pecas'] ?? [])),
                 'fornecedores' => array_values((array) ($parsed['fornecedores'] ?? [])),
             ],
-            'emails' => array_values((array) ($parsed['emails'] ?? [])),
+            'emails'    => array_values((array) ($parsed['emails'] ?? [])),
+            'sap_sync'  => $sapSync,  // ['status' => 'ok'|'skipped'|'failed', 'detail' => string]
         ];
+    }
+
+    /**
+     * Sincroniza tender.notes (com o Plano Marine acabado de adicionar)
+     * para o campo Remarks da Opportunity em SAP B1. Best-effort: erros
+     * apenas logados, não rebentam o flow do controller.
+     *
+     * @return array{status:string, detail:string}
+     */
+    private function pushToSapRemarks(Tender $tender): array
+    {
+        if (empty($tender->sap_opportunity_number)) {
+            return ['status' => 'skipped', 'detail' => 'Tender sem nº SAP Opp — cria a Opp primeiro via "Criar SAP Opp".'];
+        }
+
+        $seqNo = $tender->getSapSequentialNo();
+        if (!$seqNo) {
+            return ['status' => 'skipped', 'detail' => 'SAP Opp number presente mas SequentialNo não extraível.'];
+        }
+
+        try {
+            $ok = $this->sap->updateOpportunity($seqNo, [
+                'Remarks' => (string) $tender->notes,
+            ]);
+            if ($ok) {
+                Log::info('MarineActionPack: SAP Remarks updated', [
+                    'tender_id' => $tender->id,
+                    'sap_opp'   => $seqNo,
+                ]);
+                return ['status' => 'ok', 'detail' => 'SAP Opp #' . $seqNo . ' Remarks actualizado.'];
+            }
+            return ['status' => 'failed', 'detail' => 'SAP updateOpportunity devolveu false.'];
+        } catch (\Throwable $e) {
+            Log::warning('MarineActionPack: SAP sync failed (non-blocking)', [
+                'tender_id' => $tender->id,
+                'sap_opp'   => $seqNo,
+                'error'     => $e->getMessage(),
+            ]);
+            return ['status' => 'failed', 'detail' => $e->getMessage()];
+        }
     }
 
     private function buildContext(Tender $tender): string

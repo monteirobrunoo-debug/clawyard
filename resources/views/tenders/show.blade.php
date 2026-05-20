@@ -405,7 +405,13 @@
                                     const data = await res.json();
                                     if (!res.ok || !data.ok) throw new Error(data.error || 'HTTP ' + res.status);
 
-                                    setStatus('✓ ' + (data.emails?.length || 0) + ' draft(s) prontos. Notas do tender actualizadas.', 'ok');
+                                    let msg = '✓ ' + (data.emails?.length || 0) + ' draft(s) prontos. Notas actualizadas.';
+                                    if (data.sap_sync) {
+                                        if (data.sap_sync.status === 'ok')      msg += ' · ✓ SAP Remarks sincronizado.';
+                                        else if (data.sap_sync.status === 'skipped') msg += ' · ⚠ SAP: ' + data.sap_sync.detail;
+                                        else if (data.sap_sync.status === 'failed')  msg += ' · ✗ SAP falhou: ' + data.sap_sync.detail;
+                                    }
+                                    setStatus(msg, 'ok');
                                     renderPanel(data);
                                 } catch (e) {
                                     setStatus('Erro: ' + e.message, 'err');

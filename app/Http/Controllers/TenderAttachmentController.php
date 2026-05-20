@@ -240,13 +240,25 @@ class TenderAttachmentController extends Controller
         $u = Auth::user();
         if (!$u) abort(401);
         if ($requireManager && !$u->isManager()) abort(403);
+
+        // 2026-05-20: pedido directo do operador
+        //   "quando adcionar psds ou exceleis ou ficheiros qualquer user
+        //    pode entra e ver"
+        //
+        // Anexos (PDFs/Excel/etc) são recursos partilhados — qualquer
+        // user autenticado faz upload E download, EXCEPTO em tenders
+        // confidenciais. Igual ao enforceVisibility no TenderController.
         if ($u->can('tenders.view-all')) return;
-        // 2026-05-19: Acingov/Vortal/Anogov = pool publico interno  qualquer
-        // user autenticado pode ver (e descarregar/upload anexos). Pedido
-        // directo da admin Monica.
-        if (in_array($tender->source, \App\Models\Tender::PUBLIC_SOURCES, true)) return;
-        $collab = $tender->collaborator;
-        if (!$collab || $collab->user_id !== $u->id) abort(403);
+
+        if ($tender->is_confidential) {
+            $collab = $tender->collaborator;
+            if (!$collab || $collab->user_id !== $u->id) {
+                abort(403, 'Concurso confidencial — só atribuído + managers.');
+            }
+            return;
+        }
+
+        // Não-confidencial: aberto a todos os authenticated users.
     }
 
     /**
