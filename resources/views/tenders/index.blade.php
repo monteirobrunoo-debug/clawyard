@@ -177,6 +177,38 @@
                         onclick="document.getElementById('tender-manual-modal').classList.add('hidden')"
                         class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
             </div>
+            {{-- ─── Drag-drop zone (atalho para análise auto) ──────────────
+                 Pedido 2026-05-20:
+                   "no marine quando for para criar manualmente põe um sitio
+                    para drag and drop de ficheiros para analisar logo"
+                 Aceita PDF; submete para o mesmo endpoint /tenders/quick-pdf
+                 que o botão principal "📄 Inserir PDF" usa. Modal fecha-se
+                 assim que o user larga o ficheiro. --}}
+            <div class="px-5 pt-4 pb-3 border-b border-gray-100">
+                <form id="manual-modal-quick-pdf-form" method="POST"
+                      action="{{ route('tenders.quickPdfAnalyse') }}"
+                      enctype="multipart/form-data" class="space-y-2">
+                    @csrf
+                    <input type="hidden" name="source" value="{{ ($isMarine ?? false) ? 'marine' : 'manual' }}">
+                    <label id="manual-modal-dropzone"
+                           class="block cursor-pointer rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/40 px-4 py-5 text-center transition hover:bg-violet-100">
+                        <svg class="mx-auto h-7 w-7 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-3-3v6M7 4h10a2 2 0 012 2v14l-7-3-7 3V6a2 2 0 012-2z"/>
+                        </svg>
+                        <div class="mt-1 text-sm font-semibold text-violet-800">📄 Arrasta PDF aqui (Marta analisa logo)</div>
+                        <div class="text-[11px] text-gray-600 mt-0.5">
+                            Cliente, data, serviço, peças e fornecedores prováveis extraídos automaticamente.
+                            Ou continua a preencher o form abaixo para criar manualmente sem ficheiro.
+                        </div>
+                        <input type="file" name="file" id="manual-modal-quick-pdf-file"
+                               accept=".pdf,application/pdf" class="hidden">
+                    </label>
+                    <p id="manual-modal-quick-pdf-status" class="hidden text-[11px] text-violet-700 text-center">
+                        ⏳ Marta a ler PDF + painel multi-agente… 15-30s.
+                    </p>
+                </form>
+            </div>
+
             <form method="POST" action="{{ route('tenders.storeManual') }}" class="px-5 py-4 space-y-3 text-sm">
                 @csrf
                 <div class="grid grid-cols-2 gap-3">
@@ -520,6 +552,53 @@
             btn.disabled = true;
             btn.textContent = '⏳ A analisar…';
             pending?.classList.remove('hidden');
+        });
+    })();
+
+    // ── Manual modal: drag-drop atalho que vai pelo flow quick-pdf ──────
+    // Pedido 2026-05-20: "no marine quando for para criar manualmente põe
+    // um sitio para drag and drop de ficheiros para analisar logo".
+    (function () {
+        const dz     = document.getElementById('manual-modal-dropzone');
+        const fInput = document.getElementById('manual-modal-quick-pdf-file');
+        const form   = document.getElementById('manual-modal-quick-pdf-form');
+        const status = document.getElementById('manual-modal-quick-pdf-status');
+        if (!dz || !fInput || !form) return;
+
+        const submitWithFile = (file) => {
+            if (!file) return;
+            // Valida PDF
+            if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+                alert('Só PDFs são aceites por drag-drop. Para outros formatos preenche manualmente abaixo.');
+                return;
+            }
+            // Passa o file para o input + submit
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            fInput.files = dt.files;
+            status?.classList.remove('hidden');
+            dz.classList.add('opacity-60', 'cursor-wait');
+            form.submit();
+        };
+
+        // Click no zone → file picker
+        dz.addEventListener('click', () => fInput.click());
+        fInput.addEventListener('change', (e) => submitWithFile(e.target.files?.[0]));
+
+        // Drag-over highlight
+        ['dragenter', 'dragover'].forEach(ev =>
+            dz.addEventListener(ev, (e) => {
+                e.preventDefault();
+                dz.classList.add('bg-violet-200', 'border-violet-500');
+            }));
+        ['dragleave', 'drop'].forEach(ev =>
+            dz.addEventListener(ev, (e) => {
+                e.preventDefault();
+                dz.classList.remove('bg-violet-200', 'border-violet-500');
+            }));
+        dz.addEventListener('drop', (e) => {
+            const files = e.dataTransfer?.files;
+            if (files && files.length) submitWithFile(files[0]);
         });
     })();
     </script>
