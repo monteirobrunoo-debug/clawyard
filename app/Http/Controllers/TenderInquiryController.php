@@ -479,6 +479,13 @@ class TenderInquiryController extends Controller
 
         // Mesmo pipeline do PDF — SoR + scrub + parseItems
         $tender->load('attachments');
+        // 2026-05-20 fix: $maskedTitle estava a ser usado nas linhas
+        // ~576 e ~616 sem nunca ter sido definido neste método (copy-paste
+        // do generate() onde existe, mas a linha do scrub não veio junto).
+        // PHP 8.4 + Laravel error handler converte "Undefined variable"
+        // em ErrorException → 500. Reportado pelo José Inácio (userId 2)
+        // ao clicar em "Inquiry .docx" no /tenders/{id}.
+        $maskedTitle = $this->scrubCustomerInfo((string) ($tender->title ?? ''), $tender);
         $okAttachments = $tender->attachments->where('extraction_status', 'ok');
         $sors = [];
         foreach ($okAttachments as $att) {
