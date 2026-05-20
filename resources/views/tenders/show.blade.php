@@ -238,23 +238,21 @@
                                 ✨ Auto-resumo → Notas+SAP
                             </button>
                         </form>
-                        {{-- 2026-05-20: Marine = template + flow diferente.
-                             Esconde-se Inquiry militar + multi-agente pesado
-                             em /marine; em Concursos mantém-se tudo. --}}
-                        @if($tender->source !== 'marine')
-                            {{-- Inquiry MOD_072_V3 (PartYard Defense) — só Concursos. --}}
-                            <a href="{{ route('tenders.inquiry-pdf', $tender) }}"
-                               target="_blank"
-                               class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
-                               title="Gera PDF Inquiry PartYard Defense (MOD_072_V3) com items do SoR, termos NATO/NSPA. Anexa automaticamente.">
-                                📋 Inquiry PDF
-                            </a>
-                            <a href="{{ route('tenders.inquiry-word', $tender) }}"
-                               class="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-500"
-                               title="Gera Inquiry como Word editável (.docx).">
-                                📝 Inquiry Word
-                            </a>
-                        @endif
+                        {{-- 2026-05-20 v2: template simplificado (PartYard +
+                             Ref SAP + items) é genérico — serve Concursos E
+                             Marine. Pedido directo: "no marine tambem faz a
+                             estrutura simples". --}}
+                        <a href="{{ route('tenders.inquiry-pdf', $tender) }}"
+                           target="_blank"
+                           class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
+                           title="Gera PDF Inquiry PartYard: nome + Ref. SAP + descrição + items + 'Dear Sirs, Please inform us your Best Price and Delivery time for the following'. Anexa ao concurso.">
+                            📋 Inquiry PDF
+                        </a>
+                        <a href="{{ route('tenders.inquiry-word', $tender) }}"
+                           class="rounded-md bg-sky-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-sky-500"
+                           title="Mesmo conteúdo do Inquiry PDF mas como Word editável (.docx).">
+                            📝 Inquiry Word
+                        </a>
                         @endif
                         @unless($tender->is_confidential)
                             @if($tender->source !== 'marine')
