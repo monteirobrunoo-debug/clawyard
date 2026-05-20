@@ -625,6 +625,30 @@
         #send-btn:active { transform:scale(0.93); }
         #send-btn:disabled { background:#222; cursor:not-allowed; transform:none; }
         #send-btn svg { width:18px; height:18px; }
+        /* 2026-05-20: modo STOP — botão muda para vermelho com ⏹ quando
+           o agente está a gerar. Pedido directo: "gostaria de ter para
+           cada agente um botão de stop". Click neste estado aborta o
+           fetch via AbortController e finaliza o stream graciosamente. */
+        #send-btn.is-stop { background:#dc2626; animation:stop-pulse 1.4s ease-in-out infinite; }
+        #send-btn.is-stop:hover { background:#ef4444; transform:scale(1.05); }
+        #send-btn.is-stop:disabled { background:#dc2626; cursor:pointer; transform:none; }
+        @keyframes stop-pulse {
+            0%,100% { box-shadow:0 0 0 0 rgba(220,38,38,0.55); }
+            50%     { box-shadow:0 0 0 6px rgba(220,38,38,0); }
+        }
+        /* Per-agent stop button — ✕ pequeno no canto superior direito
+           de cada agent-grid-item, só visível enquanto o agente está
+           working. Click pára só esse agente (no chat single-stream,
+           equivale ao stop global). */
+        .agent-grid-item .ag-stop {
+            position:absolute; top:2px; left:3px; width:14px; height:14px;
+            background:#dc2626; color:#fff; border:none; border-radius:50%;
+            font-size:9px; font-weight:bold; line-height:14px; text-align:center;
+            cursor:pointer; padding:0; display:none; box-shadow:0 0 6px rgba(220,38,38,0.6);
+            transition:transform 0.15s;
+        }
+        .agent-grid-item.working .ag-stop { display:block; }
+        .agent-grid-item .ag-stop:hover { transform:scale(1.25); background:#ef4444; }
 
         /* Toggle sidebar btn */
         #toggle-panel { background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; padding:4px; }
@@ -1611,6 +1635,60 @@ function updateEmptyState(agent) {
 
 let isRecording  = false;
 let isStreaming   = false;
+// 2026-05-20: AbortController do fetch em curso. Permite o user
+// carregar no botão "stop" (que substitui o send button enquanto
+// streaming) ou nos ✕ por-agente nas grid items para abortar.
+let currentAbortController = null;
+
+// Injecta um botão ✕ stop em cada agent-grid-item — só visível
+// quando a item tem .working. Click → abortar fetch corrente.
+// Faz isto uma vez no boot do script.
+function ensureAgentStopButtons() {
+    document.querySelectorAll('.agent-grid-item').forEach(el => {
+        if (el.querySelector('.ag-stop')) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ag-stop';
+        btn.title = 'Parar geração deste agente';
+        btn.textContent = '✕';
+        btn.setAttribute('aria-label', 'Parar agente');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();   // não selecciona o agente
+            e.preventDefault();
+            stopGeneration();
+        });
+        el.appendChild(btn);
+    });
+}
+
+// Aborta o fetch em curso. Idempotente — chamar várias vezes não
+// causa problemas, o catch no sendMessage trata como AbortError
+// e finaliza o stream graciosamente.
+function stopGeneration() {
+    if (!isStreaming || !currentAbortController) return;
+    try { currentAbortController.abort(); } catch (e) { /* ignore */ }
+}
+
+// Alterna o icon do send-btn entre "send" (papel-avião) e "stop"
+// (quadrado vermelho). Chamado quando isStreaming muda.
+function setSendBtnMode(mode) {
+    if (!sendBtn) return;
+    if (mode === 'stop') {
+        sendBtn.classList.add('is-stop');
+        sendBtn.disabled = false;   // tem de ser clicável para parar
+        sendBtn.title = 'Parar geração';
+        sendBtn.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="white" stroke="none" width="18" height="18">' +
+            '<rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+    } else {
+        sendBtn.classList.remove('is-stop');
+        sendBtn.title = 'Enviar';
+        sendBtn.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">' +
+            '<line x1="22" y1="2" x2="11" y2="13"></line>' +
+            '<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+    }
+}
 let recognition  = null;
 let currentImg      = null;
 let currentImgType  = 'image/jpeg'; // MIME type of attached image
@@ -2078,7 +2156,18 @@ input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 150) + 'px';
 });
-sendBtn.addEventListener('click', sendMessage);
+// 2026-05-20: click no send-btn faz double-duty:
+//   • idle       → enviar mensagem (sendMessage)
+//   • streaming  → abortar (stopGeneration)
+sendBtn.addEventListener('click', () => {
+    if (isStreaming) {
+        stopGeneration();
+    } else {
+        sendMessage();
+    }
+});
+// Injecta ✕ por agent-grid-item no boot.
+ensureAgentStopButtons();
 
 // ── Starter chips ──
 function startChat(el) {
@@ -4532,8 +4621,11 @@ async function sendMessage() {
 
     input.value = '';
     input.style.height = 'auto';
-    sendBtn.disabled = true;
     isStreaming       = true;
+    // 2026-05-20: send-btn vira STOP enquanto streaming. Fica clicável
+    // (não disabled) para o user poder parar a qualquer momento.
+    currentAbortController = new AbortController();
+    setSendBtnMode('stop');
 
     const selectedAgent = agentSelect.value;
     document.getElementById('empty-state')?.remove();
@@ -4611,6 +4703,9 @@ async function sendMessage() {
             method:  'POST',
             headers: requestHeaders,
             body:    requestBody,
+            // Permite stopGeneration() abortar este fetch a qualquer
+            // momento — o reader loop apanha AbortError no catch.
+            signal:  currentAbortController?.signal,
         });
 
         if (res.status === 401 && await window.maybeRedirectOnOtp(res)) {
@@ -4635,7 +4730,7 @@ async function sendMessage() {
             }
             addMessage('ai', errMsg);
             logActivity('❌', `HTTP ${res.status}`, 'done');
-            sendBtn.disabled = false; isStreaming = false; clearAgentActive(); modelBadge.textContent = 'pronto'; input.focus();
+            sendBtn.disabled = false; isStreaming = false; currentAbortController = null; setSendBtnMode('send'); clearAgentActive(); modelBadge.textContent = 'pronto'; input.focus();
             return;
         }
 
@@ -5056,13 +5151,28 @@ async function sendMessage() {
 
     } catch (err) {
         if (typing.parentNode) typing.remove();
-        const errMsg = err?.message || String(err);
-        addMessage('ai', '❌ Erro: ' + errMsg);
-        logActivity('❌', 'Erro: ' + errMsg, 'done');
-        console.error('sendMessage error:', err);
+        // 2026-05-20: AbortError = user carregou stop. Não é erro:
+        // finalizamos o que já foi streamado e marcamos no log.
+        if (err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''))) {
+            if (streamBubble && accumulated.trim() !== '') {
+                // Preserva o que já chegou + marca como interrompido.
+                streamBubble.innerHTML = renderMarkdown(accumulated) +
+                    '<div style="margin-top:8px;font-size:11px;color:#dc2626;font-style:italic;">⏹ Parado pelo utilizador</div>';
+            } else {
+                addMessage('ai', '⏹ Geração parada pelo utilizador.', agentKey);
+            }
+            logActivity('⏹', 'Geração parada pelo utilizador', 'done');
+        } else {
+            const errMsg = err?.message || String(err);
+            addMessage('ai', '❌ Erro: ' + errMsg);
+            logActivity('❌', 'Erro: ' + errMsg, 'done');
+            console.error('sendMessage error:', err);
+        }
     } finally {
+        isStreaming            = false;
+        currentAbortController = null;
+        setSendBtnMode('send');
         sendBtn.disabled = false;
-        isStreaming       = false;
         clearAgentActive();
         modelBadge.textContent = 'pronto';
         input.focus();

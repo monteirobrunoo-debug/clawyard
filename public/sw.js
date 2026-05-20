@@ -13,7 +13,7 @@
  * mudança de assets para forçar reinstalação.
  */
 
-const CACHE_VERSION = 'clawyard-v2-2026-05-20-qp-counter';
+const CACHE_VERSION = 'clawyard-v2-2026-05-20-stop-btn';
 const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
 const PAGE_CACHE    = `${CACHE_VERSION}-pages`;
 
