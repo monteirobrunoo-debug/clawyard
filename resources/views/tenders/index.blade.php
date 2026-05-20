@@ -335,7 +335,7 @@
                 <input type="hidden" name="source" value="{{ ($isMarine ?? false) ? 'marine' : 'manual' }}">
 
                 <div class="rounded-md bg-violet-50 border border-violet-200 p-3 text-xs text-violet-900">
-                    Larga 1 PDF (RFP/RFQ/spec) e a Marta CRM extrai automaticamente:
+                    Larga 1 ou vários ficheiros (RFP/RFQ/spec + anexos) e a Marta CRM extrai automaticamente:
                     <ul class="mt-1 ml-4 list-disc">
                         <li><strong>Cliente</strong> (entidade compradora) + NIPC se aparecer</li>
                         <li><strong>Data limite</strong> da proposta</li>
@@ -363,22 +363,32 @@
                     </button>
                 </div>
 
-                {{-- Tab 1: Documento (PDF / Word / Email) — drag-drop + click --}}
-                <div data-tab-pane="pdf" class="space-y-1">
-                    <span class="text-xs font-semibold text-gray-700">Documento do concurso (PDF / Word / Email)</span>
+                {{-- Tab 1: Documento (PDF / Word / Email) — multi-file drop --}}
+                <div data-tab-pane="pdf" class="space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-700">Documentos do concurso (PDF / Word / Email)</span>
+                        {{-- 2026-05-20: contador grande tipo badge. Pedido:
+                             "no inserir pdf deve contar os ficheiros nao vejo" --}}
+                        <span id="qp-count-badge"
+                              class="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm">
+                            📎 <span id="qp-count-num">0</span> / 10
+                        </span>
+                    </div>
                     <div id="qp-dropzone"
-                         class="mt-1 cursor-pointer rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/30 px-6 py-8 text-center transition hover:bg-violet-50">
-                        <svg class="mx-auto h-9 w-9 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                         class="mt-1 cursor-pointer rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/30 px-6 py-6 text-center transition hover:bg-violet-50">
+                        <svg class="mx-auto h-8 w-8 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 7.5h-.75A2.25 2.25 0 0 0 4.5 9.75v7.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-7.5a2.25 2.25 0 0 0-2.25-2.25h-.75m-9 4.5 3.75-3.75m0 0 3.75 3.75M12 7.5v9" />
                         </svg>
                         <p class="mt-2 text-sm text-gray-700" id="qp-dropzone-label">
-                            <span class="font-semibold text-violet-700">Arrasta PDF, Word ou Email para aqui</span> ou clica para escolher
+                            <span class="font-semibold text-violet-700">Arrasta PDFs, Word ou Emails para aqui</span> ou clica para escolher
                         </p>
-                        <p class="mt-1 text-[11px] text-gray-500">Máx. 30 MB · PDF / .docx / .doc / .eml</p>
-                        <input type="file" name="file" id="qp-file"
+                        <p class="mt-1 text-[11px] text-gray-500">Máx. 10 ficheiros · 30 MB cada · PDF / .docx / .doc / .eml</p>
+                        <input type="file" name="files[]" id="qp-file" multiple
                                accept=".pdf,.docx,.doc,.eml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,message/rfc822"
                                class="hidden">
                     </div>
+                    {{-- Lista dos ficheiros acumulados (com botão remover) --}}
+                    <ul id="qp-files-list" class="hidden space-y-1 text-xs max-h-40 overflow-y-auto"></ul>
                 </div>
 
                 {{-- Tab 2: Texto cru (paste / drag-text) --}}
@@ -451,23 +461,112 @@
             panes.forEach(p => p.classList.toggle('hidden', p.dataset.tabPane !== key));
             // Limpa o input da outra tab para não falhar o required_without
             if (key === 'pdf')  { textInput.value = ''; textInput.dispatchEvent(new Event('input')); }
-            if (key === 'text') { fileInput.value = ''; updateDropzoneLabel(null); }
+            if (key === 'text') {
+                fileInput.value = '';
+                if (typeof qpAccumulated !== 'undefined') { qpAccumulated = []; qpSync?.(); qpRender?.(); }
+            }
         };
         tabs.forEach(t => t.addEventListener('click', () => activate(t.dataset.tabTrigger)));
 
-        // ── Drag-drop zone para o PDF ───────────────────────────────────
-        const drop = document.getElementById('qp-dropzone');
-        const label = document.getElementById('qp-dropzone-label');
-        const updateDropzoneLabel = (file) => {
-            if (!file) {
-                label.innerHTML = '<span class="font-semibold text-violet-700">Arrasta PDF, Word ou Email para aqui</span> ou clica para escolher';
+        // ── Multi-file drop zone (PDF/Word/Email) ───────────────────────
+        // 2026-05-20: pedido "no inserir pdf deve contar os ficheiros nao
+        // vejo". Convertido de single-file para multi-file com badge de
+        // contagem grande + lista dos acumulados. Espelha a manual modal.
+        const drop      = document.getElementById('qp-dropzone');
+        const label     = document.getElementById('qp-dropzone-label');
+        const listEl    = document.getElementById('qp-files-list');
+        const countNum  = document.getElementById('qp-count-num');
+        const countBadge = document.getElementById('qp-count-badge');
+        const QP_MAX_FILES = 10;
+        const QP_MAX_MB    = 30;
+        let qpAccumulated = [];
+
+        const qpEscape = (s) => String(s).replace(/[&<>"']/g, c => (
+            { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+        ));
+
+        const qpSync = () => {
+            const dt = new DataTransfer();
+            qpAccumulated.forEach(f => dt.items.add(f));
+            fileInput.files = dt.files;
+        };
+
+        const updateDropzoneLabel = (filesArr) => {
+            if (!filesArr || !filesArr.length) {
+                label.innerHTML = '<span class="font-semibold text-violet-700">Arrasta PDFs, Word ou Emails para aqui</span> ou clica para escolher';
                 return;
             }
-            const kb = (file.size / 1024).toFixed(0);
-            label.innerHTML = '✓ <span class="font-mono text-violet-800">' + file.name + '</span> <span class="text-gray-500">(' + kb + ' KB)</span>';
+            if (filesArr.length === 1) {
+                const f = filesArr[0];
+                const kb = (f.size / 1024).toFixed(0);
+                label.innerHTML = '✓ <span class="font-mono text-violet-800">' + qpEscape(f.name) + '</span> <span class="text-gray-500">(' + kb + ' KB)</span>';
+            } else {
+                label.innerHTML = '✓ <span class="font-bold text-violet-800">' + filesArr.length + ' ficheiros</span> prontos para análise — clica para adicionar mais';
+            }
         };
+
+        const qpRender = () => {
+            const n = qpAccumulated.length;
+            countNum.textContent = n;
+            // Badge muda de violet para verde quando há ≥1 ficheiro
+            countBadge.classList.toggle('bg-violet-600', n === 0);
+            countBadge.classList.toggle('bg-green-600', n > 0);
+            updateDropzoneLabel(qpAccumulated);
+            if (n === 0) {
+                listEl.classList.add('hidden');
+                listEl.innerHTML = '';
+                return;
+            }
+            listEl.classList.remove('hidden');
+            listEl.innerHTML = qpAccumulated.map((f, i) => {
+                const kb = (f.size / 1024).toFixed(0);
+                return '<li class="flex items-center justify-between rounded border border-violet-200 bg-white px-2 py-1">' +
+                       '<span class="truncate text-violet-800 font-mono">📎 ' + qpEscape(f.name) + '</span>' +
+                       '<span class="flex items-center gap-2 shrink-0">' +
+                       '<span class="text-gray-500">' + kb + ' KB</span>' +
+                       '<button type="button" data-qp-remove="' + i + '" class="text-gray-400 hover:text-red-600" title="Remover">✕</button>' +
+                       '</span></li>';
+            }).join('');
+            listEl.querySelectorAll('[data-qp-remove]').forEach(b => {
+                b.addEventListener('click', () => {
+                    qpAccumulated.splice(parseInt(b.dataset.qpRemove, 10), 1);
+                    qpSync(); qpRender();
+                });
+            });
+        };
+
+        const qpAddFiles = (fileList) => {
+            for (const f of Array.from(fileList || [])) {
+                if (qpAccumulated.length >= QP_MAX_FILES) {
+                    alert('Máximo ' + QP_MAX_FILES + ' ficheiros por análise.');
+                    break;
+                }
+                const okExt = /\.(pdf|docx?|eml)$/i.test(f.name);
+                const okMime = [
+                    'application/pdf',
+                    'application/msword',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'message/rfc822',
+                ].includes(f.type);
+                if (!okExt && !okMime) {
+                    alert('Formatos aceites: PDF, Word (.docx/.doc), Email (.eml). Ignorado: ' + f.name);
+                    continue;
+                }
+                if (f.size > QP_MAX_MB * 1024 * 1024) {
+                    alert('Máx ' + QP_MAX_MB + ' MB — ignorado: ' + f.name);
+                    continue;
+                }
+                if (qpAccumulated.some(x => x.name === f.name && x.size === f.size)) continue;
+                qpAccumulated.push(f);
+            }
+            qpSync(); qpRender();
+        };
+
         drop.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => updateDropzoneLabel(e.target.files?.[0]));
+        fileInput.addEventListener('change', (e) => {
+            qpAddFiles(e.target.files);
+            e.target.value = '';
+        });
 
         ['dragenter','dragover'].forEach(ev =>
             drop.addEventListener(ev, (e) => {
@@ -481,25 +580,7 @@
             }));
         drop.addEventListener('drop', (e) => {
             const files = e.dataTransfer?.files;
-            if (!files || !files.length) return;
-            const f0 = files[0];
-            // 2026-05-20 v3: aceita PDF/Word/Email. Pedido: "aceita pdf, word e email".
-            const okExt = /\.(pdf|docx?|eml)$/i.test(f0.name);
-            const okMime = [
-                'application/pdf',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'message/rfc822',
-            ].includes(f0.type);
-            if (!okExt && !okMime) {
-                alert('Formatos aceites: PDF, Word (.docx/.doc), Email (.eml). Para texto cru, usa a tab "✏️ Texto".');
-                return;
-            }
-            // Reassign FileList ao input via DataTransfer (proper IE-free way)
-            const dt = new DataTransfer();
-            dt.items.add(f0);
-            fileInput.files = dt.files;
-            updateDropzoneLabel(f0);
+            if (files && files.length) qpAddFiles(files);
         });
 
         // ── Live char counter no textarea ────────────────────────────────
@@ -566,16 +647,18 @@
 
         // ── Submit: disable button + pending message ────────────────────
         f.addEventListener('submit', (e) => {
-            // Validação client-side simples: pelo menos 1 das 2 tabs tem input
-            const hasFile = fileInput.files && fileInput.files.length > 0;
+            // Validação client-side: pelo menos 1 ficheiro acumulado OU texto ≥50
+            const hasFile = qpAccumulated.length > 0;
             const hasText = textInput.value.trim().length >= 50;
             if (!hasFile && !hasText) {
                 e.preventDefault();
-                alert('Larga um PDF ou cola texto (mín 50 chars) antes de analisar.');
+                alert('Larga 1 ou mais ficheiros, ou cola texto (mín 50 chars), antes de analisar.');
                 return;
             }
             btn.disabled = true;
-            btn.textContent = '⏳ A analisar…';
+            btn.textContent = hasFile && qpAccumulated.length > 1
+                ? '⏳ A analisar ' + qpAccumulated.length + ' ficheiros…'
+                : '⏳ A analisar…';
             pending?.classList.remove('hidden');
         });
     })();
