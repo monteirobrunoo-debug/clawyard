@@ -267,8 +267,12 @@
          via Marta CRM, e corre análise multi-agente. Demora 15-30s
          por isso o submit mostra spinner com aviso explícito. --}}
     <div id="tender-quick-pdf-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-start justify-center pt-16 px-4">
-        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full">
-            <div class="border-b border-gray-200 px-5 py-3 flex items-center justify-between">
+        {{-- max-h-[85vh] + flex-col garante que o modal nunca passa do
+             viewport. O form interior fica scrollable; o submit row
+             é sticky-bottom para estar SEMPRE acessível mesmo com
+             textarea grande ou banner extenso. --}}
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[85vh] flex flex-col">
+            <div class="border-b border-gray-200 px-5 py-3 flex items-center justify-between shrink-0">
                 <h3 class="text-base font-semibold text-gray-800">
                     📄 Inserir PDF · análise automática
                 </h3>
@@ -277,7 +281,7 @@
                         class="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
             </div>
             <form method="POST" action="{{ route('tenders.quickPdfAnalyse') }}" enctype="multipart/form-data"
-                  class="px-5 py-4 space-y-4 text-sm"
+                  class="px-5 py-4 space-y-4 text-sm overflow-y-auto"
                   id="tender-quick-pdf-form">
                 @csrf
                 <input type="hidden" name="source" value="{{ ($isMarine ?? false) ? 'marine' : 'manual' }}">
@@ -329,10 +333,21 @@
 
                 {{-- Tab 2: Texto cru (paste / drag-text) --}}
                 <div data-tab-pane="text" class="space-y-1 hidden">
-                    <label for="qp-text" class="text-xs font-semibold text-gray-700 block">
-                        Cola texto do concurso
-                    </label>
-                    <textarea id="qp-text" name="text" rows="12" minlength="50" maxlength="200000"
+                    <div class="flex items-center justify-between">
+                        <label for="qp-text" class="text-xs font-semibold text-gray-700">
+                            Cola texto do concurso
+                        </label>
+                        {{-- Limpa repetições típicas de Outlook quoted threads:
+                             "Subject: Subject: Subject:", "On <date> wrote:" e
+                             linhas começadas por ">". 1 click resolve. --}}
+                        <button type="button" id="qp-clean-btn"
+                                class="text-[11px] rounded border border-gray-300 bg-white px-2 py-0.5 text-gray-600 hover:bg-gray-50 hover:text-gray-800"
+                                title="Remove tokens consecutivos repetidos (Subject:Subject:Subject:) e linhas começadas por '>' (Outlook quoted text). Use depois de colar emails com threads."
+                                disabled>
+                            🧹 Limpar repetições
+                        </button>
+                    </div>
+                    <textarea id="qp-text" name="text" rows="10" minlength="50" maxlength="200000"
                               data-autogrow data-voice
                               placeholder="Cola aqui o texto do RFP/RFQ, e-mail recebido, especificação, etc. — mínimo 50 caracteres. Podes também arrastar texto seleccionado de outra janela para aqui."
                               class="w-full rounded-md border border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 text-sm font-mono leading-relaxed"></textarea>
@@ -432,9 +447,65 @@
 
         // ── Live char counter no textarea ────────────────────────────────
         const counter = document.getElementById('qp-text-count');
-        textInput.addEventListener('input', () => {
-            counter.textContent = textInput.value.length.toLocaleString('pt-PT');
-        });
+        const cleanBtn = document.getElementById('qp-clean-btn');
+        const refreshCounter = () => {
+            const len = textInput.value.length;
+            counter.textContent = len.toLocaleString('pt-PT');
+            if (cleanBtn) cleanBtn.disabled = len < 50;
+        };
+        textInput.addEventListener('input', refreshCounter);
+
+        // ── Limpar repetições típicas de Outlook quoted threads ─────────
+        // Caso típico: paste de email com 4 níveis nested → cada label
+        // ("Subject:", "From:", "Date:") aparece 4× consecutivo. Token-by-
+        // token dedup + remoção de linhas começadas por ">". Também tira
+        // a frase boilerplate "On <date>, <name> wrote:".
+        const dedupText = (s) => {
+            const lines = s.split(/\r?\n/);
+            const cleanedLines = lines.map(ln => {
+                const tokens = ln.split(/(\s+)/); // mantém whitespace nos pares
+                const out = [];
+                let lastTok = null;
+                for (const t of tokens) {
+                    const norm = t.trim();
+                    if (norm === '') { out.push(t); continue; }
+                    if (norm === lastTok) continue;
+                    out.push(t);
+                    lastTok = norm;
+                }
+                return out.join('').replace(/[ \t]+/g, ' ').trim();
+            }).filter(ln => {
+                // Tira linhas claramente quoted-text Outlook/Gmail
+                if (ln.startsWith('>')) return false;
+                if (/^On\s.+\bwrote\s*:?\s*$/i.test(ln)) return false;
+                if (/^Em\s.+\bescreveu\s*:?\s*$/i.test(ln)) return false;
+                return true;
+            });
+            // Dedup linhas idênticas consecutivas
+            const out = [];
+            for (const ln of cleanedLines) {
+                if (out.length === 0 || out[out.length - 1] !== ln) out.push(ln);
+            }
+            return out.join('\n');
+        };
+
+        if (cleanBtn) {
+            cleanBtn.addEventListener('click', () => {
+                const before = textInput.value;
+                const after  = dedupText(before);
+                textInput.value = after;
+                textInput.dispatchEvent(new Event('input', { bubbles: true }));
+                const saved = before.length - after.length;
+                if (saved > 0 && window.cyToast) {
+                    window.cyToast({
+                        title: '🧹 ' + saved.toLocaleString('pt-PT') + ' chars limpos',
+                        body: 'Repetições e quotes removidos.',
+                        tone: 'success',
+                        duration: 2400,
+                    });
+                }
+            });
+        }
 
         // ── Submit: disable button + pending message ────────────────────
         f.addEventListener('submit', (e) => {

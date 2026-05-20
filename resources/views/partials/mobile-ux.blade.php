@@ -83,6 +83,13 @@
         resize: none;
         transition: height 0.05s linear;
         min-height: 2.5rem;
+        max-height: 50vh;          /* nunca cresce mais que metade do viewport */
+    }
+    /* Quando JS detecta que precisa de scroll interno, marca a textarea
+       como overflow-y:auto via classe (CSS-only auto causa scrollbar
+       prematura em conteúdos pequenos). */
+    textarea[data-autogrow].cy-autogrow-capped {
+        overflow-y: auto;
     }
 
     /* ── Voice input button (wrapping) ─────────────────────────────────
@@ -141,9 +148,20 @@
     // MutationObserver.
     const grow = (ta) => {
         if (!ta || ta.tagName !== 'TEXTAREA') return;
+        // Reset para medir o scrollHeight real
         ta.style.height = 'auto';
-        // +2px buffer para evitar o "1-px shake" em alguns browsers
-        ta.style.height = (ta.scrollHeight + 2) + 'px';
+        const needed = ta.scrollHeight + 2;
+        // CSS max-height é 50vh. Se o conteúdo passar, deixamos o CSS
+        // limitar (height: auto) e activamos overflow-y:auto via class
+        // para o user poder scrollar dentro do textarea.
+        const maxPx = Math.floor(window.innerHeight * 0.5);
+        if (needed > maxPx) {
+            ta.style.height = maxPx + 'px';
+            ta.classList.add('cy-autogrow-capped');
+        } else {
+            ta.style.height = needed + 'px';
+            ta.classList.remove('cy-autogrow-capped');
+        }
     };
 
     const wireUp = (ta) => {
