@@ -191,6 +191,27 @@ class TenderAttachmentController extends Controller
             Log::warning('TenderAttachment: some files failed', ['tender_id' => $tender->id, 'failed' => $failed]);
         }
 
+        // 2026-05-20: auto-trigger Marta CRM em background depois do upload.
+        // Pedido directo:
+        //   "a mesma coisa nos concursos, toda a info tem de estar
+        //    disponível para todos os users assim que carregar pdf"
+        // Job runs no Supervisor queue (always-on desde commit b75a6da),
+        // typical 5-20s. User upload returna fast (~1-3s).
+        // Job tem debounce interno (skip se Marta correu há <1h) +
+        // skip se tender confidential. Best-effort: erros logados, não
+        // bloqueiam o response do upload.
+        $okCount = TenderAttachment::whereIn('id', $created)
+            ->where('extraction_status', TenderAttachment::STATUS_OK)
+            ->count();
+        if ($okCount > 0 && !$tender->is_confidential) {
+            \App\Jobs\AutoMartaResumoJob::dispatch($tender->id)
+                ->afterCommit();
+            Log::info('TenderAttachment: AutoMartaResumoJob dispatched', [
+                'tender_id' => $tender->id,
+                'new_pdfs'  => $okCount,
+            ]);
+        }
+
         // Reload tender with attachments + return summary for the UI.
         $tender->load('attachments');
         return response()->json([
