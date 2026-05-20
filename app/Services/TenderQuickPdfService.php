@@ -54,7 +54,10 @@ class TenderQuickPdfService
 
         $tender = new Tender();
         $tender->source             = $source;
-        $tender->reference          = null;
+        // 2026-05-20 fix: coluna `reference` é NOT NULL na BD de prod.
+        // Geramos placeholder único; se a Marta conseguir extrair uma
+        // ref real do PDF (via applyExtractedFields), sobrescreve depois.
+        $tender->reference          = $this->autoReference('PDF');
         $tender->title              = $stubTitle ?: 'Análise PDF — ' . now()->format('Y-m-d H:i');
         $tender->type               = 'pdf-auto';
         $tender->status             = Tender::STATUS_PENDING;
@@ -177,7 +180,10 @@ class TenderQuickPdfService
 
         $tender = new Tender();
         $tender->source             = $source;
-        $tender->reference          = null;
+        // 2026-05-20 fix: ver comentário no handle() acima — DB exige
+        // NOT NULL na coluna reference. Placeholder sobrescrito pela
+        // Marta se ela encontrar uma ref real no texto.
+        $tender->reference          = $this->autoReference('TXT');
         $tender->title              = $stubTitle ?: 'Análise texto — ' . now()->format('Y-m-d H:i');
         $tender->type               = 'text-auto';
         $tender->status             = Tender::STATUS_PENDING;
@@ -309,6 +315,20 @@ PROMPT;
 
         $decoded = json_decode($m[0], true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Gera uma reference placeholder única para o Tender stub. A coluna
+     * `tenders.reference` é NOT NULL em produção; quando o operador cria
+     * via PDF/texto não sabe a ref ainda. Esta placeholder sobrevive até
+     * a Marta extrair uma ref real do conteúdo (applyExtractedFields).
+     *
+     * Format: PDF-20260520093534-x7ab  ou  TXT-20260520093534-x7ab
+     * Sufixo random 4 chars evita colisões em segundos com importes em massa.
+     */
+    private function autoReference(string $prefix): string
+    {
+        return strtoupper($prefix) . '-' . now()->format('YmdHis') . '-' . Str::lower(Str::random(4));
     }
 
     /** Aplica os valores extraídos ao Tender sem sobrescrever stubs úteis. */

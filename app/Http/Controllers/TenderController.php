@@ -401,7 +401,12 @@ class TenderController extends Controller
 
         $tender = new Tender();
         $tender->source              = $data['source'];
-        $tender->reference           = $data['reference'] ?? null;
+        // 2026-05-20 fix: `reference` é NOT NULL na BD. Quando o user não
+        // submete uma, geramos placeholder MAN-{timestamp}-{rand4} para
+        // não rebentar o INSERT.
+        $tender->reference           = (string) ($data['reference'] ?? '') !== ''
+            ? $data['reference']
+            : 'MAN-' . now()->format('YmdHis') . '-' . \Illuminate\Support\Str::lower(\Illuminate\Support\Str::random(4));
         $tender->title               = $data['title'];
         $tender->type                = $data['type']           ?? 'manual';
         $tender->purchasing_org      = $data['purchasing_org'] ?? null;
