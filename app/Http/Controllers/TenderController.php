@@ -188,7 +188,12 @@ class TenderController extends Controller
             'canAssign'        => $canAssign,
             'canViewAll'       => $canViewAll,
             'restriction'      => $restriction,
-            'stats'            => $this->dashboardStats($canViewAll ? null : $user->id),
+            // 2026-05-20: passa $forceSource para os ring-charts ficarem
+            // restritos à secção (Marine vê só marine, Concursos vê tudo).
+            'stats'            => $this->dashboardStats(
+                $canViewAll ? null : $user->id,
+                $sectionOverride['force_source'] ?? null
+            ),
             'myAssignedCount'  => $myAssignedCount,
             'currentUserId'    => $user->id,
             // Saved views deste user (até 12) — chips clicáveis no header.
@@ -1892,10 +1897,15 @@ class TenderController extends Controller
      * All downstream breakdowns are subsets of that pipeline so the sum
      * of the slices is consistent with the headline.
      */
-    private function dashboardStats(?int $userId): array
+    private function dashboardStats(?int $userId, ?string $source = null): array
     {
         $base = Tender::query();
         if ($userId) $base->forUser($userId);
+
+        // 2026-05-20: /marine deve mostrar stats só da sua secção
+        // (antes contava tudo, fazendo o ring "Em curso" mostrar 100
+        // mesmo quando Marine só tinha 1 tender).
+        if ($source) $base->where('source', $source);
 
         $pipeline = (clone $base)->livePipeline();
 
