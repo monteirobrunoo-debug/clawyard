@@ -708,7 +708,7 @@
                              são preservados via hidden inputs para que a
                              pesquisa não quebre a ordenação que o user
                              escolheu. --}}
-                        <form method="GET" action="{{ route('tenders.index') }}"
+                        <form method="GET" action="{{ ($isMarine ?? false) ? route('marine.index') : route('tenders.index') }}"
                               class="flex items-center gap-2 w-full sm:w-auto">
                             @foreach(['mine_sort' => $mineSort, 'mine_dir' => $mineDir] as $hk => $hv)
                                 @if($hv !== null && $hv !== '')
@@ -744,7 +744,8 @@
                                 @php
                                     $clearParams = request()->query();
                                     unset($clearParams['mine_q']);
-                                    $clearUrl = route('tenders.index') . (empty($clearParams) ? '' : '?' . http_build_query($clearParams));
+                                    $clearUrl = (($isMarine ?? false) ? route('marine.index') : route('tenders.index'))
+                                                . (empty($clearParams) ? '' : '?' . http_build_query($clearParams));
                                 @endphp
                                 <a href="{{ $clearUrl }}" class="text-[11px] text-gray-500 hover:text-gray-700 underline">
                                     Limpar
@@ -973,7 +974,12 @@
 
             {{-- ─── Filters ───────────────────────────────────────────────── --}}
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
-                <form method="GET" action="{{ route('tenders.index') }}" class="grid grid-cols-1 gap-3 sm:grid-cols-6">
+                {{-- 2026-05-20: form action respeita /marine — sem isto, ao
+                     filtrar dentro do Marine Department voltavas a /tenders
+                     com source=marine como query string, perdendo o contexto
+                     da secção. --}}
+                <form method="GET" action="{{ ($isMarine ?? false) ? route('marine.index') : route('tenders.index') }}"
+                      class="grid grid-cols-1 gap-3 sm:grid-cols-6">
                     {{-- Lupa icon prefix for visual parity with the
                          "Os meus concursos" search box. The input itself
                          keeps name="q" so existing bookmarks/links work. --}}
@@ -1025,7 +1031,11 @@
                                 class="flex-1 rounded-md bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800">
                             Filtrar
                         </button>
-                        <a href="{{ route('tenders.index') }}"
+                        {{-- 2026-05-20: respeita /marine vs /tenders.
+                             Antes "Limpar" jogava sempre para /tenders mesmo
+                             quando estavas em /marine — desaparecia-se a
+                             secção em que estavas. --}}
+                        <a href="{{ ($isMarine ?? false) ? route('marine.index') : route('tenders.index') }}"
                            class="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             Limpar
                         </a>
@@ -1078,7 +1088,7 @@
                             'collaborator_id' => $filters['collaborator_id'],
                             'q'               => $filters['q'],
                         ], fn($v) => $v !== null && $v !== '');
-                        $resetUrl     = route('tenders.index', $resetParams);
+                        $resetUrl     = (($isMarine ?? false) ? route('marine.index', $resetParams) : route('tenders.index', $resetParams));
                         $isDefaultSort = !$sort;
                     @endphp
                     <header class="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3 flex-wrap">
@@ -1089,7 +1099,7 @@
                             Concursos
                             <span class="text-xs font-normal text-gray-500">({{ $all->total() }})</span>
                             @if(!empty($myAssignedCount) && $myAssignedCount > 0)
-                                <a href="{{ route('tenders.index', ['collaborator_id' => collect($collaborators)->firstWhere('user_id', $currentUserId)?->id]) }}"
+                                <a href="{{ (($isMarine ?? false) ? route('marine.index', ['collaborator_id' => collect($collaborators)->firstWhere('user_id', $currentUserId)?->id]) : route('tenders.index', ['collaborator_id' => collect($collaborators)->firstWhere('user_id', $currentUserId)?->id])) }}"
                                    title="Filtrar só os concursos atribuídos a si"
                                    class="inline-flex items-center gap-1 rounded-md bg-emerald-100 border border-emerald-300 text-emerald-800 text-xs font-semibold px-2 py-0.5 hover:bg-emerald-200">
                                     ✓ Atribuídos a mim · {{ $myAssignedCount }}
