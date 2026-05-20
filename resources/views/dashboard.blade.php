@@ -752,6 +752,9 @@
         @if(Auth::user()->canSeeNav('tenders'))
             <a href="{{ route('tenders.index') }}" class="nav-link">📋 Concursos</a>
         @endif
+        @if(Auth::user()->canSeeNav('marine'))
+            <a href="{{ route('marine.index') }}" class="nav-link">⚓ Marine Dept.</a>
+        @endif
         @if(Auth::user()->canSeeNav('rewards'))
             <a href="{{ route('rewards.me') }}" class="nav-link">🏆 Rewards</a>
         @endif

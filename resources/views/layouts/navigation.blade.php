@@ -35,10 +35,14 @@
                          "o departaneto marine tira o para fora dos concurso"
                          Marine Department é departamento próprio, não filho dos
                          Concursos. Movido para depois de Fornecedores (zona
-                         operacional) para deixar claro que é independente. --}}
-                    <x-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
-                        ⚓ {{ __('Marine Dept.') }}
-                    </x-nav-link>
+                         operacional) para deixar claro que é independente.
+                         2026-05-20: gated por canSeeNav('marine') para o painel
+                         admin poder esconder/mostrar por user. --}}
+                    @if(Auth::user()?->canSeeNav('marine'))
+                        <x-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
+                            ⚓ {{ __('Marine Dept.') }}
+                        </x-nav-link>
+                    @endif
                     @if(Auth::user()?->isManager())
                         <x-nav-link :href="route('mission')" :active="request()->routeIs('mission')"
                                     title="Mission Control — single-pane manager view">
@@ -163,10 +167,13 @@
             <x-responsive-nav-link :href="route('suppliers.index')" :active="request()->routeIs('suppliers.*')">
                 🏭 {{ __('Fornecedores') }}
             </x-responsive-nav-link>
-            {{-- Marine Department — departamento autónomo, ver desktop nav --}}
-            <x-responsive-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
-                ⚓ {{ __('Marine Dept.') }}
-            </x-responsive-nav-link>
+            {{-- Marine Department — departamento autónomo, ver desktop nav.
+                 Gated por canSeeNav('marine') (admin panel /admin/nav-access). --}}
+            @if(Auth::user()?->canSeeNav('marine'))
+                <x-responsive-nav-link :href="route('marine.index')" :active="request()->routeIs('marine.*')">
+                    ⚓ {{ __('Marine Dept.') }}
+                </x-responsive-nav-link>
+            @endif
             @if(Auth::user()?->isManager())
                 <x-responsive-nav-link :href="route('mission')" :active="request()->routeIs('mission')">
                     🛰️ {{ __('Mission') }}

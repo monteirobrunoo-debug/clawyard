@@ -83,10 +83,7 @@
     <x-slot name="header">
         <div class="flex items-center justify-between gap-3 flex-wrap">
             <h2 class="text-xl font-semibold leading-tight text-gray-800">
-                {{ $pageTitle ?? 'Concursos' }}
-                @if(!empty($isMarine))
-                    <span class="text-sm font-normal text-cyan-700 ml-2">⚓ Marine Department</span>
-                @endif
+                @if(!empty($isMarine))⚓ @endif{{ $pageTitle ?? 'Concursos' }}
             </h2>
             <div class="flex items-center gap-2">
                 @if($canViewAll)
@@ -95,7 +92,12 @@
                         🔎 Partilhados
                     </a>
                 @endif
-                @if($canAssign)
+                {{-- Colaboradores: gestão central da tabela tender_collaborators
+                     (partilhada entre Concursos e Marine). Mostramos só em
+                     /tenders para evitar duplicação visual em /marine — o
+                     mesmo CRUD continua acessível a partir de lá.
+                     2026-05-20. --}}
+                @if($canAssign && empty($isMarine))
                     <a href="{{ route('tenders.collaborators.index') }}"
                        class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
                         👥 Colaboradores

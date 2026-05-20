@@ -51,6 +51,7 @@ class User extends Authenticatable
     public const NAV_SECTIONS = [
         'briefing'    => ['emoji' => '📊', 'label' => 'Briefing',    'default_roles' => ['guest','user','manager','admin']],
         'tenders'     => ['emoji' => '📋', 'label' => 'Concursos',   'default_roles' => ['guest','user','manager','admin']],
+        'marine'      => ['emoji' => '⚓', 'label' => 'Marine Dept.', 'default_roles' => ['guest','user','manager','admin']],
         'rewards'     => ['emoji' => '🏆', 'label' => 'Rewards',     'default_roles' => ['user','manager','admin']],
         'marketplace' => ['emoji' => '🛒', 'label' => 'Marketplace', 'default_roles' => ['user','manager','admin']],
         'discoveries' => ['emoji' => '🔬', 'label' => 'Discoveries', 'default_roles' => ['user','manager','admin']],
