@@ -280,6 +280,9 @@
                         {{-- 2026-05-18: botão dedicado para resumo automático server-side.
                              Mais rápido que o flow de chat — processa TODOS os anexos sem
                              cap de URL, gera resumo ≤200 chars, mete em notas + SAP. --}}
+                        {{-- Auto-resumo da Marta só faz sentido quando há
+                             anexos com texto extraído — sem isso ela não
+                             tem o que ler. Mantém-se gated. --}}
                         @if($tender->attachments->where('extraction_status', 'ok')->isNotEmpty())
                         <form method="POST" action="{{ route('tenders.marta-summarize', $tender) }}"
                               class="inline" id="marta-summarize-form"
@@ -291,10 +294,15 @@
                                 ✨ Auto-resumo → Notas+SAP
                             </button>
                         </form>
-                        {{-- 2026-05-20 v2: template simplificado (PartYard +
-                             Ref SAP + items) é genérico — serve Concursos E
-                             Marine. Pedido directo: "no marine tambem faz a
-                             estrutura simples". --}}
+                        @endif
+
+                        {{-- 2026-05-20 fix: Inquiry PDF/Word ANTES estavam
+                             dentro do @if(attachments-OK), o que escondia
+                             os botões para tenders ainda sem anexos. Pedido
+                             directo: "users no dashboard de concurso não
+                             têm botão word ou pdf no topo, verificar e põe".
+                             Template já tem fallback: se items vazio, usa
+                             1 linha com a description. Sempre visíveis. --}}
                         <a href="{{ route('tenders.inquiry-pdf', $tender) }}"
                            target="_blank"
                            class="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-indigo-500"
@@ -306,7 +314,6 @@
                            title="Mesmo conteúdo do Inquiry PDF mas como Word editável (.docx).">
                             📝 Inquiry Word
                         </a>
-                        @endif
                         @unless($tender->is_confidential)
                             @if($tender->source !== 'marine')
                                 {{-- Multi-agente pesado (~30-60s) — só Concursos. --}}
