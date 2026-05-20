@@ -210,14 +210,32 @@ class TenderQuickPdfService
             }
         } catch (\Throwable $e) { /* best-effort */ }
 
-        // 2. Persistir o texto como um anexo "virtual" para o analyser
-        //    multi-agente o conseguir ler via $tender->attachments. Não
-        //    grava ficheiro físico no Storage — disk_path fica NULL.
-        $hash = hash('sha256', $text);
+        // 2. Persistir o texto como ficheiro .txt real + 1 row em
+        //    tender_attachments. A coluna disk_path é NOT NULL na BD, e
+        //    gravar como ficheiro físico ainda tem outras vantagens:
+        //    (a) o operador pode descarregar o paste original via UI
+        //    (b) o QnapMirror espelha-o como qualquer outro anexo
+        //    (c) outros agentes que leem do filesystem (não só DB) veem-no
+        //    Storage path: tender-attachments/{tender_id}/paste-{hash}.txt
+        $hash       = hash('sha256', $text);
+        $storedName = 'paste-' . substr($hash, 0, 8) . '.txt';
+        $relPath    = 'tender-attachments/' . $tender->id . '/' . $storedName;
+        try {
+            Storage::disk('local')->put($relPath, $text);
+        } catch (\Throwable $e) {
+            Log::warning('TenderQuickPdf: text paste storage failed (continuing)', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+            // Fallback: usa marker path; o INSERT seguinte ainda vai
+            // satisfazer a NOT NULL, mas o ficheiro não vai existir.
+            $relPath = 'tender-attachments/' . $tender->id . '/' . $storedName . '.missing';
+        }
+
         TenderAttachment::create([
             'tender_id'           => $tender->id,
-            'original_name'       => 'paste-' . substr($hash, 0, 8) . '.txt',
-            'disk_path'           => null,                       // sem ficheiro físico
+            'original_name'       => $storedName,
+            'disk_path'           => $relPath,
             'mime_type'           => 'text/plain',
             'size_bytes'          => mb_strlen($text),
             'file_hash'           => $hash,
