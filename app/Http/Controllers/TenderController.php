@@ -461,23 +461,25 @@ class TenderController extends Controller
         }
 
         // Aceita 3 modos de input (1 deles obrigatório):
-        //   • files[] → múltiplos PDFs num único submit (multi-attach + análise conjunta)
-        //   • file    → 1 PDF clássico (backward compat com drag-drop existente)
+        //   • files[] → múltiplos ficheiros num único submit (multi-attach + análise conjunta)
+        //   • file    → 1 ficheiro clássico (backward compat com drag-drop existente)
         //   • text    → paste de texto cru no textarea
         // Pedido 2026-05-20: "deixa carregar os ficheiros todos se depois
         // os agentes marco sales, marta, porto e outros do marine analisam"
+        // Pedido 2026-05-20 v3: "aceita pdf, word e email" — extensões PDF,
+        // DOCX/DOC, EML são roteadas pelo DocumentTextExtractor.
         $request->validate([
             'files'   => ['nullable', 'array', 'max:10'],
-            'files.*' => ['file', 'mimes:pdf', 'max:30720'],
-            'file'    => ['nullable', 'file', 'mimes:pdf', 'max:30720'], // backward compat
+            'files.*' => ['file', 'mimes:pdf,docx,doc,eml', 'max:30720'],
+            'file'    => ['nullable', 'file', 'mimes:pdf,docx,doc,eml', 'max:30720'], // backward compat
             'text'    => ['nullable', 'string', 'min:50', 'max:200000'],
             'source'  => ['nullable', 'string', 'in:manual,marine,acingov,vortal,anogov,nspa,sam_gov,nato,ungm,other'],
         ], [
-            'files.max'    => 'Máximo 10 PDFs por análise.',
-            'files.*.mimes'=> 'Só PDFs aceites.',
-            'files.*.max'  => 'Cada PDF máximo 30 MB.',
-            'file.mimes'   => 'Só PDFs aceites como ficheiro.',
-            'file.max'     => 'PDF máximo 30 MB.',
+            'files.max'    => 'Máximo 10 ficheiros por análise.',
+            'files.*.mimes'=> 'Formatos aceites: PDF, Word (.docx/.doc), Email (.eml).',
+            'files.*.max'  => 'Cada ficheiro máximo 30 MB.',
+            'file.mimes'   => 'Formatos aceites: PDF, Word (.docx/.doc), Email (.eml).',
+            'file.max'     => 'Ficheiro máximo 30 MB.',
             'text.min'     => 'Texto demasiado curto — mete pelo menos uma frase com algum contexto.',
             'text.max'     => 'Texto excede 200k chars; corta o essencial e tenta de novo.',
         ]);
@@ -518,7 +520,7 @@ class TenderController extends Controller
             $extracted['fornecedores'] ?? null,
         ]));
 
-        $status = "✓ Concurso #{$tender->id} criado a partir do PDF. ";
+        $status = "✓ Concurso #{$tender->id} criado a partir do(s) documento(s). ";
         $status .= $hasFields
             ? 'Marta extraiu cliente, serviço, peças e fornecedores prováveis. '
             : 'Marta não conseguiu extrair campos estruturados — verifica manualmente. ';

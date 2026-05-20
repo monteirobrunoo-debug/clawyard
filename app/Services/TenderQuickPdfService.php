@@ -29,6 +29,7 @@ class TenderQuickPdfService
 {
     public function __construct(
         private PdfTextExtractor $extractor,
+        private DocumentTextExtractor $docExtractor,
         private TenderServiceAnalysisService $analyser,
         private AgentDispatcher $dispatcher,
     ) {}
@@ -43,8 +44,14 @@ class TenderQuickPdfService
             throw new \RuntimeException('Auth required for quick PDF analysis.');
         }
 
-        if (strtolower($file->getClientOriginalExtension()) !== 'pdf') {
-            throw new \InvalidArgumentException('Quick analysis aceita apenas PDFs.');
+        // 2026-05-20 v3: "aceita pdf, word e email" — single-file path
+        // partilha as extensões com handleMultiple (PDF/DOCX/DOC/EML).
+        $ext = strtolower($file->getClientOriginalExtension() ?: pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION));
+        $allowedExts = ['pdf', 'docx', 'doc', 'eml'];
+        if (!in_array($ext, $allowedExts, true)) {
+            throw new \InvalidArgumentException(
+                'Formatos aceites: PDF, Word (.docx/.doc), Email (.eml). Recebido: .' . $ext
+            );
         }
 
         // 1. Stub Tender — usa o filename como título inicial; será reescrito
@@ -57,9 +64,9 @@ class TenderQuickPdfService
         // 2026-05-20 fix: coluna `reference` é NOT NULL na BD de prod.
         // Geramos placeholder único; se a Marta conseguir extrair uma
         // ref real do PDF (via applyExtractedFields), sobrescreve depois.
-        $tender->reference          = $this->autoReference('PDF');
-        $tender->title              = $stubTitle ?: 'Análise PDF — ' . now()->format('Y-m-d H:i');
-        $tender->type               = 'pdf-auto';
+        $tender->reference          = $this->autoReference('DOC');
+        $tender->title              = $stubTitle ?: 'Análise documento — ' . now()->format('Y-m-d H:i');
+        $tender->type               = 'doc-auto';
         $tender->status             = Tender::STATUS_PENDING;
         $tender->priority           = 'normal';
         $tender->source_modified_at = now();
@@ -80,10 +87,12 @@ class TenderQuickPdfService
             // best-effort
         }
 
-        // 2. Persist + extrair texto do PDF.
+        // 2. Persist + extrair texto. Preserva a extensão original no
+        //    stored filename (.pdf/.docx/.doc/.eml) para o DocumentTextExtractor
+        //    poder rotear pelo path se $extHint falhar.
         $hash      = hash_file('sha256', $file->getRealPath());
         $slug      = Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) ?: 'doc';
-        $storedName = $slug . '-' . substr($hash, 0, 8) . '.pdf';
+        $storedName = $slug . '-' . substr($hash, 0, 8) . '.' . $ext;
         $relPath   = 'tender-attachments/' . $tender->id . '/' . $storedName;
 
         Storage::disk('local')->putFileAs(
@@ -104,7 +113,7 @@ class TenderQuickPdfService
         ]);
 
         $absolute = Storage::disk('local')->path($relPath);
-        $res = $this->extractor->extract($absolute);
+        $res = $this->docExtractor->extract($absolute, $ext);
         if (($res['ok'] ?? false) === true) {
             $att->extracted_text    = $res['text'];
             $att->extracted_chars   = mb_strlen($res['text']);
@@ -181,9 +190,15 @@ class TenderQuickPdfService
         if (empty($files)) {
             throw new \InvalidArgumentException('Nenhum ficheiro válido recebido.');
         }
+        // 2026-05-20 v3: aceita PDF/DOCX/DOC/EML. Pedido: "aceita pdf, word e email".
+        $allowedExts = ['pdf', 'docx', 'doc', 'eml'];
         foreach ($files as $f) {
-            if (strtolower($f->getClientOriginalExtension()) !== 'pdf') {
-                throw new \InvalidArgumentException('Multi-PDF analysis aceita apenas PDFs (recebido: ' . $f->getClientOriginalName() . ').');
+            $ext = strtolower($f->getClientOriginalExtension());
+            if (!in_array($ext, $allowedExts, true)) {
+                throw new \InvalidArgumentException(
+                    "Formatos aceites: PDF, Word (.docx/.doc), Email (.eml). Recebido: "
+                    . $f->getClientOriginalName() . " ({$ext})"
+                );
             }
         }
 
@@ -193,9 +208,9 @@ class TenderQuickPdfService
 
         $tender = new Tender();
         $tender->source             = $source;
-        $tender->reference          = $this->autoReference('PDF');
-        $tender->title              = $stubTitle ?: 'Análise PDFs — ' . now()->format('Y-m-d H:i');
-        $tender->type               = 'pdf-auto-multi';
+        $tender->reference          = $this->autoReference('DOC');
+        $tender->title              = $stubTitle ?: 'Análise documentos — ' . now()->format('Y-m-d H:i');
+        $tender->type               = 'doc-auto-multi';
         $tender->status             = Tender::STATUS_PENDING;
         $tender->priority           = 'normal';
         $tender->source_modified_at = now();
@@ -214,14 +229,22 @@ class TenderQuickPdfService
             }
         } catch (\Throwable $e) { /* best-effort */ }
 
-        // 2. Anexar todos os PDFs + extrair texto individualmente
+        // 2. Anexar todos os ficheiros + extrair texto individualmente
+        //    Pedido 2026-05-20 v3: "aceita pdf, word e email". Cada ficheiro
+        //    é roteado pelo DocumentTextExtractor conforme a extensão
+        //    (PDF → smalot/pdfparser, DOCX → PhpWord, EML → MIME parse).
         $attachedCount = 0;
         $combinedText  = '';
         foreach ($files as $file) {
             $originalName = $file->getClientOriginalName();
+            $ext          = strtolower($file->getClientOriginalExtension() ?: pathinfo($originalName, PATHINFO_EXTENSION));
+            if ($ext === '') $ext = 'bin';
             $hash         = hash_file('sha256', $file->getRealPath());
             $slug         = Str::slug(pathinfo($originalName, PATHINFO_FILENAME)) ?: 'doc';
-            $storedName   = $slug . '-' . substr($hash, 0, 8) . '.pdf';
+            // Preserva a extensão original no stored filename para o
+            // DocumentTextExtractor poder inferir o engine pelo path
+            // (fallback se $extHint não for passado).
+            $storedName   = $slug . '-' . substr($hash, 0, 8) . '.' . $ext;
             $relPath      = 'tender-attachments/' . $tender->id . '/' . $storedName;
 
             try {
@@ -251,7 +274,7 @@ class TenderQuickPdfService
             ]);
 
             $absolute = Storage::disk('local')->path($relPath);
-            $res = $this->extractor->extract($absolute);
+            $res = $this->docExtractor->extract($absolute, $ext);
             if (($res['ok'] ?? false) === true) {
                 $att->extracted_text    = $res['text'];
                 $att->extracted_chars   = mb_strlen($res['text']);

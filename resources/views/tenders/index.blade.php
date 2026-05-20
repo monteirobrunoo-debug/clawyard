@@ -196,14 +196,16 @@
                         <svg class="mx-auto h-7 w-7 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-3-3v6M7 4h10a2 2 0 012 2v14l-7-3-7 3V6a2 2 0 012-2z"/>
                         </svg>
-                        <div class="mt-1 text-sm font-semibold text-violet-800">📄 Arrasta vários PDFs aqui</div>
+                        <div class="mt-1 text-sm font-semibold text-violet-800">📄 Arrasta PDFs, Word ou Emails aqui</div>
                         <div class="text-[11px] text-gray-600 mt-0.5">
-                            Acumula tudo (RFQ + anexos + specs). Quando estiver completo, clica
+                            Aceita <strong>PDF, Word (.docx/.doc), Email (.eml)</strong>. Acumula tudo
+                            (RFQ + anexos + specs). Quando estiver completo, clica
                             <strong>"Analisar com agentes Marine"</strong> em baixo. Multi-agente corre em
                             background — não vais ficar à espera.
                         </div>
                         <input type="file" name="files[]" id="manual-modal-quick-pdf-files"
-                               accept=".pdf,application/pdf" multiple class="hidden">
+                               accept=".pdf,.docx,.doc,.eml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,message/rfc822"
+                               multiple class="hidden">
                     </label>
 
                     {{-- Lista dos ficheiros acumulados --}}
@@ -353,7 +355,7 @@
                 <div class="flex gap-1 border-b border-gray-200 -mt-1">
                     <button type="button" data-tab-trigger="pdf"
                             class="qp-tab px-3 py-2 text-xs font-semibold border-b-2 border-violet-600 text-violet-700">
-                        📄 PDF
+                        📄 PDF / Word / Email
                     </button>
                     <button type="button" data-tab-trigger="text"
                             class="qp-tab px-3 py-2 text-xs font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700">
@@ -361,19 +363,21 @@
                     </button>
                 </div>
 
-                {{-- Tab 1: PDF (drag-drop + click) --}}
+                {{-- Tab 1: Documento (PDF / Word / Email) — drag-drop + click --}}
                 <div data-tab-pane="pdf" class="space-y-1">
-                    <span class="text-xs font-semibold text-gray-700">PDF do concurso</span>
+                    <span class="text-xs font-semibold text-gray-700">Documento do concurso (PDF / Word / Email)</span>
                     <div id="qp-dropzone"
                          class="mt-1 cursor-pointer rounded-lg border-2 border-dashed border-violet-300 bg-violet-50/30 px-6 py-8 text-center transition hover:bg-violet-50">
                         <svg class="mx-auto h-9 w-9 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 7.5h-.75A2.25 2.25 0 0 0 4.5 9.75v7.5a2.25 2.25 0 0 0 2.25 2.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-7.5a2.25 2.25 0 0 0-2.25-2.25h-.75m-9 4.5 3.75-3.75m0 0 3.75 3.75M12 7.5v9" />
                         </svg>
                         <p class="mt-2 text-sm text-gray-700" id="qp-dropzone-label">
-                            <span class="font-semibold text-violet-700">Arrasta o PDF para aqui</span> ou clica para escolher
+                            <span class="font-semibold text-violet-700">Arrasta PDF, Word ou Email para aqui</span> ou clica para escolher
                         </p>
-                        <p class="mt-1 text-[11px] text-gray-500">Máx. 30 MB · só PDF (xlsx/docx anexam-se depois)</p>
-                        <input type="file" name="file" id="qp-file" accept=".pdf,application/pdf" class="hidden">
+                        <p class="mt-1 text-[11px] text-gray-500">Máx. 30 MB · PDF / .docx / .doc / .eml</p>
+                        <input type="file" name="file" id="qp-file"
+                               accept=".pdf,.docx,.doc,.eml,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,message/rfc822"
+                               class="hidden">
                     </div>
                 </div>
 
@@ -456,7 +460,7 @@
         const label = document.getElementById('qp-dropzone-label');
         const updateDropzoneLabel = (file) => {
             if (!file) {
-                label.innerHTML = '<span class="font-semibold text-violet-700">Arrasta o PDF para aqui</span> ou clica para escolher';
+                label.innerHTML = '<span class="font-semibold text-violet-700">Arrasta PDF, Word ou Email para aqui</span> ou clica para escolher';
                 return;
             }
             const kb = (file.size / 1024).toFixed(0);
@@ -479,9 +483,16 @@
             const files = e.dataTransfer?.files;
             if (!files || !files.length) return;
             const f0 = files[0];
-            // Só PDF passa
-            if (!/\.pdf$/i.test(f0.name) && f0.type !== 'application/pdf') {
-                alert('Só PDFs são aceites por drag-drop. Para texto, abre a tab "✏️ Texto".');
+            // 2026-05-20 v3: aceita PDF/Word/Email. Pedido: "aceita pdf, word e email".
+            const okExt = /\.(pdf|docx?|eml)$/i.test(f0.name);
+            const okMime = [
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'message/rfc822',
+            ].includes(f0.type);
+            if (!okExt && !okMime) {
+                alert('Formatos aceites: PDF, Word (.docx/.doc), Email (.eml). Para texto cru, usa a tab "✏️ Texto".');
                 return;
             }
             // Reassign FileList ao input via DataTransfer (proper IE-free way)
@@ -635,8 +646,16 @@
                     alert('Máximo ' + MAX_FILES + ' ficheiros por análise.');
                     break;
                 }
-                if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') {
-                    alert('Só PDFs aceites — ignorado: ' + f.name);
+                // 2026-05-20 v3: aceita PDF/Word/Email. Pedido: "aceita pdf, word e email".
+                const okExt = /\.(pdf|docx?|eml)$/i.test(f.name);
+                const okMime = [
+                    'application/pdf',
+                    'application/msword',
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'message/rfc822',
+                ].includes(f.type);
+                if (!okExt && !okMime) {
+                    alert('Formatos aceites: PDF, Word (.docx/.doc), Email (.eml). Ignorado: ' + f.name);
                     continue;
                 }
                 if (f.size > MAX_MB * 1024 * 1024) {
