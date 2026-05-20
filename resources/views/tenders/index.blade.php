@@ -1245,6 +1245,14 @@
                                             ⏰ {{ $deadlinePT }}
                                         </span>
                                     @endif
+                                    @if($canAssign)
+                                        <button type="button"
+                                                onclick="deleteTender({{ $t->id }}, '{{ addslashes($t->reference ?: ('#' . $t->id)) }}')"
+                                                class="ml-auto rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                                title="Apagar este concurso (recuperável)">
+                                            🗑️
+                                        </button>
+                                    @endif
                                 </div>
                             </article>
                         @empty
@@ -1286,6 +1294,10 @@
                                             </a>
                                         </th>
                                     @endforeach
+                                    @if($canAssign)
+                                        {{-- Coluna de acção (apagar). 2026-05-20. --}}
+                                        <th class="px-3 py-2 text-right w-12"><span class="sr-only">Acções</span></th>
+                                    @endif
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100 bg-white">
@@ -1399,10 +1411,22 @@
                                                 @endif
                                             </span>
                                         </td>
+                                        {{-- Acção: apagar (manager+). Soft-delete, recuperável.
+                                             2026-05-20 pedido directo. --}}
+                                        @if($canAssign)
+                                            <td class="px-3 py-2 align-middle whitespace-nowrap text-right">
+                                                <button type="button"
+                                                        onclick="deleteTender({{ $t->id }}, '{{ addslashes($t->reference ?: ('#' . $t->id)) }}')"
+                                                        title="Apagar este concurso (recuperável)"
+                                                        class="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600">
+                                                    🗑️
+                                                </button>
+                                            </td>
+                                        @endif
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="px-3 py-8 text-center text-sm text-gray-500">
+                                        <td colspan="{{ $canAssign ? 9 : 8 }}" class="px-3 py-8 text-center text-sm text-gray-500">
                                             Nenhum concurso corresponde aos filtros.
                                         </td>
                                     </tr>
@@ -1422,6 +1446,35 @@
                     document.getElementById('select-all')?.addEventListener('change', function (e) {
                         document.querySelectorAll('.row-check').forEach(cb => cb.checked = e.target.checked);
                     });
+
+                    // ── Delete tender (soft-delete, recuperável) ─────────────────
+                    // Pedido 2026-05-20 "poe um botao par apagar". Fetch DELETE
+                    // em vez de form submit para evitar nesting com bulk-assign.
+                    window.deleteTender = async function (tenderId, ref) {
+                        if (!confirm('Apagar concurso «' + ref + '»? (Soft-delete — pode ser recuperado via DB withTrashed.)')) return;
+                        const csrf = document.querySelector('meta[name=csrf-token]')?.content || '';
+                        try {
+                            const r = await fetch('/tenders/' + tenderId, {
+                                method: 'DELETE',
+                                headers: {
+                                    'X-CSRF-TOKEN': csrf,
+                                    'Accept': 'application/json, text/html',
+                                },
+                                credentials: 'same-origin',
+                            });
+                            if (r.status === 401 && await window.maybeRedirectOnOtp(r)) return;
+                            if (!r.ok && r.status !== 302) {
+                                const txt = await r.text();
+                                const m = txt.match(/<title>([^<]+)<\/title>/i);
+                                throw new Error(m ? m[1].trim() : ('HTTP ' + r.status));
+                            }
+                            if (window.cyToast) window.cyToast({ title: '🗑 Apagado', body: ref, tone: 'success', duration: 2000 });
+                            // Reload mantém filtros e paginação actuais.
+                            window.location.reload();
+                        } catch (e) {
+                            alert('Erro ao apagar: ' + e.message);
+                        }
+                    };
                 </script>
             @endif
 

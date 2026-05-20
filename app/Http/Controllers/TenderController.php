@@ -1334,6 +1334,36 @@ class TenderController extends Controller
         return back()->with('status', "✓ {$updated} concurso(s) marcados como «{$newSt}».");
     }
 
+    /**
+     * Soft-delete de 1 tender. Manager+ only.
+     * Reversível via `Tender::withTrashed()->restore()` se for engano.
+     *
+     * Pedido 2026-05-20: "poe um botao par apagar" — UI para limpar
+     * zombies (paste falhados, RFQs duplicados, etc.) sem precisar
+     * de ir ao tinker.
+     */
+    public function destroy(Tender $tender): \Illuminate\Http\RedirectResponse
+    {
+        $user = Auth::user();
+        if (!$user || !$user->can('tenders.assign')) {
+            abort(403, 'Apenas manager+ pode apagar concursos.');
+        }
+
+        $ref = $tender->reference ?: ('#' . $tender->id);
+        $isMarine = $tender->source === 'marine';
+        $tender->delete();  // SoftDelete — deleted_at preenchido
+
+        \App\Models\AuditLog::record('tender.delete', null, [
+            'tender_id' => $tender->id,
+            'reference' => $ref,
+            'source'    => $tender->source,
+        ]);
+
+        return redirect()
+            ->to($isMarine ? route('marine.index') : route('tenders.index'))
+            ->with('status', "🗑 Concurso «{$ref}» apagado. (recuperável via DB withTrashed)");
+    }
+
     // ── Bulk assign ──────────────────────────────────────────────────────
     public function assign(TenderAssignRequest $request)
     {

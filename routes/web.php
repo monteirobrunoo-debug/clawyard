@@ -656,6 +656,10 @@ Route::middleware(['auth'])->group(function () {
     // Pedido 2026-05-20 "bulk actions com checkboxes".
     Route::post('/tenders/bulk-status', [TenderController::class, 'bulkStatus'])->name('tenders.bulkStatus');
 
+    // Delete (soft) — 1 row per tender. Manager+ only.
+    // Pedido 2026-05-20 "poe um botao par apagar".
+    Route::delete('/tenders/{tender}', [TenderController::class, 'destroy'])->name('tenders.destroy');
+
     // Web Push subscriptions (1 row por device por user). 2026-05-20.
     Route::post  ('/push/subscribe',   [\App\Http\Controllers\PushSubscriptionController::class, 'store'])
         ->name('push.subscribe');
