@@ -106,11 +106,20 @@ class ActivityFeedController extends Controller
 
         $convoUrlBase = $user->isManager() ? '/admin/conversations/' : '/conversations/';
 
+        // 2026-05-20 fix: dedupe por agente. Antes o ticker mostrava
+        // "Marta CRM respondeu · 1h ago" 3× seguidas quando ela respondeu
+        // a 3 mensagens na última hora — visualmente parecia overlap.
+        // Agora mostramos só a mais recente de cada agente.
+        $seenAgents = [];
         foreach ($messageQ->orderByDesc('created_at')
-            ->limit(8)
+            ->limit(20)   // puxar mais para dedupar sem perder agentes únicos
             ->get(['id', 'agent', 'created_at', 'conversation_id']) as $m) {
-            $meta = \App\Services\AgentCatalog::find((string) $m->agent);
-            $name = $meta['name'] ?? ucfirst((string) $m->agent);
+            $agentKey = (string) $m->agent;
+            if (isset($seenAgents[$agentKey])) continue;
+            $seenAgents[$agentKey] = true;
+
+            $meta = \App\Services\AgentCatalog::find($agentKey);
+            $name = $meta['name'] ?? ucfirst($agentKey);
             $items[] = [
                 'icon'  => $meta['emoji'] ?? '🤖',
                 'label' => "{$name} respondeu",
@@ -118,6 +127,7 @@ class ActivityFeedController extends Controller
                 'at'    => $m->created_at->toIso8601String(),
                 'ago'   => $m->created_at->diffForHumans(['short' => true]),
             ];
+            if (count($seenAgents) >= 8) break;
         }
 
         // ── Swarm runs (last 24h) ─────────────────────────────────────

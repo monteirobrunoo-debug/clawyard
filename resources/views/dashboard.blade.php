@@ -389,6 +389,52 @@
             animation: pulse-dot 1.8s ease-in-out infinite;
         }
 
+        /* Online users pill — espelha o style do counter, mas no canto
+           esquerdo da hero. Mostra avatares stack + texto "X online". */
+        .online-users-chip {
+            position: absolute; top: 18px; left: 24px;
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 6px 14px 6px 12px; border-radius: 999px;
+            font-size: 11px; font-weight: 700; letter-spacing: 0.4px;
+            color: var(--green);
+            background: color-mix(in srgb, var(--green) 8%, var(--bg2));
+            border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+            box-shadow: 0 0 16px color-mix(in srgb, var(--green) 18%, transparent);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            max-width: calc(50vw - 60px);
+        }
+        .online-users-chip .live-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: pulse-dot 1.8s ease-in-out infinite;
+        }
+        .online-users-stack { display: inline-flex; }
+        .online-users-avatar {
+            width: 22px; height: 22px; border-radius: 50%;
+            background: linear-gradient(135deg, #76b900, #4dd0ff);
+            color: #000; font-weight: 800; font-size: 9px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border: 2px solid var(--bg2);
+            margin-left: -7px;
+            box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 30%, transparent);
+        }
+        .online-users-avatar:first-child { margin-left: 0; }
+        .online-users-avatar.is-self {
+            background: linear-gradient(135deg, #fbbf24, #f97316);
+        }
+        .online-users-text {
+            text-transform: uppercase; letter-spacing: 0.6px;
+            font-size: 10.5px; padding-left: 2px;
+        }
+        @media (max-width: 700px) {
+            .online-users-chip {
+                position: static; margin: 0 auto 10px; display: inline-flex;
+            }
+        }
+        .header.is-scrolled .online-users-chip { display: none; }
+
         /* ── SEARCH BAR ── */
         .search-wrap {
             max-width: 520px; margin: 18px auto 0; position: relative;
@@ -837,6 +883,14 @@
     <span class="hero-counter-chip" title="Total de agentes prontos">
         <span class="live-dot"></span>
         {{ $agentCount ?? 27 }} agentes · live
+    </span>
+    {{-- 2026-05-20: lista de utilizadores humanos online agora. Antes o
+         ticker repetia "Marta CRM respondeu" 3× e tapava os nomes das
+         pessoas online. Esta pill mostra-os explicitamente. --}}
+    <span class="online-users-chip" id="cyOnlineUsers" style="display:none" title="Utilizadores online agora">
+        <span class="live-dot"></span>
+        <span class="online-users-stack" id="cyOnlineUsersStack"></span>
+        <span class="online-users-text" id="cyOnlineUsersText">0 online</span>
     </span>
     <p class="hero-label">HP-Group · PartYard Marine · PartYard Military</p>
     <h1>Choose your <span class="accent">Agent</span></h1>
@@ -1826,6 +1880,54 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
     }
     refreshTicker();
     setInterval(refreshTicker, 30000);
+
+    // 1c) Online users pill. Polls /api/presence/online-now every 30s
+    //     (offset 5s para não bater no mesmo segundo do ticker) e mostra
+    //     avatares dos utilizadores humanos online agora. O presence
+    //     heartbeat é mantido pelo partials/presence.blade.php incluído
+    //     no fim deste template, portanto qualquer página visitada conta.
+    //     Pedido 2026-05-20: "subroposeste os nomes de quem está online".
+    const onlineChip  = document.getElementById('cyOnlineUsers');
+    const onlineStack = document.getElementById('cyOnlineUsersStack');
+    const onlineText  = document.getElementById('cyOnlineUsersText');
+    function escOnline(s) {
+        return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    async function refreshOnlineUsers() {
+        if (!onlineChip || !onlineStack || !onlineText) return;
+        try {
+            const r = await fetch('/api/presence/online-now', {
+                headers: { 'Accept':'application/json' }, credentials:'same-origin',
+            });
+            if (!r.ok) return;
+            const d = await r.json();
+            const live = d.live || [];
+            if (live.length === 0) {
+                onlineChip.style.display = 'none';
+                return;
+            }
+            const max = 5;
+            const visible = live.slice(0, max);
+            onlineStack.innerHTML = visible.map(u => {
+                const initials = u.initials || (u.name?.[0] || '?').toUpperCase();
+                const cls = u.is_self ? 'online-users-avatar is-self' : 'online-users-avatar';
+                const title = u.is_self ? `${u.name} (tu)` : u.name;
+                return `<span class="${cls}" title="${escOnline(title)}">${escOnline(initials)}</span>`;
+            }).join('');
+            const extra = live.length > max ? ` +${live.length - max}` : '';
+            // Nomes em texto plano para quem prefere ler (truncado se >3 outros).
+            const others = live.filter(u => !u.is_self);
+            let label;
+            if (others.length === 0)      label = 'só tu online';
+            else if (others.length === 1) label = `${others[0].name.split(' ')[0]} online`;
+            else if (others.length <= 3)  label = others.map(o => o.name.split(' ')[0]).join(', ');
+            else                          label = `${others.length} pessoas online${extra}`;
+            onlineText.textContent = label;
+            onlineChip.style.display = 'inline-flex';
+        } catch (e) { /* silent */ }
+    }
+    refreshOnlineUsers();
+    setInterval(refreshOnlineUsers, 30000);
 
     // 2) Cursor-tracked highlight + 3D tilt on every .agent-card.
     //    We update --mx and --my CSS vars + a CSS transform on

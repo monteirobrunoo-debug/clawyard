@@ -86,8 +86,10 @@ Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
     Route::get('/cmdk-search', [\App\Http\Controllers\CommandPaletteController::class, 'search']);
 
     // Real-time presence (futurista round 4) — heartbeat + who's-here
-    Route::post('/presence/heartbeat', [\App\Http\Controllers\PresenceController::class, 'heartbeat']);
-    Route::get ('/presence/who',       [\App\Http\Controllers\PresenceController::class, 'who']);
+    Route::post('/presence/heartbeat',  [\App\Http\Controllers\PresenceController::class, 'heartbeat']);
+    Route::get ('/presence/who',        [\App\Http\Controllers\PresenceController::class, 'who']);
+    // 2026-05-20: lista global "online agora" para o header do dashboard
+    Route::get ('/presence/online-now', [\App\Http\Controllers\PresenceController::class, 'onlineNow']);
 
     // SAP Documents table — Richard SAP UI
     Route::get('/sap/table',  [SapTableController::class, 'tableData']);

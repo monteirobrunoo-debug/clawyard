@@ -105,6 +105,54 @@ class PresenceController extends Controller
         ]);
     }
 
+    /**
+     * GET /api/presence/online-now
+     *
+     * Lista global de TODOS os utilizadores humanos online agora,
+     * independente da página em que estão. Diferente do who() que é
+     * filtrado por path — este é para o header do dashboard mostrar
+     * "Online agora: José Inácio, Eduardo Rio…".
+     *
+     * 2026-05-20: pedido directo ("subroposeste os nomes de quem está
+     * online") — o user via "Marta CRM respondeu" 3× no ticker e queria
+     * ver as pessoas reais que estão online.
+     */
+    public function onlineNow(Request $request): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user) abort(401);
+
+        $ids = Cache::get(self::INDEX_KEY, []);
+        $live = [];
+        $cleanIds = [];
+        foreach ($ids as $id) {
+            $entry = Cache::get(sprintf(self::USER_KEY_FMT, $id));
+            if (!$entry) continue;   // expired
+            $cleanIds[] = $id;
+            $live[] = [
+                'user_id'    => $entry['user_id'],
+                'name'       => $entry['name'],
+                'initials'   => $entry['initials'],
+                'seen_at'    => $entry['seen_at'],
+                'is_self'    => (int) $entry['user_id'] === (int) $user->id,
+            ];
+        }
+        if (count($cleanIds) !== count($ids)) {
+            Cache::put(self::INDEX_KEY, $cleanIds, self::TTL_SECONDS + 30);
+        }
+
+        // Ordena: outros primeiro (alfabético), self no fim.
+        usort($live, function ($a, $b) {
+            if ($a['is_self'] !== $b['is_self']) return $a['is_self'] ? 1 : -1;
+            return strcasecmp((string) $a['name'], (string) $b['name']);
+        });
+
+        return response()->json([
+            'count' => count($live),
+            'live'  => $live,
+        ]);
+    }
+
     private function initialsFor(string $name): string
     {
         $parts = preg_split('/\s+/', trim($name)) ?: [];
