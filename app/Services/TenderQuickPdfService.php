@@ -439,8 +439,26 @@ PROMPT;
 
         $ref = trim((string) ($extracted['referencia'] ?? ''));
         if ($ref !== '' && mb_strlen($ref) <= 80) {
-            $tender->reference = $ref;
-            $dirty = true;
+            // 2026-05-20 fix: BD tem unique constraint (source, reference).
+            // Se a ref extraída pela Marta já existe NOUTRO tender (mesmo
+            // source), mantemos a placeholder TXT-/PDF- auto-gerada e
+            // sinalizamos no notes para o operador decidir manualmente.
+            $duplicate = Tender::where('source', $tender->source)
+                ->where('reference', $ref)
+                ->where('id', '!=', $tender->id)
+                ->exists();
+            if ($duplicate) {
+                Log::info('TenderQuickPdf: extracted ref already exists, keeping placeholder', [
+                    'tender_id'      => $tender->id,
+                    'extracted_ref'  => $ref,
+                    'kept_reference' => $tender->reference,
+                ]);
+                // Mete uma nota explicativa para o user
+                $extracted['notes_prepend'] = "⚠ Ref. extraída «{$ref}» já existe noutro tender — mantida ref. auto-gerada. Confirma se é duplicado ou edita manualmente.";
+            } else {
+                $tender->reference = $ref;
+                $dirty = true;
+            }
         }
 
         $client = trim((string) ($extracted['cliente'] ?? ''));
@@ -460,6 +478,13 @@ PROMPT;
         // Notas concentram o resumo do que a Marta achou — operador vê
         // tudo de uma vez sem precisar de abrir o painel da análise.
         $notesBits = [];
+
+        // 2026-05-20 fix: aviso de ref duplicada (vem do guard acima
+        // quando Marta extrai uma ref que colide com outro tender).
+        if (!empty($extracted['notes_prepend'])) {
+            $notesBits[] = (string) $extracted['notes_prepend'];
+        }
+
         $servico = trim((string) ($extracted['servico'] ?? ''));
         if ($servico !== '') $notesBits[] = "**Serviço:** {$servico}";
 
