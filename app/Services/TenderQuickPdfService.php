@@ -174,9 +174,15 @@ class TenderQuickPdfService
             throw new \InvalidArgumentException('Texto demasiado curto (mín 50 chars).');
         }
 
-        // 1. Stub Tender — sem nome de ficheiro, usa primeira linha do texto.
-        $firstLine = preg_split('/\R/', $text)[0] ?? '';
-        $stubTitle = mb_substr(trim($firstLine), 0, 200);
+        // 1. Stub Tender — heurística smart de título a partir do texto.
+        //    Procura por esta ordem:
+        //      (a) linha "Subject: …" (formato Outlook)
+        //      (b) linha que contém RFQ/RFP/RFI/TENDER/QUOTATION
+        //      (c) primeira linha "útil" (>10 chars, não é header)
+        //      (d) fallback genérico com timestamp
+        //    A Marta CRM pode sobrescrever este título depois via JSON
+        //    extraction se conseguir um melhor (applyExtractedFields).
+        $stubTitle = $this->inferStubTitleFromText($text);
 
         $tender = new Tender();
         $tender->source             = $source;
@@ -329,6 +335,71 @@ PROMPT;
     private function autoReference(string $prefix): string
     {
         return strtoupper($prefix) . '-' . now()->format('YmdHis') . '-' . Str::lower(Str::random(4));
+    }
+
+    /**
+     * Smart title inference do texto colado pelo user. Pedido 2026-05-20:
+     * "usa sempre este titulo quando crias — RFQ URGENTLY - QUOTATION -
+     *  OCEANPACT SERVIÇOS - SC 70593 - VESSEL: ROCHEDO DE SAO PAULO"
+     *
+     * Heurística por prioridade:
+     *  1. Subject: <texto>      (formato Outlook/Gmail)
+     *  2. Asunto: <texto>       (Outlook ES)
+     *  3. Assunto: <texto>      (Outlook PT)
+     *  4. Linha com RFQ/RFP/RFI/TENDER/QUOTATION/COTAÇÃO
+     *  5. Primeira linha "útil" — >10 chars e não é header (Date:/From:/etc)
+     *  6. Fallback genérico "Análise texto — DD/MM/YYYY HH:MM"
+     */
+    private function inferStubTitleFromText(string $text): string
+    {
+        // (1-3) Subject / Asunto / Assunto
+        $patterns = [
+            '/^\s*(?:Subject|Asunto|Assunto)\s*:\s*(.+?)\s*$/mi',
+        ];
+        foreach ($patterns as $pat) {
+            if (preg_match($pat, $text, $m)) {
+                $candidate = trim($m[1]);
+                if (mb_strlen($candidate) >= 10) {
+                    return mb_substr($candidate, 0, 200);
+                }
+            }
+        }
+
+        // (4) Linha com keyword de procurement
+        if (preg_match(
+            '/^.{0,300}\b(?:RFQ|RFP|RFI|TENDER|QUOTATION|COTAÇÃO|COTACAO|CONCURSO)\b.{0,300}$/mi',
+            $text,
+            $m
+        )) {
+            $candidate = trim($m[0]);
+            // Limita a 200 chars e tira whitespace estranho
+            $candidate = preg_replace('/\s+/', ' ', $candidate) ?? $candidate;
+            return mb_substr($candidate, 0, 200);
+        }
+
+        // (5) Primeira linha "útil": >10 chars, não header conhecido
+        $headerWords = ['date', 'from', 'to', 'cc', 'bcc', 'sent', 'received',
+                        'attachments', 'reply-to', 'importance', 'priority',
+                        'de', 'para', 'cco', 'enviado', 'data', 'anexos'];
+        foreach (preg_split('/\R/', $text) as $line) {
+            $line = trim($line);
+            if (mb_strlen($line) < 10) continue;
+            $lower = mb_strtolower($line);
+            $isHeader = false;
+            foreach ($headerWords as $w) {
+                if (preg_match('/^' . preg_quote($w, '/') . '\s*:/i', $lower)) {
+                    $isHeader = true;
+                    break;
+                }
+            }
+            if ($isHeader) continue;
+            // Skip shell-command-looking lines (paranoid: user colou comando)
+            if (preg_match('/^(su|sudo|cd|bash|php|git|composer)\s+/', $line)) continue;
+            return mb_substr($line, 0, 200);
+        }
+
+        // (6) Fallback genérico
+        return 'Análise texto — ' . now()->format('Y-m-d H:i');
     }
 
     /** Aplica os valores extraídos ao Tender sem sobrescrever stubs úteis. */
