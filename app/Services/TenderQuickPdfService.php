@@ -371,15 +371,19 @@ PROMPT;
     private function inferStubTitleFromText(string $text): string
     {
         // (1-3) Subject / Asunto / Assunto
-        $patterns = [
-            '/^\s*(?:Subject|Asunto|Assunto)\s*:\s*(.+?)\s*$/mi',
-        ];
-        foreach ($patterns as $pat) {
-            if (preg_match($pat, $text, $m)) {
-                $candidate = trim($m[1]);
-                if (mb_strlen($candidate) >= 10) {
-                    return mb_substr($candidate, 0, 200);
-                }
+        if (preg_match('/^\s*(?:Subject|Asunto|Assunto)\s*:\s*(.+?)\s*$/mi', $text, $m)) {
+            $candidate = trim($m[1]);
+            // 2026-05-20: paste de Outlook com thread nested deixa o
+            // capture com prefixes "Subject: Subject: Subject: RFQ …".
+            // Strip qualquer "Subject:"/Asunto/Assunto adicional no início.
+            $candidate = preg_replace(
+                '/^(?:\s*(?:Subject|Asunto|Assunto)\s*:\s*)+/i',
+                '',
+                $candidate
+            ) ?? $candidate;
+            $candidate = trim($candidate);
+            if (mb_strlen($candidate) >= 10) {
+                return mb_substr($candidate, 0, 200);
             }
         }
 

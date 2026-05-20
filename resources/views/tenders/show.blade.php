@@ -507,8 +507,24 @@
                                     credentials: 'same-origin',
                                 });
                                 if (res.status === 401 && await window.maybeRedirectOnOtp(res)) return;
-                                const data = await res.json();
-                                if (!res.ok) throw new Error(data.detail || 'HTTP ' + res.status);
+
+                                // 2026-05-20: defensive JSON parse. Se o
+                                // server devolveu HTML (Laravel exception page
+                                // por bug interno), res.json() rebenta com
+                                // "JSON.parse: unexpected character at line 1".
+                                // Lemos como text e mostramos snippet útil.
+                                const ct = res.headers.get('content-type') || '';
+                                let data = null;
+                                if (ct.includes('application/json')) {
+                                    data = await res.json();
+                                } else {
+                                    const txt = await res.text();
+                                    // Tenta extrair título do Laravel error page (se existir)
+                                    const m = txt.match(/<title>([^<]+)<\/title>/i);
+                                    const summary = m ? m[1].trim() : ('HTTP ' + res.status + ' (resposta não-JSON)');
+                                    throw new Error('Servidor: ' + summary + '. Vê storage/logs/laravel.log para o stack.');
+                                }
+                                if (!res.ok) throw new Error(data.detail || data.message || 'HTTP ' + res.status);
                                 status.className = 'mt-3 text-xs text-emerald-700';
                                 status.textContent = (data.cached ? '✓ Análise pronta (cached). ' : '✓ Análise gerada. ') + 'A renderizar inline…';
 
