@@ -1675,16 +1675,27 @@ class TenderController extends Controller
 
     private function enforceVisibility(Tender $tender, $user): void
     {
+        // 2026-05-20: pedido directo do operador
+        //   "a base de dados deveria ser para todos ou seja, qualquer pdf
+        //    deve ficar para todos os users e analise multi agente deve
+        //    ser vista por todos os users"
+        //
+        // Visibilidade aberta a TODOS os utilizadores autenticados —
+        // anexos (PDFs/imagens) e análises multi-agente passam a ser
+        // recursos partilhados independentemente de atribuição. ÚNICA
+        // excepção: is_confidential continua restrito ao manager+ e
+        // ao colaborador atribuído (defesa classificada / NDA).
         if ($user->can('tenders.view-all')) return;
 
-        // 2026-05-19: sources públicos internos (Acingov/Vortal/Anogov)
-        // são visíveis a todos. Pedido directo da admin Monica.
-        if (in_array($tender->source, Tender::PUBLIC_SOURCES, true)) return;
-
-        $collab = $tender->collaborator;
-        if (!$collab || $collab->user_id !== $user->id) {
-            abort(403, 'Este concurso não está atribuído a si.');
+        if ($tender->is_confidential) {
+            $collab = $tender->collaborator;
+            if (!$collab || $collab->user_id !== $user->id) {
+                abort(403, 'Concurso confidencial — só o colaborador atribuído + managers veem.');
+            }
+            return;
         }
+
+        // Não-confidencial: todos os users autenticados veem.
     }
 
     private function parseFilters(Request $r, ?string $forceSource = null): array
