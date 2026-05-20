@@ -1404,15 +1404,53 @@ class SapService
             }
         }
 
+        // 2026-05-20 BUG FIX: alinhar com createOpportunity (linha ~1150)
+        // que já trunca Remarks a 254 chars. A coluna SAP B1 OOPR.Remarks
+        // é nvarchar(254); enviar mais que isso falha em silêncio (HTTP
+        // 200/204 mas com payload rejeitado) ou trunca em sítio aleatório.
+        // Reportado pelo Bruno: "este processo do jose.inacio não
+        // sicronizou" — tender 316 / Opp 17545 tinha 10.072 chars em
+        // notas vindas da Marta, o PATCH passou mas o operador não viu
+        // nada de útil em SAP B1 Remarks. Ver MIGRATION 2026-05-20.
+        $remarks = $data['Remarks'] ?? null;
+        if ($remarks !== null) {
+            $remarks = (string) $remarks;
+            $origLen = mb_strlen($remarks);
+            if ($origLen > 254) {
+                // Trunca preservando o início do texto (header com a
+                // assinatura "[Marta CRM · …]" e os primeiros factos
+                // críticos). Sufixo "…" para indicar truncagem.
+                $remarks = mb_substr($remarks, 0, 251) . '...';
+                Log::info('SapService: updateOpportunity Remarks truncado', [
+                    'seq_no'    => $sequentialNo,
+                    'orig_len'  => $origLen,
+                    'sent_len'  => mb_strlen($remarks),
+                ]);
+            }
+        }
+
         $payload = array_filter([
             'CurrentStageNo'       => isset($data['StageId']) ? (int) $data['StageId'] : null,
             'SalesPerson'          => isset($data['SalesPerson']) ? (int) $data['SalesPerson'] : null,
-            'Remarks'              => $data['Remarks'] ?? null,
+            'Remarks'              => $remarks,
             'PredictedClosingDate' => $predicted,
         ], fn($v) => $v !== null);
 
         $result = $this->patch("SalesOpportunities({$sequentialNo})", $payload);
-        return !empty($result['ok']);
+        $ok = !empty($result['ok']);
+
+        // 2026-05-20: log info no SUCESSO também (antes só logava falhas).
+        // Permite auditar o que foi para SAP e quando. Sem logging silent
+        // success, ficamos sem visibilidade quando o user reclama.
+        if ($ok) {
+            Log::info('SapService: updateOpportunity OK', [
+                'seq_no'      => $sequentialNo,
+                'fields_sent' => array_keys($payload),
+                'remarks_len' => isset($payload['Remarks']) ? mb_strlen((string) $payload['Remarks']) : 0,
+            ]);
+        }
+
+        return $ok;
     }
 
     /**
