@@ -194,7 +194,14 @@
                                  a gente, mais flexível mas requer Marta a
                                  interpretar + utilizador a confirmar). --}}
                         @if(empty($tender->sap_opportunity_number))
-                            @if(auth()->user()?->isManager() || auth()->user()?->can('tenders.create-sap-opp'))
+                            {{-- 2026-05-20: pedido directo
+                                  "todos os user tem de ter o botao de abrir
+                                   no sap os concursos, user eduardo.rio nao
+                                   consegue abrir e nao aparece botao"
+                                 Aberto a qualquer authenticated user com
+                                 visibilidade ao tender. AuditLog regista
+                                 quem cria. --}}
+                            @auth
                             <form method="POST" action="{{ route('tenders.create-sap-opp', $tender) }}"
                                   class="inline"
                                   onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='⏳ A criar SAP Opp…';">
@@ -205,7 +212,7 @@
                                     🤖 Abrir SAP Opp (directo)
                                 </button>
                             </form>
-                            @endif
+                            @endauth
                             <a href="/chat?agent=crm&prompt={{ urlencode($martaPrompt) }}"
                                class="rounded-md border border-blue-300 bg-white text-blue-700 hover:bg-blue-50 px-3 py-1.5 text-sm font-semibold"
                                title="Caminho alternativo: abre /chat com Marta CRM para conversar antes de criar (útil se queres editar campos antes).">

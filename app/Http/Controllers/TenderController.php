@@ -954,12 +954,14 @@ class TenderController extends Controller
         $user = Auth::user();
         $this->enforceVisibility($tender, $user);
 
-        if (!$user->isManager() && !$user->can('tenders.create-sap-opp')) {
-            // Visibility já garantiu autenticação; falta gate de manager+.
-            // Operadores regulares vêem o botão se forem colaboradores, mas
-            // só managers podem disparar a criação SAP que mexe em SAP B1.
-            abort(403, 'Apenas managers podem abrir oportunidades SAP.');
-        }
+        // 2026-05-20: pedido directo do operador
+        //   "todos os user tem de ter o botao de abrio no sap os concursos,
+        //    user eduardo.rio nao consegue abrir e nao aparece botao"
+        //
+        // Aberto a qualquer user autenticado (Eduardo Rio, Catarina, etc.)
+        // que veja o tender. enforceVisibility já trata da confidencialidade.
+        // Action audit fica em AuditLog quando a Opp é criada — quem fez é
+        // sempre rastreável.
 
         if ($tender->is_confidential) {
             return back()->with('error', 'Concurso confidencial — não envia dados para SAP B1.');
