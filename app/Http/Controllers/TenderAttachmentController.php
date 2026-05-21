@@ -233,36 +233,26 @@ class TenderAttachmentController extends Controller
 
     public function destroy(Tender $tender, TenderAttachment $attachment)
     {
-        // 2026-05-21: regra de delete alargada. Antes só manager podia
-        // apagar — pedido "User joao murta tentou apagar um ficheiro no
-        // marine departmemt e nao consegui deu erro 403". João é role
-        // 'user' (não manager) e bateu no abort(403) da linha 253.
+        // 2026-05-21: política totalmente aberta. Pedido directo do
+        // Bruno: "Mas dá a cpaciadede de todos os user de apagar os
+        // ficherios". Espelha o flow de upload, que é aberto a todos
+        // os authenticated users em tenders não-confidenciais desde
+        // a decisão de 2026-05-20 "qualquer user pode entra e ver".
         //
-        // Nova política (espelha o flow de upload, que é aberto a todos
-        // os authenticated em tenders não-confidenciais):
+        // Política actual:
+        //   ✓ Qualquer authenticated user em tender não-confidencial
+        //   ✗ Tender confidencial: só atribuído + managers (via authorizeView)
         //
-        //   ✓ Managers              — sempre podem apagar tudo
-        //   ✓ Próprio uploader      — apaga o que carregou (corrige asneira)
-        //   ✓ Colaborador atribuído — apaga anexos do seu tender (workflow)
-        //   ✗ Outros users          — view-only, têm de pedir ao dono
-        //
-        // Continua a respeitar a flag is_confidential via authorizeView().
-        $this->authorizeView($tender);   // sem requireManager
+        // Audit log abaixo regista QUEM apagou o quê para investigar
+        // potenciais asneiras (file restoration possível via DB soft-
+        // delete: a row continua em tender_attachments com deleted_at
+        // — recoverable até o garbage-collect da Spaces apagar o objecto).
+        $this->authorizeView($tender);   // confidenciais continuam blindados aqui
         if ($attachment->tender_id !== $tender->id) abort(404);
 
         $u = Auth::user();
-        $isManager  = $u->isManager();
-        $isUploader = (int) $attachment->uploaded_by_user_id === (int) $u->id;
-        $isAssigned = $tender->collaborator
-            && (int) $tender->collaborator->user_id === (int) $u->id;
-
-        if (!$isManager && !$isUploader && !$isAssigned) {
-            abort(403,
-                'Só o uploader original, o colaborador atribuído ao concurso, '
-                . 'ou um manager pode apagar este anexo. Pede a um deles para o remover, '
-                . 'ou contacta o admin.'
-            );
-        }
+        $deletedName = $attachment->original_name;
+        $deletedSize = $attachment->size_bytes;
 
         try {
             Storage::disk(self::DISK)->delete($attachment->disk_path);
@@ -272,12 +262,14 @@ class TenderAttachmentController extends Controller
         Log::info('Tender attachment deleted', [
             'tender_id'      => $tender->id,
             'attachment_id'  => $attachment->id,
-            'original_name'  => $attachment->original_name,
+            'original_name'  => $deletedName,
+            'size_bytes'     => $deletedSize,
+            'uploaded_by'    => $attachment->uploaded_by_user_id,
             'deleted_by'     => $u->id,
-            'reason'         => $isManager ? 'manager' : ($isUploader ? 'uploader' : 'assigned'),
+            'deleted_by_name'=> $u->name,
         ]);
 
-        return back()->with('status', '✓ Anexo removido.');
+        return back()->with('status', '✓ Anexo «' . $deletedName . '» removido.');
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
