@@ -86,6 +86,7 @@ class TenderServiceAnalysisService
         private TenderAttachmentsTool $tenderAttachments,
         private BookSearchTool $bookSearch,
         private WebSearchTool $webSearch,
+        private \App\Services\AnthropicBatchService $batch,
     ) {}
 
     /**
@@ -193,6 +194,206 @@ class TenderServiceAnalysisService
         }
 
         return $analysis;
+    }
+
+    /**
+     * 2026-05-21: variante BATCH da analyse() — em vez de correr N agentes
+     * sincronamente por tender (que demora 60-180s e cobra Messages API
+     * full price), agrupa todos os (tender × agent) prompts em UM único
+     * batch Anthropic e devolve-o em ~1h por **50% off**.
+     *
+     * Pedido directo: "Anthropic Batch API nightly multi-agent (50% off)
+     * quero este vale a pena".
+     *
+     * Trade-off vs sync path:
+     *   • Sem tool-use (web_search / tender_search) — Batch API é single-turn
+     *   • Resposta em ~1h (vs ~3min sync) — bom para nocturno
+     *   • 50% off no input+output token pricing
+     *
+     * Caller responsabilidade:
+     *   • Filtrar tenders sem confidential, com PDFs OK ou texto útil
+     *   • Não submeter o mesmo tender 2× (verificar TenderServiceAnalysis
+     *     row status='running'|'queued_batch')
+     *
+     * @param iterable<Tender> $tenders
+     * @return \App\Models\AnthropicBatch|null  null se nada submetido
+     */
+    public function submitBatch(iterable $tenders, ?int $userId = null): ?\App\Models\AnthropicBatch
+    {
+        $requests = [];
+        $custom_id_map = [];   // custom_id → ['tender_id'=>X, 'agent_key'=>Y]
+
+        foreach ($tenders as $tender) {
+            if ($tender->is_confidential) continue;   // never expose to external
+
+            $categories = $this->suggester->inferCategories($tender);
+            $agentKeys  = $this->pickAgents($categories, $tender->source);
+            $context    = $this->buildContext($tender, $categories);
+
+            foreach ($agentKeys as $agentKey) {
+                $meta = AgentCatalog::find($agentKey);
+                if (!$meta) continue;
+                $name   = $meta['name'] ?? $agentKey;
+                $role   = $meta['role'] ?? '';
+                $domain = $this->domainFraming($agentKey);
+
+                // Prompt SIMPLIFICADO (single-turn, sem tools) — Batch API
+                // não suporta tool-use multi-step. O agent recebe contexto +
+                // domain framing e devolve directamente o JSON estruturado.
+                $system = <<<PROMPT
+És o {$name} ({$role}) do PartYard / HP-Group. {$domain}
+
+Outro agente está a preparar uma análise para este concurso. Foca-te
+no SERVIÇO a executar: o que é preciso fazer, riscos, lead time,
+compliance — não fornecedores nem emails.
+
+DEVOLVE APENAS este JSON (sem markdown, sem comentário antes ou depois):
+
+{
+  "summary": "≤200 chars · uma frase com a tua leitura estratégica",
+  "key_points": ["ponto-chave do teu domínio · ≤120 chars", ...max 5...],
+  "risks": ["risco · ≤120 chars", ...max 4...],
+  "recommendations": ["próximo passo · ≤120 chars", ...max 5...],
+  "lead_time_estimate": "ex: 6-8 semanas, ou 'depende' · ≤60 chars",
+  "compliance_flags": ["NATO", "ITAR", "CE", "EUC", ...]
+}
+
+REGRAS:
+  • Foca-te apenas no teu domínio.
+  • NÃO inventes dados — se não tens certeza, omite.
+  • NUNCA escrevas fornecedores chineses/russos.
+  • Português europeu.
+PROMPT;
+
+                $userMsg = "Concurso a analisar:\n{$context}\n\nDevolve APENAS o JSON.";
+
+                $customId = "tender-{$tender->id}-{$agentKey}";   // sanitizado pelo service
+
+                $requests[] = [
+                    'custom_id'  => $customId,
+                    'system'     => $system,
+                    'messages'   => [['role' => 'user', 'content' => $userMsg]],
+                    'max_tokens' => 2000,
+                ];
+                $custom_id_map[$customId] = ['tender_id' => $tender->id, 'agent_key' => $agentKey];
+
+                // Marca a row da análise como queued
+                TenderServiceAnalysis::updateOrCreate(
+                    ['tender_id' => $tender->id],
+                    ['status' => 'queued_batch', 'generated_by_user_id' => $userId]
+                );
+            }
+        }
+
+        if (empty($requests)) return null;
+
+        $model = (string) config('services.anthropic.model', 'claude-sonnet-4-6');
+        $batch = $this->batch->submit($model, 'tender-analysis', $requests, $userId);
+        if (!$batch || !$batch->batch_id) return $batch;
+
+        // Persistir o mapping no metadata para collectBatch saber assemblar
+        $batch->update([
+            'metadata' => array_merge((array) $batch->metadata, [
+                'custom_id_map' => $custom_id_map,
+            ]),
+        ]);
+
+        return $batch;
+    }
+
+    /**
+     * Quando o batch acaba (status=ended), descarrega results e assembla
+     * por tender. Retorna número de tenders processados.
+     */
+    public function collectBatch(\App\Models\AnthropicBatch $batch): int
+    {
+        if (!$batch->isReady()) return 0;
+
+        $results = $this->batch->collectResults($batch);
+        if (empty($results)) return 0;
+
+        $map = (array) (($batch->metadata['custom_id_map'] ?? []));
+        if (empty($map)) return 0;
+
+        // Agrupa results por tender_id → [agent_key => parsed_json|null]
+        $byTender = [];
+        $costTotal = 0.0;
+        foreach ($results as $customId => $row) {
+            $info = $map[$customId] ?? null;
+            if (!$info) continue;
+            $tid = (int) $info['tender_id'];
+            $ak  = (string) $info['agent_key'];
+            if (!($row['ok'] ?? false)) {
+                $byTender[$tid][$ak] = null;
+                continue;
+            }
+            $parsed = $this->parseJson((string) ($row['text'] ?? ''));
+            $byTender[$tid][$ak] = $parsed;
+
+            // Estimar custo do request (Batch API é 50% off)
+            $usage = (array) ($row['usage'] ?? []);
+            $inTok  = (int) ($usage['input_tokens']  ?? 0);
+            $outTok = (int) ($usage['output_tokens'] ?? 0);
+            // Sonnet 4.6: $3 in / $15 out per MTok → ÷2 para Batch
+            $costTotal += ($inTok * 3 + $outTok * 15) / 1_000_000 * 0.5;
+        }
+
+        $processed = 0;
+        foreach ($byTender as $tid => $agentResults) {
+            $tender = Tender::find($tid);
+            if (!$tender) continue;
+            $sections = [];
+            foreach ($agentResults as $agentKey => $parsed) {
+                if (!is_array($parsed) || empty($parsed['summary'])) continue;
+                $meta = AgentCatalog::find($agentKey);
+                $sections[$agentKey] = [
+                    'agent_name'  => $meta['name']  ?? $agentKey,
+                    'agent_emoji' => $meta['emoji'] ?? '🤖',
+                    'agent_color' => $meta['color'] ?? '#76b900',
+                    'summary'     => $parsed['summary']             ?? '',
+                    'key_points'  => $parsed['key_points']          ?? [],
+                    'risks'       => $parsed['risks']               ?? [],
+                    'recommendations' => $parsed['recommendations'] ?? [],
+                    'lead_time'   => $parsed['lead_time_estimate']  ?? '',
+                    'compliance'  => $parsed['compliance_flags']    ?? [],
+                    'cost_usd'    => 0,    // costs are tracked at batch level
+                    'iterations'  => 0,
+                    'tool_trace'  => [],
+                    'agent_run_id'=> null,
+                    'via_batch'   => true,
+                ];
+            }
+            if (empty($sections)) continue;
+
+            $execSummary = $this->synthesizeExecutiveSummary($tender, $sections);
+            $sections    = $this->sanitizeUtf8($sections);
+            $execSummary = $this->sanitizeUtf8($execSummary);
+
+            TenderServiceAnalysis::updateOrCreate(
+                ['tender_id' => $tid],
+                [
+                    'status'            => 'done',
+                    'agents_consulted'  => array_keys($sections),
+                    'sections'          => $sections,
+                    'executive_summary' => $execSummary,
+                    'total_cost_usd'    => round($costTotal / max(1, count($byTender)), 4),
+                    'generated_at'      => now(),
+                ],
+            );
+
+            \Log::info('TenderServiceAnalysis: done (batch)', [
+                'tender_id' => $tid,
+                'agents'    => array_keys($sections),
+                'via_batch' => $batch->id,
+            ]);
+            $processed++;
+        }
+
+        $batch->update([
+            'cost_usd_actual' => round($costTotal, 4),
+        ]);
+
+        return $processed;
     }
 
     /**
