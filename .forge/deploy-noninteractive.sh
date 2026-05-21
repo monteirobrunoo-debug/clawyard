@@ -96,6 +96,20 @@ else
     color "33" "  php-fpm service not found — manual reload may be needed"
 fi
 
+section "Octane graceful reload"
+# 2026-05-21: Octane workers re-fazem autoload contra nova vendor/.
+# Sem isto ficam com classloader stale → 500 errors quando Forge cleanup
+# remove releases antigas.
+if "$PHP" artisan list 2>/dev/null | grep -q "octane:reload"; then
+    "$PHP" artisan octane:reload && color "32" "  Octane reloaded" || color "33" "  Octane reload falhou (continuing)"
+else
+    color "33" "  Octane não instalado (skipping)"
+fi
+
+section "Queue workers restart"
+"$PHP" artisan queue:restart || true
+color "32" "  queue:restart signal broadcast"
+
 echo
 color "32" "✓ Deploy complete."
 echo
