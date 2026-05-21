@@ -241,7 +241,8 @@ class TenderServiceAnalysisController extends Controller
         }
 
         try {
-            $ok = $sap->updateOpportunity($seqNo, ['Remarks' => (string) $tender->notes]);
+            // 2026-05-21: appendRemarks (merge-safe). Não perde info dia-a-dia.
+            $ok = $sap->appendRemarks($seqNo, (string) $tender->notes);
             $msg = $ok
                 ? "✓ Plano sincronizado com SAP Opp #{$seqNo}."
                 : "⚠ Plano guardado local mas falhou push ao SAP Opp #{$seqNo}: " . ($sap->getLastError() ?: 'erro desconhecido');

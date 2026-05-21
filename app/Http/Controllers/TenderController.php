@@ -588,9 +588,12 @@ class TenderController extends Controller
                 $sapStatus = '⚠ Notas só guardadas localmente — este concurso não tem Nº Oportunidade SAP. Preenche o campo "Nº Oportunidade SAP" acima para activar sincronização.';
             } else {
                 try {
-                    $ok = $sap->updateOpportunity($seqNo, [
-                        'Remarks' => (string) $tender->notes,
-                    ]);
+                    // 2026-05-21: usar appendRemarks (merge-safe) em vez de
+                    // updateOpportunity. Pedido directo: "se actulizaamos
+                    // está a apagar os remarks no SAP, ver isso pois a
+                    // info tem de ficar de um dia para o outro". Faz
+                    // fetch+merge+push para nunca perder conteúdo já em SAP.
+                    $ok = $sap->appendRemarks($seqNo, (string) $tender->notes);
                     $sapStatus = $ok
                         ? "✓ Notas sincronizadas com SAP Opp #{$seqNo}"
                         : "⚠ Falha a sincronizar com SAP Opp #{$seqNo}: " . ($sap->getLastError() ?: 'erro desconhecido');
@@ -928,7 +931,8 @@ class TenderController extends Controller
             $sapStatus = 'sem Nº Oportunidade SAP — guardado só local. Preenche o campo SAP para activar sync';
         } else {
             try {
-                $ok = $sap->updateOpportunity($seqNo, ['Remarks' => (string) $tender->notes]);
+                // 2026-05-21: appendRemarks (merge-safe). Não perde info dia-a-dia.
+                $ok = $sap->appendRemarks($seqNo, (string) $tender->notes);
                 $sapStatus = $ok ? "SAP Opp #{$seqNo} sincronizado" : 'SAP rejeitou: ' . ($sap->getLastError() ?: 'erro desconhecido');
             } catch (\Throwable $e) {
                 Log::warning('Tender martaSummarize SAP sync failed', [

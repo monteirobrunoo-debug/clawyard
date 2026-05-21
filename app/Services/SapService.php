@@ -1440,8 +1440,7 @@ class SapService
         $ok = !empty($result['ok']);
 
         // 2026-05-20: log info no SUCESSO também (antes só logava falhas).
-        // Permite auditar o que foi para SAP e quando. Sem logging silent
-        // success, ficamos sem visibilidade quando o user reclama.
+        // Permite auditar o que foi para SAP e quando.
         if ($ok) {
             Log::info('SapService: updateOpportunity OK', [
                 'seq_no'      => $sequentialNo,
@@ -1451,6 +1450,92 @@ class SapService
         }
 
         return $ok;
+    }
+
+    /**
+     * 2026-05-21 BUG FIX: "quando carrregados info nas notas e actuliza nos
+     * remarks do sap, se actulizaamos está a apagar os remarks no SAP".
+     *
+     * O update direct via updateOpportunity SUBSTITUI o campo Remarks
+     * inteiro. Se o user no Dia 2 mete notas mais curtas que no Dia 1,
+     * SAP perde info do Dia 1.
+     *
+     * Esta helper faz MERGE seguro:
+     *   1. Lê o Remarks actual em SAP
+     *   2. Se $newAddition já está como substring em current → noop (return ok)
+     *   3. Se SAP está vazio → push $newAddition
+     *   4. Se SAP tem conteúdo:
+     *        a) Se o novo conteúdo (do tender.notes) CONTÉM o que está em SAP
+     *           → é uma extensão, push novo (truncado a 254)
+     *        b) Caso contrário → MERGE: SAP_current + " · " + $newAddition,
+     *           truncado mantendo o MAIS RECENTE (do fim, não do início)
+     *
+     * Resultado: nunca se perde info dia-a-dia. O campo cresce até 254
+     * chars e depois faz FIFO mantendo o mais recente.
+     *
+     * @param int    $sequentialNo  SAP opportunity SequentialNo
+     * @param string $newAddition   O novo conteúdo a juntar (full notes do tender)
+     */
+    public function appendRemarks(int $sequentialNo, string $newAddition): bool
+    {
+        $newAddition = trim($newAddition);
+        if ($newAddition === '') {
+            return true; // noop graceful
+        }
+
+        $current = '';
+        try {
+            $opp = $this->getOpportunityWithStages($sequentialNo);
+            $current = trim((string) ($opp['Remarks'] ?? ''));
+        } catch (\Throwable $e) {
+            Log::warning('SapService::appendRemarks: failed to read current, falling back to overwrite', [
+                'seq_no' => $sequentialNo,
+                'error'  => $e->getMessage(),
+            ]);
+            // Falha a ler → cai no path antigo (overwrite). Melhor isso
+            // do que falhar tudo.
+            return $this->updateOpportunity($sequentialNo, ['Remarks' => $newAddition]);
+        }
+
+        // Caso 1: já lá está como substring
+        if ($current !== '' && str_contains($current, $newAddition)) {
+            Log::info('SapService::appendRemarks: addition already present, noop', [
+                'seq_no'       => $sequentialNo,
+                'current_len'  => mb_strlen($current),
+                'addition_len' => mb_strlen($newAddition),
+            ]);
+            return true;
+        }
+
+        // Caso 2: SAP vazio
+        if ($current === '') {
+            return $this->updateOpportunity($sequentialNo, ['Remarks' => $newAddition]);
+        }
+
+        // Caso 3a: $newAddition é superset (contém todo o SAP actual)
+        if (str_contains($newAddition, $current)) {
+            // Extension natural — push novo (truncate happens em updateOpportunity)
+            Log::info('SapService::appendRemarks: new contains current, replacing safely', [
+                'seq_no'         => $sequentialNo,
+                'current_len'    => mb_strlen($current),
+                'new_len'        => mb_strlen($newAddition),
+            ]);
+            return $this->updateOpportunity($sequentialNo, ['Remarks' => $newAddition]);
+        }
+
+        // Caso 3b: divergem — merge concatenado com FIFO (mais recente fica)
+        $merged = $current . ' · ' . $newAddition;
+        // SAP limit 254 — se exceder, mantém o FIM (mais recente) cortando o início
+        if (mb_strlen($merged) > 254) {
+            $merged = '…' . mb_substr($merged, -253);
+        }
+        Log::info('SapService::appendRemarks: merging current + addition', [
+            'seq_no'      => $sequentialNo,
+            'current_len' => mb_strlen($current),
+            'addition_len'=> mb_strlen($newAddition),
+            'merged_len'  => mb_strlen($merged),
+        ]);
+        return $this->updateOpportunity($sequentialNo, ['Remarks' => $merged]);
     }
 
     /**
