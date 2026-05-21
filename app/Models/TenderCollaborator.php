@@ -235,6 +235,27 @@ class TenderCollaborator extends Model
             return null;
         }
 
+        // 2026-05-21 GUARD: recusar valores com ≤2 chars. Pedido directo:
+        // "muitos processos acingov aparecem erradamente atribuidos a
+        // Monica Pereira". Causa: Excel CONCURSOS_VICENCIO usa iniciais
+        // 2-letras (MM, ER, JI, CS, GG, SO) nas células Colaborador.
+        // A alias "mm" da row da Monica matchava qualquer "MM" → 133
+        // tenders atribuídos por engano. "JI", "ER" idem.
+        //
+        // Política: aliases <3 chars são demasiado ambíguos para
+        // auto-link. Refuse e log para o operador rever manualmente
+        // (ver /tenders/collaborators). O bulk-assign UI continua a
+        // permitir aliases de qualquer tamanho — só o auto-link no
+        // import é que fica conservador.
+        if (mb_strlen($norm) <= 2) {
+            \Illuminate\Support\Facades\Log::info(
+                'TenderCollaborator: incoming name ≤2 chars, recusado auto-link',
+                ['incoming' => $name, 'normalized' => $norm,
+                 'hint' => 'Use full name (ex.: "Monica Pereira") em vez de iniciais.'],
+            );
+            return null;
+        }
+
         // 1. Exact match on normalized_name AMONG ACTIVE rows. Filtering
         //    by active is critical: if an admin previously merged
         //    "Monica" → "Monica Pereira" (the absorbed row is now
