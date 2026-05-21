@@ -494,7 +494,12 @@
                          sync SAP. Isto vive aqui no dashboard do concurso
                          para o operador não ter de abrir outra página. --}}
                     @php
-                        $analysisRow = \App\Models\TenderServiceAnalysis::where('tender_id', $tender->id)
+                        // 2026-05-21: registo partilhado — 1 análise por tender,
+                        // visível a TODOS os users que vejam o tender (igual em
+                        // Concursos e Marine). generated_by_user_id é audit
+                        // (saber quem foi o último a correr), nunca filtra.
+                        $analysisRow = \App\Models\TenderServiceAnalysis::with('generatedBy:id,name')
+                            ->where('tender_id', $tender->id)
                             ->where('status', 'done')->first();
                         $actionItems = $analysisRow?->extractActionItems() ?? [];
                     @endphp
@@ -503,8 +508,9 @@
                             <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
                                 <div class="text-xs font-semibold text-emerald-800">
                                     📋 Plano de acção · {{ count($actionItems) }} passos
-                                    <span class="font-normal text-emerald-600 ml-1">
-                                        ({{ $analysisRow->generated_at?->diffForHumans() }})
+                                    <span class="font-normal text-emerald-600 ml-1"
+                                          title="Análise partilhada entre todos os users — última corrida por {{ $analysisRow->generatedBy?->name ?? 'sistema' }} em {{ $analysisRow->generated_at?->format('d/m/Y H:i') }}">
+                                        ({{ $analysisRow->generated_at?->diffForHumans() }}@if($analysisRow->generatedBy) · por <strong>{{ $analysisRow->generatedBy->name }}</strong>@endif)
                                     </span>
                                 </div>
                                 <div class="flex gap-2">
