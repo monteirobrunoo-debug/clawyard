@@ -36,7 +36,7 @@ class TenderSupplierController extends Controller
         // no Tavily, no Claude. Only the local supplier match runs.
         // See migration 2026_04_30_000004 for the rationale.
         if ($tender->is_confidential) {
-            $bundle = $svc->suggest($tender, localLimit: 3, includeWeb: false);
+            $bundle = $svc->suggest($tender, localLimit: 6, includeWeb: false);
             return response()->json([
                 'categories'    => $bundle['categories'],
                 'web_query'     => null,
@@ -49,7 +49,10 @@ class TenderSupplierController extends Controller
 
         $includeWeb = $request->boolean('include_web', true);
 
-        $bundle = $svc->suggest($tender, localLimit: 3, includeWeb: $includeWeb);
+        // 2026-05-21: limit 3 → 6. Pedido directo "ainda está a aparecer
+        // como fornecedores aprovados 4lean; AAGE Hempel; AAR são sempre
+        // os mesmos". Mais variedade + scoring melhor em matchLocal.
+        $bundle = $svc->suggest($tender, localLimit: 6, includeWeb: $includeWeb);
 
         return response()->json([
             'categories'      => $bundle['categories'],

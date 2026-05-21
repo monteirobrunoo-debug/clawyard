@@ -324,17 +324,92 @@ class TenderSupplierSuggesterService
     {
         if (empty($codes)) return collect();
 
-        $query = Supplier::validated()
+        // 2026-05-21: pedido directo: "ainda está a aparecer como
+        // fornecedores aprovados 4lean; AAGE Hempel; AAR são sempre
+        // os mesmos, não pode ser". Causa: 63% dos 214 suppliers
+        // (136 rows) têm exactamente IQF=3 e nenhum foi contactado.
+        // O sort antigo (iqf DESC → last_contacted DESC → name ASC)
+        // colapsava sempre em "name ASC alfabético" → os 3 primeiros
+        // do alfabeto (4Lean, AAGE, AAR) apareciam em TODOS os tenders.
+        //
+        // Fix:
+        // (a) Score composto: subcategory + brand match contra
+        //     keywords do tender dá boost real (não só código numérico).
+        // (b) Tie-breaker determinístico-por-tender (MD5(name||id)) em
+        //     vez de alfabético: refresh da mesma página dá sempre os
+        //     mesmos suppliers (não confuso), mas tenders diferentes
+        //     veem suppliers diferentes (variety).
+
+        // Constrói haystack de keywords do tender (já tinhamos a lógica
+        // em inferCategories, replicamos o trecho relevante aqui).
+        $pdfBlob = '';
+        try {
+            foreach ($tender->attachments()->where('extraction_status', 'ok')->get() as $att) {
+                $pdfBlob .= ' ' . mb_substr((string) $att->extracted_text, 0, 8000);
+            }
+        } catch (\Throwable $e) { /* ok */ }
+        $haystack = mb_strtolower(implode(' ', array_filter([
+            $tender->title,
+            $tender->reference,
+            $tender->purchasing_org,
+            $tender->notes,
+            $pdfBlob,
+        ])));
+
+        // Puxar mais candidatos do que o limit, scoring em PHP, top N.
+        // 50 é generoso para tier IQF=3 mas ainda <500ms.
+        $candidates = Supplier::validated()
             ->where(function ($w) use ($codes) {
                 foreach ($codes as $c) $w->orWhere(fn($q) => $q->inCategory($c));
-            });
-
-        return $query
+            })
             ->orderByRaw('iqf_score IS NULL, iqf_score DESC')
             ->orderByRaw('last_contacted_at IS NULL, last_contacted_at DESC')
-            ->orderBy('name')
-            ->limit($limit)
+            ->limit(50)
             ->get();
+
+        // Tender-seeded shuffle para o tie-breaker determinístico.
+        $tenderSalt = (string) $tender->id;
+
+        $scored = $candidates->map(function (Supplier $s) use ($haystack, $tenderSalt) {
+            $score = (float) ($s->iqf_score ?? 0) * 10;   // base IQF weight
+
+            // Brand match — mais forte (signal directo: o supplier
+            // trabalha com este OEM e o tender menciona o OEM).
+            foreach ((array) ($s->brands ?? []) as $b) {
+                $b = trim(mb_strtolower((string) $b));
+                if ($b !== '' && mb_strlen($b) >= 3 && str_contains($haystack, $b)) {
+                    $score += 30;
+                }
+            }
+            // Subcategory match — bom signal (specialty alinha com
+            // keyword do tender). Subcats são "13.45", "9.4", etc;
+            // só usamos o nome legível se existir mas por agora bate
+            // pelo código directo é suficiente para boost.
+            foreach ((array) ($s->subcategories ?? []) as $sc) {
+                $sc = trim(mb_strtolower((string) $sc));
+                if ($sc !== '' && str_contains($haystack, $sc)) {
+                    $score += 15;
+                }
+            }
+            // Nome do supplier no texto — boost forte (o operador
+            // muitas vezes já mencionou o supplier nas notas).
+            $nameLow = mb_strtolower($s->name);
+            if (mb_strlen($nameLow) >= 4 && str_contains($haystack, $nameLow)) {
+                $score += 50;
+            }
+
+            // Tie-breaker: hash determinístico do (id, name, tender_id).
+            // Pequeno (range 0-9) para não overpower os boosts acima.
+            $shuffleTie = hexdec(substr(md5($s->id . '|' . $s->name . '|' . $tenderSalt), 0, 4)) % 1000 / 100.0;
+
+            return ['supplier' => $s, 'score' => $score + $shuffleTie];
+        });
+
+        return $scored
+            ->sortByDesc('score')
+            ->take($limit)
+            ->pluck('supplier')
+            ->values();
     }
 
     /**
