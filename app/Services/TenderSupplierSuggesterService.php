@@ -58,7 +58,9 @@ class TenderSupplierSuggesterService
         $query = $this->buildWebQuery($tender);
 
         if ($includeWeb && $webAvailable) {
-            $webResults = $this->searchWeb($query);
+            // 2026-05-21: passa o $tender para searchWeb fazer
+            // refineWithClaude (curadoria dos hits para OEMs reais).
+            $webResults = $this->searchWeb($query, $tender);
         }
 
         // Specialist-agent consultation. Picks the 1-2 most-relevant
@@ -524,39 +526,181 @@ class TenderSupplierSuggesterService
     }
 
     /**
-     * Hit Tavily and shape the response into a small array consumable
-     * by the front-end (3-5 results, title + url + snippet).
+     * Hit Tavily + Claude para devolver lista CURADA de fabricantes/
+     * distribuidores reais (não raw Tavily hits).
+     *
+     * Pedido directo do Bruno (2026-05-21): "como procura os fabricantes
+     * correctos? Visto que ponho no claude directo e dá-me os fornecedores
+     * correctos".
+     *
+     * Pipeline:
+     *   1. Tavily fetch 10 hits (advanced depth)
+     *   2. Claude reasoning: dado o tender + hits, identifica OEMs/
+     *      distribuidores reais. Filtra marketplaces, news, blogs.
+     *   3. Devolve JSON estruturado [{name, role, country, why, url}]
+     *
+     * Fallback: se Claude falhar, devolve raw Tavily parsed (comportamento
+     * antigo) para não rebentar a UI.
+     *
+     * Custo extra: ~$0.005 Claude por query. Cacheado seria $0 em re-runs
+     * mas isso fica para iteração seguinte.
      */
-    private function searchWeb(string $query): array
+    private function searchWeb(string $query, ?Tender $tender = null): array
     {
         try {
-            $raw = $this->web->search($query, maxResults: 5, searchDepth: 'basic');
+            // Advanced em vez de basic — 8 hits melhores. ~$0.008 vs $0.005.
+            $raw = $this->web->search($query, maxResults: 8, searchDepth: 'advanced');
         } catch (\Throwable $e) {
             \Log::warning('TenderSupplierSuggester web search failed', ['error' => $e->getMessage()]);
             return [];
         }
 
-        // The service currently returns formatted text; parse out
-        // numbered hits. Pattern: "1. **Title** 80%\n   URL: https://..\n   content..."
-        $results = [];
-        if (!is_string($raw) || $raw === '') return $results;
+        if (!is_string($raw) || mb_strlen($raw) < 50) return [];
 
+        // 2026-05-21: passar pela Claude para curar fabricantes reais.
+        if ($tender !== null) {
+            $curated = $this->refineWithClaude($tender, $query, $raw);
+            if (!empty($curated)) {
+                return $curated;
+            }
+            // Fallback silencioso → parsed raw Tavily
+        }
+
+        return $this->parseRawTavilyHits($raw);
+    }
+
+    /**
+     * Parseia o texto que Tavily devolve em hits estruturados.
+     * Mantém o comportamento antigo como fallback para quando Claude
+     * falha ou não está disponível.
+     */
+    private function parseRawTavilyHits(string $raw): array
+    {
+        $results = [];
         $blocks = preg_split('/\n(?=\d+\.\s+\*\*)/', $raw) ?: [];
         foreach ($blocks as $block) {
             if (!preg_match('/\*\*(.+?)\*\*/', $block, $tm)) continue;
             $title = trim($tm[1]);
             preg_match('/URL:\s*(\S+)/i', $block, $um);
             $url = trim($um[1] ?? '');
-            // Snippet = the line after the URL line
             $snippet = '';
             if (preg_match('/URL:\s*\S+\s*\n\s+(.+)/', $block, $sm)) {
                 $snippet = mb_substr(trim($sm[1]), 0, 240);
             }
             if ($title === '' || $url === '') continue;
-            $results[] = ['title' => $title, 'url' => $url, 'snippet' => $snippet];
+            $results[] = [
+                'title'   => $title,
+                'url'     => $url,
+                'snippet' => $snippet,
+                'role'    => null,   // sem reasoning
+                'country' => null,
+            ];
             if (count($results) >= 5) break;
         }
-
         return $results;
+    }
+
+    /**
+     * Claude reasoning step: dado um tender + hits Tavily, identifica
+     * os fabricantes/distribuidores reais e filtra ruído (marketplaces
+     * tipo Alibaba, news, blogs SEO).
+     *
+     * @return list<array{name:string,url:string,snippet:string,role:string,country:?string,why:string}>
+     */
+    private function refineWithClaude(Tender $tender, string $query, string $tavilyRaw): array
+    {
+        $title = mb_substr((string) $tender->title, 0, 200);
+        $org   = mb_substr((string) $tender->purchasing_org, 0, 100);
+        $notes = mb_substr((string) $tender->notes, 0, 1500);
+
+        $system = <<<PROMPT
+És um analista de procurement da PartYard / HP-Group. Recebes:
+  • Resumo de um concurso (tender) — título, organização compradora, notas com peças/items
+  • Resultados raw de uma pesquisa Tavily — vários hits com title, URL, snippet
+
+Tarefa: identificar os 3-5 fabricantes (OEM) e distribuidores autorizados
+relevantes para FORNECER os items deste concurso à PartYard.
+
+Devolve APENAS este JSON (sem markdown, sem prefácio):
+
+{
+  "suppliers": [
+    {
+      "name": "nome do fabricante ou distribuidor (≤80 chars)",
+      "role": "OEM" | "distributor" | "integrator",
+      "country": "ISO-2 ou nome curto (≤30 chars), null se desconhecido",
+      "url": "URL do site oficial deles (preferir corp .com sobre listings)",
+      "why": "≤180 chars — porquê este é relevante: que produto/serviço deles bate o tender"
+    },
+    ... máx 5 items
+  ]
+}
+
+REGRAS:
+  • EXCLUI marketplaces genéricos (Alibaba, Made-in-China, IndiaMart, TradeKey, B2B listings)
+  • EXCLUI news sites, blog posts, Wikipedia, LinkedIn
+  • EXCLUI fornecedores chineses/russos (política HP-Group security)
+  • PREFERE empresas EU/US/UK/JP/KR/IL/CA com presença confirmada
+  • Se o tender mencionar uma BRAND específica (MTU, Cisco, Marvin), o OEM ÉSSE deve estar no top
+  • Se não houver match claro, devolve suppliers: [] (lista vazia é OK)
+  • NUNCA inventes URLs — se o Tavily não tem o site oficial, devolve a URL mais próxima dos hits
+  • Country no formato curto: "DE", "US", "Germany", "USA" — não inteiro
+PROMPT;
+
+        $userMsg = "=== TENDER ===\n";
+        $userMsg .= "Título: {$title}\n";
+        if ($org !== '')   $userMsg .= "Organização: {$org}\n";
+        if ($notes !== '') $userMsg .= "Notas (peças/items extraídos):\n{$notes}\n";
+        $userMsg .= "\n=== QUERY TAVILY ===\n{$query}\n";
+        $userMsg .= "\n=== HITS TAVILY RAW ===\n" . mb_substr($tavilyRaw, 0, 5000) . "\n=== FIM ===\n\nDevolve o JSON.";
+
+        try {
+            $res = $this->dispatcher->dispatch(
+                systemPrompt: $system,
+                userMessage:  $userMsg,
+                maxTokens:    1200,
+            );
+        } catch (\Throwable $e) {
+            \Log::warning('refineWithClaude: dispatcher threw', ['error' => $e->getMessage()]);
+            return [];
+        }
+
+        if (!($res['ok'] ?? false)) {
+            \Log::info('refineWithClaude: Claude returned not-ok, falling back to raw',
+                ['error' => $res['error'] ?? 'unknown']);
+            return [];
+        }
+
+        $raw = trim((string) ($res['text'] ?? ''));
+        $clean = preg_replace('/^```(?:json)?\s*|\s*```\s*$/m', '', $raw) ?? $raw;
+        if (!preg_match('/\{[\s\S]*\}/', $clean, $m)) return [];
+        $decoded = json_decode($m[0], true);
+        if (!is_array($decoded) || empty($decoded['suppliers'])) return [];
+
+        $out = [];
+        foreach ((array) $decoded['suppliers'] as $s) {
+            if (!is_array($s)) continue;
+            $name = trim((string) ($s['name'] ?? ''));
+            $url  = trim((string) ($s['url']  ?? ''));
+            if ($name === '' || !preg_match('#^https?://#', $url)) continue;
+            $out[] = [
+                'title'   => $name,
+                'name'    => $name,                              // alias para a UI
+                'url'     => mb_substr($url, 0, 500),
+                'snippet' => mb_substr(trim((string) ($s['why'] ?? '')), 0, 240),
+                'role'    => mb_substr(trim((string) ($s['role'] ?? '')), 0, 30),
+                'country' => mb_substr(trim((string) ($s['country'] ?? '')), 0, 30) ?: null,
+                'why'     => mb_substr(trim((string) ($s['why'] ?? '')), 0, 240),
+            ];
+            if (count($out) >= 5) break;
+        }
+
+        \Log::info('refineWithClaude: returned curated suppliers', [
+            'tender_id' => $tender->id,
+            'count'     => count($out),
+            'cost_est'  => $res['cost_usd'] ?? null,
+        ]);
+
+        return $out;
     }
 }
