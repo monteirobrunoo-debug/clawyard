@@ -27,6 +27,7 @@ class AnalysisSubmitBatchCommand extends Command
     protected $signature = 'analysis:submit-batch
                             {--max=20 : Máximo de tenders por batch}
                             {--stale-days=14 : Re-analisar tenders >N dias sem update}
+                            {--require-pdf : Só tenders com anexos OK (legacy; default agora é INCLUIR sem PDF)}
                             {--dry-run : Mostra mas não submete}';
 
     protected $description = 'Submete tenders pendentes ao Anthropic Batch API (50% off)';
@@ -53,13 +54,23 @@ class AnalysisSubmitBatchCommand extends Command
 
         $excludeIds = array_unique(array_merge($freshIds, $inflightIds));
 
-        $tenders = Tender::query()
+        // 2026-05-21: pedido directo "os que nao tem pdf analsia tambem".
+        // Agentes funcionam com título + organização + categorias inferidas
+        // mesmo sem anexos. buildContext handles ausentes gracefully.
+        // O --require-pdf é só para legacy quando o operador quer restringir.
+        $tendersQ = Tender::query()
             ->where('is_confidential', false)
             ->whereNotIn('id', $excludeIds)
-            ->whereHas('attachments', fn ($q) => $q->where('extraction_status', 'ok'))
+            ->whereNotNull('title')
+            ->where('title', '!=', '')
             ->orderByRaw('deadline_at IS NULL, deadline_at ASC')
-            ->limit($max)
-            ->get();
+            ->limit($max);
+
+        if ($this->option('require-pdf')) {
+            $tendersQ->whereHas('attachments', fn ($q) => $q->where('extraction_status', 'ok'));
+        }
+
+        $tenders = $tendersQ->get();
 
         if ($tenders->isEmpty()) {
             $this->info('Sem tenders elegíveis para batch agora.');
@@ -68,7 +79,9 @@ class AnalysisSubmitBatchCommand extends Command
 
         $this->info("Tenders elegíveis: {$tenders->count()}");
         foreach ($tenders as $t) {
-            $this->line("  #{$t->id}  ref={$t->reference}  src={$t->source}  " . mb_substr((string) $t->title, 0, 60));
+            $pdfCount = $t->attachments()->where('extraction_status', 'ok')->count();
+            $pdfPill  = $pdfCount > 0 ? "[{$pdfCount}pdf]" : '[no-pdf]';
+            $this->line("  #{$t->id}  ref={$t->reference}  src={$t->source}  {$pdfPill}  " . mb_substr((string) $t->title, 0, 55));
         }
 
         if ($dryRun) {
