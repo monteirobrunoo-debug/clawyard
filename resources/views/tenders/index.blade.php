@@ -1278,14 +1278,19 @@
                         <option value="normal"   @selected($filters['urgency'] === 'normal')>Normal &gt;14d</option>
                     </select>
 
-                    @if($canAssign)
-                        <select name="collaborator_id" class="rounded-md border-gray-300 text-sm shadow-sm">
-                            <option value="">Todos colaboradores</option>
-                            @foreach($collaborators as $c)
-                                <option value="{{ $c->id }}" @selected((int)$filters['collaborator_id'] === $c->id)>{{ $c->name }}</option>
-                            @endforeach
-                        </select>
-                    @endif
+                    {{-- 2026-05-21: filtro por colaborador disponível a todos.
+                         Antes estava @if($canAssign) — só managers viam.
+                         Pedido directo: "concursos nspa/etc, poder selecionar
+                         colaborador e ver só processos do colaborador
+                         selecionado". Filtrar é read-only (apenas adiciona
+                         ?collaborator_id=X à URL), sem risco. O bulk-assign
+                         (mais abaixo) continua restrito a manager+. --}}
+                    <select name="collaborator_id" class="rounded-md border-gray-300 text-sm shadow-sm">
+                        <option value="">Todos colaboradores</option>
+                        @foreach($collaborators as $c)
+                            <option value="{{ $c->id }}" @selected((int)$filters['collaborator_id'] === $c->id)>{{ $c->name }}</option>
+                        @endforeach
+                    </select>
 
                     <div class="flex gap-2">
                         <button type="submit"
