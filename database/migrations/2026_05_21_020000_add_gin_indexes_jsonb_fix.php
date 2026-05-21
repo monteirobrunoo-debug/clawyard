@@ -19,9 +19,10 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     /**
      * Disable automatic transaction wrap — DDL falhas não devem
-     * envenenar todo o batch.
+     * envenenar todo o batch. Sem type hint para não colidir com
+     * a propriedade untyped da classe Migration parent.
      */
-    public bool $withinTransaction = false;
+    public $withinTransaction = false;
 
     public function up(): void
     {
