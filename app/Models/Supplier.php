@@ -30,6 +30,9 @@ class Supplier extends Model
         'last_contacted_at', 'last_replied_at',
         'enriched_at', 'enrich_attempts',
         'notes',
+        // 2026-05-21: web intel sync (SupplierWebIntelService)
+        'web_intel_summary', 'web_intel_products', 'web_intel_urls',
+        'web_intel_synced_at', 'web_intel_status', 'web_intel_error',
     ];
 
     protected function casts(): array
@@ -45,6 +48,10 @@ class Supplier extends Model
             'last_contacted_at'  => 'datetime',
             'last_replied_at'    => 'datetime',
             'enriched_at'        => 'datetime',
+            // 2026-05-21 web intel
+            'web_intel_products' => 'array',
+            'web_intel_urls'     => 'array',
+            'web_intel_synced_at'=> 'datetime',
         ];
     }
 
