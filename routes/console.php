@@ -114,6 +114,21 @@ Schedule::command('suppliers:find-emails --limit=30')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Web-intel re-sync — sábados 04:30 Lisbon ─────────────────────────────
+// 2026-05-21: re-corre Tavily + Claude para suppliers sincronizados há
+// >30 dias. Websites mudam (catálogos atualizados, OEMs novos, brands
+// adicionadas). Sábados às 04:30 não compete com outras tarefas.
+//
+// Custo: ~$0.01 por supplier processado. 873 totais − 155 cat
+// restritas = 718 max. Em 30d só os que ficam stale (~25/semana) →
+// ~$0.25/semana. Trivial.
+Schedule::command('suppliers:sync-web-intel --stale')
+    ->saturdays()
+    ->at('04:30')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Supplier directory enrichment — daily 02:50 Lisbon ───────────────────
 // Walks suppliers needing web contact info (no email yet, or missing
 // website, or stale > 30 days) and runs Tavily + Claude to fill in

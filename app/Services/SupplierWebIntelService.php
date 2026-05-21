@@ -195,10 +195,17 @@ PROMPT;
         if ($existingBrands !== '') $userMsg .= "Brands conhecidas: {$existingBrands}\n";
         $userMsg .= "\n=== SNIPPETS TAVILY ===\n" . mb_substr($snippets, 0, 6000) . "\n=== FIM ===\n\nDevolve o JSON.";
 
+        // 2026-05-21: Haiku 4.5 em vez de Sonnet — extracção JSON
+        // estruturada é o ponto forte do Haiku, e custa 12× menos
+        // ($0.25/MTok vs $3/MTok). Para 873 suppliers a re-sincronizar
+        // periodicamente, faz diferença real ($0.20/run vs $2.40/run).
+        $haikuModel = (string) config('services.anthropic.model_haiku', 'claude-haiku-4-5-20251001');
+
         $res = $this->dispatcher->dispatch(
             systemPrompt: $system,
             userMessage:  $userMsg,
             maxTokens:    1200,
+            model:        $haikuModel,
         );
 
         if (!($res['ok'] ?? false)) {

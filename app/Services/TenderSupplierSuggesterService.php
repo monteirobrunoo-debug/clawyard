@@ -613,6 +613,19 @@ class TenderSupplierSuggesterService
         $org   = mb_substr((string) $tender->purchasing_org, 0, 100);
         $notes = mb_substr((string) $tender->notes, 0, 1500);
 
+        // 2026-05-21: cache em Redis por (tender_id + query + notes_hash).
+        // TTL 1h. Operador que re-abre o painel não paga $0.013 de novo.
+        // Invalida quando notas mudam (hash diferente).
+        $cacheKey = 'sup_refine:v1:' . md5($tender->id . '|' . $query . '|' . $notes);
+        $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        if (is_array($cached)) {
+            \Log::info('refineWithClaude: cache hit', [
+                'tender_id' => $tender->id,
+                'count'     => count($cached),
+            ]);
+            return $cached;
+        }
+
         $system = <<<PROMPT
 És um analista de procurement da PartYard / HP-Group. Recebes:
   • Resumo de um concurso (tender) — título, organização compradora, notas com peças/items
@@ -700,6 +713,12 @@ PROMPT;
             'count'     => count($out),
             'cost_est'  => $res['cost_usd'] ?? null,
         ]);
+
+        // Persist 1h em Redis. Não cacheia quando $out vazio (next click
+        // poderá ter resultados se Tavily mudar) — só sucessos vão para cache.
+        if (!empty($out)) {
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $out, now()->addHour());
+        }
 
         return $out;
     }
