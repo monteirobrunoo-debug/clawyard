@@ -42,6 +42,45 @@ Route::get('/', function () {
     return auth()->check() ? redirect('/dashboard') : redirect('/login');
 });
 
+/**
+ * 2026-05-21: Health endpoint público para UptimeRobot/Pingdom/etc.
+ * Sem auth (qualquer monitoring service pode chamar). Devolve 200 com
+ * JSON {ok, db, redis, ts} se tudo OK, 503 caso contrário.
+ *
+ * Não expõe nenhum dado sensível — só estado dos integrations. O
+ * IntegrationHealthChecker continua a ser /admin/health para detalhe.
+ */
+Route::get('/health', function () {
+    $checks = [];
+    $ok = true;
+
+    // DB ping — query trivial
+    try {
+        \Illuminate\Support\Facades\DB::connection()->getPdo()->query('SELECT 1');
+        $checks['db'] = 'ok';
+    } catch (\Throwable $e) {
+        $checks['db'] = 'fail';
+        $ok = false;
+    }
+
+    // Redis ping
+    try {
+        \Illuminate\Support\Facades\Redis::connection()->ping();
+        $checks['redis'] = 'ok';
+    } catch (\Throwable $e) {
+        $checks['redis'] = 'fail';
+        $ok = false;
+    }
+
+    return response()->json([
+        'ok'      => $ok,
+        'checks'  => $checks,
+        'ts'      => now()->toIso8601String(),
+        'version' => trim((string) @file_get_contents(base_path('VERSION'))) ?: 'unknown',
+    ], $ok ? 200 : 503)
+        ->header('Cache-Control', 'no-store, max-age=0');
+});
+
 // ─── Patent PDF routes ────────────────────────────────────────────────────
 
 // Patent library page

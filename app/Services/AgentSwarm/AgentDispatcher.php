@@ -86,10 +86,28 @@ class AgentDispatcher
         $started = (int) (microtime(true) * 1000);
         $model = $model ?: $this->defaultModel;
 
+        // 2026-05-21: Anthropic Prompt Caching para system prompts >=1024
+        // tokens (~4kB). System prompts da Marta, dos 30 agentes, do
+        // multi-agente, todos vão para o cache ephemeral (5min TTL).
+        // Cache HIT = 90% off no input pricing → -$40-50/mês com o uso
+        // actual. Cache MISS = mesmo custo + ~5% sobrecarga (1ª chamada).
+        //
+        // Threshold de ~1024 tokens é o mínimo do Anthropic — system
+        // prompts menores que isso ignoram o cache_control (cobrado
+        // normal). Approximation: 4 chars ≈ 1 token, então 4096 chars.
+        $systemBlock = $systemPrompt;
+        if (mb_strlen($systemPrompt) >= 4096) {
+            $systemBlock = [[
+                'type'          => 'text',
+                'text'          => $systemPrompt,
+                'cache_control' => ['type' => 'ephemeral'],
+            ]];
+        }
+
         $body = [
             'model'      => $model,
             'max_tokens' => $maxTokens,
-            'system'     => $systemPrompt,
+            'system'     => $systemBlock,
             'messages'   => [
                 ['role' => 'user', 'content' => $userMessage],
             ],

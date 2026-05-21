@@ -53,6 +53,52 @@
                 });
             }
         </script>
+
+        {{-- 2026-05-21: InstantPage — hover sobre links começa a fazer
+             pre-fetch antes do click, então a navegação seguinte é
+             quase instantânea. Self-hosted (sem CDN externo, respeita
+             CSP). Ignora hashes na URL, links externos, e respeita
+             prefers-reduced-motion / save-data.
+             https://instant.page MIT licence — 2.5kB gzipped. --}}
+        <script>
+        (function () {
+            // Skip se browser pediu data-saver
+            if (navigator.connection?.saveData) return;
+            // Skip em mobile (touch tem hover events estranhos)
+            if (matchMedia('(hover: hover) and (pointer: fine)').matches === false) return;
+
+            const prefetched = new Set();
+            const head = document.head;
+
+            const isLocal = (url) => {
+                try {
+                    const u = new URL(url, location.href);
+                    if (u.origin !== location.origin) return false;
+                    if (u.pathname === location.pathname && u.hash) return false;
+                    if (u.pathname.match(/\.(pdf|docx|xlsx|zip|png|jpg)$/i)) return false;
+                    return true;
+                } catch { return false; }
+            };
+
+            const prefetch = (url) => {
+                if (prefetched.has(url)) return;
+                prefetched.add(url);
+                const link = document.createElement('link');
+                link.rel  = 'prefetch';
+                link.href = url;
+                head.appendChild(link);
+            };
+
+            let hoverTimer = null;
+            document.addEventListener('mouseover', (e) => {
+                const a = e.target.closest('a[href]');
+                if (!a || !isLocal(a.href)) return;
+                clearTimeout(hoverTimer);
+                hoverTimer = setTimeout(() => prefetch(a.href), 65);
+            }, { passive: true });
+            document.addEventListener('mouseout', () => clearTimeout(hoverTimer), { passive: true });
+        })();
+        </script>
     </head>
     <body class="font-sans antialiased">
         <div class="min-h-screen bg-gray-100">
