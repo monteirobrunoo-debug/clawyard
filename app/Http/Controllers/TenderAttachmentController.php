@@ -233,13 +233,49 @@ class TenderAttachmentController extends Controller
 
     public function destroy(Tender $tender, TenderAttachment $attachment)
     {
-        $this->authorizeView($tender, requireManager: true);
+        // 2026-05-21: regra de delete alargada. Antes só manager podia
+        // apagar — pedido "User joao murta tentou apagar um ficheiro no
+        // marine departmemt e nao consegui deu erro 403". João é role
+        // 'user' (não manager) e bateu no abort(403) da linha 253.
+        //
+        // Nova política (espelha o flow de upload, que é aberto a todos
+        // os authenticated em tenders não-confidenciais):
+        //
+        //   ✓ Managers              — sempre podem apagar tudo
+        //   ✓ Próprio uploader      — apaga o que carregou (corrige asneira)
+        //   ✓ Colaborador atribuído — apaga anexos do seu tender (workflow)
+        //   ✗ Outros users          — view-only, têm de pedir ao dono
+        //
+        // Continua a respeitar a flag is_confidential via authorizeView().
+        $this->authorizeView($tender);   // sem requireManager
         if ($attachment->tender_id !== $tender->id) abort(404);
+
+        $u = Auth::user();
+        $isManager  = $u->isManager();
+        $isUploader = (int) $attachment->uploaded_by_user_id === (int) $u->id;
+        $isAssigned = $tender->collaborator
+            && (int) $tender->collaborator->user_id === (int) $u->id;
+
+        if (!$isManager && !$isUploader && !$isAssigned) {
+            abort(403,
+                'Só o uploader original, o colaborador atribuído ao concurso, '
+                . 'ou um manager pode apagar este anexo. Pede a um deles para o remover, '
+                . 'ou contacta o admin.'
+            );
+        }
 
         try {
             Storage::disk(self::DISK)->delete($attachment->disk_path);
         } catch (\Throwable $e) { /* file already gone — fine */ }
         $attachment->delete();
+
+        Log::info('Tender attachment deleted', [
+            'tender_id'      => $tender->id,
+            'attachment_id'  => $attachment->id,
+            'original_name'  => $attachment->original_name,
+            'deleted_by'     => $u->id,
+            'reason'         => $isManager ? 'manager' : ($isUploader ? 'uploader' : 'assigned'),
+        ]);
 
         return back()->with('status', '✓ Anexo removido.');
     }
