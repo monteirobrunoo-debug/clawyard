@@ -137,12 +137,35 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('tenders.collaborators',
             fn(User $u) => $u->isManager() || $u->hasExtraPermission('tenders.collaborators'));
 
-        // Manager+ can edit anything. Regular users can edit tenders
-        // assigned to a collaborator linked to their User account.
+        // 2026-05-21: política alargada (espelha view/upload/delete que
+        // já estão abertos a todos os authenticated users). Pedido directo:
+        //   "concursos acingov, edita aparece apenas como leitura, já
+        //    aberto no sap, não deixa escrever nos campos."
+        //
+        // Tenders não-atribuídos (ex.: Acingov recém-importado, NSPA em
+        // pool) ficavam read-only para qualquer non-manager, mesmo
+        // tendo tenders.view-all. Bloqueava operadores comerciais de
+        // editar deadline, organização, valor, notas, etc.
+        //
+        // Nova política:
+        //   ✓ Manager/Admin                 — sempre
+        //   ✓ Colaborador atribuído         — sempre (já existia)
+        //   ✓ Qualquer user authenticated   — em tenders NÃO-confidenciais
+        //   ✗ Tenders confidenciais          — só atribuído + manager
+        //     (consistente com TenderController::enforceVisibility e
+        //      TenderAttachmentController::authorizeView)
         Gate::define('tenders.update', function (User $u, Tender $t): bool {
             if ($u->isManager()) return true;
             $collab = $t->collaborator;
-            return $collab && $collab->user_id === $u->id;
+            if ($collab && $collab->user_id === $u->id) return true;
+
+            // Tenders confidenciais continuam blindados: nem o
+            // tenders.view-all dá permissão de editar.
+            if ($t->is_confidential) return false;
+
+            // Não-confidencial + authenticated: pode editar.
+            // is_active guarda contra users desactivados.
+            return (bool) $u->is_active;
         });
 
         // Adding observations is a low-privilege, append-only action so any
