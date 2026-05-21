@@ -372,35 +372,89 @@ class TenderSupplierSuggesterService
 
         $scored = $candidates->map(function (Supplier $s) use ($haystack, $tenderSalt) {
             $score = (float) ($s->iqf_score ?? 0) * 10;   // base IQF weight
+            $matchedSignals = [];
 
-            // Brand match — mais forte (signal directo: o supplier
-            // trabalha com este OEM e o tender menciona o OEM).
+            // 2026-05-21 Phase 2: web_intel_products é o signal MAIS
+            // forte. Os "products" foram extraídos do website real do
+            // supplier por Tavily+Claude. Bater 1 produto = supplier
+            // mesmo trabalha com aquilo (não só uma categoria static).
+            // Pedido directo: "Os agentes tem de verificar na web o
+            // que faz os fornecedores e confrontar se os que temos
+            // aprovado tem o mesmo material também".
+            foreach ((array) ($s->web_intel_products ?? []) as $p) {
+                $p = trim(mb_strtolower((string) $p));
+                if ($p === '' || mb_strlen($p) < 4) continue;
+                // Match exacto (substring) → boost forte
+                if (str_contains($haystack, $p)) {
+                    $score += 40;
+                    $matchedSignals[] = "web_product:{$p}";
+                    continue;
+                }
+                // Match parcial (1ª palavra do product >=4 chars) →
+                // boost menor. Ex.: product "circuit breakers MCB" →
+                // 1ª palavra "circuit" → ainda boa indicação.
+                $firstWord = explode(' ', $p)[0] ?? '';
+                if (mb_strlen($firstWord) >= 5 && str_contains($haystack, $firstWord)) {
+                    $score += 12;
+                    $matchedSignals[] = "web_word:{$firstWord}";
+                }
+            }
+
+            // Web-intel summary mention — médio signal (summary contém
+            // o que faz em prosa: "Hempel fornece tintas marítimas
+            // antifouling…" → tender com "tintas" / "antifouling" bate).
+            $summary = mb_strtolower((string) $s->web_intel_summary);
+            if (mb_strlen($summary) >= 50) {
+                // Procura 2-3 substantivos do haystack no summary
+                // (heurística leve, sem NLP).
+                $hits = 0;
+                foreach (explode(' ', mb_substr($haystack, 0, 2000)) as $w) {
+                    $w = trim($w, ".,;:()[]\"'/-");
+                    if (mb_strlen($w) >= 6 && str_contains($summary, $w)) {
+                        $hits++;
+                        if ($hits >= 3) break;
+                    }
+                }
+                if ($hits > 0) $score += $hits * 8;
+            }
+
+            // Brand match — signal directo. Tipo "MTU", "CAT".
             foreach ((array) ($s->brands ?? []) as $b) {
                 $b = trim(mb_strtolower((string) $b));
                 if ($b !== '' && mb_strlen($b) >= 3 && str_contains($haystack, $b)) {
                     $score += 30;
+                    $matchedSignals[] = "brand:{$b}";
                 }
             }
-            // Subcategory match — bom signal (specialty alinha com
-            // keyword do tender). Subcats são "13.45", "9.4", etc;
-            // só usamos o nome legível se existir mas por agora bate
-            // pelo código directo é suficiente para boost.
+            // Subcategory match — bom signal.
             foreach ((array) ($s->subcategories ?? []) as $sc) {
                 $sc = trim(mb_strtolower((string) $sc));
                 if ($sc !== '' && str_contains($haystack, $sc)) {
                     $score += 15;
                 }
             }
-            // Nome do supplier no texto — boost forte (o operador
-            // muitas vezes já mencionou o supplier nas notas).
+            // Nome do supplier no texto — boost forte.
             $nameLow = mb_strtolower($s->name);
             if (mb_strlen($nameLow) >= 4 && str_contains($haystack, $nameLow)) {
                 $score += 50;
+                $matchedSignals[] = "name";
+            }
+
+            // Penalização para suppliers sem web-intel sync (skipped,
+            // failed, ou never run) quando a categoria é genérica. Mantém
+            // o tie-breaker para os que têm match real fica em cima.
+            if (in_array((string) $s->web_intel_status, ['failed', 'no_data', 'skipped_restricted'], true)
+                || $s->web_intel_status === null) {
+                $score -= 5;
             }
 
             // Tie-breaker: hash determinístico do (id, name, tender_id).
-            // Pequeno (range 0-9) para não overpower os boosts acima.
             $shuffleTie = hexdec(substr(md5($s->id . '|' . $s->name . '|' . $tenderSalt), 0, 4)) % 1000 / 100.0;
+
+            // Anexa signals à instância (não persistido) para a UI
+            // mostrar PORQUÊ este supplier foi sugerido.
+            $s->match_signals = $matchedSignals;
+            $s->match_score   = $score + $shuffleTie;
 
             return ['supplier' => $s, 'score' => $score + $shuffleTie];
         });
@@ -422,20 +476,51 @@ class TenderSupplierSuggesterService
         // Strip common procurement boilerplate so the search focuses on
         // the actual product/service, not "tender for".
         $title = preg_replace(
-            '/\b(tender|rfq|rfp|request for (?:quote|proposal|tender|information)|procurement|aquisição|aquisicao|contrato|contract|fornecimento)\b/i',
+            '/\b(tender|rfq|rfp|request for (?:quote|proposal|tender|information)|procurement|aquisição|aquisicao|contrato|contract|fornecimento|provision of|provisão de|provision de|aquisição de)\b/i',
             '',
             $title,
         ) ?? $title;
         $title = preg_replace('/\s{2,}/', ' ', $title) ?? $title;
         $title = trim($title);
 
+        // 2026-05-21: tentar extrair signals concretos do PDF da Marta
+        // (notes contêm "Peças identificadas:" e "Fornecedores prováveis:"
+        // que ela extraiu via extractFieldsFromPdf). Pedido directo:
+        //  "pesquisa na web com o tavily nao está a dar os fornecedores
+        //   correctos". Antes só usávamos o título do concurso (vago);
+        //   agora se houver peças concretas (P/N, model number, MTU396,
+        //   SMARTCAN, etc.) construímos query muito mais directa.
+        $notes = (string) $tender->notes;
+        $extras = [];
+        if ($notes !== '' && preg_match_all('/(?:^|\n)[•\-\*]\s+([^\n]{4,80})/', $notes, $matches)) {
+            // Até 3 itens da lista de peças (mais que isso satura query Tavily)
+            foreach (array_slice($matches[1] ?? [], 0, 3) as $bullet) {
+                $bullet = trim($bullet);
+                // Limpar prefixes tipo "**Peças:**" que vêm no notes
+                $bullet = preg_replace('/^\*+|\*+$/', '', $bullet) ?? $bullet;
+                if (mb_strlen($bullet) >= 4) $extras[] = $bullet;
+            }
+        }
+
+        // Procurar P/N ou model numbers no título / notas (regex
+        // alphanumérico com hífen/ponto, 5-20 chars). Sinal forte.
+        $haystack = $title . ' ' . mb_substr($notes, 0, 2000);
+        if (preg_match_all('/\b([A-Z][A-Z0-9\-\/\.]{4,18}[A-Z0-9])\b/', $haystack, $pnMatches)) {
+            foreach (array_slice(array_unique($pnMatches[1] ?? []), 0, 2) as $pn) {
+                $extras[] = $pn;
+            }
+        }
+
         $org = trim((string) $tender->purchasing_org);
         $bits = array_filter([
-            mb_substr($title, 0, 120),
-            $org !== '' ? "for {$org}" : '',
+            mb_substr($title, 0, 100),
+            !empty($extras) ? implode(' ', $extras) : '',
             'manufacturer OR supplier OR distributor',
+            $org !== '' && mb_strlen($org) <= 40 ? "({$org})" : '',
         ]);
-        return implode(' ', $bits) ?: 'maritime spare parts supplier';
+        $query = implode(' ', $bits) ?: 'maritime spare parts supplier';
+        // Tavily limit 400 chars; deixar margem.
+        return mb_substr($query, 0, 380);
     }
 
     /**
