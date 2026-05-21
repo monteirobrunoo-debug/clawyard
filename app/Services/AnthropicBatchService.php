@@ -86,13 +86,21 @@ class AnthropicBatchService
             'metadata'          => ['custom_ids' => array_column($requests, 'custom_id')],
         ]);
 
+        // 2026-05-21: custom_id pattern Anthropic = ^[a-zA-Z0-9_-]{1,64}$
+        // — não aceita ":" nem espaços nem outros symbols. Sanitize aqui:
+        // qualquer caracter fora do alphabet vira "_". Trunca a 64 chars.
+        $sanitiseId = function (string $id): string {
+            $clean = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $id) ?? $id;
+            return mb_substr($clean, 0, 64) ?: 'id';
+        };
+
         // Anthropic batch request format: requests[].params has the same
         // shape as a normal Messages API call (model, system, messages,
         // max_tokens, etc.).
         $payload = [
-            'requests' => array_map(function ($r) {
+            'requests' => array_map(function ($r) use ($sanitiseId) {
                 return [
-                    'custom_id' => (string) $r['custom_id'],
+                    'custom_id' => $sanitiseId((string) $r['custom_id']),
                     'params' => array_filter([
                         'model'      => $r['model']      ?? null,
                         'system'     => $r['system']     ?? null,

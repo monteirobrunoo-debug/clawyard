@@ -55,9 +55,10 @@ class AnthropicBatchTestCommand extends Command
             model: 'claude-haiku-4-5-20251001',
             kind:  'smoke-test',
             requests: [
-                ['custom_id' => 'test:1', 'system' => 'You are a calculator.', 'messages' => [['role' => 'user', 'content' => 'What is 2+2? Reply ONLY with the number.']], 'max_tokens' => 10],
-                ['custom_id' => 'test:2', 'system' => 'You are a calculator.', 'messages' => [['role' => 'user', 'content' => 'What is 10*7? Reply ONLY with the number.']], 'max_tokens' => 10],
-                ['custom_id' => 'test:3', 'system' => 'You are a calculator.', 'messages' => [['role' => 'user', 'content' => 'What is 100-23? Reply ONLY with the number.']], 'max_tokens' => 10],
+                // custom_id pattern: ^[a-zA-Z0-9_-]{1,64}$ (Anthropic exige)
+                ['custom_id' => 'test-1', 'system' => 'You are a calculator.', 'messages' => [['role' => 'user', 'content' => 'What is 2+2? Reply ONLY with the number.']], 'max_tokens' => 10],
+                ['custom_id' => 'test-2', 'system' => 'You are a calculator.', 'messages' => [['role' => 'user', 'content' => 'What is 10*7? Reply ONLY with the number.']], 'max_tokens' => 10],
+                ['custom_id' => 'test-3', 'system' => 'You are a calculator.', 'messages' => [['role' => 'user', 'content' => 'What is 100-23? Reply ONLY with the number.']], 'max_tokens' => 10],
             ],
         );
 
