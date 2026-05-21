@@ -36,7 +36,7 @@ class AnthropicBatchService
 
     public function __construct()
     {
-        $this->apiKey = (string) config('services.anthropic.key', '');
+        $this->apiKey = (string) config('services.anthropic.api_key', '');
         $this->http = new Client([
             'base_uri' => 'https://api.anthropic.com/',
             'timeout'  => 60,
