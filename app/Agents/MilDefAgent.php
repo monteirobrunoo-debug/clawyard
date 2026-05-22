@@ -37,7 +37,13 @@ class MilDefAgent implements AgentInterface
 
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
-    protected string $searchPolicy = 'always';
+    // 2026-05-22: mudado de 'always' para 'conditional'. 'always' forçava
+    // Tavily em CADA mensagem, mesmo quando o user só queria knowledge interno.
+    // Resultado: streams a pendurar quando Tavily lento + custo desnecessário.
+    // 'conditional' usa keyword gate (needsWebSearch) — só dispara Tavily se
+    // o user mencionar palavras-chave que justifiquem (preço actual, fornecedor
+    // 2026, regulamentação recente, etc).
+    protected string $searchPolicy = 'conditional';
     protected string $agentKey     = 'mildef';
     protected string $contextKey   = 'mildef_intel';
     protected array  $contextTags  = [
@@ -330,7 +336,9 @@ SYSPROMPT;
     // ────────────────────────────────────────────────────────────────────────
     public function chat(string|array $message, array $history = []): string
     {
-        $finalMessage = $this->augmentWithWebSearch($message);
+        // smartAugment respeita searchPolicy ('conditional' → só dispara
+        // Tavily se needsWebSearch() detectar keywords).
+        $finalMessage = $this->smartAugment($message);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage);
         // LTM: top-5 memórias deste user × mildef → prepended ao prompt.
         // Padrão Bornet et al. 2025 — agentes deixam de ter "memória de
@@ -366,8 +374,10 @@ SYSPROMPT;
     // ────────────────────────────────────────────────────────────────────────
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        if ($heartbeat) $heartbeat('🔍 a pesquisar fornecedores de defesa mundiais');
-        $finalMessage = $this->augmentWithWebSearch($message, $heartbeat);
+        // smartAugment respeita searchPolicy. Heartbeat só dispara se o gate
+        // decidir mesmo chamar Tavily (evita "a pesquisar..." falso quando
+        // a query não precisa de web).
+        $finalMessage = $this->smartAugment($message, $heartbeat);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage, $heartbeat);
         // LTM recall — prepende memórias deste user × mildef.
         $finalMessage = $this->prependMemories($finalMessage);

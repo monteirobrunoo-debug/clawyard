@@ -12,7 +12,16 @@ class WebSearchService
     public function __construct()
     {
         $this->apiKey = config('services.tavily.api_key');
-        $this->http   = new Client(['timeout' => 10, 'connect_timeout' => 5]);
+        // 2026-05-22: timeout apertado para evitar pendurar Octane SSE streams.
+        // Antes: 10s/5s — Tavily às vezes pendura > 30s, agente fica "parado".
+        // Agora: 8s total / 3s connect. Se Tavily não responder, falha graciosa
+        // via catch em search() → devolve "(Web search failed)".
+        // Override via env se precisar de mais paciência (basic=fast, advanced=lento).
+        $this->http   = new Client([
+            'timeout'         => (int) config('services.tavily.timeout', 8),
+            'connect_timeout' => (int) config('services.tavily.connect_timeout', 3),
+            'http_errors'     => false,  // não throw em 4xx/5xx → trata na response
+        ]);
     }
 
     public function isAvailable(): bool

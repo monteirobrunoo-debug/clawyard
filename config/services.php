@@ -111,6 +111,11 @@ return [
 
     'tavily' => [
         'api_key' => env('TAVILY_API_KEY'),
+        // 2026-05-22: timeouts apertados para evitar SSE streams Octane
+        // pendurados quando Tavily fica lento. Default 8s total / 3s connect.
+        // Override via env para basic=mais rápido, advanced=mais paciente.
+        'timeout'         => (int) env('TAVILY_TIMEOUT_SECONDS', 8),
+        'connect_timeout' => (int) env('TAVILY_CONNECT_TIMEOUT_SECONDS', 3),
     ],
 
     'aria' => [
