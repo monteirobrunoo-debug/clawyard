@@ -180,8 +180,8 @@ trait AgentMemoryTrait
      *   (a) LLM-emitted tag (explícito, mais preciso):
      *       <save_memory key="preferred_oem" value="MTU sempre" importance="0.8"/>
      *
-     *   (b) User-stated heurística (português):
-     *       "lembra-te que..."   "anota..."    "para que saibas..."
+     *   (b) User-stated heurística (português + inglês):
+     *       PT: "lembra-te que..."  "lembrar:"  "anota..."  "para que saibas..."
      *       "para futuro..."     "regra..."    "sempre..."
      *
      * Stripped da resposta antes de devolver ao user (tags) — o user vê só
@@ -200,9 +200,14 @@ trait AgentMemoryTrait
             $reply
         ) ?? $reply;
 
-        // (b) Heurística português — só dispara se o user pediu explicitamente.
+        // (b) Heurística PT + EN — só dispara se o user pediu explicitamente.
+        // PT: lembra-te / lembrar / anota / para que saibas / para futuro / regra / sempre / nota
+        // EN: remember (that) / note (that) / for future / for the record / rule / always / important: / fyi
         if (preg_match_all(
-            '/\b(?:lembra-te|anota|para que saibas|para futuro|regra|sempre)\b[:,\s]+([^.\n!?]{8,200})/iu',
+            '/\b(?:'
+            . 'lembra-te|lembrar|anota|nota|para que saibas|para futuro|regra|sempre|'  // PT
+            . 'remember(?:\s+that)?|note(?:\s+that)?|for\s+future(?:\s+reference)?|for\s+the\s+record|rule|always|important|fyi'  // EN
+            . ')\b[:,\s]+([^.\n!?]{8,200})/iu',
             $userMessage,
             $matches
         )) {
