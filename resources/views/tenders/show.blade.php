@@ -316,10 +316,24 @@
                         </a>
                         @unless($tender->is_confidential)
                             @if($tender->source !== 'marine')
-                                {{-- Multi-agente pesado (~30-60s) — só Concursos. --}}
+                                {{-- Multi-agente pesado (~30-60s + custo significativo Anthropic).
+                                     2026-05-22: kill-switch — só corre via clique manual
+                                     deliberado, com confirmação de custo. Pré-calcula
+                                     custo da última run para mostrar estimativa real. --}}
+                                @php
+                                    $lastAnalysisForCost = \App\Models\TenderServiceAnalysis::where('tender_id', $tender->id)
+                                        ->where('status', 'done')
+                                        ->latest('generated_at')
+                                        ->first();
+                                    $lastCostUsd = (float) ($lastAnalysisForCost?->total_cost_usd ?? 0);
+                                    // USD→EUR aprox (rate 2026-05: 0.92). Não é trade-grade —
+                                    // só para o user perceber a ordem de grandeza.
+                                    $lastCostEur = $lastCostUsd > 0 ? round($lastCostUsd * 0.92, 2) : null;
+                                @endphp
                                 <button type="button" id="ts-service-analysis-btn"
+                                        data-last-cost-eur="{{ $lastCostEur ?? '' }}"
                                         class="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-500"
-                                        title="Painel multi-agente — Cor. Rodrigues + Marco Sales + Eng. Victor + Logística + Dr. Ana Contracts. ~30-60s, ~$0.04.">
+                                        title="Painel multi-agente — Cor. Rodrigues + Marco Sales + Eng. Victor + Logística + Dr. Ana Contracts. ~30-60s. Confirma custo antes de correr.">
                                     🎯 Análise do serviço (multi-agente)
                                 </button>
                             @else
@@ -729,6 +743,24 @@
                         const url  = "{{ route('tenders.service-analysis.generate', $tender) }}";
 
                         btn.addEventListener('click', async () => {
+                            // 2026-05-22 — confirmação de custo antes de correr.
+                            // Análise multi-agente consome muitos tokens Anthropic
+                            // (vimos €25-29 por call em produção). Forçar o user a
+                            // confirmar o custo evita cliques acidentais.
+                            const lastCostEur = parseFloat(btn.dataset.lastCostEur || '0');
+                            const costLine = lastCostEur > 0
+                                ? 'A última análise para este tender custou ~€' + lastCostEur.toFixed(2) + '.'
+                                : 'Custo típico: €5–25 dependendo do tamanho do tender (PDFs anexos, '
+                                  + 'fornecedores no contexto, etc.).';
+                            const confirmed = window.confirm(
+                                '🎯 Análise multi-agente\n\n'
+                                + 'Vai consultar Cor. Rodrigues, Marco Sales, Eng. Victor, '
+                                + 'Logística e Dr. Ana — cada um faz 1-2 chamadas à Anthropic.\n\n'
+                                + costLine + '\n\n'
+                                + 'Demora 30–60s. Continuar?'
+                            );
+                            if (!confirmed) return;
+
                             btn.disabled = true;
                             const orig = btn.textContent;
                             btn.textContent = '🔄 A consultar agentes (~30-60s)...';
