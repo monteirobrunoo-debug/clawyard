@@ -185,7 +185,7 @@ Devolve APENAS este JSON (sem markdown, sem prefácio):
   "nsn": "XXXX-XX-XXX-XXXX",
   "description": "descrição técnica do item (≤200 chars) — peça, função, specs",
   "fsc": "código FSC + nome (ex: '5331 — O-Rings')",
-  "oem": "fabricante original (nome canónico, ≤80 chars)",
+  "oem": "fabricante original (nome canónico, ≤80 chars) OU string vazia",
   "ncage_codes": ["códigos NCAGE/CAGE associados (5 chars cada)", ...],
   "distributors": [
     {"name": "nome distribuidor", "country": "ISO-2 ou nome curto",
@@ -196,12 +196,29 @@ Devolve APENAS este JSON (sem markdown, sem prefácio):
   "evidence_urls": ["https://..", "https://.."]
 }
 
-REGRAS:
+REGRAS DE EVIDÊNCIA (CRÍTICO — anti-hallucination):
+  • OEM: APENAS preenche se o nome do fabricante aparecer LITERALMENTE
+    associado ao NSN num snippet ("Manufacturer: X", "OEM: X", "Made by X",
+    "Cage code XXXXX = X"). Se vês um nome de empresa solto perto do NSN
+    mas SEM relação explícita ao item, deixa vazio. NUNCA infiras OEM a
+    partir de nomes que aparecem por coincidência geográfica/temporal.
+  • Exemplos de FALSO POSITIVO a evitar: snippet menciona "Oshkosh
+    Corporation" como cliente do FSC, não como fabricante do NSN → NÃO
+    é OEM. Empresa aparece no header da página → NÃO é OEM.
+  • Distribuidores: nome+URL têm de aparecer juntos nos snippets — não
+    inferir distribuidor a partir de "vimos esta peça em X" sem que X
+    venda esta peça especificamente.
+  • Emails: têm de aparecer LITERALMENTE no texto dos snippets — não
+    inventes (zero tolerância para .com/.eu/.pt inventados).
+  • Se NÃO tens evidência directa de qualquer campo, devolve-o vazio.
+    PREFERE FALSO NEGATIVO A FALSO POSITIVO — o agente humano que recebe
+    isto vai actuar com base nestes dados. Mentir é pior que admitir
+    "não sei".
+
+REGRAS DE POLÍTICA:
   • EXCLUI fornecedores chineses/russos (política HP-Group security)
-  • EXCLUI marketplaces (Alibaba, IndiaMart) e listings genéricos
+  • EXCLUI marketplaces (Alibaba, IndiaMart, eBay) e listings genéricos
   • PREFERE EU/US/UK/JP/KR/IL/CA
-  • Se Tavily não tem info útil, devolve campos vazios — NÃO inventes
-  • Emails têm de aparecer LITERALMENTE nos snippets — não inventes (.com/.eu/.pt etc)
   • description deve ser específica (não "spare part" genérico)
 PROMPT;
 
@@ -231,6 +248,43 @@ PROMPT;
         if (!is_array($decoded)) {
             throw new \RuntimeException('JSON decode failed');
         }
+
+        // Defesa-em-profundidade contra alucinação Haiku: se o nome do OEM
+        // ou de um distribuidor não aparece NO TEXTO ORIGINAL do Tavily,
+        // dropa silenciosamente. Match case-insensitive em ASCII strip
+        // (lida com acentos / caracteres especiais).
+        $haystack = mb_strtolower($tavilyRaw);
+        $appearsInTavily = function (string $name) use ($haystack): bool {
+            $name = trim($name);
+            if (mb_strlen($name) < 3) return false;
+            // Tenta nome inteiro, depois primeira palavra (≥4 chars).
+            if (str_contains($haystack, mb_strtolower($name))) return true;
+            $first = explode(' ', $name)[0] ?? '';
+            return mb_strlen($first) >= 4 && str_contains($haystack, mb_strtolower($first));
+        };
+
+        $oemRaw = trim((string) ($decoded['oem'] ?? ''));
+        if ($oemRaw !== '' && !$appearsInTavily($oemRaw)) {
+            Log::info('NsnLookupTool: OEM dropped (no Tavily evidence)', [
+                'nsn' => $nsn, 'oem_claimed' => $oemRaw,
+            ]);
+            $decoded['oem'] = '';
+        }
+
+        $decoded['distributors'] = array_values(array_filter(
+            (array) ($decoded['distributors'] ?? []),
+            function ($d) use ($appearsInTavily, $nsn) {
+                if (!is_array($d)) return false;
+                $name = trim((string) ($d['name'] ?? ''));
+                $ok = $name !== '' && $appearsInTavily($name);
+                if (!$ok) {
+                    Log::info('NsnLookupTool: distributor dropped (no Tavily evidence)', [
+                        'nsn' => $nsn, 'name' => $name,
+                    ]);
+                }
+                return $ok;
+            }
+        ));
 
         // Sanitize
         return [
