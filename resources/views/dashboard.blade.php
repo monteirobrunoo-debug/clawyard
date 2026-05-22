@@ -995,19 +995,26 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
 
     // ── Token Budget — banner grande no topo. Pedido 2026-05-22:
     // "faz outra vez um grande para por nap encontro no principal os tokens".
-    // O widget pequeno fica no strip de Ranking abaixo, este é destaque.
+    // Cada call separadamente em try/catch — se ranking falhar, summary
+    // continua a renderizar. Antes 1 falha matava tudo.
+    $heroTokenSummary = null;
+    $heroTokenTop3    = [];
+    $heroTokenMyEur   = null;
     try {
         $heroTokenSvc     = app(\App\Services\TokenBudgetService::class);
         $heroTokenSummary = $heroTokenSvc->summary();
-        $heroTokenTop3    = $heroTokenSvc->rankingThisMonth(3);
-        $heroTokenMyEur   = null;
-        if (auth()->check()) {
+    } catch (\Throwable) {}
+    try {
+        if (isset($heroTokenSvc)) {
+            $heroTokenTop3 = $heroTokenSvc->rankingThisMonth(3);
+        }
+    } catch (\Throwable) {}
+    try {
+        if (isset($heroTokenSvc) && auth()->check()) {
             $u = $heroTokenSvc->spentByUserThisMonth();
             $heroTokenMyEur = (float) ($u[auth()->id()] ?? 0);
         }
-    } catch (\Throwable) {
-        $heroTokenSummary = null; $heroTokenTop3 = []; $heroTokenMyEur = null;
-    }
+    } catch (\Throwable) {}
 @endphp
 
 {{-- 💰 TOKEN BUDGET HERO BANNER — full-width, no topo do dashboard.

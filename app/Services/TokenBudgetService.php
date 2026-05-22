@@ -93,30 +93,50 @@ class TokenBudgetService
         [$start, $end] = $this->periodWindow();
         $rate = $this->usdToEurRate();
 
-        // messages → conversations → user_id
-        $msgRows = DB::table('messages')
-            ->join('conversations', 'conversations.id', '=', 'messages.conversation_id')
-            ->whereBetween('messages.created_at', [$start, $end])
-            ->whereNotNull('conversations.user_id')
-            ->groupBy('conversations.user_id')
-            ->selectRaw('conversations.user_id, COALESCE(SUM(messages.cost_usd), 0) as total')
-            ->pluck('total', 'conversations.user_id')->toArray();
+        // messages → conversations → users (JOIN por email, conversations não
+        // tem user_id directo — só session_id/email/phone). 2026-05-22 fix:
+        // assumia user_id mas a coluna não existe. JOIN por email é robusto
+        // porque users.email é unique. Anonymous chats (sem email) caem fora
+        // do ranking — o gasto total continua a contar no spentThisMonth().
+        $msgRows = [];
+        try {
+            $msgRows = DB::table('messages')
+                ->join('conversations', 'conversations.id', '=', 'messages.conversation_id')
+                ->join('users', 'users.email', '=', 'conversations.email')
+                ->whereBetween('messages.created_at', [$start, $end])
+                ->whereNotNull('conversations.email')
+                ->groupBy('users.id')
+                ->selectRaw('users.id as user_id, COALESCE(SUM(messages.cost_usd), 0) as total')
+                ->pluck('total', 'user_id')->toArray();
+        } catch (\Throwable $e) {
+            \Log::warning('TokenBudgetService: msg per-user query failed — ' . $e->getMessage());
+        }
 
-        // agent_runs.user_id
-        $runRows = DB::table('agent_runs')
-            ->whereBetween('created_at', [$start, $end])
-            ->whereNotNull('user_id')
-            ->groupBy('user_id')
-            ->selectRaw('user_id, COALESCE(SUM(cost_usd), 0) as total')
-            ->pluck('total', 'user_id')->toArray();
+        // agent_runs.user_id (existe directo)
+        $runRows = [];
+        try {
+            $runRows = DB::table('agent_runs')
+                ->whereBetween('created_at', [$start, $end])
+                ->whereNotNull('user_id')
+                ->groupBy('user_id')
+                ->selectRaw('user_id, COALESCE(SUM(cost_usd), 0) as total')
+                ->pluck('total', 'user_id')->toArray();
+        } catch (\Throwable $e) {
+            \Log::warning('TokenBudgetService: agent_runs per-user query failed — ' . $e->getMessage());
+        }
 
         // tender_service_analyses.generated_by_user_id
-        $tsaRows = DB::table('tender_service_analyses')
-            ->whereBetween('created_at', [$start, $end])
-            ->whereNotNull('generated_by_user_id')
-            ->groupBy('generated_by_user_id')
-            ->selectRaw('generated_by_user_id, COALESCE(SUM(total_cost_usd), 0) as total')
-            ->pluck('total', 'generated_by_user_id')->toArray();
+        $tsaRows = [];
+        try {
+            $tsaRows = DB::table('tender_service_analyses')
+                ->whereBetween('created_at', [$start, $end])
+                ->whereNotNull('generated_by_user_id')
+                ->groupBy('generated_by_user_id')
+                ->selectRaw('generated_by_user_id, COALESCE(SUM(total_cost_usd), 0) as total')
+                ->pluck('total', 'generated_by_user_id')->toArray();
+        } catch (\Throwable $e) {
+            \Log::warning('TokenBudgetService: tsa per-user query failed — ' . $e->getMessage());
+        }
 
         // Merge — sum por user_id
         $byUser = [];
