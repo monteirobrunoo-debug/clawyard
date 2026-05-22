@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\AgentMemoryTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\SapService;
 use App\Services\PromptLibrary;
@@ -33,8 +34,10 @@ class CrmAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
     use WebSearchTrait;
+    use AgentMemoryTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
+    protected string $agentKey    = 'crm';
     protected string $contextKey  = 'crm_intel';
     protected array  $contextTags = ['CRM','oportunidade','pipeline','SAP','cliente','negócio','proposta','contrato','vendedor'];
     protected string $systemPrompt = '';
@@ -868,6 +871,7 @@ SPECIALTY;
         }
 
         $message      = $this->augmentWithCrmContext($message);
+        $message      = $this->prependMemories($message);  // LTM recall
         $recentHistory = array_slice($history, -self::CONTEXT_WINDOW);
         $messages      = array_merge($recentHistory, [['role' => 'user', 'content' => $message]]);
 
@@ -887,6 +891,7 @@ SPECIALTY;
 
         $data   = json_decode($response->getBody()->getContents(), true);
         $fullReply = $data['content'][0]['text'] ?? '';
+        $fullReply = $this->maybeExtractAndSaveMemories($rawText, $fullReply);  // LTM save
         $this->publishSharedContext($fullReply);
         return $fullReply;
     }
@@ -909,8 +914,10 @@ SPECIALTY;
         // ── Normal conversation ───────────────────────────────────────────────
         if ($heartbeat) $heartbeat('Marta a analisar...');
         $message = $this->augmentWithCrmContext($message, $heartbeat);
+        $message = $this->prependMemories($message);  // LTM recall
         if ($heartbeat) $heartbeat('Marta a responder...');
         $full = $this->callClaude($message, $history, $onChunk, $heartbeat);
+        $full = $this->maybeExtractAndSaveMemories($rawText, $full);  // LTM save
 
         // ── Anti-hallucination guard ──────────────────────────────────────
         // Se a Marta gerou uma mensagem que parece confirmação de criação

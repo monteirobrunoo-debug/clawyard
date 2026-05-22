@@ -9,6 +9,7 @@ use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
+use App\Agents\Traits\AgentMemoryTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Models\PartnerWorkshop;
 use App\Services\HpHistoryClient;
@@ -22,6 +23,7 @@ class SalesAgent implements AgentInterface
 {
     use WebSearchTrait;
     use NsnLookupTrait;
+    use AgentMemoryTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use ShippingSkillTrait;
@@ -280,11 +282,13 @@ SPECIALTY;
 
         $message = $this->augmentWithWebSearch($message, $heartbeat);
         $message = $this->augmentWithNsnLookup($message, $heartbeat);
+        $message = $this->prependMemories($message);  // LTM recall
         return $message;
     }
 
     public function chat(string|array $message, array $history = []): string
     {
+        $userOrig = $message;
         $message  = $this->augmentMessage($message);
         $bookCtx  = $this->augmentWithTechnicalBooks($message, 3);
         $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
@@ -304,12 +308,16 @@ SPECIALTY;
 
         $data = json_decode($response->getBody()->getContents(), true);
         $result = $data['content'][0]['text'] ?? '';
+        // LTM save
+        $userText = is_string($userOrig) ? $userOrig : $this->messageText($userOrig);
+        $result   = $this->maybeExtractAndSaveMemories($userText, $result);
         $this->publishSharedContext($result);
         return $result;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $userOrig = $message;
         $message  = $this->augmentMessage($message, $heartbeat);
         $bookCtx  = $this->augmentWithTechnicalBooks($message, 3);
         $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
@@ -355,6 +363,8 @@ SPECIALTY;
             }
         }
 
+        $userText = is_string($userOrig) ? $userOrig : $this->messageText($userOrig);
+        $full     = $this->maybeExtractAndSaveMemories($userText, $full);  // LTM save
         $this->publishSharedContext($full);
         return $full;
     }

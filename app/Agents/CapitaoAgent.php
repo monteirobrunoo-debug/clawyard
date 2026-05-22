@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
+use App\Agents\Traits\AgentMemoryTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Services\PartYardProfileService;
@@ -23,6 +24,7 @@ class CapitaoAgent implements AgentInterface
 {
     use WebSearchTrait;
     use NsnLookupTrait;
+    use AgentMemoryTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
@@ -153,8 +155,10 @@ SPECIALTY;
     // ─── chat() ────────────────────────────────────────────────────────────
     public function chat(string|array $message, array $history = []): string
     {
+        $userOrig = $message;
         $message  = $this->augmentWithWebSearch($message);
         $message  = $this->augmentWithNsnLookup($message);
+        $message  = $this->prependMemories($message);  // LTM
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -175,6 +179,9 @@ SPECIALTY;
 
         $data = json_decode($response->getBody()->getContents(), true);
         $result = $data['content'][0]['text'] ?? '';
+        // LTM save
+        $userText = is_string($userOrig) ? $userOrig : $this->messageText($userOrig);
+        $result   = $this->maybeExtractAndSaveMemories($userText, $result);
         $this->publishSharedContext($result);
         return $result;
     }
@@ -182,8 +189,10 @@ SPECIALTY;
     // ─── stream() ──────────────────────────────────────────────────────────
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $userOrig = $message;
         $message  = $this->augmentWithWebSearch($message, $heartbeat);
         $message  = $this->augmentWithNsnLookup($message, $heartbeat);
+        $message  = $this->prependMemories($message);  // LTM (instantâneo, sem heartbeat)
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
         ]);
@@ -237,6 +246,8 @@ SPECIALTY;
             }
         }
 
+        $userText = is_string($userOrig) ? $userOrig : $this->messageText($userOrig);
+        $full     = $this->maybeExtractAndSaveMemories($userText, $full);  // LTM save
         $this->publishSharedContext($full);
         return $full;
     }

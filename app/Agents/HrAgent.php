@@ -2,6 +2,7 @@
 
 namespace App\Agents;
 
+use App\Agents\Traits\AgentMemoryTrait;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
@@ -26,11 +27,13 @@ use Illuminate\Support\Facades\Log;
 class HrAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use AgentMemoryTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use TechnicalBookSkillTrait;
 
     protected string $systemPrompt = '';
+    protected string $agentKey     = 'hr';
 
     // HDPO meta-cognitive search gate
     protected string $searchPolicy = 'conditional';
@@ -483,11 +486,13 @@ SAP;
             if ($heartbeat) $heartbeat('a consultar legislação laboral');
             $message = $this->augmentWithWebSearch($message, $heartbeat);
         }
+        $message = $this->prependMemories($message);  // LTM recall
         return $message;
     }
 
     public function chat(string|array $message, array $history = []): string
     {
+        $userOrig = $message;
         $message  = $this->augmentMessage($message);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
@@ -513,12 +518,15 @@ SAP;
         foreach ($data['content'] ?? [] as $block) {
             if (($block['type'] ?? '') === 'text') $text .= $block['text'];
         }
+        $userText = is_string($userOrig) ? $userOrig : $this->messageText($userOrig);
+        $text     = $this->maybeExtractAndSaveMemories($userText, $text);  // LTM save
         $this->publishSharedContext($text);
         return $text;
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
+        $userOrig = $message;
         $message  = $this->augmentMessage($message, $heartbeat);
         $messages = array_merge($history, [
             ['role' => 'user', 'content' => $message],
@@ -572,6 +580,8 @@ SAP;
             }
         }
 
+        $userText = is_string($userOrig) ? $userOrig : $this->messageText($userOrig);
+        $full     = $this->maybeExtractAndSaveMemories($userText, $full);  // LTM save
         $this->publishSharedContext($full);
         return $full;
     }
