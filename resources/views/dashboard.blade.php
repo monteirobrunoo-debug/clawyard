@@ -992,7 +992,122 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
         ['total_points' => 0, 'level' => 0]
     );
     $myRecentRewards = $myRecentRewards ?? collect();
+
+    // ── Token Budget — banner grande no topo. Pedido 2026-05-22:
+    // "faz outra vez um grande para por nap encontro no principal os tokens".
+    // O widget pequeno fica no strip de Ranking abaixo, este é destaque.
+    try {
+        $heroTokenSvc     = app(\App\Services\TokenBudgetService::class);
+        $heroTokenSummary = $heroTokenSvc->summary();
+        $heroTokenTop3    = $heroTokenSvc->rankingThisMonth(3);
+        $heroTokenMyEur   = null;
+        if (auth()->check()) {
+            $u = $heroTokenSvc->spentByUserThisMonth();
+            $heroTokenMyEur = (float) ($u[auth()->id()] ?? 0);
+        }
+    } catch (\Throwable) {
+        $heroTokenSummary = null; $heroTokenTop3 = []; $heroTokenMyEur = null;
+    }
 @endphp
+
+{{-- 💰 TOKEN BUDGET HERO BANNER — full-width, no topo do dashboard.
+     Pedido directo: visível à primeira, não enterrado no strip. --}}
+@if($heroTokenSummary)
+@php
+    $hpct      = (float) $heroTokenSummary['percent_used'];
+    $hcolor    = $hpct >= 100 ? '#ef4444' : ($hpct >= 80 ? '#f59e0b' : '#10b981');
+    $hcolorBg  = $hpct >= 100 ? 'rgba(239,68,68,0.08)' : ($hpct >= 80 ? 'rgba(245,158,11,0.08)' : 'rgba(16,185,129,0.06)');
+    $hcolorBgGrad = $hpct >= 100
+        ? 'linear-gradient(135deg,#2a0f14 0%,#1a0a14 100%)'
+        : ($hpct >= 80
+            ? 'linear-gradient(135deg,#2a1a0f 0%,#1a140f 100%)'
+            : 'linear-gradient(135deg,#0f2a1f 0%,#0f1a1a 100%)');
+@endphp
+<div class="recent-wrap">
+    <div class="recent-header">
+        <span class="recent-title">💰 Pool de Tokens · {{ $heroTokenSummary['period'] }}</span>
+        @if($hpct >= 100)
+            <span style="background:#ef4444;color:#fff;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:bold;">🚨 ESGOTADO</span>
+        @elseif($hpct >= 80)
+            <span style="background:#f59e0b;color:#000;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:bold;">⚠ ALERTA</span>
+        @else
+            <span style="background:#10b981;color:#000;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:bold;">✓ SAUDÁVEL</span>
+        @endif
+    </div>
+    <div class="token-hero-grid" style="background:{{ $hcolorBgGrad }};border:1px solid {{ $hcolor }}40;border-radius:14px;padding:20px 26px;display:grid;grid-template-columns:2fr 1.4fr 1.6fr;gap:24px;align-items:center;">
+    <style>
+        @media (max-width: 768px) {
+            .token-hero-grid { grid-template-columns: 1fr !important; gap: 18px !important; }
+            .token-hero-grid > div { border-left: none !important; padding-left: 0 !important; border-top: 1px solid #2a3a4a; padding-top: 14px; }
+            .token-hero-grid > div:first-child { border-top: none; padding-top: 0; }
+        }
+    </style>
+
+        {{-- COLUNA 1: pool gauge gigante --}}
+        <div>
+            <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Pool partilhado deste mês</div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+                <span style="font-size:36px;font-weight:bold;color:{{ $hcolor }};font-family:monospace;line-height:1;">€{{ number_format($heroTokenSummary['spent_eur'], 2) }}</span>
+                <span style="color:#9ab;font-size:18px;font-family:monospace;">/ €{{ number_format($heroTokenSummary['pool_eur'], 2) }}</span>
+                <span style="color:{{ $hcolor }};font-weight:bold;font-size:18px;margin-left:6px;">{{ number_format($hpct, 1) }}%</span>
+            </div>
+            <div style="height:14px;background:#0a0a0a;border-radius:7px;overflow:hidden;margin-bottom:6px;box-shadow:inset 0 1px 3px rgba(0,0,0,0.4);">
+                <div style="height:100%;width:{{ min(100, $hpct) }}%;background:linear-gradient(90deg,{{ $hcolor }} 0%,{{ $hcolor }}cc 100%);transition:width 0.6s;"></div>
+            </div>
+            <div style="font-size:12px;color:#bcd;">
+                Restam <strong style="color:#fff;font-size:14px;">€{{ number_format($heroTokenSummary['remaining_eur'], 2) }}</strong>
+                <span style="color:#9ab;margin-left:6px;">· o que não usas, outro pode usar</span>
+            </div>
+        </div>
+
+        {{-- COLUNA 2: o que eu gastei + botão --}}
+        <div style="border-left:1px solid #2a3a4a;padding-left:24px;">
+            @if(auth()->check() && $heroTokenMyEur !== null)
+                @php
+                    $myH = $heroTokenSummary['pool_eur'] > 0 ? ($heroTokenMyEur / $heroTokenSummary['pool_eur']) * 100 : 0;
+                @endphp
+                <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Tu gastaste</div>
+                <div style="font-size:26px;font-weight:bold;color:#fbbf24;font-family:monospace;line-height:1;margin-bottom:4px;">€{{ number_format($heroTokenMyEur, 2) }}</div>
+                <div style="font-size:12px;color:#9ab;margin-bottom:10px;">{{ number_format($myH, 1) }}% do pool</div>
+            @endif
+
+            @if($hpct >= $heroTokenSummary['alert_at'] && auth()->user()?->role === 'admin')
+                <a href="{{ route('admin.tokens') }}" style="display:inline-block;background:#10b981;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;box-shadow:0 3px 8px rgba(16,185,129,0.35);">
+                    ✚ Mais Tokens
+                </a>
+            @elseif(auth()->user()?->role === 'admin')
+                <a href="{{ route('admin.tokens') }}" style="display:inline-block;background:#2a3a4a;color:#dde;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px;border:1px solid #3a4a5a;">
+                    Gerir pool →
+                </a>
+            @endif
+        </div>
+
+        {{-- COLUNA 3: top 3 consumers --}}
+        <div style="border-left:1px solid #2a3a4a;padding-left:24px;">
+            <div style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;">🏆 Top 3 — gasto real</div>
+            @forelse($heroTokenTop3 as $i => $r)
+                @php
+                    $isMe2 = auth()->check() && $r['user_id'] === auth()->id();
+                    $medal2 = ['🥇','🥈','🥉'][$i] ?? '';
+                @endphp
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 0;font-size:12px;{{ $isMe2 ? 'background:rgba(251,191,36,0.08);border-radius:4px;padding-left:6px;padding-right:6px;' : '' }}">
+                    <span style="display:flex;gap:6px;align-items:center;min-width:0;">
+                        <span>{{ $medal2 }}</span>
+                        <span style="color:{{ $isMe2 ? '#fbbf24' : '#bcd' }};font-weight:{{ $isMe2 ? 'bold' : 'normal' }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            {{ \Illuminate\Support\Str::limit($r['name'], 18) }}{{ $isMe2 ? ' (tu)' : '' }}
+                        </span>
+                    </span>
+                    <span style="color:{{ $hcolor }};font-family:monospace;font-weight:bold;white-space:nowrap;">€{{ number_format($r['eur_spent'], 2) }}</span>
+                </div>
+            @empty
+                <div style="font-size:12px;color:#9ab;font-style:italic;">Sem actividade ainda este mês.</div>
+            @endforelse
+        </div>
+
+    </div>
+</div>
+@endif
+
 <div class="recent-wrap">
     <div class="recent-header">
         <span class="recent-title">🏆 Os teus rewards</span>
