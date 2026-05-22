@@ -53,6 +53,20 @@ class RunTenderAnalysisJob implements ShouldQueue
 
     public function handle(TenderServiceAnalysisService $analyser): void
     {
+        // Master kill-switch 2026-05-22 — auto-análise multi-agente desligada
+        // por defeito. Defense-in-depth: mesmo que algum dispatcher upstream
+        // se esqueça da flag, o job dropa-se silenciosamente. Para activar:
+        // AUTO_ANALYSIS_ENABLED=true no .env.
+        //
+        // O botão manual no UI continua a funcionar porque o controller chama
+        // ->analyse() DIRECTAMENTE (sync), não passa por este job.
+        if (!config('services.tenders.auto_analysis', false)) {
+            Log::info('RunTenderAnalysisJob: dropped — auto-analysis disabled', [
+                'tender_id' => $this->tenderId,
+            ]);
+            return;
+        }
+
         $tender = Tender::find($this->tenderId);
         if (!$tender) {
             Log::info('RunTenderAnalysisJob: tender not found', ['id' => $this->tenderId]);

@@ -142,20 +142,22 @@ class TenderQuickPdfService
         $this->applyExtractedFields($tender, $extracted);
 
         // 5. Disparar análise multi-agente em BACKGROUND via queue.
-        //    2026-05-20 — pedido directo: "deixa carregar os ficheiros todos
-        //    se depois os agentes marco sales, marta, porto e outros do
-        //    marine analisam". O panel autónomo (#65) demora 60-120s e
-        //    excede nginx timeout (60s → 504). Dispatch async resolve.
+        //    DESLIGADO POR DEFAULT 2026-05-22 — pedido directo: "cancela a
+        //    utilizacao dos agentes na analise dos processos, tem de ser
+        //    manual o custo dos tokens foi muito grande". User dispara
+        //    manualmente via botão "Análise multi-agente" no tender.
         $analysisTriggered = false;
-        try {
-            \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
-                ->afterCommit();
-            $analysisTriggered = true;
-        } catch (\Throwable $e) {
-            Log::warning('TenderQuickPdf: failed to dispatch analysis job', [
-                'tender_id' => $tender->id,
-                'error'     => $e->getMessage(),
-            ]);
+        if (config('services.tenders.auto_analysis', false)) {
+            try {
+                \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
+                    ->afterCommit();
+                $analysisTriggered = true;
+            } catch (\Throwable $e) {
+                Log::warning('TenderQuickPdf: failed to dispatch analysis job', [
+                    'tender_id' => $tender->id,
+                    'error'     => $e->getMessage(),
+                ]);
+            }
         }
 
         return [
@@ -303,17 +305,20 @@ class TenderQuickPdfService
 
         $this->applyExtractedFields($tender, $extracted);
 
-        // 4. Multi-agent panel em background
+        // 4. Multi-agent panel em background — gated 2026-05-22 (ver método
+        //    handleSingle acima para contexto).
         $analysisTriggered = false;
-        try {
-            \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
-                ->afterCommit();
-            $analysisTriggered = true;
-        } catch (\Throwable $e) {
-            Log::warning('TenderQuickPdf::handleMultiple: failed to dispatch job', [
-                'tender_id' => $tender->id,
-                'error'     => $e->getMessage(),
-            ]);
+        if (config('services.tenders.auto_analysis', false)) {
+            try {
+                \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
+                    ->afterCommit();
+                $analysisTriggered = true;
+            } catch (\Throwable $e) {
+                Log::warning('TenderQuickPdf::handleMultiple: failed to dispatch job', [
+                    'tender_id' => $tender->id,
+                    'error'     => $e->getMessage(),
+                ]);
+            }
         }
 
         return [
@@ -429,19 +434,19 @@ class TenderQuickPdfService
 
         $this->applyExtractedFields($tender, $extracted);
 
-        // 4. Painel multi-agente em background — vê o "anexo virtual" via
-        //    extracted_text e produz análise. Async via queue para evitar
-        //    504 do nginx (panel demora 60-120s).
+        // 4. Painel multi-agente em background — gated 2026-05-22.
         $analysisTriggered = false;
-        try {
-            \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
-                ->afterCommit();
-            $analysisTriggered = true;
-        } catch (\Throwable $e) {
-            Log::warning('TenderQuickPdf::handleFromText: failed to dispatch job', [
-                'tender_id' => $tender->id,
-                'error'     => $e->getMessage(),
-            ]);
+        if (config('services.tenders.auto_analysis', false)) {
+            try {
+                \App\Jobs\RunTenderAnalysisJob::dispatch($tender->id, $user->id)
+                    ->afterCommit();
+                $analysisTriggered = true;
+            } catch (\Throwable $e) {
+                Log::warning('TenderQuickPdf::handleFromText: failed to dispatch job', [
+                    'tender_id' => $tender->id,
+                    'error'     => $e->getMessage(),
+                ]);
+            }
         }
 
         return [

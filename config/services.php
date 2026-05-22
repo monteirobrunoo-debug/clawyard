@@ -325,4 +325,18 @@ return [
         'enabled_on_internal' => env('AGENT_CRITIQUE_INTERNAL', false),
     ],
 
+    // ── Análise multi-agente automática em tenders ─────────────────────────
+    // Pedido directo 2026-05-22: "cancela a utilizacao dos agentes na
+    // analise dos processos, tem de ser manual o custo dos tokens foi
+    // muito grande". 5 calls de €25-29 numa só hora (01:56 hoje) é
+    // demasiado. Agora todos os auto-dispatch de RunTenderAnalysisJob
+    // ficam gatedos por esta flag. Default FALSE.
+    //
+    // Para reactivar: AUTO_ANALYSIS_ENABLED=true no .env do Forge.
+    // O botão "Análise multi-agente" no UI continua a funcionar sempre
+    // (manual ignora esta flag).
+    'tenders' => [
+        'auto_analysis' => env('AUTO_ANALYSIS_ENABLED', false),
+    ],
+
 ];

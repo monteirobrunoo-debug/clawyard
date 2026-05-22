@@ -114,25 +114,23 @@ Schedule::command('suppliers:find-emails --limit=30')
     ->withoutOverlapping()
     ->runInBackground();
 
-// ── Anthropic Batch overnight multi-agent — diário 23:30 Lisbon ───────────
-// 2026-05-21: pedido directo "Anthropic Batch API nightly multi-agent
-// (50% off) quero este vale a pena". Submete tenders sem análise (ou
-// stale >14d) ao Batch API. Custo ~50% off vs sync (Messages API).
-// Limit 20 tenders/run = ~120 requests no batch (6 agentes/tender).
-// SLA Anthropic ≤24h, normalmente <1h. Hourly collect colhe results.
-Schedule::command('analysis:submit-batch --max=20 --stale-days=14')
-    ->dailyAt('23:30')
-    ->timezone('Europe/Lisbon')
-    ->withoutOverlapping()
-    ->runInBackground();
-
-// ── Anthropic Batch collect — horário ─────────────────────────────────────
-// Polla batches pending, colecta os ended, assembla análises por tender.
-// Idempotente: results_collected impede dupla recolha.
-Schedule::command('analysis:collect-batches --max=20')
-    ->hourly()
-    ->withoutOverlapping()
-    ->runInBackground();
+// ── Anthropic Batch nightly multi-agent — DESLIGADO 2026-05-22 ────────────
+// Pedido directo: "cancela a utilizacao dos agentes na analise dos
+// processos, tem de ser manual o custo dos tokens foi muito grande".
+// 5 calls de €25-29 numa só hora (01:56 hoje) → ~€130/noite só do batch.
+// Agora análise multi-agente SÓ via botão manual no tender. Para reactivar
+// no futuro, descomenta as duas Schedule:: abaixo.
+//
+// Schedule::command('analysis:submit-batch --max=20 --stale-days=14')
+//     ->dailyAt('23:30')
+//     ->timezone('Europe/Lisbon')
+//     ->withoutOverlapping()
+//     ->runInBackground();
+//
+// Schedule::command('analysis:collect-batches --max=20')
+//     ->hourly()
+//     ->withoutOverlapping()
+//     ->runInBackground();
 
 // ── Web-intel re-sync — sábados 04:30 Lisbon ─────────────────────────────
 // 2026-05-21: re-corre Tavily + Claude para suppliers sincronizados há
