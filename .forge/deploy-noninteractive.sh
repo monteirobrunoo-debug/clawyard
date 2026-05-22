@@ -56,10 +56,15 @@ section "Working dir"
 echo "  $(pwd)"
 echo "  PHP: $PHP"
 
-section "1/5  artisan migrate"
+section "1/6  composer dump-autoload (refresh classmap)"
+# 2026-05-22: crítico. Classes PHP novas adicionadas num commit sem
+# mexer composer.json ficam fora do optimized classmap → Octane 500.
+( cd "$WORK" && composer dump-autoload --optimize -n -q ) && echo "  done" || echo "  ⚠ falhou (continuing)"
+
+section "2/6  artisan migrate"
 "$PHP" artisan migrate --force
 
-section "2/5  artisan optimize"
+section "3/6  artisan optimize"
 "$PHP" artisan config:clear  >/dev/null
 "$PHP" artisan cache:clear   >/dev/null
 "$PHP" artisan view:clear    >/dev/null
@@ -67,7 +72,7 @@ section "2/5  artisan optimize"
 "$PHP" artisan optimize      >/dev/null
 echo "  done"
 
-section "3/5  marco:import-partners"
+section "4/6  marco:import-partners"
 SEED="$WORK/database/seed-data/marco/2026-04-25_port-workshop-mapping_v1.xlsx"
 RUNTIME="$WORK/storage/app/marco/sources/$(basename "$SEED")"
 mkdir -p "$(dirname "$RUNTIME")"
@@ -78,10 +83,10 @@ else
     color "33" "  Seed xlsx not present (skipping). Pull the latest commit if missing."
 fi
 
-section "4/5  Audit (read-only)"
+section "5/6  Audit (read-only)"
 "$PHP" artisan tenders:audit-collaborator-emails || true
 
-section "5/5  Cross-user health"
+section "6/6  Cross-user health"
 # Health-check exit code is non-zero when anomalies exist — that's
 # informational, not a deploy failure. Capture so set -e doesn't bail.
 "$PHP" artisan tenders:audit-all-users || true

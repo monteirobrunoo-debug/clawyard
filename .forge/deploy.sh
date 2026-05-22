@@ -6,6 +6,13 @@ git pull origin main
 
 $FORGE_PHP composer install --no-interaction --prefer-dist --optimize-autoloader
 
+# 2026-05-22: dump-autoload explícito mesmo quando composer install não tem
+# changes a aplicar. Sem isto, classes PHP novas (Models, Services, Mails,
+# Exceptions, etc.) adicionadas num commit sem mexer composer.json ficam
+# FORA do classmap optimized → Octane crash a 500 quando tenta resolve-las.
+# Acontece sempre que adicionamos features sem novas dependências composer.
+$FORGE_PHP composer dump-autoload --optimize -n -q
+
 $FORGE_PHP artisan migrate --force
 $FORGE_PHP artisan config:clear
 $FORGE_PHP artisan cache:clear
