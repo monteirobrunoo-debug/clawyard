@@ -37,13 +37,18 @@ class MilDefAgent implements AgentInterface
 
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
-    // 2026-05-22: mudado de 'always' para 'conditional'. 'always' forçava
-    // Tavily em CADA mensagem, mesmo quando o user só queria knowledge interno.
-    // Resultado: streams a pendurar quando Tavily lento + custo desnecessário.
-    // 'conditional' usa keyword gate (needsWebSearch) — só dispara Tavily se
-    // o user mencionar palavras-chave que justifiquem (preço actual, fornecedor
-    // 2026, regulamentação recente, etc).
-    protected string $searchPolicy = 'conditional';
+    // 2026-05-22: revert para 'always' (pedido directo: "nao sei nao usar
+    // o tavily será bom, ele tem de ir á net para depois ver mais info").
+    // Cor. Rodrigues = defesa, beneficia REALMENTE de Tavily para preços
+    // actuais, fornecedores novos 2026, regulamentação NATO recente.
+    //
+    // Protecções contra Tavily lento (que motivaram o switch errado):
+    //   1. WebSearchService timeout 8s + connect_timeout 3s
+    //   2. augmentWithWebSearch faz graceful fallback se Tavily falha
+    //      (retorna mensagem unchanged, agente continua com knowledge interno)
+    //   3. NÃO bloqueia SSE stream — quando Tavily der erro, a stream
+    //      continua e a Cor. Rodrigues responde só com o que sabe
+    protected string $searchPolicy = 'always';
     protected string $agentKey     = 'mildef';
     protected string $contextKey   = 'mildef_intel';
     protected array  $contextTags  = [
@@ -336,8 +341,8 @@ SYSPROMPT;
     // ────────────────────────────────────────────────────────────────────────
     public function chat(string|array $message, array $history = []): string
     {
-        // smartAugment respeita searchPolicy ('conditional' → só dispara
-        // Tavily se needsWebSearch() detectar keywords).
+        // smartAugment respeita searchPolicy. Com 'always', sempre tenta
+        // Tavily — se Tavily falhar (timeout 8s), continua sem web.
         $finalMessage = $this->smartAugment($message);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage);
         // LTM: top-5 memórias deste user × mildef → prepended ao prompt.
