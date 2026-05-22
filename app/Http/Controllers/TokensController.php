@@ -79,6 +79,30 @@ class TokensController extends Controller
         return back()->with('status', '✓ Notificações resetadas — próximo alerta vai ser enviado.');
     }
 
+    /**
+     * POST /admin/tokens/top-up — adiciona EUR ao pool do mês actual.
+     * Default amount vem do config (services.tokens.topup_amount, €50).
+     * O user pode passar amount=X no form para override.
+     *
+     * Pedido directo 2026-05-22: "ativo tudo clicando num botao mais
+     * tokens". Botão no email + botão no /admin/tokens. Admin-only.
+     */
+    public function topUp(Request $request)
+    {
+        $this->ensureAdmin();
+
+        $amount = (float) $request->input('amount', config('services.tokens.topup_amount', 50.00));
+        $amount = max(0.0, min(10000.0, $amount));
+
+        $newPool = $this->svc->topUp($amount);
+
+        return back()->with('status',
+            '✓ Adicionados €' . number_format($amount, 2)
+            . ' ao pool. Novo pool: €' . number_format($newPool, 2)
+            . '. Notificações resetadas.'
+        );
+    }
+
     /** Constrói timeline 7d via aggregation das 3 tabelas de cost. */
     private function buildTimelineLast7Days(): array
     {

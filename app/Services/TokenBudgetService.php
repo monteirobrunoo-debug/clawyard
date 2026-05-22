@@ -233,29 +233,72 @@ class TokenBudgetService
     }
 
     /**
-     * Envia alerta — por agora log + mail simple. Pode ser estendido
-     * para Slack/push depois.
+     * Envia alerta a TODOS os admins configurados (multi-recipient).
+     * Usa Mailable formatado com botão "Mais Tokens" — clique leva
+     * ao /admin/tokens para top-up.
+     *
+     * 2026-05-22: pedido directo — destinatários default são Bruno +
+     * Catarina + Mónica (services.tokens.admin_emails).
      */
     private function dispatchAlert(string $kind, array $summary): void
     {
         $msg = $kind === 'exhausted'
             ? "🚨 Pool de tokens ESGOTADO ({$summary['percent_used']}%) — €{$summary['spent_eur']}/€{$summary['pool_eur']} no período {$summary['period']}."
-            : "⚠️ Pool de tokens em {$summary['percent_used']}% — €{$summary['spent_eur']}/€{$summary['pool_eur']} no período {$summary['period']}. Threshold alert: {$summary['alert_at']}%.";
+            : "⚠️ Pool de tokens em {$summary['percent_used']}% — €{$summary['spent_eur']}/€{$summary['pool_eur']} no período {$summary['period']}. Threshold: {$summary['alert_at']}%.";
 
         Log::warning("TokenBudget alert: {$msg}");
 
-        // Tentativa best-effort de email ao admin via Laravel Mail.
-        // Falha silenciosa se o mail driver não estiver configurado.
         try {
-            $adminEmail = (string) config('services.tokens.admin_email', config('mail.from.address', ''));
-            if ($adminEmail !== '') {
-                \Illuminate\Support\Facades\Mail::raw(
-                    $msg . "\n\nVê detalhes em: " . config('app.url') . "/admin/tokens",
-                    fn ($m) => $m->to($adminEmail)->subject('ClawYard tokens — ' . $kind),
-                );
+            $emails = (array) config('services.tokens.admin_emails', []);
+            $emails = array_values(array_filter($emails, fn ($e) => filter_var($e, FILTER_VALIDATE_EMAIL)));
+            if (empty($emails)) {
+                Log::info('TokenBudget: nenhum admin_emails configurado — alerta só logado');
+                return;
+            }
+
+            $dashboardUrl = rtrim((string) config('app.url'), '/') . '/admin/tokens';
+            $mailable = new \App\Mail\TokenPoolAlertMail($kind, $summary, $dashboardUrl);
+
+            foreach ($emails as $email) {
+                try {
+                    \Illuminate\Support\Facades\Mail::to($email)->send($mailable);
+                    Log::info("TokenBudget: alert email enviado a {$email}");
+                } catch (\Throwable $e) {
+                    Log::warning("TokenBudget: falha a enviar a {$email} — " . $e->getMessage());
+                }
             }
         } catch (\Throwable $e) {
-            Log::warning('TokenBudget: mail alert failed — ' . $e->getMessage());
+            Log::warning('TokenBudget: dispatchAlert falhou — ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Top-up — adiciona valor ao pool do período actual.
+     * Reset das flags de notificação para que novos alertas disparem
+     * quando os thresholds forem atingidos no pool aumentado.
+     *
+     * @return float novo pool_eur
+     */
+    public function topUp(?float $amount = null): float
+    {
+        $amount ??= (float) config('services.tokens.topup_amount', 50.00);
+        $amount = max(0.0, min(10000.0, $amount));
+
+        $budget = $this->currentBudget();
+        $newPool = (float) $budget->pool_eur + $amount;
+        $budget->update([
+            'pool_eur'        => $newPool,
+            'notified_at_80'  => null,
+            'notified_at_100' => null,
+        ]);
+
+        Log::info('TokenBudget: top-up', [
+            'period'  => $budget->period_yyyy_mm,
+            'amount'  => $amount,
+            'new_pool'=> $newPool,
+            'by_user' => auth()->id(),
+        ]);
+
+        return $newPool;
     }
 }

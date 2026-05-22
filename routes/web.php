@@ -954,6 +954,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::get ('/tokens',                       [\App\Http\Controllers\TokensController::class, 'index'])->name('admin.tokens');
     Route::post('/tokens',                       [\App\Http\Controllers\TokensController::class, 'update'])->name('admin.tokens.update');
     Route::post('/tokens/reset-notifications',   [\App\Http\Controllers\TokensController::class, 'resetNotifications'])->name('admin.tokens.reset-notifications');
+    Route::post('/tokens/top-up',                [\App\Http\Controllers\TokensController::class, 'topUp'])->name('admin.tokens.top-up');
 
     // Unified admin panel — health + secrets + cron + flags + integrations
     Route::get ('/panel',                    [\App\Http\Controllers\AdminPanelController::class, 'index'])->name('admin.panel');

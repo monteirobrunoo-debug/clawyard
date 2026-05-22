@@ -353,7 +353,16 @@ return [
     'tokens' => [
         'pool_eur'      => (float) env('TOKEN_POOL_EUR', 150.00),
         'usd_eur_rate'  => (float) env('TOKEN_USD_EUR_RATE', 0.92),
-        'admin_email'   => env('TOKEN_ADMIN_EMAIL', env('MAIL_FROM_ADDRESS', '')),
+        // Multi-recipient — pedido directo 2026-05-22: alertas de
+        // pool esgotado vão para Bruno + Catarina + Mónica. Separar
+        // emails por vírgula no env. Default = admin do MAIL_FROM.
+        'admin_emails'  => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('TOKEN_ADMIN_EMAILS',
+                'bruno.monteiro@hp-group.org,catarina.aresta@hp-group.org,monica.pereira@hp-group.org'))
+        ))),
+        // Quanto cada click "Mais Tokens" adiciona ao pool (EUR).
+        'topup_amount'  => (float) env('TOKEN_TOPUP_AMOUNT', 50.00),
     ],
 
 ];

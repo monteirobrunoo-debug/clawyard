@@ -45,6 +45,32 @@
         </div>
     </div>
 
+    {{-- ✚ TOP-UP CTA — destaque quando pool ≥ alert threshold. Pedido directo
+         2026-05-22: "ativo tudo clicando num botao mais tokens". --}}
+    @php
+        $topupAmount = (float) config('services.tokens.topup_amount', 50.00);
+    @endphp
+    @if($pct >= $summary['alert_at'])
+    <div style="background:linear-gradient(135deg,#0a3a1f 0%,#0f2a1a 100%);border:1px solid #10b981;border-radius:10px;padding:16px 18px;margin-bottom:18px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+            <div>
+                <div style="font-size:14px;color:#a3f0c0;font-weight:600;margin-bottom:4px;">
+                    💸 Adicionar mais tokens ao pool deste mês
+                </div>
+                <div style="font-size:12px;color:#9ab;">
+                    Pool está em {{ number_format($pct, 1) }}%. Cada clique adiciona <strong style="color:#10b981;">€{{ number_format($topupAmount, 2) }}</strong> ao pool e reset das notificações.
+                </div>
+            </div>
+            <form method="POST" action="{{ route('admin.tokens.top-up') }}" onsubmit="return confirm('Adicionar €{{ number_format($topupAmount, 2) }} ao pool? Confirma para gastar mais tokens este mês.');">
+                @csrf
+                <button style="background:#10b981;border:none;color:#fff;padding:12px 24px;border-radius:8px;cursor:pointer;font-weight:bold;font-size:14px;box-shadow:0 2px 6px rgba(16,185,129,0.3);">
+                    ✚ Mais Tokens (+€{{ number_format($topupAmount, 0) }})
+                </button>
+            </form>
+        </div>
+    </div>
+    @endif
+
     {{-- TIMELINE 7d --}}
     <div style="background:#1c1f24;border:1px solid #2a2f36;border-radius:10px;padding:18px;margin-bottom:18px;">
         <h3 style="margin:0 0 14px 0;font-size:14px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">📊 Últimos 7 dias</h3>

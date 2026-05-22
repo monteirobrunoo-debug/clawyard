@@ -1240,6 +1240,13 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                 Restam <strong style="color:#dde;">€{{ number_format($tokenSummary['remaining_eur'], 2) }}</strong> · partilhado entre todos
             </div>
 
+            {{-- ✚ Mais Tokens — CTA visível só quando ≥ alert threshold E user é admin --}}
+            @if($tokPct >= $tokenSummary['alert_at'] && auth()->user()?->role === 'admin')
+                <a href="{{ route('admin.tokens') }}" style="display:block;text-align:center;background:#10b981;color:#fff;padding:8px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:12px;margin-bottom:10px;box-shadow:0 2px 4px rgba(16,185,129,0.3);">
+                    ✚ Mais Tokens / Gerir Pool
+                </a>
+            @endif
+
             {{-- O que eu gastei (linha destacada) --}}
             @if(auth()->check() && $tokenMyEur !== null)
                 @php
