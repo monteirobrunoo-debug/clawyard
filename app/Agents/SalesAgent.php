@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Models\PartnerWorkshop;
 use App\Services\HpHistoryClient;
@@ -20,12 +21,14 @@ use Illuminate\Support\Facades\Log;
 class SalesAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use ShippingSkillTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
     protected string $systemPrompt = '';
+    protected string $agentKey     = 'sales';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
@@ -276,6 +279,7 @@ SPECIALTY;
         }
 
         $message = $this->augmentWithWebSearch($message, $heartbeat);
+        $message = $this->augmentWithNsnLookup($message, $heartbeat);
         return $message;
     }
 

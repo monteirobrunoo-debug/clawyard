@@ -5,6 +5,7 @@ namespace App\Agents;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 
@@ -28,12 +29,14 @@ use App\Agents\Traits\LogisticsSkillTrait;
 class MilDefAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
 
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
     protected string $searchPolicy = 'always';
+    protected string $agentKey     = 'mildef';
     protected string $contextKey   = 'mildef_intel';
     protected array  $contextTags  = [
         'defesa','defense','procurement','militar','military','NATO','OTAN',
@@ -326,6 +329,7 @@ SYSPROMPT;
     public function chat(string|array $message, array $history = []): string
     {
         $finalMessage = $this->augmentWithWebSearch($message);
+        $finalMessage = $this->augmentWithNsnLookup($finalMessage);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
@@ -354,6 +358,7 @@ SYSPROMPT;
     {
         if ($heartbeat) $heartbeat('🔍 a pesquisar fornecedores de defesa mundiais');
         $finalMessage = $this->augmentWithWebSearch($message, $heartbeat);
+        $finalMessage = $this->augmentWithNsnLookup($finalMessage, $heartbeat);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 

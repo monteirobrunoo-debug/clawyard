@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -22,10 +23,14 @@ use Illuminate\Support\Facades\Log;
 class EngineerAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
+
+    /** Identifica este agente para o NsnLookupTool (telemetria/cost-attribution). */
+    protected string $agentKey = 'engineer';
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
@@ -264,6 +269,7 @@ SPECIALTY;
             : $context . $message;
 
         $augmented = $this->augmentWithWebSearch($augmented);
+        $augmented = $this->augmentWithNsnLookup($augmented);
         $bookCtx   = $this->augmentWithTechnicalBooks($augmented, 3);
         $augmented = $this->sanitizeForApi($augmented);
         $history   = array_map(fn($m) => $this->sanitizeForApi($m), $history);
@@ -312,6 +318,7 @@ SPECIALTY;
         if (is_string($augmented)) {
             if ($heartbeat) $heartbeat('a pesquisar tecnologia');
             $augmented = $this->augmentWithWebSearch($augmented, $heartbeat);
+            $augmented = $this->augmentWithNsnLookup($augmented, $heartbeat);
         }
 
         // 4. Biblioteca técnica PartYard (chama ANTES do sanitizeForApi
