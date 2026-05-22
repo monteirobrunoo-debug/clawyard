@@ -201,12 +201,25 @@ class TokenBudgetService
      */
     public function isHardGated(): bool
     {
-        $budget = $this->currentBudget();
-        $gate   = (int) $budget->hard_gate_at_percent;
-        if ($gate <= 0) return false;
-
-        $summary = $this->summary();
-        return $summary['percent_used'] >= $gate;
+        // Cache 60s — chamado em headersForMessage() por CADA chat call.
+        // Sem cache, faz currentBudget() + summary() (3 SUM queries) por
+        // cada turn de cada agente. 2026-05-22: corrige NetworkError em
+        // chat causado por latência acumulada.
+        return \Illuminate\Support\Facades\Cache::remember(
+            'token_hard_gated:v1',
+            60,
+            function () {
+                try {
+                    $budget = $this->currentBudget();
+                    $gate   = (int) $budget->hard_gate_at_percent;
+                    if ($gate <= 0) return false;
+                    $summary = $this->summary();
+                    return $summary['percent_used'] >= $gate;
+                } catch (\Throwable) {
+                    return false;  // fail open
+                }
+            }
+        );
     }
 
     /**

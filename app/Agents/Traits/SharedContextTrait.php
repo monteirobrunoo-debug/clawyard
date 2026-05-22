@@ -78,12 +78,22 @@ trait SharedContextTrait
      * alerta (default ≥ 80%). Pede aos agentes para serem mais
      * concisos automaticamente. Quando o pool está saudável (< 80%),
      * devolve string vazia (zero overhead).
+     *
+     * 2026-05-22: cache Redis 60s — summary() faz 3 SUM queries pesadas
+     * (messages, agent_runs, tender_service_analyses). Sem cache,
+     * corre por CADA chat call → 2-3s extra de latência + risco de
+     * nginx timeout em SSE. Cache 60s é frequente o suficiente para
+     * apanhar transição de threshold sem matar performance.
      */
     private function costAwarenessBlock(): string
     {
         try {
-            $svc = app(\App\Services\TokenBudgetService::class);
-            $summary = $svc->summary();
+            $cacheKey = 'token_cost_awareness:v1';
+            $summary = \Illuminate\Support\Facades\Cache::remember(
+                $cacheKey,
+                60,
+                fn () => app(\App\Services\TokenBudgetService::class)->summary()
+            );
             if (!$summary['is_alert']) return '';
 
             if ($summary['is_exhausted']) {
