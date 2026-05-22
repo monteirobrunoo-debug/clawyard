@@ -1071,14 +1071,32 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                 <div style="font-size:12px;color:#9ab;margin-bottom:10px;">{{ number_format($myH, 1) }}% do pool</div>
             @endif
 
-            @if($hpct >= $heroTokenSummary['alert_at'] && auth()->user()?->role === 'admin')
+            {{-- ✚ Mais Tokens — visível a TODOS os users (não só admins).
+                 Pedido directo 2026-05-22: "para todos, todos os users
+                 tem isto". Admin → /admin/tokens (top-up directo).
+                 Não-admin → form POST que envia email aos 3 admins
+                 (Bruno, Catarina, Mónica) a pedir mais tokens. --}}
+            @if(auth()->user()?->role === 'admin')
+                {{-- Admin: link directo --}}
                 <a href="{{ route('admin.tokens') }}" style="display:inline-block;background:#10b981;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:13px;box-shadow:0 3px 8px rgba(16,185,129,0.35);">
                     ✚ Mais Tokens
                 </a>
-            @elseif(auth()->user()?->role === 'admin')
-                <a href="{{ route('admin.tokens') }}" style="display:inline-block;background:#2a3a4a;color:#dde;padding:8px 14px;border-radius:8px;text-decoration:none;font-size:12px;border:1px solid #3a4a5a;">
-                    Gerir pool →
-                </a>
+                <div style="font-size:10px;color:#9ab;margin-top:6px;">Vais ao painel para subir pool.</div>
+            @else
+                {{-- Non-admin: form que envia pedido por email aos admins --}}
+                <form method="POST" action="{{ route('tokens.request-more') }}" onsubmit="return confirm('Enviar pedido de mais tokens a Bruno, Catarina e Mónica?');">
+                    @csrf
+                    <button type="submit" style="display:inline-block;background:#10b981;color:#fff;padding:10px 18px;border-radius:8px;border:none;cursor:pointer;font-weight:bold;font-size:13px;box-shadow:0 3px 8px rgba(16,185,129,0.35);">
+                        ✚ Mais Tokens
+                    </button>
+                </form>
+                <div style="font-size:10px;color:#9ab;margin-top:6px;">Envia pedido aos admins (Bruno, Catarina, Mónica).</div>
+            @endif
+
+            @if(session('status') && str_contains(session('status'), 'Pedido enviado'))
+                <div style="margin-top:8px;background:rgba(16,185,129,0.12);border:1px solid #10b981;color:#a3f0c0;padding:6px 10px;border-radius:6px;font-size:11px;">
+                    {{ session('status') }}
+                </div>
             @endif
         </div>
 

@@ -593,6 +593,12 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile/memories/{memory}',          [\App\Http\Controllers\MemoriesController::class, 'destroy'])->name('memories.destroy');
     Route::delete('/profile/memories/agent/{agentKey}',  [\App\Http\Controllers\MemoriesController::class, 'forgetAgent'])->name('memories.forget-agent');
 
+    // POST /tokens/request-more — qualquer user logged-in pode pedir
+    // mais tokens. Envia email aos 3 admins (Bruno, Catarina, Mónica).
+    // 2026-05-22 — pedido directo "para todos, todos os users tem isto".
+    Route::post('/tokens/request-more', [\App\Http\Controllers\TokensController::class, 'requestMore'])
+        ->name('tokens.request-more');
+
     // #10 — 2FA self-service (TOTP)
     Route::get ('/profile/2fa',         [\App\Http\Controllers\TwoFactorController::class, 'setup'])->name('profile.2fa');
     Route::post('/profile/2fa/enable',  [\App\Http\Controllers\TwoFactorController::class, 'enable'])->name('profile.2fa.enable');

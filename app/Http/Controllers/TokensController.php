@@ -128,6 +128,74 @@ class TokensController extends Controller
         return $days;
     }
 
+    /**
+     * POST /tokens/request-more — qualquer user autenticado pode pedir
+     * aos admins para subirem o pool. Envia email aos 3 admins
+     * configurados (services.tokens.admin_emails) com identidade do
+     * pedinte + reason opcional.
+     *
+     * 2026-05-22 — pedido directo: "para todos, todos os users tem isto".
+     * Não é admin-only — qualquer user logged-in pode pedir mais tokens.
+     */
+    public function requestMore(Request $request)
+    {
+        $user = auth()->user();
+        if (!$user) abort(401);
+
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $summary = $this->svc->summary();
+        $emails = (array) config('services.tokens.admin_emails', []);
+        $emails = array_values(array_filter($emails, fn ($e) => filter_var($e, FILTER_VALIDATE_EMAIL)));
+
+        if (empty($emails)) {
+            return back()->with('error', 'Não há admins configurados para receber o pedido.');
+        }
+
+        $reason = trim((string) ($data['reason'] ?? ''));
+        $body = "User: {$user->name} ({$user->email})\n"
+              . "Pediu MAIS TOKENS no ClawYard.\n\n"
+              . "Estado actual:\n"
+              . "  Período: {$summary['period']}\n"
+              . "  Pool: €" . number_format($summary['pool_eur'], 2) . "\n"
+              . "  Gasto: €" . number_format($summary['spent_eur'], 2)
+              . " ({$summary['percent_used']}%)\n"
+              . "  Restante: €" . number_format($summary['remaining_eur'], 2) . "\n"
+              . ($reason !== '' ? "\nMotivo do user:\n  {$reason}\n" : '')
+              . "\nGerir pool: " . rtrim((string) config('app.url'), '/') . '/admin/tokens';
+
+        $sent = 0;
+        foreach ($emails as $email) {
+            try {
+                \Illuminate\Support\Facades\Mail::raw(
+                    $body,
+                    fn ($m) => $m->to($email)
+                        ->subject("🪙 Pedido tokens ClawYard — {$user->name}")
+                );
+                $sent++;
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning("TokensController: falha email a {$email} — " . $e->getMessage());
+            }
+        }
+
+        \Illuminate\Support\Facades\Log::info('Tokens: request-more enviado', [
+            'by_user' => $user->id,
+            'sent'    => $sent,
+            'recipients' => $emails,
+        ]);
+
+        $recipientList = implode(', ', array_map(
+            fn ($e) => explode('@', $e)[0],
+            $emails
+        ));
+
+        return back()->with('status',
+            "✓ Pedido enviado a {$recipientList}. Eles vão receber email e podem subir o pool. ({$sent} email(s) enviado(s).)"
+        );
+    }
+
     private function ensureAdmin(): void
     {
         if (auth()->user()?->role !== 'admin') {
