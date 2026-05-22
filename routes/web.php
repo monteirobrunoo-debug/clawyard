@@ -586,6 +586,13 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // /profile/memories — UI para o user ver/editar/apagar memórias LTM que
+    // os agentes têm dele. Scope: só vê as suas. 2026-05-22 — pedido directo.
+    Route::get   ('/profile/memories',                   [\App\Http\Controllers\MemoriesController::class, 'index'])->name('memories.index');
+    Route::patch ('/profile/memories/{memory}',          [\App\Http\Controllers\MemoriesController::class, 'update'])->name('memories.update');
+    Route::delete('/profile/memories/{memory}',          [\App\Http\Controllers\MemoriesController::class, 'destroy'])->name('memories.destroy');
+    Route::delete('/profile/memories/agent/{agentKey}',  [\App\Http\Controllers\MemoriesController::class, 'forgetAgent'])->name('memories.forget-agent');
+
     // #10 — 2FA self-service (TOTP)
     Route::get ('/profile/2fa',         [\App\Http\Controllers\TwoFactorController::class, 'setup'])->name('profile.2fa');
     Route::post('/profile/2fa/enable',  [\App\Http\Controllers\TwoFactorController::class, 'enable'])->name('profile.2fa.enable');
@@ -941,6 +948,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
         if ($u = $r->integer('user_id'))   $q->where('user_id', $u);
         return view('admin.audit', ['logs' => $q->paginate(50)->withQueryString()]);
     })->name('admin.audit');
+
+    // /admin/tokens — pool €/mês partilhado: timeline, ranking, set-pool.
+    // 2026-05-22 — admin-only view (controller faz check role==admin).
+    Route::get ('/tokens',                       [\App\Http\Controllers\TokensController::class, 'index'])->name('admin.tokens');
+    Route::post('/tokens',                       [\App\Http\Controllers\TokensController::class, 'update'])->name('admin.tokens.update');
+    Route::post('/tokens/reset-notifications',   [\App\Http\Controllers\TokensController::class, 'resetNotifications'])->name('admin.tokens.reset-notifications');
 
     // Unified admin panel — health + secrets + cron + flags + integrations
     Route::get ('/panel',                    [\App\Http\Controllers\AdminPanelController::class, 'index'])->name('admin.panel');

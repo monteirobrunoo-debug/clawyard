@@ -189,6 +189,14 @@ trait AgentMemoryTrait
      */
     protected function maybeExtractAndSaveMemories(string $userMessage, string $reply): string
     {
+        // (c) Feedback loops — 3ª camada de memória (Bornet Cap 7).
+        // Detecta correcção ("isso está errado", "no, that's wrong") e
+        // confirmação ("exacto", "yes correct") para refinar memórias
+        // recordadas há ≤5 minutos. Executa ANTES da extracção nova
+        // para que a mesma turn não bumpe uma memória que está a
+        // contradizer.
+        $this->applyFeedbackToRecentMemories($userMessage);
+
         // (a) Tags emitidas pelo LLM
         $cleaned = preg_replace_callback(
             '#<save_memory\s+key="([^"]+)"\s+value="([^"]+)"(?:\s+importance="([0-9.]+)")?\s*/?>(?:</save_memory>)?#i',
@@ -225,6 +233,77 @@ trait AgentMemoryTrait
         }
 
         return $cleaned;
+    }
+
+    /**
+     * Feedback loops (Bornet 2025 Cap 7 — 3rd memory layer).
+     *
+     * Detecta na mensagem do user sinais de correcção ou confirmação
+     * sobre o que o agente acabou de recordar. Refina importance OR
+     * apaga a memória recordada nesta sessão.
+     *
+     * Janela: memórias com last_recalled_at nos últimos 5 minutos
+     * (pertencem à conversa actual).
+     *
+     * Heurística:
+     *   • Correcção  → importance -= 0.3, se ficar ≤ 0.1 apaga
+     *   • Confirmação → importance += 0.1 (cap a 1.0)
+     */
+    protected function applyFeedbackToRecentMemories(string $userMessage): void
+    {
+        $userId = auth()->id();
+        $agentKey = property_exists($this, 'agentKey') ? (string) $this->agentKey : 'chat';
+        if (!$userId) return;
+
+        $lower = mb_strtolower(trim($userMessage));
+        if ($lower === '') return;
+
+        // Padrões de CORRECÇÃO — user diz que algo está errado.
+        $correctionRx = '/\b(?:'
+            . 'isso (?:está|nao está|n[ãa]o est[áa]) (?:errado|certo)|esquece (?:isso|essa)|apaga (?:isso|essa)|'
+            . 'incorrecto|incorreto|n[ãa]o é (?:assim|isso|correcto)|mentira|errado|'
+            . 'no(?:,| that\'?s| this is) (?:wrong|incorrect|not (?:right|correct|true))|'
+            . 'forget (?:that|this|it)|that\'?s (?:wrong|incorrect|not true)|'
+            . 'actually (?:no|wrong)'
+            . ')\b/iu';
+
+        // Padrões de CONFIRMAÇÃO — user diz que recordaste bem.
+        $confirmationRx = '/\b(?:'
+            . 'exacto|exact[oa]mente|perfeito|isso mesmo|correcto|correto|'
+            . 'yes(?:,| that\'?s)? (?:right|correct|exact)|exactly|that\'?s (?:right|correct)|'
+            . 'spot on|confirmed|confirm[oa]'
+            . ')\b/iu';
+
+        $isCorrection   = (bool) preg_match($correctionRx, $lower);
+        $isConfirmation = (bool) preg_match($confirmationRx, $lower);
+
+        if (!$isCorrection && !$isConfirmation) return;
+
+        // Memórias recordadas nos últimos 5 min para este (user, agent).
+        $recent = AgentMemory::query()
+            ->for($userId, $agentKey)
+            ->where('last_recalled_at', '>=', now()->subMinutes(5))
+            ->limit(5)
+            ->get();
+
+        if ($recent->isEmpty()) return;
+
+        foreach ($recent as $m) {
+            if ($isCorrection) {
+                $newImp = (float) $m->importance - 0.3;
+                if ($newImp <= 0.1) {
+                    \Log::info('AgentMemoryTrait: forgetting memory (user correction)', [
+                        'user_id' => $userId, 'agent' => $agentKey, 'key' => $m->memory_key,
+                    ]);
+                    $m->delete();
+                } else {
+                    $m->update(['importance' => round($newImp, 2)]);
+                }
+            } elseif ($isConfirmation) {
+                $newImp = min(1.0, (float) $m->importance + 0.1);
+                $m->update(['importance' => round($newImp, 2)]);
+            }
+        }
     }
 
     /**

@@ -187,6 +187,29 @@ class TokenBudgetService
     }
 
     /**
+     * Hard gate — devolve true quando novos chat calls devem ser BLOQUEADOS.
+     *
+     * Activo apenas quando hard_gate_at_percent > 0 E o pool ultrapassou
+     * esse threshold no período actual. Default desactivado (gate = 0).
+     *
+     * Para activar:
+     *   php artisan tokens:set-pool 150 --gate=95
+     *
+     * Chamado por AnthropicKeyTrait::headersForMessage() antes de cada
+     * call Anthropic. Quando true, throws TokenPoolExhaustedException
+     * que é capturada pelo handler e devolve 503 ao user.
+     */
+    public function isHardGated(): bool
+    {
+        $budget = $this->currentBudget();
+        $gate   = (int) $budget->hard_gate_at_percent;
+        if ($gate <= 0) return false;
+
+        $summary = $this->summary();
+        return $summary['percent_used'] >= $gate;
+    }
+
+    /**
      * Verifica thresholds e dispara notificações (idempotente).
      * Chamado por cron diário. Devolve true se enviou alguma notificação.
      */

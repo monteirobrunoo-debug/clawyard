@@ -131,6 +131,27 @@ trait AnthropicKeyTrait
      */
     protected function headersForMessage(string|array $message, bool $bypassPii = false): array
     {
+        // Hard gate 2026-05-22: bloqueia call Anthropic quando token pool
+        // partilhado ultrapassou o threshold de hard_gate_at_percent.
+        // Default desactivado (gate=0). Activar via:
+        //   php artisan tokens:set-pool 150 --gate=95
+        try {
+            $budget = app(\App\Services\TokenBudgetService::class);
+            if ($budget->isHardGated()) {
+                $summary = $budget->summary();
+                throw new \App\Exceptions\TokenPoolExhaustedException(
+                    percentUsed: (int) $summary['percent_used'],
+                    poolEur:     (float) $summary['pool_eur'],
+                    period:      (string) $summary['period'],
+                );
+            }
+        } catch (\App\Exceptions\TokenPoolExhaustedException $e) {
+            throw $e;  // re-throw — não engolir
+        } catch (\Throwable) {
+            // Service indisponível (DB down, etc) → não bloqueia.
+            // Falhar aberto é preferível a derrubar todos os chats.
+        }
+
         $hasPdf = false;
         if (is_array($message)) {
             foreach ($message as $block) {
