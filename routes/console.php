@@ -147,6 +147,15 @@ Schedule::command('suppliers:sync-web-intel --stale')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Token budget alert — diário 08:00 Lisbon ──────────────────────────────
+// 2026-05-22: pool €150/mês partilhado. Cron diário verifica thresholds
+// (80% / 100%) e dispara email ao admin. Idempotente — flags
+// notified_at_80/100 evitam re-envio no mesmo período.
+Schedule::command('tokens:status --notify --limit=1')
+    ->dailyAt('08:00')
+    ->timezone('Europe/Lisbon')
+    ->withoutOverlapping();
+
 // ── Supplier directory enrichment — daily 02:50 Lisbon ───────────────────
 // Walks suppliers needing web contact info (no email yet, or missing
 // website, or stale > 30 days) and runs Tavily + Claude to fill in

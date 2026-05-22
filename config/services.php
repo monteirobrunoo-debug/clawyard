@@ -339,4 +339,21 @@ return [
         'auto_analysis' => env('AUTO_ANALYSIS_ENABLED', false),
     ],
 
+    // ── Token budget (Anthropic) ───────────────────────────────────────────
+    // Pedido directo 2026-05-22: pool de €150/mês partilhado entre os users.
+    // O que um user não gasta fica disponível para outro. Ranking com preços
+    // reais via `php artisan tokens:status`.
+    //
+    // Para alterar o pool de um mês:
+    //   php artisan tokens:set-pool 200 --period=2026-06
+    //
+    // ALERT_AT_PERCENT (default 80) → email ao admin quando atingido.
+    // HARD_GATE_AT_PERCENT (default 0/off) → bloqueia novos chat calls
+    //   quando ultrapassado. Activa só se quiseres limite forte.
+    'tokens' => [
+        'pool_eur'      => (float) env('TOKEN_POOL_EUR', 150.00),
+        'usd_eur_rate'  => (float) env('TOKEN_USD_EUR_RATE', 0.92),
+        'admin_email'   => env('TOKEN_ADMIN_EMAIL', env('MAIL_FROM_ADDRESS', '')),
+    ],
+
 ];
