@@ -162,10 +162,20 @@ class TokenBudgetService
         $budget = $this->currentBudget();
         $pool   = (float) $budget->pool_eur;
         $byUser = $this->spentByUserThisMonth();
+
+        // 2026-05-22: filtra contas órfãs / merged accounts.
+        // Convenção interna: emails terminados em ".merged-into-N" são
+        // ghosts de user merge histórico. Não devem poluir o ranking.
+        $users = User::whereIn('id', array_keys($byUser))
+            ->where('email', 'not like', '%.merged-into-%')
+            ->get(['id', 'name', 'email'])
+            ->keyBy('id');
+
+        // Remove do $byUser quem foi filtrado (não tem User válido)
+        $byUser = array_filter($byUser, fn ($_, $uid) => isset($users[$uid]), ARRAY_FILTER_USE_BOTH);
+
         $activeCount = max(1, count($byUser));
         $fairShare = $pool / $activeCount;
-
-        $users = User::whereIn('id', array_keys($byUser))->get(['id', 'name', 'email'])->keyBy('id');
 
         $out = [];
         $rank = 1;
