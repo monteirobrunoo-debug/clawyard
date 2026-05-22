@@ -73,4 +73,24 @@ class RunTenderAnalysisJob implements ShouldQueue
             ]);
         }
     }
+
+    /**
+     * Called by Laravel quando o job esgota retries — tipicamente porque o
+     * worker morreu mid-job (Octane reload, deploy, queue:restart). Como
+     * temos $tries=1 isto acontece sempre que o worker é re-spawned. Sem
+     * este método, Laravel manda MaxAttemptsExceededException para o log
+     * com stack trace gigante. Com isto, ficamos com 1 linha clara.
+     *
+     * NÃO re-enfileira nem chama analyse() — re-cobrar a Anthropic $1-2
+     * por um worker que morreu não vale o custo. O user pode re-submeter
+     * manualmente do dashboard se a análise não estiver no tender.
+     */
+    public function failed(?\Throwable $e): void
+    {
+        Log::warning('RunTenderAnalysisJob: dropped after worker died mid-job', [
+            'tender_id' => $this->tenderId,
+            'user_id'   => $this->userId,
+            'reason'    => $e?->getMessage() ?? 'max attempts exceeded',
+        ]);
+    }
 }
