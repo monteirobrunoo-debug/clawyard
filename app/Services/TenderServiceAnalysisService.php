@@ -87,6 +87,7 @@ class TenderServiceAnalysisService
         private BookSearchTool $bookSearch,
         private WebSearchTool $webSearch,
         private \App\Services\AnthropicBatchService $batch,
+        private \App\Services\AgentTools\NsnLookupTool $nsnLookup,
     ) {}
 
     /**
@@ -110,6 +111,16 @@ class TenderServiceAnalysisService
         if (in_array($agentKey, $webAllowed, true)) {
             $tools[] = $this->webSearch;
         }
+
+        // 2026-05-21: nsn_lookup para agentes que mais usam NSN refs.
+        // Defesa (Cor. Rodrigues), Sales (Marco), R&D (Eng. Victor) e
+        // Marítimo (Captain Porto) frequentemente precisam de identificar
+        // OEM + distribuidores autorizados a partir de NSN num tender.
+        $nsnAllowed = ['mildef', 'sales', 'engineer', 'capitao'];
+        if (in_array($agentKey, $nsnAllowed, true)) {
+            $tools[] = $this->nsnLookup;
+        }
+
         return $tools;
     }
 
@@ -486,6 +497,10 @@ TENS FERRAMENTAS DISPONÍVEIS ({$toolList}):
   • web_search (se disponível): info actual da web (preços OEM, fornecedores
     certificados, regulamentação 2026). Custo ~\$0.005/call — usa quando
     a info que precisas é externa e actual.
+  • nsn_lookup (defesa/sales/engineer/maritimo): procura NSN (NATO Stock
+    Number) e devolve descrição + OEM + NCAGE codes + distribuidores +
+    emails de contacto. Usa quando o tender menciona NSN específico
+    (formato XXXX-XX-XXX-XXXX). Custo ~\$0.013/call. Cache 7d.
 
 ESTRATÉGIA:
   1. Pensa: que info crítica te falta para uma resposta forte?
