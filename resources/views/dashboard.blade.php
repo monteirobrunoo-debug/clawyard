@@ -1113,9 +1113,28 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
         $mvpAgents = collect();
         $agentMeta = [];
     }
+
+    // Token Budget — pool €/mês partilhado entre users. Pedido directo
+    // 2026-05-22: "faz dashboard para todos verem no ecra incial ao lado
+    // dos ranbks". Try/catch para não rebentar o dashboard se o serviço
+    // ou migration ainda não estiverem aplicados.
+    try {
+        $tokenSvc        = app(\App\Services\TokenBudgetService::class);
+        $tokenSummary    = $tokenSvc->summary();
+        $tokenRanking    = $tokenSvc->rankingThisMonth(5);
+        $tokenMyEur      = null;
+        if (auth()->check()) {
+            $byUser = $tokenSvc->spentByUserThisMonth();
+            $tokenMyEur = (float) ($byUser[auth()->id()] ?? 0);
+        }
+    } catch (\Throwable $e) {
+        $tokenSummary = null;
+        $tokenRanking = [];
+        $tokenMyEur   = null;
+    }
 @endphp
 
-@if($leaderboard->count() > 0 || $mvpAgents->count() > 0)
+@if($leaderboard->count() > 0 || $mvpAgents->count() > 0 || $tokenSummary)
 <div class="recent-wrap">
     <div class="recent-header">
         <span class="recent-title">🥇 Ranking & MVP da semana</span>
@@ -1180,6 +1199,83 @@ foreach ($agents as $a) $agentByKey[$a['key']] = $a;
                     </span>
                 </a>
             @endforeach
+        </div>
+        @endif
+
+        {{-- 💰 Token Budget — pool €/mês partilhado. 2026-05-22.
+             Visível a todos os users autenticados. Mostra:
+               • barra de progresso do pool (verde / amarelo / vermelho)
+               • o que o user gastou no mês
+               • top-5 consumers
+             O que não usas, outro pode usar — sem caps individuais. --}}
+        @if($tokenSummary)
+        @php
+            $tokPct  = (float) $tokenSummary['percent_used'];
+            $tokBar  = $tokPct >= 100 ? '#ef4444' : ($tokPct >= 80 ? '#f59e0b' : '#10b981');
+            $tokBg   = $tokPct >= 100 ? 'linear-gradient(135deg,#3a0f0f 0%,#2a0f1a 100%)'
+                     : ($tokPct >= 80 ? 'linear-gradient(135deg,#3a2a0f 0%,#2a1f0f 100%)'
+                                       : 'linear-gradient(135deg,#0f2a1a 0%,#0f1a2a 100%)');
+        @endphp
+        <div style="flex:1;min-width:300px;background:{{ $tokBg }};border:1px solid #2a3a4a;border-radius:12px;padding:14px 18px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <span style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;">
+                    💰 Pool tokens · {{ $tokenSummary['period'] }}
+                </span>
+                @if($tokPct >= 100)
+                    <span style="font-size:10px;color:#ef4444;font-weight:bold;">ESGOTADO</span>
+                @elseif($tokPct >= 80)
+                    <span style="font-size:10px;color:#f59e0b;font-weight:bold;">ALERTA</span>
+                @endif
+            </div>
+
+            {{-- Pool gauge --}}
+            <div style="display:flex;justify-content:space-between;font-size:13px;color:#dde;margin-bottom:6px;">
+                <span style="color:#bcd;">€{{ number_format($tokenSummary['spent_eur'], 2) }} <span style="color:#9ab;font-size:11px;">/ €{{ number_format($tokenSummary['pool_eur'], 2) }}</span></span>
+                <span style="color:{{ $tokBar }};font-weight:bold;font-family:monospace;">{{ number_format($tokPct, 1) }}%</span>
+            </div>
+            <div style="height:8px;background:#0a0a0a;border-radius:4px;overflow:hidden;margin-bottom:6px;">
+                <div style="height:100%;width:{{ min(100, $tokPct) }}%;background:{{ $tokBar }};transition:width 0.5s ease;"></div>
+            </div>
+            <div style="font-size:10px;color:#9ab;margin-bottom:10px;">
+                Restam <strong style="color:#dde;">€{{ number_format($tokenSummary['remaining_eur'], 2) }}</strong> · partilhado entre todos
+            </div>
+
+            {{-- O que eu gastei (linha destacada) --}}
+            @if(auth()->check() && $tokenMyEur !== null)
+                @php
+                    $myPct = $tokenSummary['pool_eur'] > 0 ? ($tokenMyEur / $tokenSummary['pool_eur']) * 100 : 0;
+                @endphp
+                <div style="background:rgba(251,191,36,0.08);border-left:3px solid #fbbf24;padding:5px 8px;border-radius:4px;margin-bottom:8px;font-size:11px;">
+                    <span style="color:#fbbf24;font-weight:bold;">Tu gastaste:</span>
+                    <span style="color:#dde;font-family:monospace;font-weight:bold;margin-left:6px;">€{{ number_format($tokenMyEur, 2) }}</span>
+                    <span style="color:#9ab;margin-left:6px;">({{ number_format($myPct, 1) }}% do pool)</span>
+                </div>
+            @endif
+
+            {{-- Top-5 ranking --}}
+            @if(!empty($tokenRanking))
+            <div style="font-size:10px;color:#9ab;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;">Top 5 — gasto real EUR</div>
+            @foreach(array_slice($tokenRanking, 0, 5) as $i => $r)
+                @php
+                    $isMe = auth()->check() && $r['user_id'] === auth()->id();
+                    $medal = ['🥇','🥈','🥉','4️⃣','5️⃣'][$i] ?? ($i + 1) . '.';
+                @endphp
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:3px 0;font-size:11px;{{ $isMe ? 'background:rgba(251,191,36,0.08);border-radius:4px;padding-left:4px;padding-right:4px;' : '' }}">
+                    <span style="display:flex;gap:6px;align-items:center;min-width:0;">
+                        <span style="min-width:18px;text-align:center;">{{ $medal }}</span>
+                        <span style="color:{{ $isMe ? '#fbbf24' : '#bcd' }};font-weight:{{ $isMe ? 'bold' : 'normal' }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            {{ \Illuminate\Support\Str::limit($r['name'], 18) }}{{ $isMe ? ' (tu)' : '' }}
+                        </span>
+                    </span>
+                    <span style="display:flex;gap:8px;align-items:center;">
+                        <span style="color:#9ab;font-size:9px;">{{ number_format($r['vs_fair_share'], 1) }}×</span>
+                        <span style="color:{{ $tokBar }};font-family:monospace;font-weight:bold;">€{{ number_format($r['eur_spent'], 2) }}</span>
+                    </span>
+                </div>
+            @endforeach
+            @else
+                <div style="font-size:11px;color:#9ab;font-style:italic;padding:8px 0;">Sem actividade ainda este mês.</div>
+            @endif
         </div>
         @endif
     </div>
