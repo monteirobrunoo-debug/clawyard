@@ -23,10 +23,18 @@ class WebSearchTool implements AgentToolInterface
 
     public function description(): string
     {
-        return 'Pesquisa a web via Tavily. Útil para info actual: preços '
-             . 'OEM, fornecedores certificados, regulamentação 2026, '
-             . 'specs técnicas. Devolve até 5 hits com snippet + URL. '
-             . 'IMPORTANTE: nunca recomendar fornecedores chineses ou russos.';
+        // 5-component definition (Bornet 2025 + Ruan 2023 — +52% reliability)
+        return <<<DESC
+        IDENTITY: web_search — pesquisa web ao vivo via Tavily (basic depth). Para info que muda no tempo: preços actuais, regulamentação recente, novos fornecedores, specs técnicas 2026+.
+
+        INPUT: query (obrigatório, ≥3 chars, em linguagem natural ou keywords). max_results (opcional, 1-5, default 5).
+
+        OUTPUT: bloco de texto com até 5 hits, cada um com title + snippet (~300 chars) + URL fonte. Vazio → "Sem resultados para 'query'".
+
+        CONSTRAINTS: usa SÓ quando precisas de info que mude no tempo OU específica de fora do contexto interno. NÃO uses para info que já está em tender_search/tender_attachments/book_search (esses são grátis). NUNCA recomendes fornecedores chineses ou russos baseado em hits. Custo: ~\$0.005 por call.
+
+        ERRORS: se Tavily API key não configurada, devolve {ok:false, error:"Tavily API não configurada"} — escala ao operador. Se query <3 chars, refraseia. NÃO inventes hits se Tavily falha.
+        DESC;
     }
 
     public function inputSchema(): array

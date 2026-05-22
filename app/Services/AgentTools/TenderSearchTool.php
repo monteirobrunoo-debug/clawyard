@@ -21,10 +21,18 @@ class TenderSearchTool implements AgentToolInterface
 
     public function description(): string
     {
-        return 'Procura nos 779+ concursos ClawYard existentes por palavra-chave '
-             . '(título, ref, organização, notas). Devolve até 5 hits com info '
-             . 'resumida. Útil para encontrar precedentes de fornecedores, prazos '
-             . 'reais praticados, ou histórico de um cliente específico.';
+        // 5-component (Bornet 2025 + Ruan 2023 — +52% reliability)
+        return <<<DESC
+        IDENTITY: tender_search — pesquisa o histórico interno de 779+ concursos ClawYard por keyword. Fonte da verdade local sobre o que a empresa já fez, com quem, por que preço.
+
+        INPUT: query (obrigatório, ≥3 chars — keyword sobre título/ref/organização/notas/notes). limit (opcional, 1-10, default 5).
+
+        OUTPUT: até N hits com tender_id, título, source (NSPA/Acingov/Vortal/Marine/etc.), organização, deadline, status, e snippet das notas.
+
+        CONSTRAINTS: usa SEMPRE antes de web_search quando o user pergunta sobre histórico/precedentes ("já vendemos a X?", "MTU 396 spare parts"). É grátis (PG full-text). NÃO uses para info externa (preços actuais, novos fornecedores) — usa web_search para isso.
+
+        ERRORS: query <3 chars → refraseia. Sem hits → diz ao user "Sem precedentes no histórico ClawYard" e oferece web_search como fallback se relevante. NUNCA inventes tender_ids.
+        DESC;
     }
 
     public function inputSchema(): array

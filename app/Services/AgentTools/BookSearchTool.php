@@ -20,10 +20,18 @@ class BookSearchTool implements AgentToolInterface
 
     public function description(): string
     {
-        return 'Pesquisa a biblioteca técnica PartYard (soldadura, naval, '
-             . 'finance, marketing, negotiation/Voss). Devolve até 4 trechos '
-             . 'com referência ao livro e página. Útil para citar normas, '
-             . 'técnicas de negociação, specs marítimas.';
+        // 5-component (Bornet 2025 + Ruan 2023 — +52% reliability)
+        return <<<DESC
+        IDENTITY: book_search — pesquisa semântica (pgvector) na biblioteca técnica PartYard. Cobre soldadura, naval (IMO/SOLAS), finance, marketing, negotiation (Voss "Never Split the Difference"), agentic AI (Bornet 2025), e outros manuais ingeridos.
+
+        INPUT: query (obrigatório, ≥4 chars — pergunta ou conceito). domain (opcional: "naval"|"finance"|"negotiation"|"engineering"|"strategy" para filtrar). limit (opcional, 1-6, default 4).
+
+        OUTPUT: até N trechos (~800 chars cada) com citação completa (livro, capítulo, página). Embedding-ranked por relevância semântica à query.
+
+        CONSTRAINTS: usa para fundamentar respostas com fontes citáveis (normas IMO, tactics Voss, modelos financeiros, agentic patterns). NÃO uses para info actual (preços hoje, regulamentação 2026) — usa web_search. Citações DEVEM aparecer literalmente na resposta — "Voss (2016) cap 3" não basta, cita o trecho.
+
+        ERRORS: 0 hits → diz "Sem cobertura na biblioteca para este tópico" e oferece web_search. NUNCA inventes citações ou números de página. Se o trecho contradiz info recente, prevalece a info recente — sinaliza ao user que o livro pode estar desactualizado.
+        DESC;
     }
 
     public function inputSchema(): array

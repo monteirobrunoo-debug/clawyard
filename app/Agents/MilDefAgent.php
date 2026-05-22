@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
+use App\Agents\Traits\AgentMemoryTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 
@@ -30,6 +31,7 @@ class MilDefAgent implements AgentInterface
 {
     use WebSearchTrait;
     use NsnLookupTrait;
+    use AgentMemoryTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
 
@@ -330,6 +332,10 @@ SYSPROMPT;
     {
         $finalMessage = $this->augmentWithWebSearch($message);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage);
+        // LTM: top-5 memórias deste user × mildef → prepended ao prompt.
+        // Padrão Bornet et al. 2025 — agentes deixam de ter "memória de
+        // peixe-dourado" entre sessões.
+        $finalMessage = $this->prependMemories($finalMessage);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
@@ -349,6 +355,10 @@ SYSPROMPT;
 
         $data   = json_decode($response->getBody()->getContents(), true);
         $result = $data['content'][0]['text'] ?? '';
+        // Detecta "lembra-te que..." na mensagem do user + tags emitidas pelo
+        // LLM. Persiste em agent_memories e devolve a resposta sem as tags.
+        $userText = is_string($message) ? $message : $this->messageText($message);
+        $result   = $this->maybeExtractAndSaveMemories($userText, $result);
         $this->publishSharedContext($result);
         return $result;
     }
@@ -359,6 +369,8 @@ SYSPROMPT;
         if ($heartbeat) $heartbeat('🔍 a pesquisar fornecedores de defesa mundiais');
         $finalMessage = $this->augmentWithWebSearch($message, $heartbeat);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage, $heartbeat);
+        // LTM recall — prepende memórias deste user × mildef.
+        $finalMessage = $this->prependMemories($finalMessage);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
@@ -411,6 +423,11 @@ SYSPROMPT;
             }
         }
 
+        // LTM save — extrai memórias do user (heurística + tags do LLM).
+        // Stripped antes do publishSharedContext para que outros agentes
+        // vejam o texto limpo, sem as tags <save_memory ... />.
+        $userText = is_string($message) ? $message : $this->messageText($message);
+        $full     = $this->maybeExtractAndSaveMemories($userText, $full);
         $this->publishSharedContext($full);
         return $full;
     }

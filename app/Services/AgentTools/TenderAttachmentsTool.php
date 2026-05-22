@@ -20,10 +20,18 @@ class TenderAttachmentsTool implements AgentToolInterface
 
     public function description(): string
     {
-        return 'Lê o texto extraído de um anexo (PDF/imagem) do tender actual. '
-             . 'Útil quando o snippet inicial não chegou e precisas de ler '
-             . 'specs técnicas, items do SoR, NSN/P-N, condições contratuais. '
-             . 'Devolve até 12.000 chars do anexo.';
+        // 5-component (Bornet 2025 + Ruan 2023 — +52% reliability)
+        return <<<DESC
+        IDENTITY: tender_attachments — lê o texto extraído de um anexo (PDF/Word/imagem OCR) do tender em análise. Fonte da verdade técnica do concurso.
+
+        INPUT: attachment_id (obrigatório, inteiro — listado no contexto inicial do tender). offset (opcional, char offset para chunks grandes). chars (opcional, máx 12000, default 8000).
+
+        OUTPUT: texto plain do anexo desde offset até offset+chars. Inclui marcador "[truncado em pos X de Y]" quando o anexo é maior que chars.
+
+        CONSTRAINTS: usa quando o user pergunta sobre detalhes técnicos específicos (specs, items SoR, NSN, condições contratuais, prazo de entrega, datas) que NÃO estão no snippet inicial do tender. Não uses para anexos de outros tenders (security — só anexos do tender_id actual em contexto). Confidential tenders já estão filtrados pelo controller.
+
+        ERRORS: attachment_id inexistente → devolve {ok:false, error:"anexo não encontrado"} — pede ao user para confirmar qual anexo. PDF sem extracted_text (failed OCR) → indica explicitamente "OCR falhou, anexo só visual" e sugere ao user abrir manualmente.
+        DESC;
     }
 
     public function inputSchema(): array

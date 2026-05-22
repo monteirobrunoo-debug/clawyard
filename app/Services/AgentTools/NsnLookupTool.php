@@ -44,12 +44,23 @@ class NsnLookupTool implements AgentToolInterface
 
     public function description(): string
     {
-        return 'Procura um NSN (NATO Stock Number) e devolve descrição, OEM, '
-             . 'NCAGE codes, distribuidores autorizados, e contactos (emails) '
-             . 'quando disponíveis. Útil quando o tender menciona NSN específico '
-             . 'e precisas de identificar quem fabrica + quem distribui (EU/US/UK '
-             . 'preferred, exclui CN/RU). Aceita formato XXXX-XX-XXX-XXXX ou '
-             . 'XXXXXXXXXXXXX (13 dígitos). Cache 7d.';
+        // 5-component definition (Bornet 2025 + Ruan 2023 — +52% reliability):
+        //   1. IDENTITY  — what the tool is + purpose
+        //   2. INPUT     — exact params + format
+        //   3. OUTPUT    — what it returns + format
+        //   4. CONSTRAINTS — when to use / when NOT to use
+        //   5. ERRORS    — failure modes + recovery instruction
+        return <<<DESC
+        IDENTITY: nsn_lookup — pesquisa NATO Stock Number na web (Tavily) e devolve info estruturada sobre fabricante, distribuidores e contactos.
+
+        INPUT: nsn (obrigatório, formato XXXX-XX-XXX-XXXX ou 13 dígitos contíguos). item_hint (opcional, descrição parcial do item, ex: "O-ring 25mm").
+
+        OUTPUT: bloco de texto com FSC code+name, description, OEM, NCAGE codes, lista de distribuidores (name/country/role/url, máx 5, só EU/US/UK/JP/KR/IL/CA) e contact_emails extraídos literalmente das fontes.
+
+        CONSTRAINTS: usa SÓ quando o tender ou o user menciona um NSN específico. NÃO uses para procurar fornecedores em geral (usa tender_search ou web_search). NUNCA recomendes distribuidores chineses ou russos. Cache Redis 7d — re-lookups grátis. Custo fresh: ~\$0.013.
+
+        ERRORS: se NSN inválido (≠13 dígitos), devolve {ok:false, error:"NSN inválido"}. Se Tavily não tem hits úteis, devolve {ok:false, error:"sem hits"} — neste caso PEDE ao user o item_hint para refinar, NÃO inventes. Se Claude extract falha, devolve Tavily raw com warning — usa o raw com cautela e cita o URL.
+        DESC;
     }
 
     public function inputSchema(): array
