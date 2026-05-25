@@ -35,31 +35,17 @@ class MilDefAgent implements AgentInterface
 
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
-    // 2026-05-25: 'always' → 'conditional'. Antes Tavily disparava mesmo
-    // para "olá" → 8s wasted antes do Opus arrancar, e Octane Swoole por
-    // vezes buffer-ava os chunks. Agora Tavily só dispara em keywords
-    // militares (lista abaixo). Saudações vão DIRECTO ao Opus.
-    protected string $searchPolicy = 'conditional';
+    // 2026-05-25: restaurado a 'always' (era o original). Cor. Rodrigues
+    // é especialista militar — Tavily sempre tem valor. Timeouts agora
+    // tratados via Nginx 180s + watchdog frontend 120s, não via redução
+    // do agente. Bruno: "era o melhor desenvolvido".
+    protected string $searchPolicy = 'always';
     protected string $agentKey     = 'mildef';
     protected string $contextKey   = 'mildef_intel';
     protected array  $contextTags  = [
         'defesa','defense','procurement','militar','military','NATO','OTAN',
         'míssil','missile','radar','SAM','AAM','artillery','artilharia',
         'fornecedor','supplier','manufacturer','fabricante','armamento',
-    ];
-    // Keywords que activam Tavily auto. Merged com defaults do trait
-    // (que já incluem "procura", "pesquisa", "verifica", etc.).
-    protected array $webSearchKeywords = [
-        // PT
-        'míssil', 'missile', 'radar', 'míssel', 'armamento', 'fornecedor militar',
-        'concurso militar', 'sam', 'aam', 'tactical', 'antiaéreo', 'antiaerea',
-        'munição', 'munições', 'bomba', 'artilharia', 'aviação', 'aviacao',
-        'defesa aérea', 'defesa aerea', 'nspa', 'edip', 'edirpa', 'asap',
-        // EN
-        'manufacturer', 'supplier', 'air defence', 'air defense', 'rocket',
-        'projectile', 'warhead', 'guided', 'unmanned', 'uav', 'drone',
-        // Sigla pesquisa explícita
-        'fabricante de', 'who makes', 'find supplier', 'find manufacturer',
     ];
 
     protected Client $client;
@@ -346,28 +332,24 @@ SYSPROMPT;
     // ────────────────────────────────────────────────────────────────────────
     public function chat(string|array $message, array $history = []): string
     {
-        // smartAugment respeita searchPolicy='conditional' — só Tavily se
-        // mensagem tem keywords militares ou explícitos ("procura", "pesquisa").
-        $finalMessage = $this->smartAugment($message);
+        // 2026-05-25 restauro: original com searchPolicy='always' via
+        // augmentWithWebSearch (não smartAugment). Cor. Rodrigues precisa
+        // sempre de Tavily — é especialista militar com info actualizada.
+        $finalMessage = $this->augmentWithWebSearch($message);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
-        // 2026-05-25: trim history a 12 mensagens recentes. System prompt
-        // MilDef tem ~16K chars + augments + history sem trim podia exceder
-        // o context window e provocar first-chunk delays massivos.
-        $messages = array_merge(array_slice($history, -12), [
+        $messages = array_merge($history, [
             ['role' => 'user', 'content' => $finalMessage],
         ]);
 
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
-                // 2026-05-25: revertido para Opus. Sonnet 4-6 não streamava
-                // chunks para MilDef (heartbeat ⚔️ disparava mas LLM ficava
-                // silencioso). Opus mais lento mas comprovadamente funcional.
+                // Opus = deep reasoning tier (original Cor. Rodrigues spec).
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
-                'max_tokens' => 4096,  // reduzido de 8192 — corta tempo gerando pela metade
+                'max_tokens' => 8192,  // restaurado ao original
                 'system'     => $sys,
                 'messages'   => $messages,
             ],
@@ -383,18 +365,19 @@ SYSPROMPT;
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         if ($heartbeat) $heartbeat('🔍 a pesquisar fornecedores de defesa mundiais');
-        // smartAugment respeita searchPolicy='conditional' — Tavily só dispara
-        // se mensagem tem keywords militares ou explícitos ("procura", etc.).
-        // Saudações tipo "olá" passam directo sem Tavily, poupando 8s.
-        $finalMessage = $this->smartAugment($message, $heartbeat);
+        // 2026-05-25 restauro: augmentWithWebSearch (searchPolicy='always').
+        // Cor. Rodrigues está restaurado à capacidade máxima:
+        //   - Tavily SEMPRE
+        //   - NSN lookup com cache 7d
+        //   - Technical books RAG (incluindo Voss negotiation)
+        //   - Full history (proxy timeouts cobertos por Nginx 180s + watchdog 120s)
+        //   - Opus + max_tokens 8192
+        $finalMessage = $this->augmentWithWebSearch($message, $heartbeat);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage, $heartbeat);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
-        // 2026-05-25: trim history a 12 mensagens recentes. System prompt
-        // MilDef tem ~16K chars + augments + history sem trim podia exceder
-        // o context window e provocar first-chunk delays massivos.
-        $messages = array_merge(array_slice($history, -12), [
+        $messages = array_merge($history, [
             ['role' => 'user', 'content' => $finalMessage],
         ]);
 
@@ -405,7 +388,7 @@ SYSPROMPT;
             'stream'  => true,
             'json'    => [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
-                'max_tokens' => 4096,
+                'max_tokens' => 8192,
                 'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
