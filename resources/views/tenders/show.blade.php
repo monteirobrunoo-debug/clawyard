@@ -174,7 +174,14 @@
                     </div>
                     <div>
                         <dt class="text-xs uppercase text-gray-500">Nº Oportunidade SAP</dt>
-                        <dd class="font-mono text-gray-900">{{ $tender->sap_opportunity_number ?: '—' }}</dd>
+                        <dd class="font-mono text-gray-900 flex items-center gap-2 flex-wrap">
+                            <span>{{ $tender->sap_opportunity_number ?: '—' }}</span>
+                            @if($tender->isProcessOpen())
+                                <span class="inline-flex items-center gap-1 rounded bg-green-100 border border-green-300 px-2 py-0.5 text-green-800 text-[10px] font-semibold uppercase tracking-wide" title="Processo SAP já aberto — sincronização activa">
+                                    🟢 Processo aberto
+                                </span>
+                            @endif
+                        </dd>
                     </div>
                     <div>
                         <dt class="text-xs uppercase text-gray-500">Organização</dt>

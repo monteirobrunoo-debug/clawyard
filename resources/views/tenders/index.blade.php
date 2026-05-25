@@ -1124,12 +1124,12 @@
                                              pediram esta coluna depois de não saberem se as suas
                                              notes iam sincronizar (sem sap_opp = não sincroniza). --}}
                                         <td class="px-3 py-2 whitespace-nowrap font-mono text-xs">
-                                            @if($t->sap_opportunity_number)
-                                                <span class="inline-flex items-center rounded bg-green-50 border border-green-200 px-2 py-0.5 text-green-800" title="Notas guardadas aqui sincronizam com SAP Opp #{{ $t->getSapSequentialNo() }}">
-                                                    ✓ {{ $t->sap_opportunity_number }}
+                                            @if($t->isProcessOpen())
+                                                <span class="inline-flex items-center gap-1 rounded bg-green-50 border border-green-300 px-2 py-0.5 text-green-800 font-semibold" title="Processo SAP já aberto — sincronização activa. Notas guardadas aqui vão para SAP Opp #{{ $t->getSapSequentialNo() }}">
+                                                    🟢 Aberto <span class="opacity-80 font-normal">#{{ $t->sap_opportunity_number }}</span>
                                                 </span>
                                             @else
-                                                <span class="inline-flex items-center rounded bg-yellow-50 border border-yellow-200 px-2 py-0.5 text-yellow-800" title="Sem oportunidade SAP — notas guardam-se só localmente. Preenche o campo no detalhe do concurso para activar sincronização.">
+                                                <span class="inline-flex items-center rounded bg-yellow-50 border border-yellow-200 px-2 py-0.5 text-yellow-800" title="Sem oportunidade SAP — processo ainda não foi aberto. Notas guardam-se só localmente. Preenche o campo no detalhe do concurso para activar.">
                                                     ⚠ sem nº
                                                 </span>
                                             @endif
@@ -1501,9 +1501,9 @@
                                             ✓ atribuído
                                         </span>
                                     @endif
-                                    @if($t->sap_opportunity_number)
-                                        <span class="rounded border border-cyan-300 bg-cyan-50 px-1.5 py-0.5 font-mono text-cyan-800">
-                                            SAP #{{ $t->sap_opportunity_number }}
+                                    @if($t->isProcessOpen())
+                                        <span class="rounded border border-green-300 bg-green-50 px-1.5 py-0.5 font-mono text-green-800 font-semibold" title="Processo SAP já aberto — sincronização activa">
+                                            🟢 Aberto #{{ $t->sap_opportunity_number }}
                                         </span>
                                     @endif
                                     @if($deadlinePT)
@@ -1643,9 +1643,9 @@
                                             </span>
                                         </td>
                                         <td class="px-3 py-2 align-middle font-mono text-xs whitespace-nowrap">
-                                            @if($t->sap_opportunity_number)
-                                                <span class="inline-flex items-center rounded bg-green-50 border border-green-200 px-2 py-0.5 text-green-800">
-                                                    ✓ {{ $t->sap_opportunity_number }}
+                                            @if($t->isProcessOpen())
+                                                <span class="inline-flex items-center gap-1 rounded bg-green-50 border border-green-300 px-2 py-0.5 text-green-800 font-semibold" title="Processo SAP já aberto — sincronização activa">
+                                                    🟢 Aberto <span class="opacity-80 font-normal">#{{ $t->sap_opportunity_number }}</span>
                                                 </span>
                                             @else
                                                 <span class="text-yellow-700">⚠ sem nº</span>

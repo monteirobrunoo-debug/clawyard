@@ -130,6 +130,20 @@ class Tender extends Model
         };
     }
 
+    /**
+     * Regra de negócio confirmada por Bruno (2026-05-25):
+     *   "Quando existe um número nos concursos na zona de SAP atribuído
+     *    e com valor numérico, quer dizer que o processo já está aberto."
+     *
+     * sap_opportunity_number preenchido (não vazio) → processo aberto no
+     * SAP B1, sincronização activa. Usado por views (badge verde) e
+     * possivelmente filtros futuros ("só processos abertos").
+     */
+    public function isProcessOpen(): bool
+    {
+        return trim((string) ($this->sap_opportunity_number ?? '')) !== '';
+    }
+
     // ── Status vocabulary (LEGACY — mantido para back-compat enquanto
     //    migration cache_sap_stage roda; novas views usam sapStageLabel) ──
     public const STATUS_PENDING       = 'pending';        // new import, no status yet
