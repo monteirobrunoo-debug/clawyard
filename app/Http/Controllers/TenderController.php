@@ -1227,8 +1227,11 @@ class TenderController extends Controller
             return back()->with('error',
                 "Não encontrei nenhum Customer ou Lead no SAP B1{$triedStr}. " .
                 "Nota: o SAP B1 só aceita Customers (C) ou Leads (L) em Sales Opportunities — Suppliers (F) não servem. " .
-                "Resolução: 1) cria/converte o BP para Customer em SAP B1 → Negócios → Parceiros, OU " .
-                "2) edita este concurso e ajusta o campo \"Organização Compradora\" para um Customer existente."
+                "Resolução RÁPIDA: vai ao SAP B1, descobre o CardCode do Customer correcto (ex.: C000263), " .
+                "e cola-o no campo \"🏢 SAP Customer CardCode\" abaixo do bloco de Atribuição neste mesmo tender. " .
+                "Depois clica \"Criar SAP Opp\" outra vez. " .
+                "OU (caminhos longos): 1) cria/converte o BP para Customer em SAP B1 → Negócios → Parceiros, " .
+                "OU 2) edita este concurso e ajusta o campo \"Organização Compradora\" para um Customer existente."
             );
         }
 
