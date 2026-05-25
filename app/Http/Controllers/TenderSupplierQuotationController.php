@@ -128,6 +128,11 @@ class TenderSupplierQuotationController extends Controller
     /**
      * Upload PDF da cotação + Marta extrai. Salva como TenderAttachment +
      * cria a TenderSupplierQuotation com campos preenchidos pelo LLM.
+     *
+     * 2026-05-25: outer try/catch defensivo — qualquer exception inesperada
+     * (encryption SafeEncryptedString, DB constraint, Marta hang) devolve
+     * JSON com diagnóstico em vez de 500 HTML opaco. JS modal mostra o
+     * erro real ao user via alert().
      */
     public function extract(Request $request, Tender $tender): JsonResponse
     {
@@ -166,63 +171,85 @@ class TenderSupplierQuotationController extends Controller
                 $storedName,
             );
         } catch (\Throwable $e) {
+            Log::warning('Quotation extract: storage failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
             return response()->json(['ok' => false, 'error' => 'Storage falhou: ' . $e->getMessage()], 500);
         }
 
-        $absolute = Storage::disk('local')->path($relPath);
-        $extracted = $this->pdfExtractor->extract($absolute);
-        $pdfText   = ($extracted['ok'] ?? false) ? (string) ($extracted['text'] ?? '') : '';
+        // Outer try/catch — qualquer fatal após upload retorna JSON diagnostic
+        // em vez de 500 HTML opaco.
+        try {
+            $absolute = Storage::disk('local')->path($relPath);
+            $extracted = $this->pdfExtractor->extract($absolute);
+            $pdfText   = ($extracted['ok'] ?? false) ? (string) ($extracted['text'] ?? '') : '';
 
-        $att = TenderAttachment::create([
-            'tender_id'           => $tender->id,
-            'original_name'       => $originalName,
-            'disk_path'           => $relPath,
-            'mime_type'           => $file->getClientMimeType() ?: 'application/pdf',
-            'size_bytes'          => $file->getSize(),
-            'file_hash'           => $hash,
-            'extraction_status'   => $pdfText !== '' ? TenderAttachment::STATUS_OK : TenderAttachment::STATUS_FAILED,
-            'extracted_text'      => $pdfText !== '' ? $pdfText : null,
-            'extracted_chars'     => mb_strlen($pdfText),
-            'uploaded_by_user_id' => Auth::id(),
-        ]);
+            $att = TenderAttachment::create([
+                'tender_id'           => $tender->id,
+                'original_name'       => $originalName,
+                'disk_path'           => $relPath,
+                'mime_type'           => $file->getClientMimeType() ?: 'application/pdf',
+                'size_bytes'          => $file->getSize(),
+                'file_hash'           => $hash,
+                'extraction_status'   => $pdfText !== '' ? TenderAttachment::STATUS_OK : TenderAttachment::STATUS_FAILED,
+                'extracted_text'      => $pdfText !== '' ? $pdfText : null,
+                'extracted_chars'     => mb_strlen($pdfText),
+                'uploaded_by_user_id' => Auth::id(),
+            ]);
 
-        // 2. Marta extrai campos do PDF
-        $parsed = [];
-        if ($pdfText !== '') {
-            try {
-                $parsed = $this->callMartaParse($pdfText);
-            } catch (\Throwable $e) {
-                Log::warning('Quotation extract: Marta failed', [
-                    'tender_id' => $tender->id,
-                    'error'     => $e->getMessage(),
-                ]);
+            // 2. Marta extrai campos do PDF
+            $parsed = [];
+            if ($pdfText !== '') {
+                try {
+                    $parsed = $this->callMartaParse($pdfText);
+                } catch (\Throwable $e) {
+                    Log::warning('Quotation extract: Marta failed', [
+                        'tender_id' => $tender->id,
+                        'error'     => $e->getMessage(),
+                    ]);
+                }
             }
+
+            // 3. Cria a quotation com defaults do PDF + override do request
+            $q = new TenderSupplierQuotation([
+                'tender_id'              => $tender->id,
+                'supplier_id'            => $request->integer('supplier_id') ?: null,
+                'supplier_name_freetext' => $request->input('supplier_name_freetext'),
+                'unit_price'             => $parsed['unit_price'] ?? null,
+                'currency'               => strtoupper((string) ($parsed['currency'] ?? 'EUR')) ?: 'EUR',
+                'quantity'               => (int) ($parsed['quantity'] ?? 1),
+                'delivery_days'          => $parsed['delivery_days'] ?? null,
+                'validity_days'          => $parsed['validity_days'] ?? null,
+                'incoterm'               => isset($parsed['incoterm']) ? strtoupper((string) $parsed['incoterm']) : null,
+                'notes'                  => $parsed['notes'] ?? null,
+                'pdf_attachment_id'      => $att->id,
+                'parsed_by_marta_at'     => !empty($parsed) ? now() : null,
+                'created_by_user_id'     => Auth::id(),
+            ]);
+            $q->total_price = $q->effectiveTotal();
+            $q->save();
+
+            return response()->json([
+                'ok'        => true,
+                'quotation' => $this->shape($q->fresh(['supplier', 'attachment'])),
+                'parsed_ok' => !empty($parsed),
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Quotation extract: fatal', [
+                'tender_id' => $tender->id,
+                'user_id'   => Auth::id(),
+                'file'      => $originalName,
+                'error'     => $e->getMessage(),
+                'file_line' => $e->getFile() . ':' . $e->getLine(),
+                'trace'     => mb_substr($e->getTraceAsString(), 0, 1500),
+            ]);
+            return response()->json([
+                'ok'    => false,
+                'error' => 'Erro ao processar cotação: ' . $e->getMessage(),
+            ], 500);
         }
-
-        // 3. Cria a quotation com defaults do PDF + override do request
-        $q = new TenderSupplierQuotation([
-            'tender_id'              => $tender->id,
-            'supplier_id'            => $request->integer('supplier_id') ?: null,
-            'supplier_name_freetext' => $request->input('supplier_name_freetext'),
-            'unit_price'             => $parsed['unit_price'] ?? null,
-            'currency'               => strtoupper((string) ($parsed['currency'] ?? 'EUR')) ?: 'EUR',
-            'quantity'               => (int) ($parsed['quantity'] ?? 1),
-            'delivery_days'          => $parsed['delivery_days'] ?? null,
-            'validity_days'          => $parsed['validity_days'] ?? null,
-            'incoterm'               => isset($parsed['incoterm']) ? strtoupper((string) $parsed['incoterm']) : null,
-            'notes'                  => $parsed['notes'] ?? null,
-            'pdf_attachment_id'      => $att->id,
-            'parsed_by_marta_at'     => !empty($parsed) ? now() : null,
-            'created_by_user_id'     => Auth::id(),
-        ]);
-        $q->total_price = $q->effectiveTotal();
-        $q->save();
-
-        return response()->json([
-            'ok'        => true,
-            'quotation' => $this->shape($q->fresh(['supplier', 'attachment'])),
-            'parsed_ok' => !empty($parsed),
-        ]);
     }
 
     /** Excel comparativo de TODAS as cotações da tender. */
