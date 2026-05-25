@@ -75,41 +75,73 @@
                    3. Oferta ao cliente + insights de preços + push SAP (em construção)
                  Stepper é apenas visual; os anchors levam o user ao bloco. --}}
             @php
-                $phase1Done = !empty($tender->sap_opportunity_number);
-                $hasQuotes  = false;  // futuro: tender_supplier_quotations
-                $hasOffer   = false;  // futuro: tender_sales_offers
-                $phase = $hasOffer ? 3 : ($hasQuotes ? 2 : 1);
+                // 2026-05-25: stepper agora reflecte estado real do tender.
+                // Antes $hasQuotes/$hasOffer eram hardcoded false → todas as
+                // fases mostravam "Fase 1 active" mesmo com cotações criadas.
+                $phase1Done   = $tender->isProcessOpen();
+                $quotesCount  = \App\Models\TenderSupplierQuotation::where('tender_id', $tender->id)->count();
+                $hasQuotes    = $quotesCount > 0;
+                $hasOffer     = false;  // futuro: tender_sales_offers
+                $phase        = $hasOffer ? 3 : ($hasQuotes ? 2 : 1);
+
+                // Progress percent for visual bar (1/3, 2/3, 3/3).
+                $progressPct = $phase === 3 ? 100 : ($phase === 2 ? 66 : 33);
             @endphp
             <section class="rounded-lg bg-white shadow-sm border border-gray-100 p-4">
+                {{-- 2026-05-25: progress bar acima do stepper para feedback
+                     visual imediato de quão longe o tender está. --}}
+                <div class="mb-3">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[10px] uppercase tracking-wider font-semibold text-gray-500">
+                            Progresso do concurso
+                        </span>
+                        <span class="text-xs font-semibold {{ $phase === 3 ? 'text-emerald-600' : 'text-indigo-600' }}">
+                            Fase {{ $phase }} / 3 · {{ $progressPct }}%
+                        </span>
+                    </div>
+                    <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+                        <div class="h-full rounded-full transition-all duration-500 {{ $phase === 3 ? 'bg-emerald-500' : 'bg-indigo-500' }}"
+                             style="width: {{ $progressPct }}%"></div>
+                    </div>
+                </div>
+
                 <ol class="grid grid-cols-1 gap-3 sm:grid-cols-3 text-sm">
                     @foreach([
                         ['n'=>1, 'icon'=>'📨', 'label'=>'Fornecedores + Emails + SAP', 'anchor'=>'#phase-1',
-                            'sub'=>'Seleccionar fornecedores, enviar inquiries, abrir SAP Opp, anotar.'],
+                            'sub'=>'Seleccionar fornecedores, enviar inquiries, abrir SAP Opp, anotar.',
+                            'meta' => $phase1Done ? '🟢 SAP Opp aberta' : '⚠ falta SAP Opp'],
                         ['n'=>2, 'icon'=>'💰', 'label'=>'Cotações + comparativo Excel',  'anchor'=>'#phase-2',
-                            'sub'=>'Inserir cotações recebidas, gerar Excel comparativo.'],
+                            'sub'=>'Inserir cotações recebidas, gerar Excel comparativo.',
+                            'meta' => $hasQuotes ? "✓ {$quotesCount} cotaç" . ($quotesCount === 1 ? 'ão' : 'ões') : 'sem cotações ainda'],
                         ['n'=>3, 'icon'=>'🎯', 'label'=>'Oferta cliente + push SAP',     'anchor'=>'#phase-3',
-                            'sub'=>'Preparar oferta usando comparativo, insights de preço, push directo a SAP.'],
+                            'sub'=>'Preparar oferta usando comparativo, insights de preço, push directo a SAP.',
+                            'meta' => 'em construção'],
                     ] as $st)
                         @php
                             $isActive = $phase === $st['n'];
                             $isDone   = $phase > $st['n'];
                             $bg     = $isDone ? 'bg-emerald-50 border-emerald-300' :
-                                      ($isActive ? 'bg-indigo-50 border-indigo-300' : 'bg-gray-50 border-gray-200');
+                                      ($isActive ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-200' : 'bg-gray-50 border-gray-200');
                             $badge  = $isDone ? 'bg-emerald-600 text-white' :
                                       ($isActive ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-gray-700');
                             $label  = $isDone ? '✓' : $st['n'];
+                            $metaColor = $isDone ? 'text-emerald-700' :
+                                         ($isActive ? 'text-indigo-700' : 'text-gray-500');
                         @endphp
                         <li>
                             <a href="{{ $st['anchor'] }}"
-                               class="block rounded-md border {{ $bg }} px-3 py-2 hover:shadow-sm transition">
+                               class="block rounded-md border {{ $bg }} px-3 py-2.5 hover:shadow-md transition-all">
                                 <div class="flex items-center gap-2">
-                                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold {{ $badge }}">{{ $label }}</span>
-                                    <span class="text-xs uppercase tracking-wider font-semibold text-gray-500">Fase {{ $st['n'] }}</span>
+                                    <span class="inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold {{ $badge }}">{{ $label }}</span>
+                                    <span class="text-[10px] uppercase tracking-wider font-semibold text-gray-500">Fase {{ $st['n'] }}</span>
                                 </div>
-                                <div class="mt-1 text-sm font-semibold text-gray-800">
+                                <div class="mt-1.5 text-sm font-semibold text-gray-800">
                                     {{ $st['icon'] }} {{ $st['label'] }}
                                 </div>
-                                <div class="text-xs text-gray-600">{{ $st['sub'] }}</div>
+                                <div class="mt-0.5 text-xs text-gray-600">{{ $st['sub'] }}</div>
+                                <div class="mt-1.5 text-[11px] font-medium {{ $metaColor }}">
+                                    {{ $st['meta'] }}
+                                </div>
                             </a>
                         </li>
                     @endforeach
