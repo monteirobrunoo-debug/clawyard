@@ -422,10 +422,63 @@
                                 </button>
                             @endif
                         @endunless
+
+                        {{-- 2026-05-25: Multi-agent debate (Bornet pattern). 3 agentes
+                             debatem 2 rounds + Haiku synthesis. ~30-90s background, ~$0.20.
+                             Para tenders críticos onde quer reduzir hallucination.
+                             Persistido em multi_agent_debates table. --}}
+                        @unless($tender->is_confidential)
+                            <form method="POST" action="{{ route('tenders.debate', $tender) }}"
+                                  class="inline"
+                                  onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='⏳ A iniciar debate…';">
+                                @csrf
+                                <button type="submit"
+                                        class="rounded-md bg-purple-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-600"
+                                        title="3 agentes independentes debatem este tender em 2 rounds + Haiku synthesis. ~30-90s background (~$0.20). Para tenders críticos / alto stake.">
+                                    🧠 Debate multi-agente
+                                </button>
+                            </form>
+                        @endunless
                     </div>
 
                     {{-- Status box for service-analysis button --}}
                     <div id="ts-service-analysis-status" class="mt-3 hidden text-xs"></div>
+
+                    {{-- 2026-05-25: Histórico recente de debates multi-agente para
+                         este tender. Mostra estado + synthesis quando done. --}}
+                    @php
+                        $recentDebates = \App\Models\MultiAgentDebate::where('tender_id', $tender->id)
+                            ->orderByDesc('created_at')
+                            ->limit(3)
+                            ->get();
+                    @endphp
+                    @if($recentDebates->isNotEmpty())
+                        <div class="mt-3 space-y-2">
+                            @foreach($recentDebates as $d)
+                                <div class="rounded-md border border-purple-200 bg-purple-50 p-3">
+                                    <div class="flex items-center justify-between gap-2 mb-1">
+                                        <span class="text-xs font-semibold text-purple-800">
+                                            🧠 Debate #{{ $d->id }}
+                                            @if($d->status === 'pending')   <span class="text-amber-700">⏳ pendente</span>
+                                            @elseif($d->status === 'running') <span class="text-blue-700">▶ a correr…</span>
+                                            @elseif($d->status === 'done')   <span class="text-emerald-700">✓ done</span>
+                                            @else                            <span class="text-red-700">✗ falhou</span>
+                                            @endif
+                                        </span>
+                                        <span class="text-[10px] text-gray-500">
+                                            @if($d->confidence_pct !== null) confiança: {{ $d->confidence_pct }}% · @endif
+                                            ${{ number_format((float) $d->cost_usd, 3) }} · {{ $d->created_at?->diffForHumans() }}
+                                        </span>
+                                    </div>
+                                    @if($d->status === 'done' && $d->synthesis)
+                                        <div class="text-xs text-gray-800 whitespace-pre-wrap">{{ mb_strimwidth($d->synthesis, 0, 800, '…') }}</div>
+                                    @elseif($d->status === 'failed')
+                                        <div class="text-xs text-red-700">{{ mb_strimwidth($d->synthesis ?? 'sem detalhe', 0, 300, '…') }}</div>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
 
                     {{-- ⚓ Marine action pack — status + panel de drafts.
                          Pedido 2026-05-20 (marine): "Daniel prepara os emails

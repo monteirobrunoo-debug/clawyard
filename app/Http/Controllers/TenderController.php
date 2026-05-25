@@ -1000,6 +1000,57 @@ class TenderController extends Controller
             : "✓ SAP CardCode {$code} associado. Marta vai usar este BP directamente.");
     }
 
+    /**
+     * Trigger multi-agent debate (Bornet pattern) sobre este tender.
+     *
+     * 3 agentes (default: mildef+sales+engineer ou capitao+sales+engineer
+     * para Marine) corrm 2 rounds independentes + 1 synthesis Haiku.
+     * Custo ~$0.15-0.30. Demora 30-90s — corre em background via job.
+     *
+     * Para tenders críticos (>€100k, mil-def, alto stake). Reduz
+     * hallucination via cognitive diversity (Montreal +13%, MIT/Google -22% error).
+     */
+    public function launchDebate(Request $request, Tender $tender)
+    {
+        $user = Auth::user();
+        $this->enforceVisibility($tender, $user);
+
+        if ($tender->is_confidential) {
+            return back()->with('error', 'Tender confidencial — debate multi-agente não permitido.');
+        }
+
+        // Topic opcional via form
+        $topic = trim((string) $request->input('topic', ''));
+        $topic = $topic !== '' ? mb_substr($topic, 0, 500) : null;
+
+        // Cria record pending — service vai actualizar para running/done.
+        $debate = \App\Models\MultiAgentDebate::create([
+            'tender_id'            => $tender->id,
+            'initiated_by_user_id' => $user->id,
+            'topic'                => $topic,
+            'agent_keys'           => null,
+            'status'               => \App\Models\MultiAgentDebate::STATUS_PENDING,
+            'rounds'               => null,
+            'synthesis'            => null,
+            'disagreements'        => null,
+            'confidence_pct'       => null,
+            'cost_usd'             => 0,
+            'started_at'           => null,
+            'finished_at'          => null,
+        ]);
+
+        // Dispatch para queue 'default' — Supervisor já está a correr este queue.
+        // O job carrega o tender, chama MultiAgentDebateService->debate(), e
+        // actualiza o record. UI faz polling ou refresh para ver resultado.
+        \App\Jobs\RunMultiAgentDebateJob::dispatch($debate->id)
+            ->onQueue('default');
+
+        return back()->with('status',
+            "🧠 Debate multi-agente #{$debate->id} iniciado em background. " .
+            "Demora 30-90s. Refresh esta página para ver o resultado."
+        );
+    }
+
     public function createSapOpp(Tender $tender, SapService $sap)
     {
         $user = Auth::user();
