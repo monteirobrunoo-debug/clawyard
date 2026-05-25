@@ -133,6 +133,21 @@ return [
             'handler' => NullHandler::class,
         ],
 
+        // 2026-05-25: channel "deprecations" deve EXISTIR na lista channels
+        // mesmo que seja só forward para null. Sem isto, qualquer deprecation
+        // warning de Carbon/Laravel/etc faz `Log::channel('deprecations')`
+        // throw InvalidArgumentException → Octane worker crash → 500 todas as
+        // requests até systemd restartar (~5s).
+        //
+        // CAUSAS observadas em prod 2026-05-25 16:34:
+        //   Carbon: "diff/diffReal methods will be renamed"
+        // Solução: silenciar deprecations (null handler), evitar crashes
+        // por warnings de bibliotecas que ainda usam APIs deprecated.
+        'deprecations' => [
+            'driver' => 'monolog',
+            'handler' => NullHandler::class,
+        ],
+
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
