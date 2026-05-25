@@ -88,6 +88,7 @@ class TenderServiceAnalysisService
         private WebSearchTool $webSearch,
         private \App\Services\AnthropicBatchService $batch,
         private \App\Services\AgentTools\NsnLookupTool $nsnLookup,
+        private \App\Services\AgentTools\KnowledgeSearchTool $knowledgeSearch,
     ) {}
 
     /**
@@ -104,7 +105,17 @@ class TenderServiceAnalysisService
     private function toolsForAgent(string $agentKey): array
     {
         // Base universal — todos têm.
-        $tools = [$this->tenderSearch, $this->tenderAttachments, $this->bookSearch];
+        // 2026-05-25: knowledge_search adicionado à base. Custo €0 por
+        // call (DB query) e os 31 factos auto-extraídos da memória
+        // organizacional PartYard são úteis para qualquer agente —
+        // saber que ORE26003 = NSPA, ou que HP-Group tem NCAGE P3527
+        // melhora a precisão de TODAS as recomendações.
+        $tools = [
+            $this->tenderSearch,
+            $this->tenderAttachments,
+            $this->bookSearch,
+            $this->knowledgeSearch,
+        ];
 
         // Web search só para agents que precisam de info actual externa
         $webAllowed = ['mildef', 'sales', 'marketing', 'research', 'engineer'];
