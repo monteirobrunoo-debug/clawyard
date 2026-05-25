@@ -340,11 +340,11 @@ SYSPROMPT;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
-                // 2026-05-25: switched Opus→Sonnet 4-6. Opus generation ~30
-                // tok/s × 8192 max_tokens ≈ 4min só de streaming. Sonnet é
-                // 3-5× mais rápido com qualidade comparável.
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
-                'max_tokens' => 4096,
+                // 2026-05-25: revertido para Opus. Sonnet 4-6 não streamava
+                // chunks para MilDef (heartbeat ⚔️ disparava mas LLM ficava
+                // silencioso). Opus mais lento mas comprovadamente funcional.
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'max_tokens' => 4096,  // reduzido de 8192 — corta tempo gerando pela metade
                 'system'     => $sys,
                 'messages'   => $messages,
             ],
@@ -375,7 +375,7 @@ SYSPROMPT;
             'headers' => $this->headersForMessage($finalMessage),
             'stream'  => true,
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 4096,
                 'system'     => $sys,
                 'messages'   => $messages,
@@ -419,5 +419,5 @@ SYSPROMPT;
     }
 
     public function getName(): string  { return 'mildef'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
 }
