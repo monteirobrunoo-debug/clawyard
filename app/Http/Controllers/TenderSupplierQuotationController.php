@@ -182,21 +182,41 @@ class TenderSupplierQuotationController extends Controller
         // em vez de 500 HTML opaco.
         try {
             $absolute = Storage::disk('local')->path($relPath);
-            $extracted = $this->pdfExtractor->extract($absolute);
-            $pdfText   = ($extracted['ok'] ?? false) ? (string) ($extracted['text'] ?? '') : '';
 
-            $att = TenderAttachment::create([
-                'tender_id'           => $tender->id,
-                'original_name'       => $originalName,
-                'disk_path'           => $relPath,
-                'mime_type'           => $file->getClientMimeType() ?: 'application/pdf',
-                'size_bytes'          => $file->getSize(),
-                'file_hash'           => $hash,
-                'extraction_status'   => $pdfText !== '' ? TenderAttachment::STATUS_OK : TenderAttachment::STATUS_FAILED,
-                'extracted_text'      => $pdfText !== '' ? $pdfText : null,
-                'extracted_chars'     => mb_strlen($pdfText),
-                'uploaded_by_user_id' => Auth::id(),
-            ]);
+            // 2026-05-25: reuse attachment existente quando o mesmo PDF
+            // já foi carregado para este tender. Unique constraint
+            // (tender_id, file_hash) bloqueava re-upload mas user pode
+            // querer criar múltiplas cotações que partilham o mesmo PDF
+            // (mesmo doc, fornecedores diferentes na tabela comparativa).
+            $att = TenderAttachment::where('tender_id', $tender->id)
+                ->where('file_hash', $hash)
+                ->first();
+
+            if ($att) {
+                // PDF já indexado anteriormente — reusa texto extraído.
+                Log::info('Quotation extract: reusing existing attachment', [
+                    'tender_id'     => $tender->id,
+                    'attachment_id' => $att->id,
+                ]);
+                $pdfText = (string) ($att->extracted_text ?? '');
+            } else {
+                // Novo PDF — extrai e cria.
+                $extracted = $this->pdfExtractor->extract($absolute);
+                $pdfText   = ($extracted['ok'] ?? false) ? (string) ($extracted['text'] ?? '') : '';
+
+                $att = TenderAttachment::create([
+                    'tender_id'           => $tender->id,
+                    'original_name'       => $originalName,
+                    'disk_path'           => $relPath,
+                    'mime_type'           => $file->getClientMimeType() ?: 'application/pdf',
+                    'size_bytes'          => $file->getSize(),
+                    'file_hash'           => $hash,
+                    'extraction_status'   => $pdfText !== '' ? TenderAttachment::STATUS_OK : TenderAttachment::STATUS_FAILED,
+                    'extracted_text'      => $pdfText !== '' ? $pdfText : null,
+                    'extracted_chars'     => mb_strlen($pdfText),
+                    'uploaded_by_user_id' => Auth::id(),
+                ]);
+            }
 
             // 2. Marta extrai campos do PDF
             $parsed = [];
