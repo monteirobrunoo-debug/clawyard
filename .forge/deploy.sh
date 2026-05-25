@@ -1,33 +1,120 @@
 #!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+# deploy.sh — Forge auto-deploy script (HARDENED 2026-05-25)
+#
+# Resolve 6 race conditions identificadas a 25 Mai 2026:
+#   1. Mutex global flock para prevenir deploys concorrentes
+#   2. Sem `clear → optimize` gap — só optimize (atomic)
+#   3. Octane reload com retry + health check + fallback restart
+#   4. Verificação de health após reload (curl /health)
+#   5. Migrate só depois de autoload (schema mismatch protection)
+#   6. Logs com timestamps para debugar deploys lentos
+#
+# IMPORTANTE: este script NÃO USA set -e propositadamente — queremos
+# que falhas individuais não tumbem o pipeline. Cada step gere o seu
+# próprio erro e continua quando seguro.
+# ─────────────────────────────────────────────────────────────────────────────
 
-cd /home/forge/clawyard.partyard.eu
+DEPLOY_LOCK="/tmp/clawyard-deploy.lock"
+APP_DIR="/home/forge/clawyard.partyard.eu"
+HEALTH_URL="http://127.0.0.1:8000/health"
 
-git pull origin main
+ts() { date +'%H:%M:%S'; }
+log() { echo "[$(ts)] $*"; }
+err() { echo "[$(ts)] ✗ $*" >&2; }
 
-$FORGE_PHP composer install --no-interaction --prefer-dist --optimize-autoloader
+# ─── 0. Mutex global ────────────────────────────────────────────────────────
+# Só 1 deploy de cada vez. Se outro estiver a correr, espera até 60s
+# então aborta (não acumula deploys queued).
+exec 200>"$DEPLOY_LOCK"
+if ! flock -w 60 200; then
+    err "Outro deploy a correr há >60s — abortando para evitar race conditions"
+    exit 1
+fi
 
-# 2026-05-22: dump-autoload explícito mesmo quando composer install não tem
-# changes a aplicar. Sem isto, classes PHP novas (Models, Services, Mails,
-# Exceptions, etc.) adicionadas num commit sem mexer composer.json ficam
-# FORA do classmap optimized → Octane crash a 500 quando tenta resolve-las.
-# Acontece sempre que adicionamos features sem novas dependências composer.
+log "═══ DEPLOY START ═══"
+cd "$APP_DIR" || { err "cd $APP_DIR falhou"; exit 1; }
+
+# ─── 1. Pull código ─────────────────────────────────────────────────────────
+log "1/8 git pull"
+git pull origin main 2>&1 | tail -3
+
+# ─── 2. Composer install + dump ─────────────────────────────────────────────
+log "2/8 composer install + dump-autoload"
+$FORGE_PHP composer install --no-interaction --prefer-dist --optimize-autoloader --quiet
 $FORGE_PHP composer dump-autoload --optimize -n -q
 
-$FORGE_PHP artisan migrate --force
-$FORGE_PHP artisan config:clear
-$FORGE_PHP artisan cache:clear
-$FORGE_PHP artisan view:clear
-$FORGE_PHP artisan route:clear
-$FORGE_PHP artisan optimize
+# ─── 3. Migrate ─────────────────────────────────────────────────────────────
+# Depois de autoload (caso migration referencie classes novas).
+# Antes de cache rebuild (caso novas migrations alterem schemas referenciados).
+log "3/8 migrate --force"
+if ! $FORGE_PHP artisan migrate --force --no-interaction 2>&1; then
+    err "Migration falhou — abortando deploy (cache não rebuild, Octane mantém estado anterior)"
+    exit 1
+fi
 
-( flock -w 10 9 || exit 1
-    echo 'Restarting FPM...'; sudo -S service $FORGE_PHP_FPM reload ) 9>/tmp/fpmlock
+# ─── 4. Cache rebuild atómico ───────────────────────────────────────────────
+# Substitui o padrão "clear → optimize" (2-3s gap a 500s) pelo "optimize"
+# directo que sobrepõe os ficheiros atomicamente. config:cache + route:cache
+# + view:cache + event:cache numa só call.
+log "4/8 artisan optimize (atomic cache rebuild)"
+if ! $FORGE_PHP artisan optimize 2>&1; then
+    err "Optimize falhou — Octane vai correr sem cache (OK mas lento)"
+    # Não exit — continua para tentar restart workers
+fi
 
-# 2026-05-21: Octane graceful reload — workers re-fazem autoload contra
-# a nova vendor/ do release. Sem isto, workers em memória ficam com
-# classloader stale apontando para releases antigas que Forge cleanup
-# remove → 500 errors em todas as requests.
-$FORGE_PHP artisan octane:reload || true
+# ─── 5. Octane reload com verificação ───────────────────────────────────────
+# octane:reload é assíncrono — manda signal e devolve já. Damos 8s para
+# todos os workers (4× workers + 2× task workers) rotarem, depois health check.
+log "5/8 octane:reload"
+$FORGE_PHP artisan octane:reload 2>&1 || err "octane:reload sinal falhou — vou tentar hard restart"
 
-# Reset queue workers (Supervisor) também, para apanharem novo código
-$FORGE_PHP artisan queue:restart || true
+# Wait for workers to actually rotate. Swoole reload é gradual.
+sleep 8
+
+# Health check com 3 tentativas (5s entre cada)
+log "6/8 health check"
+HEALTH_OK=false
+for attempt in 1 2 3; do
+    code=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+    if [[ "$code" == "200" ]]; then
+        log "  ✓ health 200 (attempt $attempt)"
+        HEALTH_OK=true
+        break
+    fi
+    log "  attempt $attempt → HTTP $code — retry em 5s"
+    sleep 5
+done
+
+# ─── 7. Fallback: hard restart se health falhou ─────────────────────────────
+if [[ "$HEALTH_OK" == "false" ]]; then
+    err "Health failed após reload — hard restart"
+    sudo -n systemctl restart clawyard-octane.service 2>&1 || \
+        err "systemctl restart falhou — investigação manual necessária"
+
+    # Mais 8s + nova verificação
+    sleep 8
+    code=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+    if [[ "$code" == "200" ]]; then
+        log "  ✓ recovered after hard restart"
+    else
+        err "  ✗ STILL DOWN after restart — ALERTAR ADMIN"
+        # Não exit — pelo menos queue:restart corre
+    fi
+fi
+
+# ─── 8. Queue restart ───────────────────────────────────────────────────────
+log "7/8 queue:restart (broadcast)"
+$FORGE_PHP artisan queue:restart 2>&1 || err "queue:restart falhou"
+
+log "8/8 ═══ DEPLOY END ═══"
+
+# Resumo final
+final_code=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+if [[ "$final_code" == "200" ]]; then
+    log "✅ Deploy completo. Health 200. Octane operacional."
+    exit 0
+else
+    err "⚠ Deploy completo MAS health=$final_code. Verifica logs Octane."
+    exit 2
+fi
