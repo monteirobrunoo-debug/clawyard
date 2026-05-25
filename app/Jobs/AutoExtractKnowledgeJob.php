@@ -32,7 +32,10 @@ class AutoExtractKnowledgeJob implements ShouldQueue
     public int $timeout = 60;
 
     public function __construct(public int $conversationId) {
-        $this->onQueue('low');
+        // 2026-05-25: 'default' em vez de 'low' — Supervisor por defeito
+        // só vigia 'default'+'high'. Jobs em 'low' ficariam parados.
+        // Não é hot path (1 call Haiku, ~3s) — OK competir com default.
+        $this->onQueue('default');
     }
 
     public function handle(OrganizationalMemoryService $svc): void
