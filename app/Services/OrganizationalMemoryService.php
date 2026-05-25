@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\OrganizationalKnowledge;
+use App\Services\AgentSwarm\AgentDispatcher;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
