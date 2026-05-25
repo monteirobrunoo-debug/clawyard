@@ -35,13 +35,31 @@ class MilDefAgent implements AgentInterface
 
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
-    protected string $searchPolicy = 'always';
+    // 2026-05-25: 'always' → 'conditional'. Antes Tavily disparava mesmo
+    // para "olá" → 8s wasted antes do Opus arrancar, e Octane Swoole por
+    // vezes buffer-ava os chunks. Agora Tavily só dispara em keywords
+    // militares (lista abaixo). Saudações vão DIRECTO ao Opus.
+    protected string $searchPolicy = 'conditional';
     protected string $agentKey     = 'mildef';
     protected string $contextKey   = 'mildef_intel';
     protected array  $contextTags  = [
         'defesa','defense','procurement','militar','military','NATO','OTAN',
         'míssil','missile','radar','SAM','AAM','artillery','artilharia',
         'fornecedor','supplier','manufacturer','fabricante','armamento',
+    ];
+    // Keywords que activam Tavily auto. Merged com defaults do trait
+    // (que já incluem "procura", "pesquisa", "verifica", etc.).
+    protected array $webSearchKeywords = [
+        // PT
+        'míssil', 'missile', 'radar', 'míssel', 'armamento', 'fornecedor militar',
+        'concurso militar', 'sam', 'aam', 'tactical', 'antiaéreo', 'antiaerea',
+        'munição', 'munições', 'bomba', 'artilharia', 'aviação', 'aviacao',
+        'defesa aérea', 'defesa aerea', 'nspa', 'edip', 'edirpa', 'asap',
+        // EN
+        'manufacturer', 'supplier', 'air defence', 'air defense', 'rocket',
+        'projectile', 'warhead', 'guided', 'unmanned', 'uav', 'drone',
+        // Sigla pesquisa explícita
+        'fabricante de', 'who makes', 'find supplier', 'find manufacturer',
     ];
 
     protected Client $client;
@@ -328,7 +346,9 @@ SYSPROMPT;
     // ────────────────────────────────────────────────────────────────────────
     public function chat(string|array $message, array $history = []): string
     {
-        $finalMessage = $this->augmentWithWebSearch($message);
+        // smartAugment respeita searchPolicy='conditional' — só Tavily se
+        // mensagem tem keywords militares ou explícitos ("procura", "pesquisa").
+        $finalMessage = $this->smartAugment($message);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
@@ -360,7 +380,10 @@ SYSPROMPT;
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         if ($heartbeat) $heartbeat('🔍 a pesquisar fornecedores de defesa mundiais');
-        $finalMessage = $this->augmentWithWebSearch($message, $heartbeat);
+        // smartAugment respeita searchPolicy='conditional' — Tavily só dispara
+        // se mensagem tem keywords militares ou explícitos ("procura", etc.).
+        // Saudações tipo "olá" passam directo sem Tavily, poupando 8s.
+        $finalMessage = $this->smartAugment($message, $heartbeat);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage, $heartbeat);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
