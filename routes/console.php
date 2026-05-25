@@ -147,6 +147,16 @@ Schedule::command('suppliers:sync-web-intel --stale')
     ->withoutOverlapping()
     ->runInBackground();
 
+// ── Auto-extract organizational knowledge — every 30 min ──────────────────
+// 2026-05-22: varre conversas com novas mensagens assistant desde a última
+// run, dispatch job per conversa para Haiku analisar + gravar factos em
+// organizational_knowledge. Custo: ~$0.0005 por conversa COM factos.
+// Job em queue 'low' — não compete com chats em curso.
+Schedule::command('knowledge:auto-extract --max=15')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping()
+    ->runInBackground();
+
 // ── Token budget alert — diário 08:00 Lisbon ──────────────────────────────
 // 2026-05-22: pool €150/mês partilhado. Cron diário verifica thresholds
 // (80% / 100%) e dispara email ao admin. Idempotente — flags
