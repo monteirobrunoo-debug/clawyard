@@ -353,7 +353,10 @@ SYSPROMPT;
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
-        $messages = array_merge($history, [
+        // 2026-05-25: trim history a 12 mensagens recentes. System prompt
+        // MilDef tem ~16K chars + augments + history sem trim podia exceder
+        // o context window e provocar first-chunk delays massivos.
+        $messages = array_merge(array_slice($history, -12), [
             ['role' => 'user', 'content' => $finalMessage],
         ]);
 
@@ -388,7 +391,10 @@ SYSPROMPT;
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
-        $messages = array_merge($history, [
+        // 2026-05-25: trim history a 12 mensagens recentes. System prompt
+        // MilDef tem ~16K chars + augments + history sem trim podia exceder
+        // o context window e provocar first-chunk delays massivos.
+        $messages = array_merge(array_slice($history, -12), [
             ['role' => 'user', 'content' => $finalMessage],
         ]);
 
