@@ -458,10 +458,21 @@ class NvidiaController extends Controller
             // Release session lock so other tabs don't block waiting for this stream
             session()->save();
 
-            // Flush all PHP output buffers so SSE data reaches the browser immediately
-            // (PHP-FPM output_buffering=4096 would otherwise hold small packets)
-            while (ob_get_level() > 0) { ob_end_flush(); }
-            flush();
+            // 2026-05-25: REMOVIDO `while (ob_get_level()) ob_end_flush()`.
+            // CAUSA RAIZ do "lê depois desliga": Octane Swoole gere os
+            // output buffers sozinho. Quando fechávamos buffers manualmente,
+            // o SwooleClient::sendResponseContent() tentava ob_end_clean()
+            // no fim → warning → HandleExceptions promove a fatal →
+            // worker recycle → SSE connection drops mid-stream.
+            //
+            // Stack trace prod 2026-05-25 19:36:
+            //   SwooleClient.php(244): ob_end_clean()
+            //   HandleExceptions->handleError()
+            //
+            // Em Octane Swoole basta `echo` — flushes ao client naturalmente
+            // no fim de cada iteração do worker. Não precisamos forçar nada.
+            // (Em CLI/FPM mode, o servidor não suporta SSE eficiente — não
+            // é o nosso caso em prod.)
 
             // Send metadata first so the JS can set up the message bubble correctly
             $meta = [
