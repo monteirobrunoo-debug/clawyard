@@ -8,7 +8,6 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
-use App\Agents\Traits\AgentMemoryTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -25,13 +24,12 @@ class EngineerAgent implements AgentInterface
 {
     use WebSearchTrait;
     use NsnLookupTrait;
-    use AgentMemoryTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
 
-    /** Identifica este agente para o NsnLookupTool + AgentMemoryTrait. */
+    /** Identifica este agente para o NsnLookupTool (telemetria/cost-attribution). */
     protected string $agentKey = 'engineer';
     protected string $systemPrompt = '';
 
@@ -272,7 +270,6 @@ SPECIALTY;
 
         $augmented = $this->augmentWithWebSearch($augmented);
         $augmented = $this->augmentWithNsnLookup($augmented);
-        $augmented = $this->prependMemories($augmented);  // LTM
         $bookCtx   = $this->augmentWithTechnicalBooks($augmented, 3);
         $augmented = $this->sanitizeForApi($augmented);
         $history   = array_map(fn($m) => $this->sanitizeForApi($m), $history);
@@ -300,9 +297,6 @@ SPECIALTY;
         foreach ($data['content'] ?? [] as $block) {
             if (($block['type'] ?? '') === 'text') $text .= $block['text'];
         }
-        // LTM save — heurística + tags do LLM. Strip antes do publishSharedContext.
-        $userText = is_string($message) ? $message : $this->messageText($message);
-        $text     = $this->maybeExtractAndSaveMemories($userText, $text);
         $this->publishSharedContext($text);
         return $text;
     }
@@ -326,8 +320,6 @@ SPECIALTY;
             $augmented = $this->augmentWithWebSearch($augmented, $heartbeat);
             $augmented = $this->augmentWithNsnLookup($augmented, $heartbeat);
         }
-        // LTM recall — fora do branch is_string para apanhar arrays também.
-        $augmented = $this->prependMemories($augmented);
 
         // 4. Biblioteca técnica PartYard (chama ANTES do sanitizeForApi
         //    para que o pre-sanitised augmented siga para o keyword check)
@@ -394,8 +386,6 @@ SPECIALTY;
             }
         }
 
-        $userText = is_string($message) ? $message : $this->messageText($message);
-        $full     = $this->maybeExtractAndSaveMemories($userText, $full);  // LTM save
         $this->publishSharedContext($full);
         return $full;
     }

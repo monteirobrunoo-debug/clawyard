@@ -6,7 +6,6 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
-use App\Agents\Traits\AgentMemoryTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 
@@ -31,23 +30,11 @@ class MilDefAgent implements AgentInterface
 {
     use WebSearchTrait;
     use NsnLookupTrait;
-    use AgentMemoryTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
 
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
-    // 2026-05-22: revert para 'always' (pedido directo: "nao sei nao usar
-    // o tavily será bom, ele tem de ir á net para depois ver mais info").
-    // Cor. Rodrigues = defesa, beneficia REALMENTE de Tavily para preços
-    // actuais, fornecedores novos 2026, regulamentação NATO recente.
-    //
-    // Protecções contra Tavily lento (que motivaram o switch errado):
-    //   1. WebSearchService timeout 8s + connect_timeout 3s
-    //   2. augmentWithWebSearch faz graceful fallback se Tavily falha
-    //      (retorna mensagem unchanged, agente continua com knowledge interno)
-    //   3. NÃO bloqueia SSE stream — quando Tavily der erro, a stream
-    //      continua e a Cor. Rodrigues responde só com o que sabe
     protected string $searchPolicy = 'always';
     protected string $agentKey     = 'mildef';
     protected string $contextKey   = 'mildef_intel';
@@ -341,14 +328,8 @@ SYSPROMPT;
     // ────────────────────────────────────────────────────────────────────────
     public function chat(string|array $message, array $history = []): string
     {
-        // smartAugment respeita searchPolicy. Com 'always', sempre tenta
-        // Tavily — se Tavily falhar (timeout 8s), continua sem web.
-        $finalMessage = $this->smartAugment($message);
+        $finalMessage = $this->augmentWithWebSearch($message);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage);
-        // LTM: top-5 memórias deste user × mildef → prepended ao prompt.
-        // Padrão Bornet et al. 2025 — agentes deixam de ter "memória de
-        // peixe-dourado" entre sessões.
-        $finalMessage = $this->prependMemories($finalMessage);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
@@ -368,10 +349,6 @@ SYSPROMPT;
 
         $data   = json_decode($response->getBody()->getContents(), true);
         $result = $data['content'][0]['text'] ?? '';
-        // Detecta "lembra-te que..." na mensagem do user + tags emitidas pelo
-        // LLM. Persiste em agent_memories e devolve a resposta sem as tags.
-        $userText = is_string($message) ? $message : $this->messageText($message);
-        $result   = $this->maybeExtractAndSaveMemories($userText, $result);
         $this->publishSharedContext($result);
         return $result;
     }
@@ -379,13 +356,9 @@ SYSPROMPT;
     // ────────────────────────────────────────────────────────────────────────
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        // smartAugment respeita searchPolicy. Heartbeat só dispara se o gate
-        // decidir mesmo chamar Tavily (evita "a pesquisar..." falso quando
-        // a query não precisa de web).
-        $finalMessage = $this->smartAugment($message, $heartbeat);
+        if ($heartbeat) $heartbeat('🔍 a pesquisar fornecedores de defesa mundiais');
+        $finalMessage = $this->augmentWithWebSearch($message, $heartbeat);
         $finalMessage = $this->augmentWithNsnLookup($finalMessage, $heartbeat);
-        // LTM recall — prepende memórias deste user × mildef.
-        $finalMessage = $this->prependMemories($finalMessage);
         $bookCtx      = $this->augmentWithTechnicalBooks($finalMessage, 3);
         $sys          = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
@@ -438,11 +411,6 @@ SYSPROMPT;
             }
         }
 
-        // LTM save — extrai memórias do user (heurística + tags do LLM).
-        // Stripped antes do publishSharedContext para que outros agentes
-        // vejam o texto limpo, sem as tags <save_memory ... />.
-        $userText = is_string($message) ? $message : $this->messageText($message);
-        $full     = $this->maybeExtractAndSaveMemories($userText, $full);
         $this->publishSharedContext($full);
         return $full;
     }
