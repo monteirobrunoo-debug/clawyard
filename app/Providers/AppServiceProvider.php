@@ -47,6 +47,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // 2026-05-25: silenciar E_DEPRECATED a nível de reporting.
+        // Carbon, Symfony, Laravel internals geram warnings que (mesmo com
+        // logging.deprecations=null) Octane Swoole por vezes promove a
+        // fatal → worker exit → "lê depois desliga" para o user.
+        // Esta máscara é per-request, não afecta E_ERROR ou E_WARNING reais.
+        error_reporting(error_reporting() & ~E_DEPRECATED & ~E_USER_DEPRECATED);
+
         // Guarantee ANTHROPIC_API_KEY is always available via getenv()
         // even when PHP-FPM OPcache has a stale config.php
         $this->ensureAnthropicKey();
