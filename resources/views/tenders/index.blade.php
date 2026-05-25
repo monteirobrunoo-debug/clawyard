@@ -1221,6 +1221,7 @@
                             <input type="hidden" name="status"          value="{{ $filters['status']          ?? '' }}">
                             <input type="hidden" name="urgency"         value="{{ $filters['urgency']         ?? '' }}">
                             <input type="hidden" name="collaborator_id" value="{{ $filters['collaborator_id'] ?? '' }}">
+                            <input type="hidden" name="process_open"    value="{{ !empty($filters['process_open']) ? '1' : '' }}">
                             <input type="hidden" name="q"               value="{{ $filters['q']               ?? '' }}">
                             <input type="hidden" name="sort"            value="{{ $sort ?? '' }}">
                             <input type="hidden" name="dir"             value="{{ $dir  ?? '' }}">
@@ -1291,6 +1292,19 @@
                             <option value="{{ $c->id }}" @selected((int)$filters['collaborator_id'] === $c->id)>{{ $c->name }}</option>
                         @endforeach
                     </select>
+
+                    {{-- 2026-05-25: checkbox "📂 Só processos abertos" — filtra
+                         tenders com sap_opportunity_number preenchido (SAP Opp
+                         já criada). Bruno: "quando existe um número... quer dizer
+                         que o processo já está aberto". --}}
+                    <label class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm cursor-pointer hover:bg-gray-50">
+                        <input type="checkbox"
+                               name="process_open"
+                               value="1"
+                               @checked(!empty($filters['process_open']))
+                               class="rounded border-gray-300 text-green-600 focus:ring-green-500">
+                        <span class="text-gray-700">📂 Só processos abertos</span>
+                    </label>
 
                     <div class="flex gap-2">
                         <button type="submit"

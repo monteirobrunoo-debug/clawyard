@@ -1806,6 +1806,10 @@ class TenderController extends Controller
         // $forceSource (2026-05-19 v4): quando o caller é a route /marine,
         // forçar source=marine ignorando completamente o que vem na URL.
         // Permite ter um sub-dashboard isolado para Marine Department.
+        // 2026-05-25: nova flag `process_open` — quando '1' filtra só tenders
+        // com sap_opportunity_number preenchido (processo SAP aberto).
+        $processOpen = $r->string('process_open')->trim()->value() === '1';
+
         if ($forceSource !== null) {
             return [
                 'source'           => $forceSource,
@@ -1813,6 +1817,7 @@ class TenderController extends Controller
                 'urgency'          => $r->string('urgency')->trim()->value() ?: null,
                 'collaborator_id'  => $r->integer('collaborator_id') ?: null,
                 'q'                => $r->string('q')->trim()->value() ?: null,
+                'process_open'     => $processOpen,
             ];
         }
 
@@ -1820,7 +1825,8 @@ class TenderController extends Controller
                      || $r->filled('status')
                      || $r->filled('urgency')
                      || $r->filled('collaborator_id')
-                     || $r->filled('q');
+                     || $r->filled('q')
+                     || $processOpen;
         $sourceRaw = $r->string('source')->trim()->value();
         $source    = $sourceRaw !== '' ? $sourceRaw
                                        : ($hasAnyFilter ? null : 'nspa');
@@ -1831,6 +1837,7 @@ class TenderController extends Controller
             'urgency'          => $r->string('urgency')->trim()->value() ?: null,
             'collaborator_id'  => $r->integer('collaborator_id') ?: null,
             'q'                => $r->string('q')->trim()->value() ?: null,
+            'process_open'     => $processOpen,
         ];
     }
 
@@ -2006,6 +2013,12 @@ class TenderController extends Controller
                   ->orWhere('reference', 'LIKE', $q)
                   ->orWhere('sap_opportunity_number', 'LIKE', $q);
             });
+        }
+        // 2026-05-25: filter "process_open" — só tenders com sap_opportunity_number
+        // preenchido (processo SAP aberto, ver Tender::isProcessOpen()).
+        if (!empty($f['process_open'])) {
+            $query->whereNotNull('sap_opportunity_number')
+                  ->where('sap_opportunity_number', '!=', '');
         }
         if ($f['urgency']) {
             // Translate urgency bucket → deadline_at window. "overdue" caps at
