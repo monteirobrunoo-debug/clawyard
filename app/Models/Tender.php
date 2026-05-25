@@ -28,6 +28,7 @@ class Tender extends Model
 
     protected $fillable = [
         'source', 'reference', 'title', 'type', 'purchasing_org',
+        'sap_customer_card_code',
         'status', 'priority', 'is_confidential',
         'assigned_collaborator_id', 'assigned_at', 'assigned_by_user_id',
         'deadline_at', 'source_modified_at',

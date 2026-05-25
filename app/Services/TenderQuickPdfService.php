@@ -475,8 +475,8 @@ class TenderQuickPdfService
 público / RFQ / RFP e tens de devolver APENAS este JSON (sem markdown):
 
 {
-  "titulo": "≤200 chars — descrição do serviço/produto pedido",
-  "referencia": "código do procedimento se existir (ex.: 5022019630, 9001/2026), ou null",
+  "titulo": "≤200 chars — DESCRIÇÃO do material/serviço pedido (NÃO o número RFQ)",
+  "referencia": "número do procedimento/RFQ/cotação se existir (ex.: '2026.013375', '5022019630', '9001/2026'), ou null",
   "cliente": "nome da entidade compradora (ex.: NSPA, NCIA, Marinha Portuguesa, Câmara de Lisboa)",
   "nipc": "9 dígitos PT se aparecer, ou null",
   "data_limite": "deadline em formato YYYY-MM-DD se identificável, ou null",
@@ -485,8 +485,17 @@ público / RFQ / RFP e tens de devolver APENAS este JSON (sem markdown):
   "fornecedores": ["OEM ou fornecedor que faz sentido contactar (MTU, CAT, MAK, SKF, …)", ...máx 5...]
 }
 
-REGRAS:
-  • Se não tens a certeza absoluta de um valor, devolve null em vez de inventar.
+REGRAS CRÍTICAS:
+  • TÍTULO ≠ "Request for Quotation nº XXXX" — esse é o REFERENCIA. O
+    título tem de descrever O QUE está a ser pedido. Exemplos:
+      ✅ "Aquisição de Baterias Diversas para Frota AW119"
+      ✅ "Fornecimento de Bombas Hidráulicas Centrífugas"
+      ❌ "Request for Quotation nº 2026.013375"
+      ❌ "RFQ 5022019630"
+    Se o documento começa por "RFQ nº ABC — Compra de Baterias", o título
+    é "Compra de Baterias" e referencia="ABC".
+
+  • Se não tens certeza absoluta de um valor, devolve null em vez de inventar.
   • NUNCA inventes NIPC, referências, datas ou nomes de clientes.
   • Para pecas/fornecedores devolve só items mencionados ou inferíveis com
     confiança alta (ex.: vê "MTU 396" → fornecedor MTU). Lista vazia é OK.
@@ -610,6 +619,23 @@ PROMPT;
         $dirty = false;
 
         $title = trim((string) ($extracted['titulo'] ?? ''));
+        // 2026-05-25: post-processing — se Marta devolveu o número RFQ como
+        // título (e.g. "Request for Quotation nº 2026.013375"), strip a prefix
+        // e tenta cair na descrição real. Pedido directo: título tem de ser
+        // o ASSUNTO/SERVIÇO, RFQ vai para reference.
+        if ($title !== '') {
+            // Strip "Request for Quotation nº XXX" / "RFQ nº XXX" / "Cotação nº XXX"
+            $cleaned = preg_replace(
+                '/^\s*(?:request\s+for\s+(?:quotation|proposal|information)|rfq|rfp|rfi|cotação|cotacao|quotation|tender|concurso)\s*(?:n[ºo°]?\s*)?[\d\.\/\-]+\s*[—\-:,]?\s*/iu',
+                '',
+                $title
+            ) ?? $title;
+            $cleaned = trim($cleaned, " \t\n\r\0\x0B-—:,");
+            if (mb_strlen($cleaned) >= 10) {
+                $title = $cleaned;  // ficou com descrição útil
+            }
+            // else: mantém o título original (mesmo que seja só RFQ — melhor que vazio)
+        }
         if ($title !== '' && mb_strlen($title) <= 500) {
             $tender->title = $title;
             $dirty = true;
