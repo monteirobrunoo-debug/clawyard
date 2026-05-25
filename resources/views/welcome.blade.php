@@ -4698,6 +4698,11 @@ async function sendMessage() {
     let streamBubble = null;   // the bubble div inside that message
     let agentKey     = selectedAgent; // resolved agent (may change after meta)
 
+    // 2026-05-25 (#110): watchdog state declared no scope da função.
+    // Atribuído dentro do try a seguir, lido por catch/finally.
+    let watchdog = null;
+    let watchdogTriggered = false;
+
     try {
         const res = await fetch('/api/chat', {
             method:  'POST',
@@ -4737,6 +4742,21 @@ async function sendMessage() {
         const reader  = res.body.getReader();
         const decoder = new TextDecoder();
         let   lineBuf = '';
+
+        // 2026-05-25 (#110): Stuck-agent watchdog. Se nenhum chunk
+        // chegar em 60s, abortamos o stream e o catch mostra retry button.
+        // Heartbeats também contam como chunks (Octane envia ": heartbeat …"
+        // SSE comments). Resolve casos tipo Cor. Rodrigues stuck.
+        let lastChunkAt = Date.now();
+        const WATCHDOG_MS = 60000;
+        watchdog = setInterval(() => {
+            if (!isStreaming) { clearInterval(watchdog); return; }
+            if (Date.now() - lastChunkAt > WATCHDOG_MS) {
+                watchdogTriggered = true;
+                clearInterval(watchdog);
+                try { currentAbortController?.abort(); } catch (e) {}
+            }
+        }, 5000);
 
         // Process one SSE line
         function handleLine(line) {
@@ -4923,6 +4943,8 @@ async function sendMessage() {
         // Read the stream
         while (true) {
             const { done, value } = await reader.read();
+            // 2026-05-25 (#110): reset watchdog every chunk (incl. heartbeats)
+            lastChunkAt = Date.now();
             if (done) {
                 // Stream closed by server without [DONE] (timeout / Cloudflare cut)
                 // Clean up any leftover typing indicator or empty bubble
@@ -5153,15 +5175,33 @@ async function sendMessage() {
         if (typing.parentNode) typing.remove();
         // 2026-05-20: AbortError = user carregou stop. Não é erro:
         // finalizamos o que já foi streamado e marcamos no log.
+        // 2026-05-25 (#110): AbortError pode também vir do watchdog 60s.
         if (err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''))) {
-            if (streamBubble && accumulated.trim() !== '') {
+            if (watchdogTriggered) {
+                // Stuck agent — retry message com botão visível.
+                const retryMsg = '⏱️ O agente parou de responder (60s sem chunks). Pode ser timeout API ou worker preso.';
+                if (streamBubble && accumulated.trim() !== '') {
+                    streamBubble.innerHTML = renderMarkdown(accumulated) +
+                        '<div style="margin-top:10px;padding:10px;background:#fef2f2;border-radius:8px;font-size:12px;color:#991b1b">' +
+                        retryMsg +
+                        '<br><button onclick="document.getElementById(\'message-input\')?.focus()" ' +
+                        'style="margin-top:8px;padding:5px 12px;background:#dc2626;color:white;border:none;border-radius:6px;font-size:11px;cursor:pointer">🔄 Tentar de novo</button>' +
+                        '</div>';
+                } else {
+                    addMessage('ai',
+                        retryMsg + '\n\n*Clica enviar para tentar de novo, ou escolhe outro agente.*',
+                        agentKey);
+                }
+                logActivity('⏱️', 'Watchdog: agente preso 60s — abortado', 'done');
+            } else if (streamBubble && accumulated.trim() !== '') {
                 // Preserva o que já chegou + marca como interrompido.
                 streamBubble.innerHTML = renderMarkdown(accumulated) +
                     '<div style="margin-top:8px;font-size:11px;color:#dc2626;font-style:italic;">⏹ Parado pelo utilizador</div>';
+                logActivity('⏹', 'Geração parada pelo utilizador', 'done');
             } else {
                 addMessage('ai', '⏹ Geração parada pelo utilizador.', agentKey);
+                logActivity('⏹', 'Geração parada pelo utilizador', 'done');
             }
-            logActivity('⏹', 'Geração parada pelo utilizador', 'done');
         } else {
             const errMsg = err?.message || String(err);
             addMessage('ai', '❌ Erro: ' + errMsg);
@@ -5169,6 +5209,8 @@ async function sendMessage() {
             console.error('sendMessage error:', err);
         }
     } finally {
+        // 2026-05-25 (#110): sempre limpar watchdog ao sair.
+        if (watchdog) { try { clearInterval(watchdog); } catch (e) {} watchdog = null; }
         isStreaming            = false;
         currentAbortController = null;
         setSendBtnMode('send');
