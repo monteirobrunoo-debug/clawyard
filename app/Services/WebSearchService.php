@@ -52,6 +52,16 @@ class WebSearchService
         }
         $query = $clamped;
 
+        // 2026-05-25: cache Redis 1h — mesmo query+depth+limit dentro de 1h
+        // retorna do cache, sem latência Tavily. Fixa 408 timeouts em chats
+        // recorrentes (Cor. Rodrigues searchPolicy=always).
+        $cacheKey = 'tavily:v1:' . md5($query . '|' . $maxResults . '|' . $searchDepth . '|' . ($days ?? '-'));
+        $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        if (is_string($cached)) {
+            \Log::info('WebSearchService: cache hit', ['query' => $query]);
+            return $cached;
+        }
+
         try {
             $payload = [
                 'api_key'             => $this->apiKey,
@@ -91,7 +101,15 @@ class WebSearchService
                 $lines[] = '';
             }
 
-            return implode("\n", $lines) ?: '(No results found)';
+            $result = implode("\n", $lines) ?: '(No results found)';
+
+            // Cache resultado válido 1h. Não cacha "(No results found)" — pode
+            // ser temporário e queremos que nova tentativa em ~min consiga.
+            if (!str_starts_with($result, '(')) {
+                \Illuminate\Support\Facades\Cache::put($cacheKey, $result, now()->addHour());
+            }
+
+            return $result;
 
         } catch (\Throwable $e) {
             \Log::warning('WebSearchService error: ' . $e->getMessage());
