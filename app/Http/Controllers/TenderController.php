@@ -1204,34 +1204,30 @@ class TenderController extends Controller
             }
         }
 
-        // 2026-05-18: SAP B1 Sales Opportunities só aceita Customers (C)
-        // e Leads (L) — Suppliers (F prefix, cSupplier) dão "Select
-        // business partner of either customer or lead type". Filtrar
-        // ANTES do ranking para evitar escolher o supplier canónico
-        // (ex.: NSPA está como cSupplier F000366, mas as suas divisões
-        // como cCustomer C000263 / C000273 — temos de pegar nas C's).
-        $bps = collect($bps)->filter(function ($bp) {
-            $type = (string) ($bp['CardType'] ?? '');
-            return in_array($type, ['cCustomer', 'cLid', 'C', 'L'], true);
-        })->values()->all();
+        // 2026-05-18: SAP B1 Sales Opportunities idealmente quer Customers (C)
+        // e Leads (L) — Suppliers (F, cSupplier) dão erro SAP "Select
+        // business partner of either customer or lead type". Mas Bruno
+        // (2026-05-25) pediu para incluir Suppliers também, com prioridade
+        // a Customers/Leads — assim a Marta tenta o melhor match e se for
+        // só Supplier deixa o SAP rejeitar com mensagem própria em vez de
+        // bloquear localmente.
+        //
+        // Estratégia: NÃO filtra antes do ranking. O ranking abaixo escolhe
+        // o melhor BP. Aplicamos só penalty a Suppliers para que Customers
+        // ganhem sempre quando existem ambos com o mesmo nome.
+        // (filtro removido — mantém todos os types)
 
         if (empty($bps)) {
-            // Pode ser:
-            //   (a) nenhum BP existe com esse nome
-            //   (b) BPs existem mas são todos Suppliers (não Customer/Lead)
+            // Nenhum BP de qualquer tipo (Customer, Lead, Supplier) encontrado.
             $tried = [];
             if ($purchasingOrg !== '') $tried[] = "\"{$purchasingOrg}\"";
             if ($sourceBp)             $tried[] = "\"{$sourceBp}\" (da source {$tender->source})";
             $triedStr = $tried ? ' (tentei: ' . implode(' e ', $tried) . ')' : '';
 
             return back()->with('error',
-                "Não encontrei nenhum Customer ou Lead no SAP B1{$triedStr}. " .
-                "Nota: o SAP B1 só aceita Customers (C) ou Leads (L) em Sales Opportunities — Suppliers (F) não servem. " .
-                "Resolução RÁPIDA: vai ao SAP B1, descobre o CardCode do Customer correcto (ex.: C000263), " .
-                "e cola-o no campo \"🏢 SAP Customer CardCode\" abaixo do bloco de Atribuição neste mesmo tender. " .
-                "Depois clica \"Criar SAP Opp\" outra vez. " .
-                "OU (caminhos longos): 1) cria/converte o BP para Customer em SAP B1 → Negócios → Parceiros, " .
-                "OU 2) edita este concurso e ajusta o campo \"Organização Compradora\" para um Customer existente."
+                "Não encontrei nenhum Business Partner no SAP B1{$triedStr}. " .
+                "Resolução RÁPIDA: cola o CardCode no campo \"🏢 SAP Customer CardCode\" abaixo do bloco de Atribuição, depois \"Criar SAP Opp\" outra vez. " .
+                "OU edita o concurso e ajusta a \"Organização Compradora\" para um nome que exista no SAP."
             );
         }
 
@@ -1249,13 +1245,22 @@ class TenderController extends Controller
         $searchTerm = $resolvedVia === 'purchasing_org' ? $purchasingOrg : (string) $sourceBp;
         $needleLow  = mb_strtolower($searchTerm);
 
+        // 2026-05-25: tier function com penalty de +10 para non-Customer/Lead.
+        // Customers/Leads sempre ganham se existirem, MAS se só houver
+        // Suppliers (F), usamos o melhor desses (tier 11-13) em vez de
+        // rejeitar localmente. SAP B1 rejeita por si próprio com mensagem
+        // própria — operador vê erro do SAP, não nosso.
         $tier = function (array $bp) use ($needleLow): int {
+            $type = (string) ($bp['CardType'] ?? '');
+            $isCustomerOrLead = in_array($type, ['cCustomer', 'cLid', 'C', 'L'], true);
+            $penalty = $isCustomerOrLead ? 0 : 10;  // Supplier → tier 11-14
+
             $name = mb_strtolower(trim((string) ($bp['CardName'] ?? '')));
-            if ($name === $needleLow) return 1;
+            if ($name === $needleLow) return 1 + $penalty;
             // Prefix with explicit separator → almost certainly the canonical entity
-            if (preg_match('/^' . preg_quote($needleLow, '/') . '[\s\-—:_]/u', $name)) return 2;
-            if (str_starts_with($name, $needleLow)) return 3;
-            return 4;
+            if (preg_match('/^' . preg_quote($needleLow, '/') . '[\s\-—:_]/u', $name)) return 2 + $penalty;
+            if (str_starts_with($name, $needleLow)) return 3 + $penalty;
+            return 4 + $penalty;
         };
 
         // Ordena: tier ASC, depois length ASC
@@ -1266,17 +1271,35 @@ class TenderController extends Controller
 
         $best = $rankedBps->first()['bp'] ?? null;
         $bestTier = $rankedBps->first()['tier'] ?? 99;
+        $isSupplierMatch = $bestTier >= 11;
 
         // Só pedimos input manual quando NEM SEQUER há um match prefix/exact.
-        // Se há match tier 1, 2 ou 3 → usa o melhor. Tier 4 (só contains)
-        // pode ser ruído (ex.: "GKN AEROSPACE" matched "NSPA" porque tem
-        // a sequência "NSP" algures), por isso desambiguamos.
-        if (!$best || $bestTier >= 4) {
-            $opts = $rankedBps->take(3)->map(fn($r) => "{$r['bp']['CardCode']} → {$r['bp']['CardName']}")->implode(' | ');
+        // - tier 1-3: bom Customer/Lead → usa imediatamente
+        // - tier 4: weak Customer/Lead (só contains) → desambiguar
+        // - tier 11-13: bom Supplier (sem Customer/Lead disponível) → tenta (SAP rejeita se for o caso)
+        // - tier 14: weak Supplier → desambiguar
+        // - tier 99: nada → erro
+        if (!$best || $bestTier === 4 || $bestTier >= 14) {
+            $opts = $rankedBps->take(3)->map(function ($r) {
+                $type = (string) ($r['bp']['CardType'] ?? '');
+                $kind = in_array($type, ['cCustomer', 'C'], true) ? '🟢 Customer'
+                       : (in_array($type, ['cLid', 'L'], true) ? '🟡 Lead' : '🔴 Supplier');
+                return "{$r['bp']['CardCode']} {$kind} → {$r['bp']['CardName']}";
+            })->implode(' | ');
             return back()->with('error',
                 "Não tenho um match claro para \"{$searchTerm}\" no SAP B1. " .
-                "Encontrei só matches fracos. Edita o concurso e ajusta \"Organização Compradora\" para um nome mais específico. Sugestões: {$opts}"
+                "Edita o concurso e ajusta \"Organização Compradora\" para um nome mais específico, ou cola um CardCode no campo manual. Sugestões: {$opts}"
             );
+        }
+
+        // Log when we're falling back to a Supplier match (operator should know)
+        if ($isSupplierMatch) {
+            Log::warning('Tender createSapOpp: only Supplier matches — tentando, SAP B1 pode rejeitar', [
+                'tender_id' => $tender->id,
+                'card_code' => $best['CardCode'] ?? null,
+                'card_name' => $best['CardName'] ?? null,
+                'card_type' => $best['CardType'] ?? null,
+            ]);
         }
 
         $bp = $best;
