@@ -18,7 +18,11 @@ use Illuminate\Support\Str;
  */
 class OrganizationalMemoryService
 {
-    public function __construct(private ?AgentDispatcher $dispatcher = null) {}
+    // AgentDispatcher é OBRIGATÓRIO — sem default null. Antes era opcional
+    // (?AgentDispatcher = null) e o container injectava null porque assumia
+    // que era opcional → autoExtract() sempre fazia skip. Bug encontrado
+    // 2026-05-25: 50 jobs corridos sem extrair nada.
+    public function __construct(private AgentDispatcher $dispatcher) {}
 
     /**
      * Adiciona uma memória manualmente. Devolve o registo ou null se
@@ -113,11 +117,10 @@ class OrganizationalMemoryService
         ?int $extractedByUserId = null,
         ?string $context = null,
     ): int {
-        if (!$this->dispatcher) {
-            Log::info('OrganizationalMemory: auto-extract skipped — no dispatcher');
+        if (mb_strlen($conversationText) < 200) {
+            Log::info('OrganizationalMemory: skip — texto < 200 chars', ['context' => $context]);
             return 0;
         }
-        if (mb_strlen($conversationText) < 200) return 0;
 
         $system = <<<PROMPT
 És um knowledge extractor da PartYard/HP-Group. Lês uma conversação
