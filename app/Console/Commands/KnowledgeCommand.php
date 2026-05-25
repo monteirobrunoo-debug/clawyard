@@ -38,7 +38,7 @@ class KnowledgeCommand extends Command
             'search' => $this->cmdSearch($svc),
             'stats'  => $this->cmdStats($svc),
             'forget' => $this->cmdForget($svc),
-            default  => $this->fail("Acção inválida: {$action}. Usa list|add|search|stats|forget"),
+            default  => $this->failWith("Acção inválida: {$action}. Usa list|add|search|stats|forget"),
         };
     }
 
@@ -80,14 +80,14 @@ class KnowledgeCommand extends Command
         $key   = (string) $this->argument('key');
         $value = (string) $this->argument('value');
         if ($key === '' || $value === '') {
-            return $this->fail('Key e value obrigatórios: knowledge add "key" "value"');
+            return $this->failWith('Key e value obrigatórios: knowledge add "key" "value"');
         }
 
         $cat = (string) $this->option('category');
         $imp = (float)  $this->option('importance');
 
         $row = $svc->remember(key: $key, value: $value, category: $cat, importance: $imp, source: 'manual');
-        if (!$row) return $this->fail('Não foi possível gravar.');
+        if (!$row) return $this->failWith('Não foi possível gravar.');
 
         $this->info("✓ Memória gravada [{$row->category}, importance {$row->importance}]: {$row->knowledge_key}");
         return self::SUCCESS;
@@ -134,14 +134,18 @@ class KnowledgeCommand extends Command
     private function cmdForget(OrganizationalMemoryService $svc): int
     {
         $key = (string) $this->argument('key');
-        if ($key === '') return $this->fail('Key obrigatória: knowledge forget "key"');
+        if ($key === '') return $this->failWith('Key obrigatória: knowledge forget "key"');
 
         $count = OrganizationalKnowledge::where('knowledge_key', $key)->delete();
         $this->info("✓ {$count} memória(s) apagada(s).");
         return self::SUCCESS;
     }
 
-    private function fail(string $msg): int
+    /**
+     * Helper local — Laravel 11+ tem Command::fail() público nativo,
+     * por isso usamos nome diferente para evitar conflito de visibilidade.
+     */
+    private function failWith(string $msg): int
     {
         $this->error($msg);
         return self::FAILURE;
