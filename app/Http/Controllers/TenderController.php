@@ -1019,36 +1019,45 @@ class TenderController extends Controller
             return back()->with('error', 'Tender confidencial — debate multi-agente não permitido.');
         }
 
-        // Topic opcional via form
-        $topic = trim((string) $request->input('topic', ''));
-        $topic = $topic !== '' ? mb_substr($topic, 0, 500) : null;
+        try {
+            // Topic opcional via form
+            $topic = trim((string) $request->input('topic', ''));
+            $topic = $topic !== '' ? mb_substr($topic, 0, 500) : null;
 
-        // Cria record pending — service vai actualizar para running/done.
-        $debate = \App\Models\MultiAgentDebate::create([
-            'tender_id'            => $tender->id,
-            'initiated_by_user_id' => $user->id,
-            'topic'                => $topic,
-            'agent_keys'           => null,
-            'status'               => \App\Models\MultiAgentDebate::STATUS_PENDING,
-            'rounds'               => null,
-            'synthesis'            => null,
-            'disagreements'        => null,
-            'confidence_pct'       => null,
-            'cost_usd'             => 0,
-            'started_at'           => null,
-            'finished_at'          => null,
-        ]);
+            // Cria record pending — service vai actualizar para running/done.
+            $debate = \App\Models\MultiAgentDebate::create([
+                'tender_id'            => $tender->id,
+                'initiated_by_user_id' => $user->id,
+                'topic'                => $topic,
+                'agent_keys'           => null,
+                'status'               => \App\Models\MultiAgentDebate::STATUS_PENDING,
+                'rounds'               => null,
+                'synthesis'            => null,
+                'disagreements'        => null,
+                'confidence_pct'       => null,
+                'cost_usd'             => 0,
+                'started_at'           => null,
+                'finished_at'          => null,
+            ]);
 
-        // Dispatch para queue 'default' — Supervisor já está a correr este queue.
-        // O job carrega o tender, chama MultiAgentDebateService->debate(), e
-        // actualiza o record. UI faz polling ou refresh para ver resultado.
-        \App\Jobs\RunMultiAgentDebateJob::dispatch($debate->id)
-            ->onQueue('default');
+            // Dispatch para queue 'default' — Supervisor já está a correr este queue.
+            \App\Jobs\RunMultiAgentDebateJob::dispatch($debate->id)
+                ->onQueue('default');
 
-        return back()->with('status',
-            "🧠 Debate multi-agente #{$debate->id} iniciado em background. " .
-            "Demora 30-90s. Refresh esta página para ver o resultado."
-        );
+            return back()->with('status',
+                "🧠 Debate multi-agente #{$debate->id} iniciado em background. " .
+                "Demora 30-90s. Refresh esta página para ver o resultado."
+            );
+        } catch (\Throwable $e) {
+            Log::error('launchDebate failed', [
+                'tender_id' => $tender->id,
+                'user_id'   => $user->id,
+                'error'     => $e->getMessage(),
+            ]);
+            return back()->with('error',
+                'Não foi possível iniciar o debate: ' . mb_substr($e->getMessage(), 0, 200)
+            );
+        }
     }
 
     public function createSapOpp(Tender $tender, SapService $sap)
