@@ -185,6 +185,42 @@
                         <dd class="text-gray-900">{{ $tender->assignedBy?->name ?? '—' }}</dd>
                     </div>
                 </dl>
+
+                {{-- 🏢 SAP Customer CardCode — associação manual. Pedido directo
+                     Marine 2026-05-25: quando purchasing_org corresponde a um
+                     Supplier (F) em vez de Customer (C), Marta falha. Operador
+                     pode meter o CardCode correcto aqui para Marta usar
+                     directamente. --}}
+                @unless($tender->is_confidential)
+                <div class="mt-3 pt-3 border-t border-gray-200">
+                    <form method="POST" action="{{ route('tenders.update-sap-card-code', $tender) }}"
+                          style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;">
+                        @csrf
+                        @method('PATCH')
+                        <label style="font-size:11px;color:#9ab;text-transform:uppercase;letter-spacing:0.5px;">
+                            🏢 SAP Customer CardCode:
+                        </label>
+                        <input type="text" name="sap_customer_card_code"
+                               value="{{ $tender->sap_customer_card_code }}"
+                               placeholder="ex: C000263"
+                               maxlength="30"
+                               style="background:#fff;border:1px solid #cbd5e1;color:#1f2937;padding:4px 10px;border-radius:4px;width:130px;font-family:monospace;font-size:12px;">
+                        <button type="submit"
+                                style="background:#3b82f6;border:none;color:#fff;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;">
+                            Guardar
+                        </button>
+                        @if(!empty($tender->sap_customer_card_code))
+                            <span style="font-size:11px;color:#10b981;">
+                                ✓ Marta vai usar directamente
+                            </span>
+                        @else
+                            <span style="font-size:11px;color:#9ab;">
+                                opcional — se Marta falhar com "Supplier vs Customer", mete aqui o CardCode certo
+                            </span>
+                        @endif
+                    </form>
+                </div>
+                @endunless
             </section>
 
             {{-- ─── PDFs do concurso (drag-drop) + Marta CRM trigger ────────

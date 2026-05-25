@@ -968,6 +968,38 @@ class TenderController extends Controller
      *   4. Em sucesso: actualiza tender.sap_opportunity_number + sap_stage_no
      *   5. Em falha: flash error com detail
      */
+    /**
+     * PATCH /tenders/{tender}/sap-card-code — associa manualmente um SAP B1
+     * Customer/Lead CardCode ao tender. Pedido directo Marine 2026-05-25:
+     * permite contornar o problema de purchasing_org corresponder a
+     * Suppliers (F) em vez de Customers (C) no SAP.
+     */
+    public function updateSapCardCode(Request $request, Tender $tender)
+    {
+        $user = Auth::user();
+        $this->enforceVisibility($tender, $user);
+
+        $data = $request->validate([
+            'sap_customer_card_code' => ['nullable', 'string', 'max:30'],
+        ]);
+
+        $code = trim((string) ($data['sap_customer_card_code'] ?? ''));
+
+        // Validação ligeira do formato — Customer C000xxx ou Lead L000xxx
+        if ($code !== '' && !preg_match('/^[A-Z]\d{4,7}$/', $code)) {
+            return back()->with('error',
+                "Formato CardCode inválido: \"{$code}\". Espera letra (C/L) + 4-7 dígitos (ex: C000263)."
+            );
+        }
+
+        $tender->sap_customer_card_code = $code === '' ? null : $code;
+        $tender->save();
+
+        return back()->with('status', $code === ''
+            ? '✓ SAP CardCode limpo. Marta volta a fazer lookup automático.'
+            : "✓ SAP CardCode {$code} associado. Marta vai usar este BP directamente.");
+    }
+
     public function createSapOpp(Tender $tender, SapService $sap)
     {
         $user = Auth::user();
@@ -1060,6 +1092,50 @@ class TenderController extends Controller
         // prefix "NSPA"). Pedido directo do operador:
         // "Anspa op codigo de clinete é C000263".
         $purchasingOrg = trim((string) $tender->purchasing_org);
+
+        // 2026-05-25 — pedido directo Marine: "Tem que se associar
+        // diretamente o Cliente como está em SAP se não o agente não cria OP".
+        // Se o operador preencheu manualmente sap_customer_card_code na UI,
+        // usa-o directamente — skip search por nome (que falhava ao
+        // encontrar só Suppliers para BPs como NSPA).
+        $manualCardCode = trim((string) ($tender->sap_customer_card_code ?? ''));
+        if ($manualCardCode !== '') {
+            try {
+                $bp = $sap->getBusinessPartner($manualCardCode);
+                if ($bp && !empty($bp['CardCode'])) {
+                    $cardType = (string) ($bp['CardType'] ?? '');
+                    if (in_array($cardType, ['cCustomer', 'cLid', 'C', 'L'], true)) {
+                        $resolvedCardCode = (string) $bp['CardCode'];
+                        $resolvedCardName = (string) ($bp['CardName'] ?? $manualCardCode);
+                        $resolvedVia      = 'manual_cardcode';
+                        Log::info('Tender createSapOpp: usou sap_customer_card_code manual', [
+                            'tender_id' => $tender->id,
+                            'cardcode'  => $resolvedCardCode,
+                        ]);
+                        goto buildPayload;
+                    } else {
+                        return back()->with('error',
+                            "SAP CardCode \"{$manualCardCode}\" existe mas é tipo \"{$cardType}\" — não é Customer/Lead. " .
+                            "Edita o concurso e mete um CardCode de Customer (C…) ou Lead (L…)."
+                        );
+                    }
+                } else {
+                    return back()->with('error',
+                        "SAP CardCode \"{$manualCardCode}\" não existe no SAP B1. " .
+                        "Verifica o código e tenta de novo."
+                    );
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Tender createSapOpp: manual cardcode lookup failed', [
+                    'cardcode' => $manualCardCode,
+                    'error'    => $e->getMessage(),
+                ]);
+                return back()->with('error',
+                    "Não consegui validar SAP CardCode \"{$manualCardCode}\". " . $e->getMessage()
+                );
+            }
+        }
+
         $directCardCode = Tender::cardCodeForSource($tender->source);
 
         if ($directCardCode) {
