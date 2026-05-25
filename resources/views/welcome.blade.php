@@ -4748,7 +4748,11 @@ async function sendMessage() {
         // Heartbeats também contam como chunks (Octane envia ": heartbeat …"
         // SSE comments). Resolve casos tipo Cor. Rodrigues stuck.
         let lastChunkAt = Date.now();
-        const WATCHDOG_MS = 60000;
+        // 2026-05-25: aumentado 60s → 120s para casar com Nginx 180s e dar
+        // chance a agentes pesados (Cor. Rodrigues Opus + Tavily + NSN) a
+        // responderem. Antes, watchdog cortava antes do agente chegar ao
+        // primeiro chunk em queries complexas.
+        const WATCHDOG_MS = 120000;
         watchdog = setInterval(() => {
             if (!isStreaming) { clearInterval(watchdog); return; }
             if (Date.now() - lastChunkAt > WATCHDOG_MS) {
@@ -5179,7 +5183,7 @@ async function sendMessage() {
         if (err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''))) {
             if (watchdogTriggered) {
                 // Stuck agent — retry message com botão visível.
-                const retryMsg = '⏱️ O agente parou de responder (60s sem chunks). Pode ser timeout API ou worker preso.';
+                const retryMsg = '⏱️ O agente parou de responder (120s sem chunks). Pode ser timeout API ou worker preso.';
                 if (streamBubble && accumulated.trim() !== '') {
                     streamBubble.innerHTML = renderMarkdown(accumulated) +
                         '<div style="margin-top:10px;padding:10px;background:#fef2f2;border-radius:8px;font-size:12px;color:#991b1b">' +
