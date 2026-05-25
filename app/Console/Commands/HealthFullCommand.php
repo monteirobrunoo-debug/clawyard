@@ -140,12 +140,16 @@ class HealthFullCommand extends Command
                 $row['memories'] = '?';
             }
 
-            // Tenders assigned
+            // Tenders assigned — coluna correcta é assigned_collaborator_id
+            // (TenderCollaborator → User). Fallback: assigned_by_user_id.
             try {
-                $row['tenders'] = (int) DB::table('tender_user')->where('user_id', $u->id)->count();
+                $row['tenders'] = (int) Tender::where(function ($q) use ($u) {
+                    $q->whereHas('assignedCollaborator', fn ($c) => $c->where('user_id', $u->id))
+                      ->orWhere('assigned_by_user_id', $u->id);
+                })->count();
             } catch (\Throwable) {
                 try {
-                    $row['tenders'] = (int) Tender::where('assigned_to_user_id', $u->id)->count();
+                    $row['tenders'] = (int) Tender::where('assigned_by_user_id', $u->id)->count();
                 } catch (\Throwable) {
                     $row['tenders'] = '?';
                 }
