@@ -23,7 +23,7 @@ class KnowledgeCommand extends Command
                             {action : list|add|search|stats|forget}
                             {key? : Key ou query}
                             {value? : Value (para add)}
-                            {--category=general : Categoria}
+                            {--category= : Categoria (vazio = sem filtro em list/search)}
                             {--importance=0.5 : Importância 0-1}
                             {--limit=20 : Limite list/search}';
 
@@ -45,10 +45,10 @@ class KnowledgeCommand extends Command
     private function cmdList(OrganizationalMemoryService $svc): int
     {
         $limit = (int) $this->option('limit');
-        $cat = $this->option('category');
+        $cat = $this->option('category') ?: null;
 
         $q = OrganizationalKnowledge::query()->fresh();
-        if ($cat && $cat !== 'general') {
+        if ($cat) {  // só filtra se explicitamente passado
             $q->where('category', $cat);
         }
         $rows = $q->orderByRelevance()->limit($limit)->get();
@@ -83,7 +83,8 @@ class KnowledgeCommand extends Command
             return $this->failWith('Key e value obrigatórios: knowledge add "key" "value"');
         }
 
-        $cat = (string) $this->option('category');
+        // Para add, default 'general' quando não passado.
+        $cat = ((string) $this->option('category')) ?: 'general';
         $imp = (float)  $this->option('importance');
 
         $row = $svc->remember(key: $key, value: $value, category: $cat, importance: $imp, source: 'manual');
