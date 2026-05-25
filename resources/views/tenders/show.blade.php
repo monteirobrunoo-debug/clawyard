@@ -78,8 +78,12 @@
                 // 2026-05-25: stepper agora reflecte estado real do tender.
                 // Antes $hasQuotes/$hasOffer eram hardcoded false → todas as
                 // fases mostravam "Fase 1 active" mesmo com cotações criadas.
+                // Try/catch defensivo na query — fallback 0 em vez de 500.
                 $phase1Done   = $tender->isProcessOpen();
-                $quotesCount  = \App\Models\TenderSupplierQuotation::where('tender_id', $tender->id)->count();
+                $quotesCount  = 0;
+                try {
+                    $quotesCount = \App\Models\TenderSupplierQuotation::where('tender_id', $tender->id)->count();
+                } catch (\Throwable) { /* sem cotações ou tabela indisponível */ }
                 $hasQuotes    = $quotesCount > 0;
                 $hasOffer     = false;  // futuro: tender_sales_offers
                 $phase        = $hasOffer ? 3 : ($hasQuotes ? 2 : 1);
@@ -445,12 +449,21 @@
                     <div id="ts-service-analysis-status" class="mt-3 hidden text-xs"></div>
 
                     {{-- 2026-05-25: Histórico recente de debates multi-agente para
-                         este tender. Mostra estado + synthesis quando done. --}}
+                         este tender. Mostra estado + synthesis quando done.
+                         Try/catch defensivo — se a tabela não existir ou query
+                         falhar, retorna collection vazia em vez de 500. --}}
                     @php
-                        $recentDebates = \App\Models\MultiAgentDebate::where('tender_id', $tender->id)
-                            ->orderByDesc('created_at')
-                            ->limit(3)
-                            ->get();
+                        $recentDebates = collect();
+                        try {
+                            if (\Schema::hasTable('multi_agent_debates')) {
+                                $recentDebates = \App\Models\MultiAgentDebate::where('tender_id', $tender->id)
+                                    ->orderByDesc('created_at')
+                                    ->limit(3)
+                                    ->get();
+                            }
+                        } catch (\Throwable $e) {
+                            \Log::warning('show.blade recentDebates query failed: ' . $e->getMessage());
+                        }
                     @endphp
                     @if($recentDebates->isNotEmpty())
                         <div class="mt-3 space-y-2">
