@@ -205,11 +205,10 @@ class NatoDbImportCommand extends Command
             }
 
             if (!empty($records)) {
-                // Postgres tem limite de 65,535 bind parameters por query.
-                // Cada record tem ~15-17 colunas → max ~3,800 records por upsert.
-                // Sub-chunk para 2,500 (conservador, deixa margem para variação).
-                $fieldsCount  = count(array_keys($records[0]));
-                $maxPerBatch  = max(500, (int) floor(60000 / max(1, $fieldsCount)));
+                // Postgres limit: 65,535 bind params por query.
+                // Laravel upsert add timestamps + on conflict update placeholders.
+                // Hard cap em 1000 records por batch → max ~16k params (ultra-safe).
+                $maxPerBatch  = 1000;
                 $batches      = array_chunk($records, $maxPerBatch);
 
                 foreach ($batches as $batch) {
@@ -222,7 +221,13 @@ class NatoDbImportCommand extends Command
                         $inserted += count($batch);
                     } catch (\Throwable $e) {
                         $errors += count($batch);
-                        $bar->setMessage('erro batch: ' . mb_substr($e->getMessage(), 0, 60));
+                        // Log full error para diagnóstico (mb_substr corta no UI)
+                        \Log::warning('NatoDbImport batch failed', [
+                            'rows'   => count($batch),
+                            'fields' => count(array_keys($batch[0])),
+                            'error'  => $e->getMessage(),
+                        ]);
+                        $bar->setMessage('erro batch: ' . mb_substr($e->getMessage(), 0, 50));
                     }
                 }
                 $bar->setMessage('upserts ' . number_format($inserted));
