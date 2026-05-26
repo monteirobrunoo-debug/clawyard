@@ -205,18 +205,27 @@ class NatoDbImportCommand extends Command
             }
 
             if (!empty($records)) {
-                try {
-                    if ($type === 'ncage') {
-                        NatoNcage::upsert($records, ['cage_code'], array_keys($records[0]));
-                    } else {
-                        NatoNsn::upsert($records, ['nsn'], array_keys($records[0]));
+                // Postgres tem limite de 65,535 bind parameters por query.
+                // Cada record tem ~15-17 colunas → max ~3,800 records por upsert.
+                // Sub-chunk para 2,500 (conservador, deixa margem para variação).
+                $fieldsCount  = count(array_keys($records[0]));
+                $maxPerBatch  = max(500, (int) floor(60000 / max(1, $fieldsCount)));
+                $batches      = array_chunk($records, $maxPerBatch);
+
+                foreach ($batches as $batch) {
+                    try {
+                        if ($type === 'ncage') {
+                            NatoNcage::upsert($batch, ['cage_code'], array_keys($batch[0]));
+                        } else {
+                            NatoNsn::upsert($batch, ['nsn'], array_keys($batch[0]));
+                        }
+                        $inserted += count($batch);
+                    } catch (\Throwable $e) {
+                        $errors += count($batch);
+                        $bar->setMessage('erro batch: ' . mb_substr($e->getMessage(), 0, 60));
                     }
-                    $inserted += count($records);
-                    $bar->setMessage('upserts ' . number_format($inserted));
-                } catch (\Throwable $e) {
-                    $errors += count($records);
-                    $bar->setMessage('erro chunk: ' . mb_substr($e->getMessage(), 0, 60));
                 }
+                $bar->setMessage('upserts ' . number_format($inserted));
             }
 
             $bar->advance(count($rows));
