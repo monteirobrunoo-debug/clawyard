@@ -23,6 +23,10 @@ use Illuminate\Support\Facades\Log;
  */
 class NatoCodificationService
 {
+    public function __construct(
+        private ?NcageEnrichmentService $enricher = null,
+    ) {}
+
     /**
      * Disponível se pelo menos uma tabela tem dados.
      * Resultado cached 5min para não fazer COUNT em cada lookup.
@@ -75,7 +79,26 @@ class NatoCodificationService
 
         $manufacturer = null;
         if ($row->manufacturer_cage) {
-            $manufacturer = NatoNcage::where('cage_code', strtoupper($row->manufacturer_cage))->first();
+            $cage = strtoupper($row->manufacturer_cage);
+            $manufacturer = NatoNcage::where('cage_code', $cage)->first();
+
+            // Lazy enrichment: se CAGE existe no NSN mas não há row NCAGE
+            // (ou foi marcado como '(sem nome)'), tenta enriquecer via
+            // Tavily+Haiku. Síncrono — ~5s na primeira pergunta, $0 depois.
+            $needsEnrich = !$manufacturer
+                       || empty($manufacturer->company_name)
+                       || $manufacturer->company_name === '(sem nome)';
+
+            if ($needsEnrich && $this->enricher) {
+                try {
+                    $enriched = $this->enricher->enrich($cage);
+                    if ($enriched) $manufacturer = $enriched;
+                } catch (\Throwable $e) {
+                    Log::warning('NatoCodificationService: enrichment failed', [
+                        'cage' => $cage, 'error' => $e->getMessage(),
+                    ]);
+                }
+            }
         }
 
         // Country name via NCB → nato_country_codes
