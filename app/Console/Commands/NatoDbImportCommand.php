@@ -205,10 +205,10 @@ class NatoDbImportCommand extends Command
             }
 
             if (!empty($records)) {
-                // Postgres limit: 65,535 bind params por query.
-                // Laravel upsert add timestamps + on conflict update placeholders.
-                // Hard cap em 1000 records por batch → max ~16k params (ultra-safe).
-                $maxPerBatch  = 1000;
+                // Postgres protocol: 65,535 params. PDO_PGSQL: pode ser int16 = 32,767.
+                // Cap em 500 records × 14 cols = 7k params. 4.7× abaixo do limite
+                // pessimista. Trade-off: 2× mais round-trips, ~5 min extra em 34M.
+                $maxPerBatch  = 500;
                 $batches      = array_chunk($records, $maxPerBatch);
 
                 foreach ($batches as $batch) {
