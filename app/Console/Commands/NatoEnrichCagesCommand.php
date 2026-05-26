@@ -26,6 +26,7 @@ class NatoEnrichCagesCommand extends Command
     protected $signature = 'nato:enrich-cages
                             {--limit=100 : Máx CAGEs a processar (default 100)}
                             {--min-refs=1 : Só processa CAGEs referenciados N+ vezes em nato_nsn}
+                            {--yes : Skipa prompt de confirmação (útil para nohup)}
                             {--dry-run : Lista CAGEs sem chamar Tavily}';
 
     protected $description = 'Backfill nato_ncage com nomes via Tavily+Haiku, ordenado por frequência';
@@ -88,9 +89,13 @@ SQL;
             return self::SUCCESS;
         }
 
-        if (!$this->confirm("Processar {$total} CAGEs? Custo estimado ~$" . number_format($total * 0.013, 2), false)) {
-            $this->warn('Cancelado.');
-            return self::SUCCESS;
+        if (!$this->option('yes')) {
+            if (!$this->confirm("Processar {$total} CAGEs? Custo estimado ~$" . number_format($total * 0.013, 2), false)) {
+                $this->warn('Cancelado.');
+                return self::SUCCESS;
+            }
+        } else {
+            $this->info('--yes activo, a processar sem confirmação...');
         }
 
         $bar = $this->output->createProgressBar($total);
