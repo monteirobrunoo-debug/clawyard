@@ -1556,8 +1556,8 @@ HTML;
         } catch (\Throwable $e) { /* best-effort */ }
 
         return response()->stream(function () use ($agent, $message, $history, $agentName, $agentModel, $sessionId, $share) {
-            while (ob_get_level() > 0) { ob_end_flush(); }
-            flush();
+            // 2026-05-25: REMOVIDO ob_end_flush() — Octane Swoole gere buffers
+            // sozinho. Ver NvidiaController para detalhes da causa raiz.
 
             $meta = [
                 'type'       => 'meta',

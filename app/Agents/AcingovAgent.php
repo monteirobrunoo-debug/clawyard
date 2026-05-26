@@ -1455,11 +1455,9 @@ MSG;
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
-        // Flush & destroy all PHP output buffers so every echo() reaches the
-        // browser immediately without waiting for the 4096-byte buffer to fill
-        while (ob_get_level() > 0) {
-            ob_end_flush();
-        }
+        // 2026-05-25: REMOVIDO ob_end_flush() — Octane Swoole gere buffers.
+        // Manualmente fechar causa SwooleClient ob_end_clean() falhar →
+        // worker crash mid-stream. Ver NvidiaController para causa raiz.
 
         $today = now()->format('Y-m-d H:i');
         $full  = '';

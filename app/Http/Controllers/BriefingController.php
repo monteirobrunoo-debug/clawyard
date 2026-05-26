@@ -29,11 +29,12 @@ class BriefingController extends Controller
 
         return response()->stream(function () use ($userId) {
 
-            // ── 1. Flush ALL PHP output buffers immediately (same as NvidiaController)
-            while (ob_get_level() > 0) ob_end_flush();
-            flush();
+            // 2026-05-25: REMOVIDO `while (ob_get_level()) ob_end_flush()`.
+            // Octane Swoole gere os buffers internamente. Fechar manualmente
+            // provocava ob_end_clean() falhar em SwooleClient → worker crash.
+            // Ver NvidiaController.php para detalhes da causa raiz.
 
-            // ── 2. Release session lock — allows other requests to proceed during stream
+            // Release session lock — allows other requests to proceed during stream
             session()->save();
 
             // ── 3. Send meta event so the frontend knows the stream is alive
