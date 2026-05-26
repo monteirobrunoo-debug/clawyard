@@ -7,6 +7,7 @@ use App\Agents\Traits\SelfCritiqueDisciplineTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use GuzzleHttp\Client;
@@ -34,6 +35,7 @@ use Illuminate\Support\Facades\Log;
 class MarketingAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use TechnicalBookSkillTrait;
@@ -570,6 +572,7 @@ TOKENS;
         if (is_string($message) && $this->needsWebSearch($message)) {
             if ($heartbeat) $heartbeat('a pesquisar benchmarks e trends');
             $message = $this->augmentWithWebSearch($message, $heartbeat);
+            $message = $this->augmentWithNsnLookup($message, $heartbeat);
         }
         return $message;
     }
@@ -674,6 +677,7 @@ TOKENS;
         // (benchmarks, algoritmos, case studies recentes envelhecem).
         if ($bookCtx !== '' && (new \App\Services\WebSearchService())->isAvailable()) {
             $message = $this->augmentWithWebSearch($message);
+            $message = $this->augmentWithNsnLookup($message);
         }
 
         $messages = array_merge($history, [
@@ -717,6 +721,7 @@ TOKENS;
         if ($bookCtx !== '' && (new \App\Services\WebSearchService())->isAvailable()) {
             if ($heartbeat) $heartbeat('a cruzar livros com web 🌐📚');
             $message = $this->augmentWithWebSearch($message, $heartbeat);
+            $message = $this->augmentWithNsnLookup($message, $heartbeat);
         }
 
         $messages = array_merge($history, [

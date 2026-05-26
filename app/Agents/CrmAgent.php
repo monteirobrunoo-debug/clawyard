@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\SapService;
 use App\Services\PromptLibrary;
@@ -33,6 +34,7 @@ class CrmAgent implements AgentInterface
     use SharedContextTrait;
     use ShippingSkillTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
     protected string $contextKey  = 'crm_intel';

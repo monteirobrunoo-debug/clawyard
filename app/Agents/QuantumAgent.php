@@ -5,6 +5,7 @@ namespace App\Agents;
 use App\Models\Discovery;
 use App\Models\Report;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use GuzzleHttp\Client;
@@ -16,6 +17,7 @@ use App\Services\PatentPdfService;
 class QuantumAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
@@ -743,6 +745,7 @@ MSG;
                 }
             } else {
                 $finalMessage = $this->augmentWithWebSearch($finalMessage, $heartbeat);
+                $finalMessage = $this->augmentWithNsnLookup($finalMessage, $heartbeat);
             }
         }
 

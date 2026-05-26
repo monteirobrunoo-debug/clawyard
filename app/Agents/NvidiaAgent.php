@@ -7,12 +7,14 @@ use App\Agents\Traits\SharedContextTrait;
 
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 class NvidiaAgent implements AgentInterface
 {
     use SharedContextTrait;
 
     use LogisticsSkillTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'
     protected string $searchPolicy = 'conditional';
     protected Client $client;

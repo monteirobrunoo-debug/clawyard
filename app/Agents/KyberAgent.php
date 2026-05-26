@@ -12,6 +12,7 @@ use App\Agents\Traits\SharedContextTrait;
 
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 /**
  * Kyber Agent — post-quantum email encryption assistant.
  *
@@ -28,6 +29,7 @@ class KyberAgent implements AgentInterface
     use SharedContextTrait;
     use LogisticsSkillTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'

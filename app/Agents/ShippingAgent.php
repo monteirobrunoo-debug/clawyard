@@ -9,6 +9,7 @@ use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Services\HarmonizedCodesService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -35,6 +36,7 @@ class ShippingAgent implements AgentInterface
     use TechnicalBookSkillTrait;
     use WebSearchTrait;
 
+    use NsnLookupTrait;
     protected string $systemPrompt = '';
 
     protected string $searchPolicy = 'conditional';

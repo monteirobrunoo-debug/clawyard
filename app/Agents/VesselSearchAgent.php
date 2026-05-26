@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Models\PartnerWorkshop;
 use App\Services\HpHistoryClient;
@@ -29,6 +30,7 @@ class VesselSearchAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     use TechnicalBookSkillTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;

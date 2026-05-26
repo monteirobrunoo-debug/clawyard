@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -15,6 +16,7 @@ use App\Services\PromptLibrary;
 class EmailAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use ShippingSkillTrait;
@@ -258,6 +260,7 @@ SPECIALTY;
     public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentWithWebSearch($message);
+        $message = $this->augmentWithNsnLookup($message);
         $bookCtx  = $this->augmentWithTechnicalBooks($message, 2);
         $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
         $messages = array_merge($history, [
@@ -288,6 +291,7 @@ SPECIALTY;
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
         $message  = $this->augmentWithWebSearch($message, $heartbeat);
+        $message = $this->augmentWithNsnLookup($message, $heartbeat);
         $bookCtx  = $this->augmentWithTechnicalBooks($message, 2);
         $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
         $messages = array_merge($history, [

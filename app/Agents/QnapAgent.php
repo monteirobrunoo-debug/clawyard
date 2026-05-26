@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Services\QnapIndexService;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -24,6 +25,7 @@ class QnapAgent implements AgentInterface
     use SharedContextTrait;
     use LogisticsSkillTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'

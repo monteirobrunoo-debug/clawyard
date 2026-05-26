@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\Log;
 class AriaAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
@@ -373,6 +375,7 @@ SPECIALTY;
         // ── Web search for CVE/exploit/news/SIEM queries ───────────────────
         $message = $this->augmentWithWebSearch($message, $heartbeat);
 
+        $message = $this->augmentWithNsnLookup($message, $heartbeat);
         return $message;
     }
 

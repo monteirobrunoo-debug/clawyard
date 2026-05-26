@@ -6,6 +6,7 @@ use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -25,6 +26,7 @@ class ComputerUseAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     use SharedContextTrait;
 
     use LogisticsSkillTrait;
@@ -109,8 +111,9 @@ SPECIALTY;
         if ($this->hasBridge()) {
             return $this->computerUseLoop($message, $history, null);
         }
-        // Fallback: web search only
+        // Fallback: web search only + NATO/NSN local lookup
         $augmented = $this->augmentWithWebSearch($message);
+        $augmented = $this->augmentWithNsnLookup($augmented);
         $messages  = array_merge($history, [['role' => 'user', 'content' => $augmented]]);
         try {
             $response = $this->client->post('/v1/messages', [
@@ -429,6 +432,7 @@ SPECIALTY;
         $onChunk("---\n\nEnquanto isso, vou responder com pesquisa web:\n\n");
 
         $augmented = $this->augmentWithWebSearch($message, $heartbeat);
+        $augmented = $this->augmentWithNsnLookup($augmented, $heartbeat);
         $messages  = array_merge($history, [['role' => 'user', 'content' => $augmented]]);
 
         try {

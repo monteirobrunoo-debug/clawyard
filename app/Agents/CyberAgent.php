@@ -8,6 +8,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 
@@ -18,6 +19,7 @@ class CyberAgent implements AgentInterface
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     protected string $systemPrompt = '';
 
     // HDPO meta-cognitive search gate: 'always' | 'conditional' | 'never'

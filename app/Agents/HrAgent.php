@@ -6,6 +6,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use App\Services\SapService;
@@ -26,6 +27,7 @@ use Illuminate\Support\Facades\Log;
 class HrAgent implements AgentInterface
 {
     use WebSearchTrait;
+    use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
     use TechnicalBookSkillTrait;
@@ -482,6 +484,7 @@ SAP;
         if (is_string($message) && $this->needsWebSearch($message)) {
             if ($heartbeat) $heartbeat('a consultar legislação laboral');
             $message = $this->augmentWithWebSearch($message, $heartbeat);
+            $message = $this->augmentWithNsnLookup($message, $heartbeat);
         }
         return $message;
     }

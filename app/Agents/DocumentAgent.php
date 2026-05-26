@@ -7,6 +7,7 @@ use App\Agents\Traits\AnthropicKeyTrait;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
+use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
@@ -15,6 +16,7 @@ class DocumentAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
     use WebSearchTrait;
+    use NsnLookupTrait;
     use SharedContextTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
@@ -112,6 +114,7 @@ SPECIALTY;
     public function chat(string|array $message, array $history = []): string
     {
         $message  = $this->augmentWithWebSearch($message);
+        $message = $this->augmentWithNsnLookup($message);
         $bookCtx  = $this->augmentWithTechnicalBooks($message, 3);
         $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
@@ -139,6 +142,7 @@ SPECIALTY;
     {
         if ($heartbeat) $heartbeat('a pesquisar');
         $message  = $this->augmentWithWebSearch($message, $heartbeat);
+        $message = $this->augmentWithNsnLookup($message, $heartbeat);
         $bookCtx  = $this->augmentWithTechnicalBooks($message, 3);
         $sys      = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
