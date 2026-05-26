@@ -33,6 +33,8 @@ class NatoDbImportCommand extends Command
                             {--chunk=10000 : Rows por batch upsert (default 10000)}
                             {--limit=0 : Limita import a N rows (debug, 0 = todos)}
                             {--start-rowid=0 : Resume — começar a partir deste rowid (default 0)}
+                            {--where= : Cláusula SQL extra (sem WHERE), ex: "LENGTH(Niin) = 7"}
+                            {--assume-ncb= : Para 7-digit Niins, assume este NCB (ex: 27 para Turquia)}
                             {--dry-run : Não escreve — só conta + valida mapping}';
 
     protected $description = 'Importa SQLite NSN_Catalog para Postgres nato_* (streaming)';
@@ -89,7 +91,14 @@ class NatoDbImportCommand extends Command
         $chunk      = max(100, min((int) $this->option('chunk'), 50000));
         $limit      = max(0, (int) $this->option('limit'));
         $startRowid = max(0, (int) $this->option('start-rowid'));
+        $whereExtra = trim((string) $this->option('where'));
+        $assumeNcb  = trim((string) $this->option('assume-ncb'));
         $dry        = (bool) $this->option('dry-run');
+
+        if ($assumeNcb !== '' && !preg_match('/^\d{2}$/', $assumeNcb)) {
+            $this->error('--assume-ncb deve ser 2 dígitos (ex: 27 para Turquia)');
+            return self::FAILURE;
+        }
 
         if (!is_file($path)) {
             $this->error("Ficheiro não existe: {$path}");
@@ -139,16 +148,20 @@ class NatoDbImportCommand extends Command
         }
         $this->line('');
 
-        // Total rows
-        $total = (int) $pdo->query('SELECT COUNT(*) FROM ' . $this->quoteIdent($table))->fetchColumn();
+        // Total rows (com filtro opcional)
+        $whereClause = $whereExtra !== '' ? " WHERE {$whereExtra}" : '';
+        $total = (int) $pdo->query('SELECT COUNT(*) FROM ' . $this->quoteIdent($table) . $whereClause)->fetchColumn();
         if ($limit > 0) $total = min($total, $limit);
         $this->info('Total rows a processar: ' . number_format($total));
+        if ($whereExtra !== '') $this->line('   Filtro: ' . $whereExtra);
+        if ($assumeNcb !== '')  $this->line('   Assume NCB=' . $assumeNcb . ' para Niins de 7 dígitos');
 
         if ($dry) {
             $this->warn('🧪 DRY RUN — nenhuma escrita. Sample (primeiras 3):');
-            $sample = $pdo->query('SELECT * FROM ' . $this->quoteIdent($table) . ' LIMIT 3')->fetchAll(PDO::FETCH_ASSOC);
+            $sampleSql = 'SELECT * FROM ' . $this->quoteIdent($table) . $whereClause . ' LIMIT 3';
+            $sample = $pdo->query($sampleSql)->fetchAll(PDO::FETCH_ASSOC);
             foreach ($sample as $i => $r) {
-                $rec = $this->mapRow($r, $map, $type);
+                $rec = $this->mapRow($r, $map, $type, $assumeNcb);
                 $this->line('  [' . ($i + 1) . '] ' . json_encode($rec, JSON_UNESCAPED_UNICODE));
             }
             return self::SUCCESS;
@@ -164,8 +177,10 @@ class NatoDbImportCommand extends Command
         $orderCol = $hasRowid ? 'rowid' : ($cols[0] ?? 'rowid');
 
         $selectCols = '"rowid" AS __rowid__, ' . implode(', ', array_map(fn ($c) => $this->quoteIdent($c), $cols));
+        $whereCursor = "\"{$orderCol}\" > :lastId";
+        if ($whereExtra !== '') $whereCursor .= " AND ({$whereExtra})";
         $sql = "SELECT {$selectCols} FROM " . $this->quoteIdent($table)
-             . " WHERE \"{$orderCol}\" > :lastId ORDER BY \"{$orderCol}\" LIMIT :lim";
+             . " WHERE {$whereCursor} ORDER BY \"{$orderCol}\" LIMIT :lim";
 
         $stmt = $pdo->prepare($sql);
 
@@ -193,7 +208,7 @@ class NatoDbImportCommand extends Command
                 if ($rowid > $lastId) $lastId = $rowid;
 
                 try {
-                    $rec = $this->mapRow($r, $map, $type);
+                    $rec = $this->mapRow($r, $map, $type, $assumeNcb);
                     if ($rec) {
                         $records[] = $rec;
                     } else {
@@ -303,7 +318,7 @@ class NatoDbImportCommand extends Command
         return $map;
     }
 
-    private function mapRow(array $row, array $map, string $type): ?array
+    private function mapRow(array $row, array $map, string $type, string $assumeNcb = ''): ?array
     {
         $rec = [];
         foreach ($map as $field => $sqliteCol) {
@@ -318,17 +333,26 @@ class NatoDbImportCommand extends Command
             if (mb_strlen($rec['cage_code']) > 10) return null;
             $rec['company_name'] = $rec['company_name'] ?? '(sem nome)';
         } else {
-            // NSN: aceita 3 formatos de input
+            // NSN: aceita 4 formatos de input
             //   1. Coluna nsn directa (13 dígitos com ou sem hifens)
             //   2. fsc(4) + niin(9 = NCB(2)+NIIN(7)) — caso turco SEGA SEGK
-            //   3. fsc(4) + niin(7) (NCB ausente → ignora, sem normalizar)
+            //   3. fsc(4) + niin(7), com --assume-ncb=XX para prefixar
+            //   4. Outras combinações falham (skip)
             if (empty($rec['nsn'])) {
                 $fsc  = (string) ($rec['fsc']  ?? '');
                 $niin = (string) ($rec['niin'] ?? '');
                 if ($fsc !== '' && $niin !== '') {
-                    // Limpa: só dígitos. Caso 2: fsc(4) + niin(9 = NCB+NIIN) = 13.
                     $fscDigits  = preg_replace('/\D/', '', $fsc) ?? '';
                     $niinDigits = preg_replace('/\D/', '', $niin) ?? '';
+
+                    // Caso 3: Niin = 7 digits + assume-ncb fornecido → prefixar NCB
+                    if (mb_strlen($niinDigits) === 7 && $assumeNcb !== ''
+                        && preg_match('/^\d{2}$/', $assumeNcb)) {
+                        $niinDigits = $assumeNcb . $niinDigits;
+                        // Marca como NCB assumido para forensics no raw
+                        $row['__ncb_assumed__'] = $assumeNcb;
+                    }
+
                     $rec['nsn'] = $fscDigits . $niinDigits;
                 }
             }
