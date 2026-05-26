@@ -18,7 +18,8 @@ class NatoNsn extends Model
     protected $fillable = [
         'nsn', 'fsc', 'fsc_name', 'ncb', 'niin', 'description',
         'unit_of_issue', 'manufacturer_cage', 'manufacturer_pn',
-        'hazardous_material_code', 'raw',
+        'hazardous_material_code', 'replaced_by', 'replaced_by_2',
+        'niin_status_code', 'raw',
     ];
 
     protected $casts = ['raw' => 'array'];

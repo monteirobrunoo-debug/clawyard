@@ -197,6 +197,15 @@ class NsnLookupTool implements AgentToolInterface
         if (!empty($local['manufacturer_pn'])) $out .= "\nPart Number (OEM): " . $local['manufacturer_pn'];
         if (!empty($local['hazmat']))          $out .= "\nHazardous Material Code: " . $local['hazmat'];
 
+        // Status / obsolescência — crítico para procurement
+        if (!empty($local['status_code'])) {
+            $out .= "\n⚠ Status code: " . $local['status_code'] . ' (verificar se item activo)';
+        }
+        if (!empty($local['replaced_by'])) {
+            $out .= "\n🔁 NSN substituído por: " . $local['replaced_by'];
+            if (!empty($local['replaced_by_2'])) $out .= " (alt: " . $local['replaced_by_2'] . ")";
+        }
+
         if (!empty($local['ncb'])) {
             $line = "NCB: " . $local['ncb'];
             if (!empty($local['ncb_country'])) $line .= " ({$local['ncb_country']})";

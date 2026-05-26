@@ -96,6 +96,9 @@ class NatoCodificationService
             'unit_of_issue'   => $row->unit_of_issue,
             'manufacturer_pn' => $row->manufacturer_pn,
             'hazmat'          => $row->hazardous_material_code,
+            'replaced_by'     => $row->replaced_by ?? null,
+            'replaced_by_2'   => $row->replaced_by_2 ?? null,
+            'status_code'     => $row->niin_status_code ?? null,
             'oem'             => $manufacturer?->company_name,
             'ncage_codes'     => $row->manufacturer_cage ? [$row->manufacturer_cage] : [],
             'manufacturer'    => $manufacturer ? [

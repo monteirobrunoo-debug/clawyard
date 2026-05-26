@@ -76,6 +76,8 @@ class NatoDbImportCommand extends Command
             'manufacturer_pn'    => ['manufacturer_pn', 'part_number', 'pn', 'mfr_pn', 'p_n', 'partno', 'iign'],
             'hazardous_material_code' => ['hazardous_material_code', 'hmc', 'haz', 'hazcode'],
             'replaced_by'        => ['replaced_by', 'nsnreplacement1', 'replacement', 'successor'],
+            'replaced_by_2'      => ['replaced_by_2', 'nsnreplacement2', 'successor2'],
+            'niin_status_code'   => ['niin_status_code', 'niinstatuscode', 'status_code', 'status'],
         ],
     ];
 
