@@ -30,16 +30,28 @@ class NatoDbImportCommand extends Command
                             {--type= : ncage|nsn (obrigatório)}
                             {--table= : Nome da tabela SQLite (obrigatório)}
                             {--map= : col1=field1,col2=field2 overrides (opcional)}
-                            {--chunk=5000 : Rows por batch upsert (default 5000)}
+                            {--chunk=10000 : Rows por batch upsert (default 10000)}
                             {--limit=0 : Limita import a N rows (debug, 0 = todos)}
+                            {--start-rowid=0 : Resume — começar a partir deste rowid (default 0)}
                             {--dry-run : Não escreve — só conta + valida mapping}';
 
     protected $description = 'Importa SQLite NSN_Catalog para Postgres nato_* (streaming)';
 
-    /** Sinónimos comuns de colunas — case-insensitive */
+    /**
+     * Sinónimos comuns de colunas — case-insensitive.
+     * Inclui dialectos turco/militar para suportar catálogos NATO de outros
+     * países (SEGA SEGK Turquia, etc.):
+     *   • Nsc  ↔ fsc  (NATO Stock Class)
+     *   • Niin ↔ niin (mas: 9 chars = NCB(2) + NIIN(7))
+     *   • Anin ↔ description (Approved Item Name)
+     *   • Namc ↔ manufacturer_cage (Manufacturer's NCAGE)
+     *   • Iign ↔ manufacturer_pn (Item Identification / OEM PN)
+     *   • Tiic ↔ unit_of_issue (Type Item Identification Code)
+     *   • NiinStatusCode ↔ replaced_by indicator
+     */
     private const SYNONYMS = [
         'ncage' => [
-            'cage_code'    => ['cage_code', 'cage', 'ncage', 'code', 'ncage_code', 'cagec'],
+            'cage_code'    => ['cage_code', 'cage', 'ncage', 'code', 'ncage_code', 'cagec', 'namc'],
             'company_name' => ['company_name', 'company', 'name', 'manufacturer', 'manufacturer_name', 'mfr', 'mfr_name', 'fabricante'],
             'country_code' => ['country_code', 'country', 'iso', 'ctry', 'cntry', 'pais', 'country_iso'],
             'country_name' => ['country_name', 'country_long', 'pais_nome'],
@@ -54,26 +66,28 @@ class NatoDbImportCommand extends Command
         ],
         'nsn' => [
             'nsn'                => ['nsn', 'stock_number', 'nato_stock_number', 'nsn_code', 'nsnnumber'],
-            'fsc'                => ['fsc', 'federal_supply_class', 'class', 'fsc_code'],
+            'fsc'                => ['fsc', 'federal_supply_class', 'class', 'fsc_code', 'nsc'],
             'fsc_name'           => ['fsc_name', 'class_name', 'fsc_title'],
-            'ncb'                => ['ncb', 'nato_country', 'ncb_code', 'country_code'],
+            'ncb'                => ['ncb', 'nato_country', 'ncb_code'],
             'niin'               => ['niin', 'item_id', 'niinnumber'],
-            'description'        => ['description', 'item_description', 'item_name', 'name', 'descricao', 'descrição', 'item'],
-            'unit_of_issue'      => ['unit_of_issue', 'unit', 'uoi', 'ui', 'unit_issue'],
-            'manufacturer_cage'  => ['manufacturer_cage', 'cage', 'mfr_cage', 'cage_code', 'fabricante_cage', 'ncage'],
-            'manufacturer_pn'    => ['manufacturer_pn', 'part_number', 'pn', 'mfr_pn', 'p_n', 'partno'],
+            'description'        => ['description', 'item_description', 'item_name', 'name', 'descricao', 'descrição', 'item', 'anin'],
+            'unit_of_issue'      => ['unit_of_issue', 'unit', 'uoi', 'ui', 'unit_issue', 'tiic'],
+            'manufacturer_cage'  => ['manufacturer_cage', 'cage', 'cage_code', 'mfr_cage', 'fabricante_cage', 'ncage', 'namc'],
+            'manufacturer_pn'    => ['manufacturer_pn', 'part_number', 'pn', 'mfr_pn', 'p_n', 'partno', 'iign'],
             'hazardous_material_code' => ['hazardous_material_code', 'hmc', 'haz', 'hazcode'],
+            'replaced_by'        => ['replaced_by', 'nsnreplacement1', 'replacement', 'successor'],
         ],
     ];
 
     public function handle(): int
     {
-        $path  = (string) $this->argument('path');
-        $type  = (string) $this->option('type');
-        $table = (string) $this->option('table');
-        $chunk = max(100, min((int) $this->option('chunk'), 20000));
-        $limit = max(0, (int) $this->option('limit'));
-        $dry   = (bool) $this->option('dry-run');
+        $path       = (string) $this->argument('path');
+        $type       = (string) $this->option('type');
+        $table      = (string) $this->option('table');
+        $chunk      = max(100, min((int) $this->option('chunk'), 50000));
+        $limit      = max(0, (int) $this->option('limit'));
+        $startRowid = max(0, (int) $this->option('start-rowid'));
+        $dry        = (bool) $this->option('dry-run');
 
         if (!is_file($path)) {
             $this->error("Ficheiro não existe: {$path}");
@@ -153,7 +167,10 @@ class NatoDbImportCommand extends Command
 
         $stmt = $pdo->prepare($sql);
 
-        $lastId = 0;
+        $lastId = $startRowid;
+        if ($startRowid > 0) {
+            $this->warn("⏵  Resume: começar a partir do rowid {$startRowid}");
+        }
         $inserted = 0;
         $skipped  = 0;
         $errors   = 0;
@@ -249,13 +266,22 @@ class NatoDbImportCommand extends Command
             }
         }
 
-        // Primary key obrigatório
+        // Primary key obrigatório — com fallback inteligente para NSN catalogs
+        // que não têm coluna `nsn` directa mas têm fsc + niin separados (típico
+        // em SEGA SEGK Turquia, FLIS US, e outros catálogos NATO oficiais).
         $primary = $type === 'ncage' ? 'cage_code' : 'nsn';
         if (!isset($map[$primary])) {
-            throw new \RuntimeException(
-                "Coluna primary '{$primary}' não detectada. Use --map {$primary}=<col_no_sqlite>. "
-                . 'Colunas SQLite: ' . implode(', ', $sqliteCols)
-            );
+            // Fallback NSN: aceitar se temos fsc + niin (vamos construir o NSN)
+            if ($type === 'nsn' && isset($map['fsc']) && isset($map['niin'])) {
+                // OK — mapRow vai construir nsn = fsc . niin
+                // Não setamos map['nsn'] aqui — o mapRow detecta a ausência e constrói.
+            } else {
+                throw new \RuntimeException(
+                    "Coluna primary '{$primary}' não detectada. Use --map {$primary}=<col_no_sqlite>. "
+                    . 'Colunas SQLite: ' . implode(', ', $sqliteCols)
+                    . ($type === 'nsn' ? '. Alternativa: assegurar que --map inclui fsc=<col> e niin=<col>.' : '')
+                );
+            }
         }
 
         return $map;
@@ -270,20 +296,36 @@ class NatoDbImportCommand extends Command
             $rec[$field] = ($val === '' || $val === null) ? null : $val;
         }
 
-        $primary = $type === 'ncage' ? 'cage_code' : 'nsn';
-        if (empty($rec[$primary])) return null;
-
         if ($type === 'ncage') {
+            if (empty($rec['cage_code'])) return null;
             $rec['cage_code'] = strtoupper((string) $rec['cage_code']);
             if (mb_strlen($rec['cage_code']) > 10) return null;
             $rec['company_name'] = $rec['company_name'] ?? '(sem nome)';
         } else {
-            $rec['nsn'] = NatoNsn::normalizeNsn((string) $rec['nsn']) ?? null;
+            // NSN: aceita 3 formatos de input
+            //   1. Coluna nsn directa (13 dígitos com ou sem hifens)
+            //   2. fsc(4) + niin(9 = NCB(2)+NIIN(7)) — caso turco SEGA SEGK
+            //   3. fsc(4) + niin(7) (NCB ausente → ignora, sem normalizar)
+            if (empty($rec['nsn'])) {
+                $fsc  = (string) ($rec['fsc']  ?? '');
+                $niin = (string) ($rec['niin'] ?? '');
+                if ($fsc !== '' && $niin !== '') {
+                    // Limpa: só dígitos. Caso 2: fsc(4) + niin(9 = NCB+NIIN) = 13.
+                    $fscDigits  = preg_replace('/\D/', '', $fsc) ?? '';
+                    $niinDigits = preg_replace('/\D/', '', $niin) ?? '';
+                    $rec['nsn'] = $fscDigits . $niinDigits;
+                }
+            }
+
+            $rec['nsn'] = NatoNsn::normalizeNsn((string) ($rec['nsn'] ?? '')) ?? null;
             if (!$rec['nsn']) return null;
+
             $parts = explode('-', $rec['nsn']);
             $rec['fsc']  = $rec['fsc']  ?? $parts[0];
             $rec['ncb']  = $rec['ncb']  ?? $parts[1];
-            $rec['niin'] = $rec['niin'] ?? ($parts[2] . $parts[3]);
+            $rec['niin'] = ($parts[2] . $parts[3]);  // Sempre 7 dígitos, override input
+            // Status code (NiinStatusCode = 'C' canceled, 'X' replaced, etc.)
+            // Não persistimos directamente — só usamos se replaced_by_xxx existir
         }
 
         // raw = sample do row original (debug / forensics)
