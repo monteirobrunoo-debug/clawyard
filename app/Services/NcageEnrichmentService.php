@@ -137,28 +137,56 @@ class NcageEnrichmentService
     {
         $system = <<<PROMPT
 És um analista de procurement do PartYard / HP-Group. Recebes:
-  • Um código CAGE/NCAGE (NATO Commercial And Government Entity)
-  • Snippets de Tavily com referências a esse código
+  • Um código CAGE/NCAGE específico: {$cage}
+  • Snippets de Tavily
 
 Devolve APENAS este JSON (sem markdown, sem prefácio):
 
 {
-  "name": "nome canónico da empresa (ex: 'RHEINMETALL AG'). Vazio se não tens evidência clara.",
-  "country_code": "ISO-2 do país (ex: 'DE', 'US', 'TR'). Vazio se desconhecido.",
-  "country_name": "nome curto do país (ex: 'Germany'). Vazio se desconhecido.",
-  "city": "cidade da sede. Vazio se desconhecido.",
-  "website": "URL oficial (https://...). Vazio se desconhecido."
+  "name": "nome canónico da empresa OU vazio",
+  "country_code": "ISO-2 do país OU vazio",
+  "country_name": "nome curto do país OU vazio",
+  "city": "cidade da sede OU vazio",
+  "website": "URL oficial https:// OU vazio",
+  "evidence_phrase": "frase EXACTA dos snippets que liga {$cage} à empresa OU vazio"
 }
 
-REGRAS:
-  • Nome: APENAS se aparecer LITERALMENTE associado ao CAGE nos snippets
-    ("CAGE {$cage} = X", "{$cage} is X", "Manufacturer: X (CAGE {$cage})").
-    Se vês uma empresa solta num site genérico sem ligação ao CAGE,
-    deixa vazio.
-  • NUNCA inventes empresas. Falso negativo é melhor que falso positivo —
-    o operador humano vai usar isto para decisões de procurement.
-  • Recusa empresas chinesas (.cn) e russas (.ru) — política HP-Group.
-  • Prefere fontes oficiais NSPA, DLA, NATO Codification Bureau.
+REGRAS CRÍTICAS (anti-falso-positivo):
+
+1. EVIDÊNCIA OBRIGATÓRIA: O nome só é válido se houver UMA das seguintes
+   frases LITERALMENTE nos snippets, com o código {$cage} VISÍVEL:
+     • "CAGE {$cage}" + nome empresa na MESMA frase ou frase adjacente
+     • "{$cage} – X" / "{$cage} - X" / "{$cage}: X"
+     • "Manufacturer: X" + "CAGE {$cage}" na MESMA página
+     • "X (CAGE {$cage})" / "X / CAGE {$cage}"
+   Cole essa frase no campo evidence_phrase.
+
+2. NÃO ATRIBUIR SÓ PORQUE O NOME APARECE: Se vês "Curtiss-Wright" mencionado
+   numa página que também menciona o CAGE {$cage}, isso NÃO chega. Tens de
+   ver os dois LIGADOS na mesma frase/parágrafo.
+
+3. NUNCA usar o nome mais comum em defesa por defeito. Se não tens prova
+   directa, devolve TUDO vazio. É preferível 0% de hits do que 50% de
+   falsos positivos que poluem a base de dados.
+
+4. SE O CAGE NÃO APARECE LITERALMENTE NOS SNIPPETS, devolve vazio. O
+   Tavily devia trazer páginas que mencionam o CAGE — se não há, é porque
+   não há boa evidência online.
+
+5. Recusa empresas chinesas (.cn) e russas (.ru).
+
+VERIFICAÇÃO ANTES DE DEVOLVER:
+  • Procuro mentalmente "{$cage}" no snippet — vejo?
+  • Procuro o nome que vou devolver na mesma frase/parágrafo que o CAGE?
+  • Se respondi "não" a qualquer uma → devolvo VAZIO.
+
+Exemplos:
+
+INPUT snippet: "Manufacturer: Daken S.p.a. CAGE Code: 22670. Italian battery..."
+OUTPUT: {"name":"Daken S.p.a.","evidence_phrase":"Manufacturer: Daken S.p.a. CAGE Code: 22670"}
+
+INPUT snippet: "Curtiss-Wright is a major defense supplier. Other companies with CAGE 15120 also..."
+OUTPUT: {"name":"","evidence_phrase":""} (Curtiss-Wright NÃO está ligado ao CAGE 15120 — só são mencionados em frases adjacentes)
 PROMPT;
 
         $userMsg = "CAGE: {$cage}\n\n=== TAVILY HITS ===\n"
@@ -188,10 +216,47 @@ PROMPT;
             throw new \RuntimeException('JSON decode failed');
         }
 
-        // Defesa em profundidade — nome tem de aparecer no Tavily raw
-        $name = trim((string) ($decoded['name'] ?? ''));
+        // Defesa em profundidade — TRÊS validações cumulativas:
+        $name           = trim((string) ($decoded['name'] ?? ''));
+        $evidencePhrase = trim((string) ($decoded['evidence_phrase'] ?? ''));
+
+        // (1) O CAGE TEM de aparecer literalmente no Tavily raw — senão a
+        //     query nem trouxe o catálogo certo.
+        if (!str_contains(mb_strtolower($tavilyRaw), mb_strtolower($cage))) {
+            Log::info('NcageEnrichmentService: CAGE não aparece no Tavily raw — dropping name', [
+                'cage' => $cage, 'name_claimed' => $name,
+            ]);
+            $name = '';
+        }
+
+        // (2) A evidence_phrase TEM de aparecer no Tavily raw E TEM de conter o CAGE
+        if ($name !== '' && $evidencePhrase !== '') {
+            $rawLower    = mb_strtolower($tavilyRaw);
+            $phraseLower = mb_strtolower($evidencePhrase);
+            $cageLower   = mb_strtolower($cage);
+
+            $phraseInRaw = str_contains($rawLower, $phraseLower);
+            $cageInPhrase = str_contains($phraseLower, $cageLower);
+
+            if (!$phraseInRaw || !$cageInPhrase) {
+                Log::info('NcageEnrichmentService: evidence_phrase invalid', [
+                    'cage' => $cage, 'name_claimed' => $name,
+                    'phrase_in_raw' => $phraseInRaw,
+                    'cage_in_phrase' => $cageInPhrase,
+                ]);
+                $name = '';
+            }
+        } elseif ($name !== '' && $evidencePhrase === '') {
+            // Sem evidence_phrase a empresa não foi devidamente ligada ao CAGE.
+            Log::info('NcageEnrichmentService: name without evidence_phrase — dropping', [
+                'cage' => $cage, 'name_claimed' => $name,
+            ]);
+            $name = '';
+        }
+
+        // (3) Fallback antigo: nome tem de existir no Tavily (já implícito por #2)
         if ($name !== '' && !$this->appearsInText($name, $tavilyRaw)) {
-            Log::info('NcageEnrichmentService: name dropped (no Tavily evidence)', [
+            Log::info('NcageEnrichmentService: name not in Tavily — dropping', [
                 'cage' => $cage, 'name_claimed' => $name,
             ]);
             $name = '';
