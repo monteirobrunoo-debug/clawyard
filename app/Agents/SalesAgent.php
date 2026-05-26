@@ -334,7 +334,13 @@ SPECIALTY;
         $buf  = '';
 
         while (!$body->eof()) {
-            $buf .= $body->read(1024);
+            try {
+                $buf .= $body->read(1024);
+            } catch (\Throwable $readErr) {
+                if ($full === '') throw $readErr;
+                \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
+                break;
+            }
             while (($pos = strpos($buf, "\n")) !== false) {
                 $line = substr($buf, 0, $pos);
                 $buf  = substr($buf, $pos + 1);
