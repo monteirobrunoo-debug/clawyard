@@ -106,11 +106,19 @@ class NsnLookupTool implements AgentToolInterface
                     'oem'  => $local['oem'] ?? '?',
                     'cage' => $local['ncage_codes'][0] ?? '?',
                 ]);
+
+                // 0.5. ALSO fetch distributor + email layer via Tavily (cached 7d).
+                //      Local NATO dá dados oficiais (descrição, CAGE, PN, OEM).
+                //      Tavily layer adiciona quem REALMENTE vende + emails — sem
+                //      isto, o agente tem o que é, mas não a QUEM contactar.
+                $distIntel = $this->fetchDistributorIntel($nsn, $hint, $local);
+                $costDist  = ($distIntel['_cached'] ?? false) ? 0 : 0.013;
+
                 return [
                     'ok'       => true,
-                    'result'   => $this->formatLocalResult($local),
-                    'cost_usd' => 0,
-                    'source'   => 'nato_local',
+                    'result'   => $this->formatLocalResult($local, $distIntel),
+                    'cost_usd' => $costDist,
+                    'source'   => $costDist > 0 ? 'nato_local+tavily_dist' : 'nato_local+cached_dist',
                 ];
             }
             // Local miss: cai para Tavily (NSN pode existir mas não estar no nosso dataset)
@@ -182,11 +190,169 @@ class NsnLookupTool implements AgentToolInterface
     }
 
     /**
+     * Fetch Tavily-based distributor/email intel layered ON TOP of local hit.
+     * Cached 7d por NSN (NSN data é stable, distribuidores mudam pouco).
+     *
+     * @return array{distributors:array,contact_emails:array,evidence_urls:array,_cached:bool}|null
+     */
+    private function fetchDistributorIntel(string $nsn, string $hint, array $local): ?array
+    {
+        $cacheKey = 'nsn_dist:v1:' . $nsn;
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            $cached['_cached'] = true;
+            return $cached;
+        }
+
+        if (!$this->web->isAvailable()) return null;
+
+        // Query enriquecida com hints do local hit (descrição em turco + OEM PN ajudam Tavily)
+        $bits = ['NSN ' . $nsn];
+        if (!empty($local['oem']))             $bits[] = $local['oem'];
+        if (!empty($local['manufacturer_pn'])) $bits[] = '"' . $local['manufacturer_pn'] . '"';
+        if (!empty($local['description']))     $bits[] = '"' . mb_substr($local['description'], 0, 50) . '"';
+        if ($hint !== '')                      $bits[] = '"' . mb_substr($hint, 0, 60) . '"';
+        $bits[] = 'distributor OR supplier OR contact email';
+        $query = mb_substr(implode(' ', $bits), 0, 380);
+
+        try {
+            $raw = $this->web->search($query, maxResults: 6, searchDepth: 'basic');
+        } catch (\Throwable $e) {
+            Log::warning('NsnLookupTool: dist Tavily failed', [
+                'nsn' => $nsn, 'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+
+        if (!is_string($raw) || mb_strlen($raw) < 50) return null;
+
+        try {
+            $intel = $this->extractDistributorIntel($nsn, $local, $raw);
+        } catch (\Throwable $e) {
+            Log::warning('NsnLookupTool: dist Haiku extract failed', [
+                'nsn' => $nsn, 'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+
+        Cache::put($cacheKey, $intel, now()->addDays(7));
+        $intel['_cached'] = false;
+        return $intel;
+    }
+
+    /**
+     * Haiku extrai SÓ distribuidores + emails dado o contexto local.
+     */
+    private function extractDistributorIntel(string $nsn, array $local, string $tavilyRaw): array
+    {
+        $context = "NSN: {$nsn}";
+        if (!empty($local['description']))     $context .= "\nDescription: " . $local['description'];
+        if (!empty($local['oem']))             $context .= "\nOEM: " . $local['oem'];
+        if (!empty($local['manufacturer_pn'])) $context .= "\nOEM Part Number: " . $local['manufacturer_pn'];
+        if (!empty($local['fsc']))             $context .= "\nFSC: " . $local['fsc'];
+
+        $system = <<<PROMPT
+És analista de procurement do PartYard / HP-Group. Acabaste de receber dados
+oficiais NATO sobre um NSN (descrição, OEM, part number). Agora a tua tarefa
+é encontrar QUEM vende este item — distribuidores aprovados + emails de
+contacto reais.
+
+Devolve APENAS este JSON (sem markdown, sem prefácio):
+
+{
+  "distributors": [
+    {"name": "nome distribuidor", "country": "ISO-2 ou nome curto",
+     "role": "OEM" | "distributor" | "broker", "url": "https://..."},
+    ... máx 5 ...
+  ],
+  "contact_emails": ["sales@oem.com", "info@distributor.com", ... máx 5],
+  "evidence_urls": ["https://..", "https://..", ... máx 5]
+}
+
+REGRAS DE EVIDÊNCIA (anti-hallucination):
+  • Distribuidor: nome+URL têm de aparecer literalmente nos snippets — não
+    inferir.
+  • Emails: têm de aparecer LITERALMENTE no texto. Zero tolerância para
+    .com/.eu inventados.
+  • Se não tens evidência, devolve listas vazias. FALSO NEGATIVO É SEMPRE
+    MELHOR QUE FALSO POSITIVO — operador humano vai contactar estes leads.
+
+REGRAS DE POLÍTICA:
+  • EXCLUI fornecedores chineses (.cn) / russos (.ru) — política HP-Group.
+  • EXCLUI marketplaces (Alibaba, eBay, IndiaMart).
+  • PREFERE EU/US/UK/JP/KR/IL/CA.
+PROMPT;
+
+        $userMsg = $context . "\n\n=== TAVILY HITS ===\n"
+                 . mb_substr($tavilyRaw, 0, 4000)
+                 . "\n=== FIM ===\n\nDevolve o JSON.";
+
+        $haikuModel = (string) config('services.anthropic.model_haiku', 'claude-haiku-4-5-20251001');
+
+        $res = $this->dispatcher->dispatch(
+            systemPrompt: $system,
+            userMessage:  $userMsg,
+            maxTokens:    800,
+            model:        $haikuModel,
+        );
+
+        if (!($res['ok'] ?? false)) {
+            throw new \RuntimeException('Haiku failed: ' . ($res['error'] ?? 'unknown'));
+        }
+
+        $raw = trim((string) ($res['text'] ?? ''));
+        $clean = preg_replace('/^```(?:json)?\s*|\s*```\s*$/m', '', $raw) ?? $raw;
+        if (!preg_match('/\{[\s\S]*\}/', $clean, $m)) {
+            throw new \RuntimeException('LLM did not return JSON');
+        }
+        $decoded = json_decode($m[0], true);
+        if (!is_array($decoded)) {
+            throw new \RuntimeException('JSON decode failed');
+        }
+
+        // Defesa: nomes/emails têm de aparecer no Tavily raw
+        $haystack = mb_strtolower($tavilyRaw);
+        $appearsInTavily = function (string $needle) use ($haystack): bool {
+            $needle = trim($needle);
+            if (mb_strlen($needle) < 3) return false;
+            return str_contains($haystack, mb_strtolower($needle));
+        };
+
+        return [
+            'distributors'    => array_slice(array_values(array_filter(
+                array_map(function ($d) use ($appearsInTavily) {
+                    if (!is_array($d)) return null;
+                    $name = trim((string) ($d['name'] ?? ''));
+                    if ($name === '' || !$appearsInTavily($name)) return null;
+                    $url = trim((string) ($d['url'] ?? ''));
+                    return [
+                        'name'    => mb_substr($name, 0, 80),
+                        'country' => mb_substr(trim((string) ($d['country'] ?? '')), 0, 30),
+                        'role'    => mb_substr(trim((string) ($d['role']    ?? '')), 0, 20),
+                        'url'     => preg_match('#^https?://#', $url) ? mb_substr($url, 0, 500) : '',
+                    ];
+                }, (array) ($decoded['distributors'] ?? []))
+            )), 0, 5),
+            'contact_emails'  => array_slice(array_values(array_filter(
+                array_map(fn ($e) => trim((string) $e), (array) ($decoded['contact_emails'] ?? [])),
+                fn ($e) => preg_match('/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/', $e)
+                       && str_contains(mb_strtolower($e), '@')
+                       && str_contains(mb_strtolower($tavilyRaw), mb_strtolower($e))
+            )), 0, 5),
+            'evidence_urls'   => array_slice(array_values(array_filter(
+                array_map(fn ($u) => trim((string) $u), (array) ($decoded['evidence_urls'] ?? [])),
+                fn ($u) => preg_match('#^https?://#', $u)
+            )), 0, 5),
+            '_cached'         => false,
+        ];
+    }
+
+    /**
      * Formata resultado vindo do dataset local NATO (NatoCodificationService).
      * Estrutura é diferente do Tavily (temos manufacturer completo), portanto
      * tem o seu próprio formatter — mais rico em dados oficiais.
      */
-    private function formatLocalResult(array $local): string
+    private function formatLocalResult(array $local, ?array $distIntel = null): string
     {
         $nsn = (string) ($local['nsn'] ?? '');
         $out = "NSN {$nsn}  [fonte: dataset NATO local — dados oficiais]";
@@ -229,7 +395,40 @@ class NsnLookupTool implements AgentToolInterface
             if (!empty($mfg['status']))   $out .= "\n  • Estado: " . $mfg['status'];
         }
 
-        $out .= "\n\n(Fonte oficial NATO — sem necessidade de pesquisa web.)";
+        // Distribuidores + emails (Tavily layer cached 7d) — quem REALMENTE vende
+        if ($distIntel && (!empty($distIntel['distributors']) || !empty($distIntel['contact_emails']))) {
+            if (!empty($distIntel['distributors'])) {
+                $out .= "\n\nDistribuidores identificados (preferred EU/US/UK):";
+                foreach ($distIntel['distributors'] as $d) {
+                    $line = "  • {$d['name']}";
+                    if (!empty($d['country'])) $line .= " ({$d['country']})";
+                    if (!empty($d['role']))    $line .= " [{$d['role']}]";
+                    if (!empty($d['url']))     $line .= " — {$d['url']}";
+                    $out .= "\n" . $line;
+                }
+            }
+
+            if (!empty($distIntel['contact_emails'])) {
+                $out .= "\n\nContactos email (verificar antes de usar):";
+                foreach ($distIntel['contact_emails'] as $e) {
+                    $out .= "\n  → {$e}";
+                }
+            }
+
+            if (!empty($distIntel['evidence_urls'])) {
+                $out .= "\n\nEvidence:";
+                foreach ($distIntel['evidence_urls'] as $u) {
+                    $out .= "\n  - {$u}";
+                }
+            }
+
+            $out .= ($distIntel['_cached'] ?? false)
+                ? "\n\n(NATO oficial + distribuidores cached 7d — $0)"
+                : "\n\n(NATO oficial + distribuidores fresh Tavily — ~\$0.013, cached 7d)";
+        } else {
+            $out .= "\n\n(Fonte oficial NATO — distribuidores não encontrados via web.)";
+        }
+
         return $out;
     }
 
