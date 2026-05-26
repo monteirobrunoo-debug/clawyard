@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
 use App\Agents\Traits\SharedContextTrait;
@@ -32,6 +33,7 @@ class MilDefAgent implements AgentInterface
     use NsnLookupTrait;
     use AnthropicKeyTrait;
     use SharedContextTrait;
+    use HandlesAnthropicStream;
 
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
@@ -395,36 +397,18 @@ SYSPROMPT;
             ],
         ]);
 
-        $body     = $response->getBody();
-        $full     = '';
-        $buf      = '';
-        $lastBeat = time();
-
-        while (!$body->eof()) {
-            $buf .= $body->read(1024);
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            if ($heartbeat && (time() - $lastBeat) >= 5) {
-                $heartbeat('processando inteligência de defesa');
-                $lastBeat = time();
-            }
-        }
+        // Stream com graceful handling de "Error in input stream":
+        // o trait apanha read() exceptions após resposta parcial e sai
+        // limpo no message_stop event antes de qualquer read final que
+        // possa falhar. Fix sistémico 2026-05-26.
+        $full = $this->readAnthropicStream(
+            body:           $response->getBody(),
+            onDelta:        $onChunk,
+            heartbeat:      $heartbeat,
+            heartbeatEvery: 5,
+            heartbeatLabel: 'processando inteligência de defesa',
+            agentLabel:     'MilDefAgent',
+        );
 
         $this->publishSharedContext($full);
         return $full;
