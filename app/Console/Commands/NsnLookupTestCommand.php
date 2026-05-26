@@ -40,6 +40,8 @@ class NsnLookupTestCommand extends Command
 
         $this->line($res['result']);
         $this->line('');
+        $source = (string) ($res['source'] ?? 'desconhecida');
+        $this->info('Fonte: ' . $source);
         $this->info('Cost: $' . number_format((float) ($res['cost_usd'] ?? 0), 4));
 
         return self::SUCCESS;

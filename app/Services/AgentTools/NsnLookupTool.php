@@ -3,6 +3,7 @@
 namespace App\Services\AgentTools;
 
 use App\Services\AgentSwarm\AgentDispatcher;
+use App\Services\NatoCodificationService;
 use App\Services\WebSearchService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -38,6 +39,7 @@ class NsnLookupTool implements AgentToolInterface
     public function __construct(
         private WebSearchService $web,
         private AgentDispatcher $dispatcher,
+        private NatoCodificationService $nato,
     ) {}
 
     public function name(): string { return 'nsn_lookup'; }
@@ -94,6 +96,27 @@ class NsnLookupTool implements AgentToolInterface
 
         $hint = trim((string) ($input['item_hint'] ?? ''));
 
+        // 0. LOCAL FIRST — Postgres em <50ms, $0, dados oficiais NATO.
+        //    Substitui Tavily quando temos data importada (descansa Cor. Rodrigues).
+        if ($this->nato->isAvailable()) {
+            $local = $this->nato->lookupNsn($nsn);
+            if ($local) {
+                Log::info('NsnLookupTool: local NATO hit', [
+                    'nsn'  => $nsn,
+                    'oem'  => $local['oem'] ?? '?',
+                    'cage' => $local['ncage_codes'][0] ?? '?',
+                ]);
+                return [
+                    'ok'       => true,
+                    'result'   => $this->formatLocalResult($local),
+                    'cost_usd' => 0,
+                    'source'   => 'nato_local',
+                ];
+            }
+            // Local miss: cai para Tavily (NSN pode existir mas não estar no nosso dataset)
+            Log::info('NsnLookupTool: local NATO miss, fallback Tavily', ['nsn' => $nsn]);
+        }
+
         // 1. Cache check — NSN data é stable, 7d é seguro
         $cacheKey = 'nsn_lookup:v1:' . $nsn . ($hint !== '' ? ':' . md5($hint) : '');
         $cached = Cache::get($cacheKey);
@@ -103,11 +126,12 @@ class NsnLookupTool implements AgentToolInterface
                 'ok'       => true,
                 'result'   => $this->formatResult($nsn, $cached),
                 'cost_usd' => 0,
+                'source'   => 'tavily_cache',
             ];
         }
 
         if (!$this->web->isAvailable()) {
-            return ['ok' => false, 'error' => 'Tavily API não configurada.'];
+            return ['ok' => false, 'error' => 'Tavily API não configurada e NSN não está no dataset local NATO.'];
         }
 
         // 2. Tavily — query optimizada para sites com NSN data
@@ -135,6 +159,7 @@ class NsnLookupTool implements AgentToolInterface
                 'ok'       => true,
                 'result'   => "Tavily raw (Claude extract falhou):\n" . mb_substr($raw, 0, 3000),
                 'cost_usd' => 0.008,
+                'source'   => 'tavily_raw',
             ];
         }
 
@@ -152,7 +177,51 @@ class NsnLookupTool implements AgentToolInterface
             'ok'       => true,
             'result'   => $this->formatResult($nsn, $intel),
             'cost_usd' => 0.013,
+            'source'   => 'tavily_fresh',
         ];
+    }
+
+    /**
+     * Formata resultado vindo do dataset local NATO (NatoCodificationService).
+     * Estrutura é diferente do Tavily (temos manufacturer completo), portanto
+     * tem o seu próprio formatter — mais rico em dados oficiais.
+     */
+    private function formatLocalResult(array $local): string
+    {
+        $nsn = (string) ($local['nsn'] ?? '');
+        $out = "NSN {$nsn}  [fonte: dataset NATO local — dados oficiais]";
+
+        if (!empty($local['fsc']))             $out .= "\nFSC: " . $local['fsc'];
+        if (!empty($local['description']))     $out .= "\nDescription: " . $local['description'];
+        if (!empty($local['unit_of_issue']))   $out .= "\nUnit of Issue: " . $local['unit_of_issue'];
+        if (!empty($local['manufacturer_pn'])) $out .= "\nPart Number (OEM): " . $local['manufacturer_pn'];
+        if (!empty($local['hazmat']))          $out .= "\nHazardous Material Code: " . $local['hazmat'];
+
+        if (!empty($local['ncb'])) {
+            $line = "NCB: " . $local['ncb'];
+            if (!empty($local['ncb_country'])) $line .= " ({$local['ncb_country']})";
+            $out .= "\n" . $line;
+        }
+
+        if (!empty($local['oem']))     $out .= "\nOEM: " . $local['oem'];
+
+        $mfg = $local['manufacturer'] ?? null;
+        if (is_array($mfg)) {
+            $out .= "\n\nFabricante (NCAGE oficial):";
+            $out .= "\n  • CAGE: " . ($mfg['cage_code'] ?? '?');
+            if (!empty($mfg['name']))     $out .= "\n  • Nome: " . $mfg['name'];
+            if (!empty($mfg['country']))  $out .= "\n  • País: " . $mfg['country'];
+            if (!empty($mfg['city']))     $out .= "\n  • Cidade: " . $mfg['city'];
+            if (!empty($mfg['address']))  $out .= "\n  • Morada: " . $mfg['address'];
+            if (!empty($mfg['postcode'])) $out .= "\n  • CP: " . $mfg['postcode'];
+            if (!empty($mfg['phone']))    $out .= "\n  • Tel: " . $mfg['phone'];
+            if (!empty($mfg['email']))    $out .= "\n  • Email: " . $mfg['email'];
+            if (!empty($mfg['website']))  $out .= "\n  • Web: " . $mfg['website'];
+            if (!empty($mfg['status']))   $out .= "\n  • Estado: " . $mfg['status'];
+        }
+
+        $out .= "\n\n(Fonte oficial NATO — sem necessidade de pesquisa web.)";
+        return $out;
     }
 
     /**
