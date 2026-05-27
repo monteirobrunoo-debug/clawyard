@@ -95,9 +95,34 @@ class NspaImporter implements TenderImporterInterface
         $sheet       = $spreadsheet->getSheetByName(self::SHEET_NAME)
             ?? $spreadsheet->getActiveSheet();
 
-        $headers        = [];
-        $emptyRunLength = 0;
-        $rowIndex       = 0;
+        $headers          = [];
+        $emptyRunLength   = 0;
+        $rowIndex         = 0;
+        $headerlessFormat = false;
+
+        // Mapping posicional para formato headerless (NSPA 2026-05-27+):
+        // A=ClosingDate, B=CollectiveNumber, C=LastModified, D=vazio,
+        // E=Title, F=TypeDescription, G=Colaborador, H=Status, I=Oportunidade
+        // Detectado quando row 1 NÃO tem nenhum cell começando com "RFP_".
+        $positionalHeaders = [
+            'RFP_ClosingDate',           // A
+            'RFP_CollectiveNumber',      // B
+            'RFP_LastModifiedDate',      // C
+            'RFP_PurchasingOrganisation',// D (vazio no novo formato)
+            'RFP_Title',                 // E
+            'RFP_TypeDescription',       // F
+            'Colaborador',               // G
+            'Status',                    // H
+            'Oportunidade nº',           // I
+            'Coluna1',                   // J (não existe — defensive)
+            'Nivel',                     // K
+            'Data de Distribuição',      // L
+            'Valor da Offer Sub',        // M
+            'Currency',                  // N
+            'tempo de hora',             // O
+            null, null,                  // P, Q (blanks no schema antigo)
+            'RESULTADO',                 // R
+        ];
 
         foreach ($sheet->getRowIterator() as $row) {
             $rowIndex++;
@@ -109,12 +134,31 @@ class NspaImporter implements TenderImporterInterface
             }
 
             if ($rowIndex === 1) {
-                // Normalise header names: trim trailing spaces ("Nivel " → "Nivel")
-                $headers = array_map(
-                    fn($h) => is_string($h) ? trim($h) : $h,
-                    $cells
-                );
-                continue;
+                // Detect: does row 1 look like a canonical header row?
+                // Canonical headers always start with "RFP_" (3 of the cells).
+                $hasCanonicalHeaders = false;
+                foreach ($cells as $c) {
+                    if (is_string($c) && str_starts_with(trim($c), 'RFP_')) {
+                        $hasCanonicalHeaders = true;
+                        break;
+                    }
+                }
+
+                if ($hasCanonicalHeaders) {
+                    // Old format: row 1 has headers. Use them directly.
+                    $headers = array_map(
+                        fn($h) => is_string($h) ? trim($h) : $h,
+                        $cells
+                    );
+                    continue;
+                }
+
+                // New format (NSPA 2026-05-27+): no header row, data starts on row 1.
+                // Use positional mapping. Fall through to process row 1 as data.
+                $headerlessFormat = true;
+                $headers          = $positionalHeaders;
+                \Log::info('NspaImporter: headerless format detected, using positional mapping');
+                // NO continue — row 1 is data, process it below.
             }
 
             // Map cell index → header name. Unnamed columns become "col_<n>".
