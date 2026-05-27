@@ -342,17 +342,84 @@ SPECIALTY;
         $sys = $this->sanitizeForApi($this->enrichSystemPrompt($this->systemPrompt));
         if ($bookCtx) $sys .= "\n\n" . $this->sanitizeForApi($bookCtx);
 
+        // ── Primary attempt: Opus + thinking (rich, expensive, can fail) ──
+        try {
+            $full = $this->callAnthropicStream(
+                config: [
+                    'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                    'max_tokens' => 16000,
+                    'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
+                    'system'     => $sys,
+                    'messages'   => $messages,
+                    'stream'     => true,
+                ],
+                headers: $this->headersForMessage($augmented),
+                onChunk: $onChunk,
+                heartbeat: $heartbeat,
+                heartbeatLabel: 'Eng. Victor a planear',
+                augmented: $augmented,
+                messages: $messages,
+            );
+            $this->publishSharedContext($full);
+            return $full;
+        } catch (\Throwable $primaryErr) {
+            \Log::warning('EngineerAgent: primary call failed, retrying with Sonnet+no-thinking', [
+                'error' => $primaryErr->getMessage(),
+                'exception' => get_class($primaryErr),
+            ]);
+            if ($heartbeat) $heartbeat('⚠️ a tentar fallback (Sonnet, sem thinking)');
+        }
+
+        // ── Fallback attempt: Sonnet, no thinking, smaller max_tokens ──
+        try {
+            $full = $this->callAnthropicStream(
+                config: [
+                    'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                    'max_tokens' => 4096,
+                    'system'     => $sys,
+                    'messages'   => $messages,
+                    'stream'     => true,
+                ],
+                headers: $this->headersForMessage($augmented),
+                onChunk: $onChunk,
+                heartbeat: $heartbeat,
+                heartbeatLabel: 'Eng. Victor a responder (modo rápido)',
+                augmented: $augmented,
+                messages: $messages,
+            );
+            $this->publishSharedContext($full);
+            return $full;
+        } catch (\Throwable $fallbackErr) {
+            \Log::error('EngineerAgent: BOTH primary and fallback failed', [
+                'fallback_error' => $fallbackErr->getMessage(),
+            ]);
+            // Último recurso: mensagem clara ao user (não-empty para evitar
+            // "Error in input stream" no frontend).
+            $emergency = "⚠️ Eng. Victor temporariamente indisponível (Anthropic API instável). "
+                       . "Tenta novamente em 30 segundos. Se persistir, contacta o Bruno.\n\n"
+                       . "Erro técnico: " . mb_substr($fallbackErr->getMessage(), 0, 100);
+            $onChunk($emergency);
+            return $emergency;
+        }
+    }
+
+    /**
+     * Helper para chamada Anthropic com stream + leitura defensiva.
+     * Usado pela primary E fallback paths do stream().
+     */
+    private function callAnthropicStream(
+        array $config,
+        array $headers,
+        callable $onChunk,
+        ?callable $heartbeat,
+        string $heartbeatLabel,
+        $augmented,
+        array $messages,
+    ): string {
         $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($augmented),
+            'headers' => $headers,
             'stream'  => true,
-            'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
-                'max_tokens' => 16000,
-                'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                'system'     => $sys,
-                'messages'   => $messages,
-                'stream'     => true,
-            ],
+            'json'    => $config,
         ]);
 
         $body     = $response->getBody();
@@ -365,20 +432,21 @@ SPECIALTY;
                 $buf .= $body->read(1024);
             } catch (\Throwable $readErr) {
                 if ($full === '') {
-                    // Diagnóstico: read falhou ANTES de receber qualquer chunk.
-                    // Logar contexto para identificar a causa raiz.
                     \Log::error('EngineerAgent: stream read failed BEFORE any content', [
-                        'msg'           => $readErr->getMessage(),
-                        'exception'     => get_class($readErr),
-                        'response_code' => method_exists($response, 'getStatusCode') ? $response->getStatusCode() : 'unknown',
+                        'msg'              => $readErr->getMessage(),
+                        'exception'        => get_class($readErr),
+                        'model'            => $config['model'] ?? 'unknown',
+                        'response_code'    => method_exists($response, 'getStatusCode') ? $response->getStatusCode() : 'unknown',
                         'response_headers' => method_exists($response, 'getHeaders') ? array_map(fn($v) => is_array($v) ? implode(',', $v) : (string)$v, $response->getHeaders()) : [],
-                        'user_id'       => auth()->id() ?? 'guest',
-                        'augmented_len' => is_string($augmented) ? strlen($augmented) : 'array',
-                        'messages_count' => count($messages),
+                        'user_id'          => auth()->id() ?? 'guest',
+                        'augmented_len'    => is_string($augmented) ? strlen($augmented) : 'array',
+                        'messages_count'   => count($messages),
                     ]);
                     throw $readErr;
                 }
-                \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
+                \Log::info('EngineerAgent: stream graceful end after partial response', [
+                    'msg' => $readErr->getMessage(), 'len' => strlen($full),
+                ]);
                 break;
             }
             while (($pos = strpos($buf, "\n")) !== false) {
@@ -390,6 +458,7 @@ SPECIALTY;
                 if ($json === '[DONE]') break 2;
                 $evt = json_decode($json, true);
                 if (!is_array($evt)) continue;
+                if (($evt['type'] ?? '') === 'message_stop') break 2;
                 if (($evt['type'] ?? '') === 'content_block_delta'
                     && ($evt['delta']['type'] ?? '') === 'text_delta') {
                     $text = $evt['delta']['text'] ?? '';
@@ -400,12 +469,11 @@ SPECIALTY;
                 }
             }
             if ($heartbeat && (time() - $lastBeat) >= 3) {
-                $heartbeat('Eng. Victor a planear');
+                $heartbeat($heartbeatLabel);
                 $lastBeat = time();
             }
         }
 
-        $this->publishSharedContext($full);
         return $full;
     }
 
