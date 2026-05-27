@@ -37,5 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Sentry — captura todas as exceções unhandled em produção.
+        // DSN configurado via SENTRY_LARAVEL_DSN no .env. Sem DSN = no-op.
+        \Sentry\Laravel\Integration::handles($exceptions);
     })->create();

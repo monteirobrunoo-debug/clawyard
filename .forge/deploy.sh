@@ -44,6 +44,20 @@ log "2/8 composer install + dump-autoload"
 $FORGE_PHP composer install --no-interaction --prefer-dist --optimize-autoloader --quiet
 $FORGE_PHP composer dump-autoload --optimize -n -q
 
+# ─── 2.5. Smoke test — apanha PHP fatal errors ANTES de tocar Octane ────────
+# Boot do Laravel completo via artisan. Se houver erro fatal (typo, classe
+# inexistente, etc.), abortamos aqui antes de quebrar produção.
+# Pedido directo Bruno 2026-05-27: "estou farto que octane de tantos erros".
+log "2.5/8 smoke test (boot Laravel sem afectar produção)"
+SMOKE_OUT=$($FORGE_PHP artisan tinker --execute='echo "ok\n"; var_dump(config("app.name"));' 2>&1)
+SMOKE_CODE=$?
+if [[ $SMOKE_CODE -ne 0 ]] || [[ "$SMOKE_OUT" != *"ok"* ]]; then
+    err "Smoke test FALHOU — Laravel não boota com este código. Aborto antes de tocar Octane."
+    err "Output: $SMOKE_OUT"
+    exit 1
+fi
+log "  ✓ smoke test passa"
+
 # ─── 3. Migrate ─────────────────────────────────────────────────────────────
 # Depois de autoload (caso migration referencie classes novas).
 # Antes de cache rebuild (caso novas migrations alterem schemas referenciados).

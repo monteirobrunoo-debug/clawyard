@@ -18,6 +18,7 @@
         "phpoffice/phpspreadsheet": "^5.6",
         "phpoffice/phpword": "^1.4",
         "pragmarx/google2fa": "^8.0",
+        "sentry/sentry-laravel": "^4.13",
         "smalot/pdfparser": "^2.12"
     },
     "require-dev": {
