@@ -1525,7 +1525,9 @@
                                             ⏰ {{ $deadlinePT }}
                                         </span>
                                     @endif
-                                    @if($canAssign)
+                                    @if($canAssign || ($isMarine ?? false))
+                                        {{-- Marine: TODOS os authenticated podem apagar (pedido Bruno 2026-05-26).
+                                             Soft-delete + audit log → recuperável. --}}
                                         <button type="button"
                                                 onclick="deleteTender({{ $t->id }}, '{{ addslashes($t->reference ?: ('#' . $t->id)) }}')"
                                                 class="ml-auto rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
@@ -1574,8 +1576,8 @@
                                             </a>
                                         </th>
                                     @endforeach
-                                    @if($canAssign)
-                                        {{-- Coluna de acção (apagar). 2026-05-20. --}}
+                                    @if($canAssign || ($isMarine ?? false))
+                                        {{-- Coluna de acção (apagar). 2026-05-20. Marine aberto a todos 2026-05-26. --}}
                                         <th class="px-3 py-2 text-right w-12"><span class="sr-only">Acções</span></th>
                                     @endif
                                 </tr>
@@ -1691,9 +1693,9 @@
                                                 @endif
                                             </span>
                                         </td>
-                                        {{-- Acção: apagar (manager+). Soft-delete, recuperável.
-                                             2026-05-20 pedido directo. --}}
-                                        @if($canAssign)
+                                        {{-- Acção: apagar. Manager+ em todas as fontes, OU TODOS em Marine.
+                                             2026-05-20 inicial · 2026-05-26 Marine aberto. Soft-delete, recuperável. --}}
+                                        @if($canAssign || ($isMarine ?? false))
                                             <td class="px-3 py-2 align-middle whitespace-nowrap text-right">
                                                 <button type="button"
                                                         onclick="deleteTender({{ $t->id }}, '{{ addslashes($t->reference ?: ('#' . $t->id)) }}')"
@@ -1706,7 +1708,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="{{ $canAssign ? 9 : 8 }}" class="px-3 py-8 text-center text-sm text-gray-500">
+                                        <td colspan="{{ ($canAssign || ($isMarine ?? false)) ? 9 : 8 }}" class="px-3 py-8 text-center text-sm text-gray-500">
                                             Nenhum concurso corresponde aos filtros.
                                         </td>
                                     </tr>

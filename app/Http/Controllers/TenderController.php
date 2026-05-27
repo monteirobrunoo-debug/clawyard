@@ -1542,12 +1542,19 @@ class TenderController extends Controller
     public function destroy(Tender $tender): \Illuminate\Http\RedirectResponse
     {
         $user = Auth::user();
-        if (!$user || !$user->can('tenders.assign')) {
-            abort(403, 'Apenas manager+ pode apagar concursos.');
+        if (!$user) abort(403);
+
+        $isMarine = $tender->source === 'marine';
+
+        // Marine: TODOS os authenticated podem apagar (pedido directo Bruno).
+        // É soft-delete + audit log, portanto recuperável se alguém abusa.
+        // Restantes fontes (NSPA/Acingov/Vortal/etc): mantém regra antiga
+        // (apenas tenders.assign — managers).
+        if (!$isMarine && !$user->can('tenders.assign')) {
+            abort(403, 'Apenas manager+ pode apagar concursos não-Marine.');
         }
 
         $ref = $tender->reference ?: ('#' . $tender->id);
-        $isMarine = $tender->source === 'marine';
         $tender->delete();  // SoftDelete — deleted_at preenchido
 
         \App\Models\AuditLog::record('tender.delete', null, [
