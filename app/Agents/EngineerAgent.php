@@ -342,65 +342,75 @@ SPECIALTY;
         $sys = $this->sanitizeForApi($this->enrichSystemPrompt($this->systemPrompt));
         if ($bookCtx) $sys .= "\n\n" . $this->sanitizeForApi($bookCtx);
 
-        // ── Primary attempt: Opus + thinking (rich, expensive, can fail) ──
-        try {
-            $full = $this->callAnthropicStream(
-                config: [
-                    'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
-                    'max_tokens' => 16000,
-                    'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
-                    'system'     => $sys,
-                    'messages'   => $messages,
-                    'stream'     => true,
-                ],
-                headers: $this->headersForMessage($augmented),
-                onChunk: $onChunk,
-                heartbeat: $heartbeat,
-                heartbeatLabel: 'Eng. Victor a planear',
-                augmented: $augmented,
-                messages: $messages,
-            );
-            $this->publishSharedContext($full);
-            return $full;
-        } catch (\Throwable $primaryErr) {
-            \Log::warning('EngineerAgent: primary call failed, retrying with Sonnet+no-thinking', [
-                'error' => $primaryErr->getMessage(),
-                'exception' => get_class($primaryErr),
-            ]);
-            if ($heartbeat) $heartbeat('⚠️ a tentar fallback (Sonnet, sem thinking)');
+        // Eng. Victor SEMPRE com Opus + thinking. Pedido directo Bruno:
+        // "eu quero ele com thinking".
+        // Resiliência via 3 retries com backoff exponencial (1s, 3s, 7s)
+        // em vez de degradar o modelo. Se todas falham → emergency message
+        // ao user (não-empty, evita "Error in input stream").
+        $opusConfig = [
+            'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+            'max_tokens' => 16000,
+            'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
+            'system'     => $sys,
+            'messages'   => $messages,
+            'stream'     => true,
+        ];
+
+        $delays = [0, 1, 3, 7];  // 1ª = imediato, depois 1s, 3s, 7s
+        $lastErr = null;
+
+        foreach ($delays as $attempt => $delaySeconds) {
+            if ($delaySeconds > 0) {
+                if ($heartbeat) $heartbeat("⚠️ retry " . $attempt . " (Anthropic instável, aguarda " . $delaySeconds . "s)");
+                sleep($delaySeconds);
+            }
+
+            try {
+                $full = $this->callAnthropicStream(
+                    config:         $opusConfig,
+                    headers:        $this->headersForMessage($augmented),
+                    onChunk:        $onChunk,
+                    heartbeat:      $heartbeat,
+                    heartbeatLabel: $attempt === 0 ? 'Eng. Victor a planear' : 'Eng. Victor (retry ' . $attempt . ')',
+                    augmented:      $augmented,
+                    messages:       $messages,
+                );
+
+                if ($attempt > 0) {
+                    \Log::info('EngineerAgent: succeeded on retry ' . $attempt, [
+                        'previous_errors' => $lastErr ? $lastErr->getMessage() : null,
+                    ]);
+                }
+
+                $this->publishSharedContext($full);
+                return $full;
+            } catch (\Throwable $err) {
+                $lastErr = $err;
+                \Log::warning('EngineerAgent: attempt ' . $attempt . ' failed', [
+                    'error'     => $err->getMessage(),
+                    'exception' => get_class($err),
+                    'next_delay' => $delays[$attempt + 1] ?? 'none',
+                ]);
+            }
         }
 
-        // ── Fallback attempt: Sonnet, no thinking, smaller max_tokens ──
-        try {
-            $full = $this->callAnthropicStream(
-                config: [
-                    'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
-                    'max_tokens' => 4096,
-                    'system'     => $sys,
-                    'messages'   => $messages,
-                    'stream'     => true,
-                ],
-                headers: $this->headersForMessage($augmented),
-                onChunk: $onChunk,
-                heartbeat: $heartbeat,
-                heartbeatLabel: 'Eng. Victor a responder (modo rápido)',
-                augmented: $augmented,
-                messages: $messages,
-            );
-            $this->publishSharedContext($full);
-            return $full;
-        } catch (\Throwable $fallbackErr) {
-            \Log::error('EngineerAgent: BOTH primary and fallback failed', [
-                'fallback_error' => $fallbackErr->getMessage(),
-            ]);
-            // Último recurso: mensagem clara ao user (não-empty para evitar
-            // "Error in input stream" no frontend).
-            $emergency = "⚠️ Eng. Victor temporariamente indisponível (Anthropic API instável). "
-                       . "Tenta novamente em 30 segundos. Se persistir, contacta o Bruno.\n\n"
-                       . "Erro técnico: " . mb_substr($fallbackErr->getMessage(), 0, 100);
-            $onChunk($emergency);
-            return $emergency;
-        }
+        // Todas as tentativas falharam. Emergency message (não-empty).
+        \Log::error('EngineerAgent: ALL retries failed, sending emergency message', [
+            'attempts'   => count($delays),
+            'last_error' => $lastErr ? $lastErr->getMessage() : 'unknown',
+        ]);
+
+        $emergency = "⚠️ Eng. Victor temporariamente indisponível.\n\n"
+                   . "Tentei " . count($delays) . " vezes com Opus+thinking e a Anthropic API "
+                   . "está a rejeitar a request. Causa provável: rate limit ou overload "
+                   . "(Anthropic 529 / network glitch).\n\n"
+                   . "**O que fazer:**\n"
+                   . "1. Aguarda 1-2 minutos\n"
+                   . "2. Tenta novamente\n"
+                   . "3. Se persistir, contacta o Bruno\n\n"
+                   . "Erro técnico: " . mb_substr($lastErr ? $lastErr->getMessage() : 'unknown', 0, 200);
+        $onChunk($emergency);
+        return $emergency;
     }
 
     /**
