@@ -364,7 +364,20 @@ SPECIALTY;
             try {
                 $buf .= $body->read(1024);
             } catch (\Throwable $readErr) {
-                if ($full === '') throw $readErr;
+                if ($full === '') {
+                    // Diagnóstico: read falhou ANTES de receber qualquer chunk.
+                    // Logar contexto para identificar a causa raiz.
+                    \Log::error('EngineerAgent: stream read failed BEFORE any content', [
+                        'msg'           => $readErr->getMessage(),
+                        'exception'     => get_class($readErr),
+                        'response_code' => method_exists($response, 'getStatusCode') ? $response->getStatusCode() : 'unknown',
+                        'response_headers' => method_exists($response, 'getHeaders') ? array_map(fn($v) => is_array($v) ? implode(',', $v) : (string)$v, $response->getHeaders()) : [],
+                        'user_id'       => auth()->id() ?? 'guest',
+                        'augmented_len' => is_string($augmented) ? strlen($augmented) : 'array',
+                        'messages_count' => count($messages),
+                    ]);
+                    throw $readErr;
+                }
                 \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
                 break;
             }

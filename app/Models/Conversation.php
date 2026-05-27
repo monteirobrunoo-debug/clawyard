@@ -106,6 +106,12 @@ class Conversation extends Model
 
         if (!$older) return null;
 
+        // Defesa UTF-8: $older pode conter bytes inválidos vindos de PDFs
+        // extraídos com encoding misto (Windows-1252) ou conversation->content
+        // guardado com truncamento multibyte mid-character. json_encode falha
+        // hard em malformed UTF-8 — convertemos preservando o que é válido.
+        $older = mb_convert_encoding($older, 'UTF-8', 'UTF-8');
+
         // Ask Claude to produce a compact summary (non-streaming, fire-and-forget style)
         try {
             $apiKey = config('services.anthropic.api_key');
