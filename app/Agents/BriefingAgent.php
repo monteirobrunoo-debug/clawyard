@@ -6,6 +6,7 @@ use App\Models\Discovery;
 use App\Models\Report;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
@@ -18,6 +19,7 @@ use App\Services\SapService;
 class BriefingAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use HandlesAnthropicStream;
     use WebSearchTrait;
     use NsnLookupTrait;
     use SharedContextTrait;
@@ -371,53 +373,24 @@ SPECIALTY;
      */
     private function streamViaAnthropic(string $systemPrompt, string $prompt, callable $onChunk, ?callable $heartbeat, string $full): string
     {
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($prompt),
-            'stream'  => true,
-            'json'    => [
+        // 2026-05-28 refactor: stream loop manual → trait helper.
+        // Ganha retries automáticos + emergency message.
+        $full .= $this->streamAnthropicWithRetries(
+            config: [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 8192,
                 'system'     => $systemPrompt,
                 'messages'   => [['role' => 'user', 'content' => $prompt]],
                 'stream'     => true,
             ],
-        ]);
-
-        $body     = $response->getBody();
-        $buf      = '';
-        $lastBeat = time();
-
-        while (!$body->eof()) {
-            try {
-                $buf .= $body->read(1024);
-            } catch (\Throwable $readErr) {
-                if ($full === '') throw $readErr;
-                \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
-                break;
-            }
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            if ($heartbeat && (time() - $lastBeat) >= 5) {
-                $heartbeat('Renato a escrever (Claude Opus)');
-                $lastBeat = time();
-            }
-        }
+            headers:          $this->headersForMessage($prompt),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Renato a escrever (Claude Opus)',
+            retries:          [0, 2, 5],
+            emergencyMessage: "⚠️ Renato (briefing) temporariamente indisponível. Tenta novamente em 30s.",
+            agentLabel:       'BriefingAgent',
+        );
 
         return $full;
     }
