@@ -89,18 +89,33 @@ class ClaudeAgent implements AgentInterface
         $bookCtx = $this->augmentWithTechnicalBooks($message, 4);
         $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
-            'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
-                'max_tokens' => 8192,
-                'system'     => $sys,
-                'messages'   => $messages,
-            ],
-        ]);
+        $model     = config('services.anthropic.model', 'claude-sonnet-4-6');
+        $maxTokens = 8192;
 
-        $data = json_decode($response->getBody()->getContents(), true);
-        return $data['content'][0]['text'] ?? '';
+        // 2026-05-28 Fase B2: hash-exact semantic cache. Hit → zero custo
+        // Anthropic. Skip se: temp>0, max_tokens>8k, msgs>5 turns, system
+        // tem 'no-cache' marker. ClaudeAgent é piloto — se funcionar bem,
+        // expandimos para outros agentes em commits seguintes.
+        $cache = app(\App\Services\AnthropicResponseCache::class);
+        return $cache->remember(
+            model:      $model,
+            system:     $sys,
+            messages:   $messages,
+            maxTokens:  $maxTokens,
+            compute:    function () use ($message, $messages, $sys, $model, $maxTokens) {
+                $response = $this->client->post('/v1/messages', [
+                    'headers' => $this->headersForMessage($message),
+                    'json'    => [
+                        'model'      => $model,
+                        'max_tokens' => $maxTokens,
+                        'system'     => $sys,
+                        'messages'   => $messages,
+                    ],
+                ]);
+                $data = json_decode($response->getBody()->getContents(), true);
+                return $data['content'][0]['text'] ?? '';
+            },
+        );
     }
 
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
