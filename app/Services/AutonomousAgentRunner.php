@@ -86,6 +86,23 @@ class AutonomousAgentRunner
         $thinkBudget   = (int)    ($config['thinking_budget'] ?? 0);
         $maxOutTokens  = (int)    ($config['max_output_tokens'] ?? 4096);
 
+        // 2026-05-28 BUGFIX defensivo: extended thinking SÓ funciona em Opus.
+        // Se o caller passa thinking_budget>0 mas o $this->model default é
+        // Sonnet, a API trava silently (sem text_delta events) — o user vê
+        // dots+caption infinitos. Auto-swap para Opus aqui evita o bug
+        // latente. Caller pode forçar Sonnet explícito via $config['model'].
+        $resolvedModel = (string) ($config['model'] ?? $this->model);
+        if ($thinkBudget > 0 && str_contains(strtolower($resolvedModel), 'sonnet')) {
+            $opusModel = (string) config('services.anthropic.model_opus', 'claude-opus-4-8');
+            Log::info('AutonomousAgentRunner: auto-swap Sonnet→Opus (thinking enabled)', [
+                'agent_key'    => $agentKey,
+                'from'         => $resolvedModel,
+                'to'           => $opusModel,
+                'budget'       => $thinkBudget,
+            ]);
+            $resolvedModel = $opusModel;
+        }
+
         // Cria AgentRun em status=running ANTES do loop para o ter sempre
         // como forensics mesmo se algo rebenta.
         $run = AgentRun::create([
@@ -127,7 +144,7 @@ class AutonomousAgentRunner
                 }
 
                 $body = [
-                    'model'      => $this->model,
+                    'model'      => $resolvedModel,  // 2026-05-28: respeita auto-swap Opus quando thinking activo
                     'max_tokens' => $maxOutTokens,
                     'system'     => $systemPrompt,
                     'messages'   => $messages,
