@@ -90,21 +90,21 @@ class SecurityAuditCommand extends Command
         $this->line(str_repeat('─', 70));
     }
 
-    private function pass(string $check, string $detail = ''): void
+    private function markPass(string $check, string $detail = ''): void
     {
         $this->line("  <fg=green>✓</> {$check}" . ($detail ? "  <fg=gray>· {$detail}</>" : ''));
         $this->results[] = ['check' => $check, 'status' => 'pass', 'detail' => $detail];
         $this->passed++;
     }
 
-    private function warn(string $check, string $detail = ''): void
+    private function markWarn(string $check, string $detail = ''): void
     {
         $this->line("  <fg=yellow>⚠</> {$check}" . ($detail ? "  <fg=gray>· {$detail}</>" : ''));
         $this->results[] = ['check' => $check, 'status' => 'warn', 'detail' => $detail];
         $this->warned++;
     }
 
-    private function fail(string $check, string $detail = ''): void
+    private function markFail(string $check, string $detail = ''): void
     {
         $this->line("  <fg=red>✗</> {$check}" . ($detail ? "  <fg=gray>· {$detail}</>" : ''));
         $this->results[] = ['check' => $check, 'status' => 'fail', 'detail' => $detail];
@@ -116,44 +116,44 @@ class SecurityAuditCommand extends Command
     {
         $url = config('app.url');
         if (!$url || !str_starts_with($url, 'https://')) {
-            $this->fail('Site URL is HTTPS', "Got: {$url}");
+            $this->markFail('Site URL is HTTPS', "Got: {$url}");
             return;
         }
-        $this->pass('Site URL is HTTPS', $url);
+        $this->markPass('Site URL is HTTPS', $url);
     }
 
     private function checkAnthropicTls(): void
     {
         $base = config('services.anthropic.base_uri', 'https://api.anthropic.com');
         if (!str_starts_with($base, 'https://')) {
-            $this->fail('Anthropic API uses HTTPS', "Got: {$base}");
+            $this->markFail('Anthropic API uses HTTPS', "Got: {$base}");
         return;
         }
-        $this->pass('Anthropic API uses HTTPS', $base);
+        $this->markPass('Anthropic API uses HTTPS', $base);
     }
 
     private function checkTavilyTls(): void
     {
         $url = config('services.tavily.base_uri', 'https://api.tavily.com');
         if (!str_starts_with($url, 'https://')) {
-            $this->fail('Tavily API uses HTTPS', "Got: {$url}");
+            $this->markFail('Tavily API uses HTTPS', "Got: {$url}");
         return;
         }
-        $this->pass('Tavily API uses HTTPS', $url);
+        $this->markPass('Tavily API uses HTTPS', $url);
     }
 
     private function checkSapTls(): void
     {
         $url = config('services.sap.base_uri') ?? env('SAP_BASE_URL', '');
         if (empty($url)) {
-            $this->warn('SAP API URL', 'Not configured');
+            $this->markWarn('SAP API URL', 'Not configured');
         return;
         }
         if (!str_starts_with($url, 'https://')) {
-            $this->fail('SAP B1 ServiceLayer uses HTTPS', "Got: {$url}");
+            $this->markFail('SAP B1 ServiceLayer uses HTTPS', "Got: {$url}");
         return;
         }
-        $this->pass('SAP B1 ServiceLayer uses HTTPS', $url);
+        $this->markPass('SAP B1 ServiceLayer uses HTTPS', $url);
     }
 
     private function checkPostgresTls(): void
@@ -162,21 +162,21 @@ class SecurityAuditCommand extends Command
             $sslMode = DB::connection()->getPdo()->getAttribute(\PDO::ATTR_DRIVER_NAME);
             $host = config('database.connections.pgsql.host', '');
             if (str_contains($host, 'ondigitalocean.com')) {
-                $this->pass('Postgres DO managed (TLS default)', $host);
+                $this->markPass('Postgres DO managed (TLS default)', $host);
             } elseif (str_contains($host, '127.0.0.1') || str_contains($host, 'localhost')) {
-                $this->warn('Postgres connection local', 'TLS opcional em loopback');
+                $this->markWarn('Postgres connection local', 'TLS opcional em loopback');
         return;
             } else {
                 $sslmode = config('database.connections.pgsql.sslmode', 'prefer');
                 if (in_array($sslmode, ['require', 'verify-ca', 'verify-full'], true)) {
-                    $this->pass('Postgres sslmode=' . $sslmode, $host);
+                    $this->markPass('Postgres sslmode=' . $sslmode, $host);
                 } else {
-                    $this->warn('Postgres sslmode', "sslmode={$sslmode} — considera 'require'");
+                    $this->markWarn('Postgres sslmode', "sslmode={$sslmode} — considera 'require'");
         return;
                 }
             }
         } catch (\Throwable $e) {
-            $this->fail('Postgres TLS check', $e->getMessage());
+            $this->markFail('Postgres TLS check', $e->getMessage());
         return;
         }
     }
@@ -185,13 +185,13 @@ class SecurityAuditCommand extends Command
     {
         $host = config('database.redis.default.host', '127.0.0.1');
         if (str_contains($host, '127.0.0.1') || str_contains($host, 'localhost')) {
-            $this->pass('Redis local (loopback)', $host . ' — TLS desnecessário');
+            $this->markPass('Redis local (loopback)', $host . ' — TLS desnecessário');
         } else {
             $scheme = config('database.redis.default.scheme', 'tcp');
             if ($scheme === 'tls') {
-                $this->pass('Redis uses TLS', $host);
+                $this->markPass('Redis uses TLS', $host);
             } else {
-                $this->warn('Redis scheme', "scheme={$scheme} — considera 'tls' se remoto");
+                $this->markWarn('Redis scheme', "scheme={$scheme} — considera 'tls' se remoto");
         return;
             }
         }
@@ -201,14 +201,14 @@ class SecurityAuditCommand extends Command
     {
         $endpoint = config('filesystems.disks.spaces.endpoint', '');
         if (empty($endpoint)) {
-            $this->warn('DO Spaces endpoint', 'Não configurado');
+            $this->markWarn('DO Spaces endpoint', 'Não configurado');
         return;
         }
         if (!str_starts_with($endpoint, 'https://')) {
-            $this->fail('DO Spaces uses HTTPS', "Got: {$endpoint}");
+            $this->markFail('DO Spaces uses HTTPS', "Got: {$endpoint}");
         return;
         }
-        $this->pass('DO Spaces uses HTTPS', $endpoint);
+        $this->markPass('DO Spaces uses HTTPS', $endpoint);
     }
 
     // ─── Section 2: At-rest encryption ──────────────────────────────────────
@@ -216,9 +216,9 @@ class SecurityAuditCommand extends Command
     {
         $host = config('database.connections.pgsql.host', '');
         if (str_contains($host, 'ondigitalocean.com')) {
-            $this->pass('Postgres at-rest encryption', 'DO managed = AES-256 default');
+            $this->markPass('Postgres at-rest encryption', 'DO managed = AES-256 default');
         } else {
-            $this->warn('Postgres at-rest encryption', 'Self-hosted — verifica disk encryption');
+            $this->markWarn('Postgres at-rest encryption', 'Self-hosted — verifica disk encryption');
         return;
         }
     }
@@ -227,9 +227,9 @@ class SecurityAuditCommand extends Command
     {
         $encrypt = config('session.encrypt', false);
         if ($encrypt) {
-            $this->pass('Session payload encryption (SESSION_ENCRYPT)', 'true');
+            $this->markPass('Session payload encryption (SESSION_ENCRYPT)', 'true');
         } else {
-            $this->fail('Session payload encryption (SESSION_ENCRYPT)', 'Set SESSION_ENCRYPT=true no .env');
+            $this->markFail('Session payload encryption (SESSION_ENCRYPT)', 'Set SESSION_ENCRYPT=true no .env');
         return;
         }
     }
@@ -238,14 +238,14 @@ class SecurityAuditCommand extends Command
     {
         $key = config('app.key');
         if (empty($key)) {
-            $this->fail('APP_KEY', 'Não está set — todo o encrypted está em risco');
+            $this->markFail('APP_KEY', 'Não está set — todo o encrypted está em risco');
         return;
         }
         if (strlen($key) < 32) {
-            $this->fail('APP_KEY', 'Demasiado curto — usa `php artisan key:generate`');
+            $this->markFail('APP_KEY', 'Demasiado curto — usa `php artisan key:generate`');
         return;
         }
-        $this->pass('APP_KEY length', strlen($key) . ' chars');
+        $this->markPass('APP_KEY length', strlen($key) . ' chars');
     }
 
     private function checkEncryptedCasts(): void
@@ -253,7 +253,7 @@ class SecurityAuditCommand extends Command
         // Procura modelos com 'encrypted' casts
         $modelsPath = app_path('Models');
         if (!is_dir($modelsPath)) {
-            $this->warn('Encrypted casts', 'Models dir não encontrado');
+            $this->markWarn('Encrypted casts', 'Models dir não encontrado');
         return;
         }
         $count = 0;
@@ -262,9 +262,9 @@ class SecurityAuditCommand extends Command
             if (preg_match('/=>\s*[\'"]encrypted/', $content)) $count++;
         }
         if ($count > 0) {
-            $this->pass('Encrypted Eloquent casts', "Encontrados em {$count} modelos");
+            $this->markPass('Encrypted Eloquent casts', "Encontrados em {$count} modelos");
         } else {
-            $this->warn('Encrypted Eloquent casts', 'Nenhum modelo usa cast encrypted — avalia se campos sensíveis precisam');
+            $this->markWarn('Encrypted Eloquent casts', 'Nenhum modelo usa cast encrypted — avalia se campos sensíveis precisam');
         return;
         }
     }
@@ -274,14 +274,14 @@ class SecurityAuditCommand extends Command
     {
         $envPath = base_path('.env');
         if (!file_exists($envPath)) {
-            $this->warn('.env permissions', 'Ficheiro não encontrado');
+            $this->markWarn('.env permissions', 'Ficheiro não encontrado');
         return;
         }
         $perms = substr(sprintf('%o', fileperms($envPath)), -3);
         if (in_array($perms, ['600', '640', '660'], true)) {
-            $this->pass('.env file permissions', $perms);
+            $this->markPass('.env file permissions', $perms);
         } else {
-            $this->fail('.env file permissions', "Got {$perms} — devia ser 600 ou 640. chmod 640 .env");
+            $this->markFail('.env file permissions', "Got {$perms} — devia ser 600 ou 640. chmod 640 .env");
         return;
         }
     }
@@ -300,9 +300,9 @@ class SecurityAuditCommand extends Command
             }
         }
         if (empty($found)) {
-            $this->pass('Hardcoded secrets in repo', 'Não detectados');
+            $this->markPass('Hardcoded secrets in repo', 'Não detectados');
         } else {
-            $this->fail('Hardcoded secrets in repo', 'Encontrados: ' . implode(' | ', $found));
+            $this->markFail('Hardcoded secrets in repo', 'Encontrados: ' . implode(' | ', $found));
         return;
         }
     }
@@ -316,11 +316,11 @@ class SecurityAuditCommand extends Command
         foreach ($required as $configKey => $envKey) {
             $val = config($configKey);
             if (empty($val)) {
-                $this->warn("{$envKey}", 'Não está set');
+                $this->markWarn("{$envKey}", 'Não está set');
         return;
             } else {
                 $masked = substr($val, 0, 8) . '...' . substr($val, -4);
-                $this->pass("{$envKey}", $masked);
+                $this->markPass("{$envKey}", $masked);
             }
         }
     }
@@ -330,9 +330,9 @@ class SecurityAuditCommand extends Command
     {
         $driver = config('hashing.driver', 'bcrypt');
         if (in_array($driver, ['bcrypt', 'argon', 'argon2id'], true)) {
-            $this->pass('Password hashing driver', $driver);
+            $this->markPass('Password hashing driver', $driver);
         } else {
-            $this->fail('Password hashing driver', "Got: {$driver}");
+            $this->markFail('Password hashing driver', "Got: {$driver}");
         return;
         }
     }
@@ -340,9 +340,9 @@ class SecurityAuditCommand extends Command
     private function checkOtpRequired(): void
     {
         if (class_exists('App\Http\Middleware\RequireIpVerification')) {
-            $this->pass('IP-bound OTP middleware', 'RequireIpVerification class exists');
+            $this->markPass('IP-bound OTP middleware', 'RequireIpVerification class exists');
         } else {
-            $this->warn('IP-bound OTP middleware', 'Class não encontrada');
+            $this->markWarn('IP-bound OTP middleware', 'Class não encontrada');
         return;
         }
     }
@@ -353,16 +353,16 @@ class SecurityAuditCommand extends Command
         $httpOnly = config('session.http_only', true);
         $sameSite = config('session.same_site', 'lax');
 
-        if ($secure) $this->pass('Session cookie Secure flag', 'true');
-        else        $this->warn('Session cookie Secure flag', 'false — set SESSION_SECURE_COOKIE=true em prod');
+        if ($secure) $this->markPass('Session cookie Secure flag', 'true');
+        else        $this->markWarn('Session cookie Secure flag', 'false — set SESSION_SECURE_COOKIE=true em prod');
 
-        if ($httpOnly) $this->pass('Session cookie HttpOnly flag', 'true');
-        else           $this->fail('Session cookie HttpOnly flag', 'false — vulnerable to XSS');
+        if ($httpOnly) $this->markPass('Session cookie HttpOnly flag', 'true');
+        else           $this->markFail('Session cookie HttpOnly flag', 'false — vulnerable to XSS');
 
         if (in_array($sameSite, ['lax', 'strict'], true)) {
-            $this->pass('Session cookie SameSite', $sameSite);
+            $this->markPass('Session cookie SameSite', $sameSite);
         } else {
-            $this->warn('Session cookie SameSite', "Got: {$sameSite}");
+            $this->markWarn('Session cookie SameSite', "Got: {$sameSite}");
         return;
         }
     }
@@ -377,9 +377,9 @@ class SecurityAuditCommand extends Command
             ? file_get_contents(base_path('bootstrap/app.php'))
             : '';
         if (str_contains($rsp, 'throttle') || str_contains($bootstrap, 'throttle')) {
-            $this->pass('Login throttle (rate limit)', 'Detectado');
+            $this->markPass('Login throttle (rate limit)', 'Detectado');
         } else {
-            $this->warn('Login throttle', 'Não detectado — verifica middleware throttle:login');
+            $this->markWarn('Login throttle', 'Não detectado — verifica middleware throttle:login');
         return;
         }
     }
@@ -388,9 +388,9 @@ class SecurityAuditCommand extends Command
     private function checkIpVerification(): void
     {
         if (file_exists(app_path('Http/Middleware/RequireIpVerification.php'))) {
-            $this->pass('IP verification middleware', 'Activo');
+            $this->markPass('IP verification middleware', 'Activo');
         } else {
-            $this->warn('IP verification middleware', 'Não encontrado');
+            $this->markWarn('IP verification middleware', 'Não encontrado');
         return;
         }
     }
@@ -398,9 +398,9 @@ class SecurityAuditCommand extends Command
     private function checkSecurityHeaders(): void
     {
         if (file_exists(app_path('Http/Middleware/SecurityHeadersMiddleware.php'))) {
-            $this->pass('Security headers middleware', 'Activo (HSTS, X-Frame, etc.)');
+            $this->markPass('Security headers middleware', 'Activo (HSTS, X-Frame, etc.)');
         } else {
-            $this->fail('Security headers middleware', 'Não encontrado');
+            $this->markFail('Security headers middleware', 'Não encontrado');
         return;
         }
     }
@@ -411,9 +411,9 @@ class SecurityAuditCommand extends Command
         if (file_exists($bootstrap)) {
             $content = file_get_contents($bootstrap);
             if (str_contains($content, 'VerifyCsrfToken') || str_contains($content, 'web()')) {
-                $this->pass('CSRF protection', 'Web middleware aplica');
+                $this->markPass('CSRF protection', 'Web middleware aplica');
             } else {
-                $this->warn('CSRF protection', 'Verifica manualmente');
+                $this->markWarn('CSRF protection', 'Verifica manualmente');
         return;
             }
         }
