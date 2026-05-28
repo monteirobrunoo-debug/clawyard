@@ -420,9 +420,14 @@ class SapService
 
     public function searchBusinessPartners(string $name, int $top = 5): array
     {
+        // Case-insensitive: usa tolower() em ambos os lados.
+        // SAP B1 ServiceLayer OData suporta tolower(). Sem isto, "NORDFISH AG"
+        // não matcharia "Nordfish AG" e vice-versa — sintoma reportado pelos
+        // users Marine 2026-05-27: "nomes com maiúsculas não abrem processo".
+        $needle = strtolower($name);
         $data = $this->get('BusinessPartners', [
             '$select' => 'CardCode,CardName,CardType,Phone1,EmailAddress,CreditLimit',
-            '$filter' => "contains(CardName,'" . addslashes($name) . "')",
+            '$filter' => "contains(tolower(CardName),'" . addslashes($needle) . "')",
             '$top'    => $top,
         ]);
         return $data['value'] ?? [];
@@ -1967,8 +1972,9 @@ class SapService
             $filters[] = "DocDate le '" . date('Y-m-d', strtotime($dateTo)) . "'";
         }
         if ($cardFilter) {
-            $safe      = addslashes($cardFilter);
-            $filters[] = "(contains(CardName,'{$safe}') or contains(CardCode,'{$safe}'))";
+            // Case-insensitive — SAP B1 OData tolower().
+            $safe      = addslashes(strtolower($cardFilter));
+            $filters[] = "(contains(tolower(CardName),'{$safe}') or contains(tolower(CardCode),'{$safe}'))";
         }
 
         $query = [
