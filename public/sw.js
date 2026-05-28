@@ -13,7 +13,7 @@
  * mudança de assets para forçar reinstalação.
  */
 
-const CACHE_VERSION = 'clawyard-v3-2026-05-21-octane-purge';
+const CACHE_VERSION = 'clawyard-v4-2026-05-28-ux-fixes';
 const SHELL_CACHE   = `${CACHE_VERSION}-shell`;
 const PAGE_CACHE    = `${CACHE_VERSION}-pages`;
 
