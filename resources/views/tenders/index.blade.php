@@ -1723,11 +1723,18 @@
                 </section>
             </form>
 
-            @if($canAssign)
+            @if($canAssign || ($isMarine ?? false))
+                {{-- 2026-05-28: era só @if($canAssign) → Marine users viam o
+                     botão 🗑 mas o JS deleteTender ficava por definir.
+                     Agora qualquer Marine user tem o handler. select-all
+                     só faz sentido para managers (bulk assign), por isso
+                     guardamos atrás de canAssign. --}}
                 <script>
+                    @if($canAssign)
                     document.getElementById('select-all')?.addEventListener('change', function (e) {
                         document.querySelectorAll('.row-check').forEach(cb => cb.checked = e.target.checked);
                     });
+                    @endif
 
                     // ── Delete tender (soft-delete, recuperável) ─────────────────
                     // Pedido 2026-05-20 "poe um botao par apagar". Fetch DELETE
