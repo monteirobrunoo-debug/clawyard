@@ -968,6 +968,14 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->group(function () {
     Route::post('/tokens/reset-notifications',   [\App\Http\Controllers\TokensController::class, 'resetNotifications'])->name('admin.tokens.reset-notifications');
     Route::post('/tokens/top-up',                [\App\Http\Controllers\TokensController::class, 'topUp'])->name('admin.tokens.top-up');
 
+    // ── Fase A2 + A3 (2026-05-28): dashboards read-only ────────────────
+    // Custo Anthropic por user/agente + saúde dos agentes (latency, fail
+    // rate, feedback). Dados em agent_runs + agent_metrics.
+    Route::get('/anthropic-cost', [\App\Http\Controllers\Admin\MetricsController::class, 'anthropicCost'])
+        ->name('admin.metrics.cost');
+    Route::get('/agent-health',   [\App\Http\Controllers\Admin\MetricsController::class, 'agentHealth'])
+        ->name('admin.metrics.health');
+
     // Unified admin panel — health + secrets + cron + flags + integrations
     Route::get ('/panel',                    [\App\Http\Controllers\AdminPanelController::class, 'index'])->name('admin.panel');
     Route::post('/panel/flag',               [\App\Http\Controllers\AdminPanelController::class, 'setFlag'])->name('admin.panel.flag');
