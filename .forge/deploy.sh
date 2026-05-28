@@ -78,13 +78,19 @@ if ! $FORGE_PHP artisan optimize 2>&1; then
 fi
 
 # ─── 5. Octane reload com verificação ───────────────────────────────────────
-# octane:reload é assíncrono — manda signal e devolve já. Damos 8s para
-# todos os workers (4× workers + 2× task workers) rotarem, depois health check.
-log "5/8 octane:reload"
+# octane:reload manda SIGUSR1. Swoole espera que cada worker termine a request
+# actual (graceful) antes de o reiniciar com código novo.
+#
+# 2026-05-28 Fase A4: BUMP 8→30s. User reportou "Erro: network error" mid-
+# stream depois de deploys. Streams SSE Opus (15-60s) eram cortadas porque o
+# wait de 8s era curto demais — workers velhos killed antes da stream
+# completar. 30s cobre a maioria dos casos sem atrasar deploys excessivamente.
+# Trade-off: deploys ~22s mais lentos = zero cortes em streams.
+log "5/8 octane:reload (graceful drain, espera 30s)"
 $FORGE_PHP artisan octane:reload 2>&1 || err "octane:reload sinal falhou — vou tentar hard restart"
 
-# Wait for workers to actually rotate. Swoole reload é gradual.
-sleep 8
+# Wait for workers to actually rotate + drain in-flight streams.
+sleep 30
 
 # Health check com 3 tentativas (5s entre cada)
 log "6/8 health check"

@@ -219,6 +219,10 @@ return [
     |
     */
 
-    'max_execution_time' => 30,
+    // 2026-05-28 Fase A4: env-configurable. Default 30s suficiente para chat
+    // sync, mas streaming SSE de Opus + extended thinking pode exceder. Em
+    // .env: OCTANE_MAX_EXECUTION_TIME=120 para dar buffer. Valor 0 = sem
+    // limite (cuidado: memory leaks acumulam em workers long-lived).
+    'max_execution_time' => (int) env('OCTANE_MAX_EXECUTION_TIME', 30),
 
 ];
