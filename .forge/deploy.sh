@@ -117,9 +117,20 @@ if [[ "$HEALTH_OK" == "false" ]]; then
     fi
 fi
 
-# ─── 8. Queue restart ───────────────────────────────────────────────────────
-log "7/8 queue:restart (broadcast)"
-$FORGE_PHP artisan queue:restart 2>&1 || err "queue:restart falhou"
+# ─── 8. Queue restart — REMOVIDO 2026-05-28 ─────────────────────────────────
+# Pedido directo Bruno: jobs em flight (RunTenderAnalysisJob ~5-10min) eram
+# killed durante deploys, gerando MaxAttemptsExceededException em Sentry.
+#
+# Decisão: workers actualizam-se naturalmente via max-requests=500 ciclo
+# (~30-60min em produção típica). Trade-off: código de queue jobs pode
+# ficar 30-60min desactualizado após deploy, mas in-flight jobs sobrevivem.
+#
+# Se algum dia precisares de force-restart workers (ex: bug crítico em job
+# class), corres manualmente:
+#   sudo supervisorctl restart clawyard-queue:*
+# OU:
+#   sudo -u forge php /home/forge/clawyard.partyard.eu/current/artisan queue:restart
+log "7/8 queue:restart SKIPPED (graceful — workers ciclam via max-requests=500)"
 
 log "8/8 ═══ DEPLOY END ═══"
 
