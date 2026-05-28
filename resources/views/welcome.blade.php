@@ -323,6 +323,28 @@
             box-shadow: 0 0 6px color-mix(in srgb, var(--agent-color, #76b900) 60%, transparent);
             animation: dot-wave 1.2s infinite ease-in-out;
         }
+
+        /* 2026-05-28 BUGFIX: a .typing-caption original tem opacity:0 +
+           typing-caption-fade animation (cycle 0%→1→0 a cada 6s) — pensada
+           para o addTyping() bubble que existe poucos segundos. Mas dentro
+           do .stream-thinking (que pode durar 30s+ em Opus), o user via
+           caption invisível ~70% do tempo e quadro parecia vazio. Bruno:
+           "ainda igual no dr quantum". Fix: override quando dentro de
+           .stream-thinking — opacity sempre 1, sem animação. O JS já trata
+           do ciclo de captions cada 4s via setInterval. */
+        .stream-thinking .typing-caption {
+            opacity: 1 !important;
+            animation: none !important;
+            color: var(--text, #cfd8dc);
+            font-style: normal;
+            font-size: 12.5px;
+        }
+        /* Defensive: garante dots e o stream-thinking row sempre visíveis,
+           sem heredada de qualquer rule global a fazer fade. */
+        .stream-thinking,
+        .stream-thinking .dot {
+            opacity: 1 !important;
+        }
         .dot:nth-child(2) { animation-delay: 0.15s; }
         .dot:nth-child(3) { animation-delay: 0.30s; }
         @keyframes dot-wave {
