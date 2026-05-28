@@ -145,12 +145,16 @@ class TenderServiceAnalysisController extends Controller
         if ($request->boolean('json')) {
             $analysis = TenderServiceAnalysis::where('tender_id', $tender->id)->first();
             return response()->json([
-                'status'    => $analysis?->status ?? 'not_started',
-                'is_done'   => $analysis && $analysis->status === 'done',
-                'view_url'  => $analysis && $analysis->status === 'done'
+                'status'      => $analysis?->status ?? 'not_started',
+                'is_done'     => $analysis && $analysis->status === 'done',
+                'is_failed'   => $analysis && $analysis->status === 'failed',
+                'fail_reason' => $analysis && $analysis->status === 'failed'
+                    ? ($analysis->fail_reason ?? 'worker timeout')
+                    : null,
+                'view_url'    => $analysis && $analysis->status === 'done'
                     ? route('tenders.service-analysis.show', $tender)
                     : null,
-                'updated_at' => $analysis?->updated_at?->toIso8601String(),
+                'updated_at'  => $analysis?->updated_at?->toIso8601String(),
             ]);
         }
 

@@ -991,6 +991,12 @@
                                         return;
                                     }
 
+                                    if (pollData.is_failed) {
+                                        statusEl.className = 'mt-3 text-xs text-red-700';
+                                        statusEl.textContent = `✗ Análise falhou após ${elapsed}s — ${pollData.fail_reason || 'worker timeout'}. Tenta de novo.`;
+                                        return;
+                                    }
+
                                     // Update visual feedback
                                     statusEl.textContent = `⏳ A analisar… ${elapsed}s elapsed (agentes a correr em background)`;
                                 } catch (pollErr) {

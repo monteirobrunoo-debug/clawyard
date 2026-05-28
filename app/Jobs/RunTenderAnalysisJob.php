@@ -34,7 +34,9 @@ class RunTenderAnalysisJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
-    public int $timeout = 240;       // 4min — 5-8 agentes × ~20s média
+    public int $timeout = 600;       // 10min — 5-8 agentes × ~30s média + buffer
+                                     // Bumped de 240→600 após Sentry capturar
+                                     // MaxAttemptsExceededException 2026-05-28.
 
     public function __construct(
         public int $tenderId,
@@ -110,5 +112,27 @@ class RunTenderAnalysisJob implements ShouldQueue
             'user_id'   => $this->userId,
             'reason'    => $e?->getMessage() ?? 'max attempts exceeded',
         ]);
+
+        // 2026-05-28: marca o TenderServiceAnalysis como failed para que o
+        // frontend polling pare e mostre erro em vez de spinner infinito.
+        // Sem isto, user fica preso em ⏳ até refrescar manualmente.
+        try {
+            \App\Models\TenderServiceAnalysis::where('tender_id', $this->tenderId)
+                ->where('status', 'running')
+                ->update([
+                    'status'      => 'failed',
+                    'failed_at'   => now(),
+                    'fail_reason' => mb_substr($e?->getMessage() ?? 'worker timeout', 0, 500),
+                ]);
+        } catch (\Throwable $updateErr) {
+            // Schema pode não ter failed_at/fail_reason — fallback minimal
+            try {
+                \App\Models\TenderServiceAnalysis::where('tender_id', $this->tenderId)
+                    ->where('status', 'running')
+                    ->update(['status' => 'failed']);
+            } catch (\Throwable) {
+                // Best effort — não bloquear o log
+            }
+        }
     }
 }
