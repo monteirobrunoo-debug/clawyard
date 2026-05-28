@@ -214,6 +214,14 @@
             line-height: 1.7;
             white-space: pre-wrap;
             word-break: break-word;
+            /* 2026-05-28: defesa extra contra texto longo sem espaços (URLs,
+               JSON, tokens). word-break:break-word não chega em alguns
+               browsers; overflow-wrap:anywhere força quebra em qualquer
+               carácter quando não há alternativa. min-width:0 permite
+               ao flex container encolher o filho. */
+            overflow-wrap: anywhere;
+            min-width: 0;
+            max-width: 100%;
             box-shadow: 0 2px 8px rgba(0,0,0,0.12);
         }
         .message.user .bubble {
@@ -4903,6 +4911,28 @@ async function sendMessage() {
                 const agentEmoji = AGENT_EMOJIS[agentKey] || '🤖';
                 const agentLabel = AGENT_NAMES[agentKey]  || 'ClawYard';
 
+                // 2026-05-28: pre-fill streamBubble com indicador "a pensar"
+                // até chegar o primeiro chunk. Sem isto, o quadro fica
+                // VAZIO durante 5-30s em Opus + extended thinking — user
+                // não sabe se algo está a acontecer. Captions iguais às
+                // do addTyping() para visual continuity.
+                const captionsByAgent = {
+                    crm:        ['a consultar SAP…', 'a verificar Business Partners…', 'a redigir oportunidade…'],
+                    sales:      ['a recolher contexto…', 'a consultar tabela de preços…', 'a redigir resposta…'],
+                    email:      ['a estudar template…', 'a redigir email…', 'a verificar assinatura…'],
+                    mildef:     ['a consultar NSPA/NCAGE…', 'a cruzar com histórico…', 'a redigir resposta…'],
+                    quantum:    ['🧠 extended thinking — pode demorar 30s', 'a pesquisar arXiv/EPO…', 'a cruzar referências…', 'a sintetizar findings…'],
+                    aria:       ['🧠 extended thinking activado', 'a auditar protocolos…', 'a verificar CSP…', 'a sintetizar findings…'],
+                    briefing:   ['a consultar todos os agentes…', 'a sintetizar dados…', 'a preparar briefing…'],
+                    capitao:    ['a consultar IMO/MARPOL…', 'a verificar dados de navio…', 'a redigir resposta…'],
+                    finance:    ['🧠 extended thinking activado', 'a consultar facturação SAP…', 'a calcular margens…', 'a redigir nota…'],
+                    engineer:   ['🧠 extended thinking activado', 'a consultar specs técnicas…', 'a cruzar manuais…', 'a redigir solução…'],
+                    document:   ['a indexar documento…', 'a extrair pontos-chave…', 'a sintetizar resumo…'],
+                    orchestrator: ['a delegar aos agentes…', 'a recolher respostas…', 'a sintetizar…'],
+                    thinking:   ['🧠 extended thinking — pode demorar 30s+', 'a explorar abordagens…', 'a verificar consistência…'],
+                };
+                const initCaptions = captionsByAgent[agentKey] || ['a pensar…', 'a consultar memória…', 'a redigir resposta…'];
+
                 msgEl.innerHTML = `
                     <div class="avatar">${agentEmoji}</div>
                     <div class="msg-col">
@@ -4910,7 +4940,14 @@ async function sendMessage() {
                             <span>${agentLabel}</span>
                             <span class="agent-tag active">${agentEmoji} ${agentLabel}</span>
                         </div>
-                        <div class="bubble stream-bubble"></div>
+                        <div class="bubble stream-bubble">
+                            <div class="typing-row stream-thinking" data-captions='${JSON.stringify(initCaptions).replace(/'/g, "&#39;")}' data-i="0">
+                                <span style="display:inline-flex;gap:4px;align-items:center">
+                                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                                </span>
+                                <span class="typing-caption">${initCaptions[0]}</span>
+                            </div>
+                        </div>
                     </div>`;
 
                 chat.appendChild(msgEl);
@@ -4918,6 +4955,22 @@ async function sendMessage() {
 
                 streamMsg    = msgEl;
                 streamBubble = msgEl.querySelector('.stream-bubble');
+
+                // Cycle captions cada 4s enquanto o thinking indicator existir.
+                // Mais rápido que addTyping() (6s) porque o user está em
+                // "active waiting mode" — perceber progresso é mais importante.
+                const thinkEl = streamBubble.querySelector('.stream-thinking');
+                if (thinkEl && initCaptions.length > 1) {
+                    let ci = 0;
+                    const cTick = setInterval(() => {
+                        // Para quando o thinking indicator é removido (1º chunk).
+                        if (!thinkEl.isConnected) { clearInterval(cTick); return; }
+                        ci = (ci + 1) % initCaptions.length;
+                        const cap = thinkEl.querySelector('.typing-caption');
+                        if (cap) cap.textContent = initCaptions[ci];
+                    }, 4000);
+                    msgEl._thinkTick = cTick;
+                }
                 return;
             }
 
@@ -4948,6 +5001,17 @@ async function sendMessage() {
             // ── Chunk event ──
             if (evt.chunk !== undefined && streamBubble) {
                 accumulated += evt.chunk;
+
+                // 2026-05-28: ao chegar o 1º chunk de TEXTO real, remover
+                // o thinking indicator. As checks abaixo (KYBER, etc) já
+                // sobrescrevem .innerHTML, mas para text chunks normais o
+                // path de render é diferente — limpamos aqui defensivamente.
+                if (streamMsg && streamMsg._thinkTick) {
+                    clearInterval(streamMsg._thinkTick);
+                    streamMsg._thinkTick = null;
+                }
+                const thinkEl = streamBubble.querySelector('.stream-thinking');
+                if (thinkEl) thinkEl.remove();
 
                 // ── Kyber action payloads — render card immediately, don't show raw JSON ──
                 if (accumulated.startsWith('__KYBER_KEYS__')) {
