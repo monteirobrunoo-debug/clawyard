@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
@@ -26,6 +27,7 @@ class FinanceAgent implements AgentInterface
     use WebSearchTrait;
     use NsnLookupTrait;
     use AnthropicKeyTrait;
+    use HandlesAnthropicStream;
     use SharedContextTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
@@ -267,10 +269,10 @@ SPECIALTY;
         $bookCtx = $this->augmentWithTechnicalBooks($message, 5);
         $sys     = $this->enrichSystemPrompt($this->systemPrompt) . ($bookCtx ? "\n\n" . $bookCtx : '');
 
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
-            'stream'  => true,
-            'json'    => [
+        // 2026-05-28 refactor: stream loop → trait helper.
+        // Note: mantém thinking mode (Luís é Opus + 5k thinking budget).
+        $full = $this->streamAnthropicWithRetries(
+            config: [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
@@ -278,44 +280,15 @@ SPECIALTY;
                 'messages'   => $messages,
                 'stream'     => true,
             ],
-        ]);
-
-        $body     = $response->getBody();
-        $full     = '';
-        $buf      = '';
-        $lastBeat = time();
-
-        while (!$body->eof()) {
-            try {
-                $buf .= $body->read(1024);
-            } catch (\Throwable $readErr) {
-                if ($full === '') throw $readErr;
-                \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
-                break;
-            }
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
-                $heartbeat('a calcular');
-                $lastBeat = time();
-            }
-        }
+            headers:          $this->headersForMessage($message),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Luís a calcular',
+            heartbeatEvery:   10,
+            retries:          [0, 2, 5],
+            emergencyMessage: "⚠️ Luís (Finance) temporariamente indisponível. Tenta novamente em 30s.",
+            agentLabel:       'FinanceAgent',
+        );
 
         $this->publishSharedContext($full);
         return $full;

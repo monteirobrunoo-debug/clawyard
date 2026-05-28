@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\WebSearchTrait;
 use App\Agents\Traits\NsnLookupTrait;
@@ -17,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 class SapAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use HandlesAnthropicStream;
     use WebSearchTrait;
     use NsnLookupTrait;
     use SharedContextTrait;
@@ -251,54 +253,24 @@ SPECIALTY;
             ['role' => 'user', 'content' => $message],
         ]);
 
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
-            'stream'  => true,
-            'json'    => [
+        // 2026-05-28 refactor: stream loop → trait helper.
+        $full = $this->streamAnthropicWithRetries(
+            config: [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
                 'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
                 'stream'     => true,
             ],
-        ]);
-
-        $body     = $response->getBody();
-        $full     = '';
-        $buf      = '';
-        $lastBeat = time();
-
-        while (!$body->eof()) {
-            try {
-                $buf .= $body->read(1024);
-            } catch (\Throwable $readErr) {
-                if ($full === '') throw $readErr;
-                \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
-                break;
-            }
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            if ($heartbeat && (time() - $lastBeat) >= 10) {
-                $heartbeat('a processar');
-                $lastBeat = time();
-            }
-        }
+            headers:          $this->headersForMessage($message),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Marta SAP a processar',
+            heartbeatEvery:   10,
+            retries:          [0, 2, 5],
+            emergencyMessage: "⚠️ Marta SAP temporariamente indisponível. Tenta novamente em 30s.",
+            agentLabel:       'SapAgent',
+        );
 
         $this->publishSharedContext($full);
         return $full;
