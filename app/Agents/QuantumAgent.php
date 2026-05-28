@@ -10,6 +10,7 @@ use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\LogisticsSkillTrait;
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
 use App\Services\PatentPdfService;
@@ -19,6 +20,7 @@ class QuantumAgent implements AgentInterface
     use WebSearchTrait;
     use NsnLookupTrait;
     use AnthropicKeyTrait;
+    use HandlesAnthropicStream;
     use SharedContextTrait;
     use LogisticsSkillTrait;
     protected string $systemPrompt = '';
@@ -755,10 +757,11 @@ MSG;
 
         if ($heartbeat) $heartbeat('a activar raciocínio extendido ⚛️');
 
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($finalMessage),
-            'stream'  => true,
-            'json'    => [
+        // 2026-05-28 refactor: stream loop → trait helper.
+        // 'thinking' config preserved. Trait skips thinking_delta and
+        // handles message_stop + graceful read errors internally.
+        $full = $this->streamAnthropicWithRetries(
+            config: [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 7000],
@@ -766,61 +769,14 @@ MSG;
                 'messages'   => $messages,
                 'stream'     => true,
             ],
-        ]);
-
-        $body        = $response->getBody();
-        $full        = '';
-        $buf         = '';
-        $lastBeat    = time();
-
-        while (!$body->eof()) {
-            // Guzzle/PSR-7 read() lança "Error in input stream" quando o
-            // upstream fecha a connection mid-buffer (timeout do nginx
-            // llm-proxy, fim brusco do Anthropic, etc.). Apanhamos para
-            // distinguir entre "morreu antes de receber qq texto" (erro
-            // real, propaga) e "morreu depois da resposta toda" (graceful,
-            // ignora). Sintoma do user: balão completo + ❌ Erro: Error
-            // in input stream a seguir.
-            try {
-                $buf .= $body->read(1024);
-            } catch (\Throwable $readErr) {
-                if ($full === '') throw $readErr;
-                \Log::info('QuantumAgent: stream read error após resposta completa — graceful end', [
-                    'msg' => $readErr->getMessage(), 'len' => strlen($full),
-                ]);
-                break;
-            }
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                // Anthropic SSE termina com event message_stop — sai limpo
-                // do loop antes de qualquer read() final que possa falhar.
-                if (($evt['type'] ?? '') === 'message_stop') break 2;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        // Stream ALL chunks to client without filtering.
-                        // The DISCOVERIES_JSON HTML-comment block is stripped
-                        // on the frontend in renderMarkdown() so users never see it.
-                        // Filtering here caused 30-60s silence that dropped connections.
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            // Heartbeat every 3s to keep mobile connections alive
-            if ($heartbeat && (time() - $lastBeat) >= 3) {
-                $heartbeat('streaming');
-                $lastBeat = time();
-            }
-        }
+            headers:          $this->headersForMessage($finalMessage),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Quantum a processar',
+            retries:          [0, 2, 5],
+            emergencyMessage: "⚠️ Quantum temporariamente indisponível. Tenta novamente em 30s.",
+            agentLabel:       'QuantumAgent',
+        );
 
         if ($isDigest) {
             try { $this->saveDiscoveriesFromResponse($full); } catch (\Throwable $e) {
