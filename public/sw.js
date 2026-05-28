@@ -42,6 +42,16 @@ self.addEventListener('activate', (event) => {
                 .map((n) => caches.delete(n))
         );
         await self.clients.claim();
+
+        // 2026-05-28: notifica TODAS as tabs que há nova versão. O frontend
+        // (welcome.blade.php) escuta este message e mostra um banner amarelo
+        // "⚡ Nova versão — Reload" para o user actualizar sem ter de fazer
+        // hard refresh manual. Resolve o "freeze do Octane" reportado.
+        const clients = await self.clients.matchAll({ includeUncontrolled: true });
+        clients.forEach(c => c.postMessage({
+            type: 'sw-updated',
+            version: CACHE_VERSION,
+        }));
     })());
 });
 

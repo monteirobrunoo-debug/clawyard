@@ -77,6 +77,34 @@ if ! $FORGE_PHP artisan optimize 2>&1; then
     # Não exit — continua para tentar restart workers
 fi
 
+# ─── 4.1. Auto-bump SW version + opcache reset (anti-freeze 2026-05-28) ─────
+# Pedido directo Bruno: "já é um problema antigo esse freeze no octane, tem
+# de ser melhorado". User via comportamento antigo apesar do deploy ter o
+# código novo. 3 vectores combinados resolvem em definitivo:
+#
+#   a) sw.js — injecta git short SHA na CACHE_VERSION. Cada release tem cache
+#      key única → SW invalida automaticamente todos os caches antigos no
+#      próximo carregamento (activate event line 36-45 do sw.js).
+#   b) opcache_reset() — Octane workers re-leem todos os .php files. Mesmo
+#      que opcache.validate_timestamps=0 estivesse activo, reset força.
+#   c) view:clear é implícito no view:cache do optimize, mas se houver
+#      problemas adicionais, ver storage/framework/views/.
+GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+DEPLOY_TS=$(date +'%Y-%m-%d_%H%M')
+if [[ -f public/sw.js ]]; then
+    NEW_VERSION="clawyard-${GIT_SHA}-${DEPLOY_TS}"
+    if sed -i.bak "s|^const CACHE_VERSION = '.*';|const CACHE_VERSION = '${NEW_VERSION}';|" public/sw.js 2>/dev/null; then
+        rm -f public/sw.js.bak
+        log "  ✓ sw.js bump → ${NEW_VERSION}"
+    else
+        err "  sw.js sed failed — continuando sem bump"
+    fi
+fi
+
+# opcache_reset via tinker. Não-crítico: se falhar, octane:reload abaixo
+# também limpa opcache no boot dos workers novos.
+$FORGE_PHP artisan tinker --execute='function_exists("opcache_reset") ? opcache_reset() : null; echo "opcache_reset:" . (function_exists("opcache_reset") ? "ok" : "skipped") . "\n";' 2>&1 | tail -1
+
 # ─── 5. Octane reload com verificação ───────────────────────────────────────
 # octane:reload manda SIGUSR1. Swoole espera que cada worker termine a request
 # actual (graceful) antes de o reiniciar com código novo.

@@ -51,6 +51,33 @@
                         .register('/sw.js', { scope: '/' })
                         .catch((e) => console.warn('SW registration failed:', e));
                 });
+
+                // 2026-05-28 anti-freeze: quando o SW activa uma nova versão
+                // (após deploy), envia postMessage 'sw-updated'. Mostramos um
+                // banner amarelo "⚡ Nova versão ClawYard — Reload" no topo
+                // da página. Click reloads → user vê código novo sem hard
+                // refresh manual. Resolve o "octane freeze" definitivamente.
+                navigator.serviceWorker.addEventListener('message', (event) => {
+                    if (event.data?.type !== 'sw-updated') return;
+                    if (document.getElementById('sw-update-banner')) return; // anti-dup
+                    const banner = document.createElement('div');
+                    banner.id = 'sw-update-banner';
+                    banner.setAttribute('role', 'alert');
+                    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#fbbf24,#f59e0b);color:#1f2937;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,0.18);font-family:system-ui,-apple-system,sans-serif;';
+                    banner.innerHTML = `
+                        <span>⚡ Nova versão ClawYard disponível</span>
+                        <button id="sw-reload-btn" style="background:#1f2937;color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
+                            🔄 Reload
+                        </button>
+                        <button id="sw-dismiss-btn" aria-label="Dispensar" style="background:transparent;border:none;color:#1f2937;font-size:18px;cursor:pointer;padding:0 4px;line-height:1;">×</button>
+                    `;
+                    document.body.appendChild(banner);
+                    document.getElementById('sw-reload-btn').onclick = () => {
+                        // skipWaiting + clean reload — apanha sempre o código novo.
+                        location.reload();
+                    };
+                    document.getElementById('sw-dismiss-btn').onclick = () => banner.remove();
+                });
             }
         </script>
 

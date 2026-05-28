@@ -354,7 +354,17 @@ Route::get('/chat', function () {
             'agents'   => array_intersect_key($catalog, array_flip($allowed)),
         ];
     }
-    return view('welcome', ['agentRestriction' => $restriction]);
+    // 2026-05-28 anti-freeze: Cache-Control: no-cache no welcome HTML.
+    // O chat tem JS inline pesado — quando há um deploy, o user precisa
+    // do HTML fresh para apanhar o JS novo (não cached). no-cache (não
+    // confundir com no-store) permite o browser cachear mas obriga
+    // revalidação no servidor a cada GET — se ETag bate, devolve 304;
+    // senão devolve 200 com HTML novo. Assets (CSS/JS/fonts no /build/)
+    // continuam cached normalmente via SW cache-first.
+    return response()
+        ->view('welcome', ['agentRestriction' => $restriction])
+        ->header('Cache-Control', 'no-cache, must-revalidate')
+        ->header('Pragma', 'no-cache');
 })->middleware(['auth'])->name('chat');
 
 // Usage analytics — personal dashboard showing which agents the user
