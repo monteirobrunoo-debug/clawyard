@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
@@ -27,6 +28,7 @@ class SalesAgent implements AgentInterface
     use ShippingSkillTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
+    use HandlesAnthropicStream;
     protected string $systemPrompt = '';
     protected string $agentKey     = 'sales';
 
@@ -317,49 +319,25 @@ SPECIALTY;
             ['role' => 'user', 'content' => $message],
         ]);
 
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $this->headersForMessage($message),
-            'stream'  => true,
-            'json'    => [
+        // 2026-05-28 refactor: substituídas ~30 linhas de stream loop manual
+        // pelo trait HandlesAnthropicStream::streamAnthropicWithRetries.
+        // Inclui retries automáticos (0s, 2s, 5s) + emergency message.
+        $full = $this->streamAnthropicWithRetries(
+            config: [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
                 'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
-        ]);
-
-        $body = $response->getBody();
-        $full = '';
-        $buf  = '';
-
-        while (!$body->eof()) {
-            try {
-                $buf .= $body->read(1024);
-            } catch (\Throwable $readErr) {
-                if ($full === '') throw $readErr;
-                \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
-                break;
-            }
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-        }
+            headers:          $this->headersForMessage($message),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Marco Sales a analisar',
+            retries:          [0, 2, 5],
+            emergencyMessage: "⚠️ Marco Sales temporariamente indisponível. Tenta novamente em 30s.",
+            agentLabel:       'SalesAgent',
+        );
 
         $this->publishSharedContext($full);
         return $full;

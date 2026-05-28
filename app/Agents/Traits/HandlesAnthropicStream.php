@@ -26,8 +26,113 @@ use Psr\Http\Message\StreamInterface;
 trait HandlesAnthropicStream
 {
     /**
+     * High-level wrapper: build request → POST → read stream → retries → emergency.
+     *
+     * Caso de uso típico (Engineer/MilDef/Marco/etc.):
+     *
+     *     $full = $this->streamAnthropicWithRetries(
+     *         config: ['model' => ..., 'max_tokens' => ..., 'system' => $sys, 'messages' => $msgs, 'stream' => true],
+     *         headers: $this->headersForMessage($message),
+     *         onChunk: $onChunk,
+     *         heartbeat: $heartbeat,
+     *         heartbeatLabel: 'agent a pensar',
+     *         retries: [0, 1, 3, 7],
+     *     );
+     *
+     * Se TODAS as retries falharem com $full === '' → emergency message via $onChunk.
+     * Frontend nunca vê stream completamente vazio → elimina "❌ Error in input stream".
+     *
+     * @param array         $config           Payload JSON Anthropic (model, max_tokens, etc.)
+     * @param array         $headers          Headers para POST (incluindo x-api-key)
+     * @param callable      $onChunk          function(string $text): void — chunk callback
+     * @param ?callable     $heartbeat        function(string $label): void
+     * @param string        $heartbeatLabel   Texto do heartbeat
+     * @param array<int>    $retries          Delays em segundos antes de cada tentativa, ex: [0, 1, 3, 7]
+     * @param ?string       $emergencyMessage Mensagem final se todas falham (null = throw)
+     * @param ?string       $agentLabel       Label para logs
+     * @param int           $heartbeatEvery   Segundos entre heartbeats
+     *
+     * @return string Texto completo agregado da resposta
+     */
+    protected function streamAnthropicWithRetries(
+        array $config,
+        array $headers,
+        callable $onChunk,
+        ?callable $heartbeat = null,
+        string $heartbeatLabel = 'processando',
+        array $retries = [0, 2, 5],
+        ?string $emergencyMessage = null,
+        ?string $agentLabel = null,
+        int $heartbeatEvery = 5,
+    ): string {
+        $label = $agentLabel ?? class_basename(static::class);
+        $lastErr = null;
+
+        // Garante que tem client (assumimos que o agent tem $this->client Guzzle)
+        if (!property_exists($this, 'client') || $this->client === null) {
+            throw new \RuntimeException("{$label}: \$this->client (Guzzle) não está disponível");
+        }
+
+        foreach ($retries as $attempt => $delaySeconds) {
+            if ($delaySeconds > 0) {
+                if ($heartbeat) $heartbeat("⚠️ retry {$attempt} (aguarda {$delaySeconds}s)");
+                sleep($delaySeconds);
+            }
+
+            try {
+                $response = $this->client->post('/v1/messages', [
+                    'headers' => $headers,
+                    'stream'  => true,
+                    'json'    => $config,
+                ]);
+
+                $full = $this->readAnthropicStream(
+                    body:           $response->getBody(),
+                    onDelta:        $onChunk,
+                    heartbeat:      $heartbeat,
+                    heartbeatEvery: $heartbeatEvery,
+                    heartbeatLabel: $attempt === 0 ? $heartbeatLabel : "{$heartbeatLabel} (retry {$attempt})",
+                    agentLabel:     $label,
+                );
+
+                if ($attempt > 0) {
+                    Log::info("{$label}: succeeded on retry {$attempt}", [
+                        'previous_errors' => $lastErr?->getMessage(),
+                    ]);
+                }
+
+                return $full;
+            } catch (\Throwable $err) {
+                $lastErr = $err;
+                Log::warning("{$label}: attempt {$attempt} failed", [
+                    'error'      => $err->getMessage(),
+                    'exception'  => get_class($err),
+                    'next_delay' => $retries[$attempt + 1] ?? 'none',
+                ]);
+            }
+        }
+
+        // Todas falharam.
+        Log::error("{$label}: ALL " . count($retries) . " attempts failed", [
+            'last_error' => $lastErr?->getMessage(),
+        ]);
+
+        if ($emergencyMessage !== null) {
+            $onChunk($emergencyMessage);
+            return $emergencyMessage;
+        }
+
+        // Sem mensagem de emergência → propaga
+        throw $lastErr ?? new \RuntimeException("{$label}: all retries failed (no exception captured)");
+    }
+
+    /**
      * Lê o SSE stream e devolve o texto completo concatenado.
      * Para cada text_delta chama $onDelta(string $chunk).
+     *
+     * Low-level: usar diretamente quando precisas de controlo customizado
+     * (custom retry logic, tool-use loop, etc.). Caso contrário usa o wrapper
+     * streamAnthropicWithRetries() acima.
      *
      * @param StreamInterface $body            O response body (stream)
      * @param callable        $onDelta         function(string $chunk): void
