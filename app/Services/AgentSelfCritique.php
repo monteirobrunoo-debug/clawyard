@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Log;
  *
  * Modelo usado: configurável via services.agent_critique.model — default
  * claude-sonnet-4-5 (mesmo que o draft) para consistência de capacidade,
- * mas pode-se forçar claude-opus-4-5 para validação ainda mais rigorosa.
+ * mas pode-se forçar claude-opus-4-8 para validação ainda mais rigorosa.
  *
  * Custo: ~+1 chamada por turn = +30-50% custo. Por isso é OPT-IN via
  * config flag `services.agent_critique.enabled` (default false), e

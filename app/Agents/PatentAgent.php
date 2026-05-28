@@ -404,7 +404,7 @@ MSG;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 8192,
                 'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
@@ -435,7 +435,7 @@ MSG;
         // 2026-05-28 refactor: stream loop → trait helper.
         $full = $this->streamAnthropicWithRetries(
             config: [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 8192,
                 'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
                 'messages'   => $messages,
@@ -481,5 +481,5 @@ MSG;
     }
 
     public function getName(): string  { return 'patent'; }
-    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-8'); }
 }

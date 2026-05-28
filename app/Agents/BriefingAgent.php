@@ -363,7 +363,7 @@ SPECIALTY;
         $provider = config('services.briefing.provider', 'anthropic');
         return $provider === 'nvidia'
             ? (string) config('services.briefing.nvidia_model', 'nvidia/llama-3.3-nemotron-super-49b-v1.5')
-            : (string) config('services.anthropic.model_opus',  'claude-opus-4-5');
+            : (string) config('services.anthropic.model_opus',  'claude-opus-4-8');
     }
 
     // ─── Provider-specific streaming helpers ───────────────────────────────
@@ -377,7 +377,7 @@ SPECIALTY;
         // Ganha retries automáticos + emergency message.
         $full .= $this->streamAnthropicWithRetries(
             config: [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 8192,
                 'system'     => $systemPrompt,
                 'messages'   => [['role' => 'user', 'content' => $prompt]],

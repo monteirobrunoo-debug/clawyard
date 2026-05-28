@@ -46,12 +46,15 @@ return [
         // Default (fast, high-volume agents: Sales, Support, Email, CRM, Claude chat…)
         // `claude-sonnet-4-6` alias validated 2026-04-22 — resolves to the
         // newest 4.6 sonnet snapshot on Anthropic's side.
+        // Re-probed 2026-05-28: claude-sonnet-4-7 → 404, claude-sonnet-4-8 → 404.
+        // Sonnet ainda no 4-6 do lado da API (release Anthropic só mexeu em Opus).
         'model'       => env('ANTHROPIC_MODEL',        'claude-sonnet-4-6'),
         // Deep reasoning tier — used by Thinking, Briefing, Engineer, Patent, Finance, MilDef.
-        // Alias `claude-opus-4-5` validated 2026-04-22. Do NOT pin to a
-        // dated snapshot without re-probing (`claude-opus-4-5-20250929`
-        // returned 404).
-        'model_opus'  => env('ANTHROPIC_MODEL_OPUS',   'claude-opus-4-5'),
+        // 2026-05-28: probed claude-opus-4-8 → 200 (novo release Anthropic).
+        // Upgrade de claude-opus-4-5 → claude-opus-4-8. Mesmo custo, reasoning
+        // melhor, melhor instruction-following (importante para o novo
+        // __FOLLOWUP__ marker). Alias dinâmico — não pinar a snapshot dated.
+        'model_opus'  => env('ANTHROPIC_MODEL_OPUS',   'claude-opus-4-8'),
         // Ultra-fast tier for suggestions/smart-chips. Keep on haiku.
         // NOTE: `claude-haiku-4-6` does NOT exist (probe returned 404) —
         // haiku is still at 4.5. Pin to the dated 4.5 snapshot we validated

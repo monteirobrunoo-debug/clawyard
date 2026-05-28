@@ -20,11 +20,14 @@ class ModelProbe extends Command
 
     private const CANDIDATES = [
         // Default tier
-        'claude-sonnet-4-6',
-        'claude-sonnet-4-5',
+        'claude-sonnet-4-8',  // probe 2026-05-28: 404 (não existe ainda)
+        'claude-sonnet-4-7',  // probe 2026-05-28: 404 (não existe)
+        'claude-sonnet-4-6',  // probe 2026-04-22: 200 (current default)
+        'claude-sonnet-4-5',  // legacy fallback
         // Deep reasoning tier
-        'claude-opus-4-7',
-        'claude-opus-4-5',
+        'claude-opus-4-8',    // probe 2026-05-28: 200 (NEW — current default)
+        'claude-opus-4-6',    // probe 2026-05-28: 200 (intermédio)
+        'claude-opus-4-5',    // legacy fallback
         'claude-opus-4-1',
         // Fast tier
         'claude-haiku-4-6',

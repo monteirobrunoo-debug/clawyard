@@ -284,7 +284,7 @@ SPECIALTY;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($augmented),
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $sys,
@@ -348,7 +348,7 @@ SPECIALTY;
         // em vez de degradar o modelo. Se todas falham → emergency message
         // ao user (não-empty, evita "Error in input stream").
         $opusConfig = [
-            'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+            'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
             'max_tokens' => 16000,
             'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
             'system'     => $sys,
@@ -488,7 +488,7 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'engineer'; }
-    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-8'); }
 
     /**
      * Re-encode every string inside the message tree as valid UTF-8 so

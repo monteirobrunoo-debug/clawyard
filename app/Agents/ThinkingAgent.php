@@ -113,7 +113,7 @@ SPECIALTY;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 20000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 10000],
                 'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
@@ -147,7 +147,7 @@ SPECIALTY;
         // 'thinking' config preserved; trait skips non-text deltas (thinking_delta).
         $full = $this->streamAnthropicWithRetries(
             config: [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 20000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 10000],
                 'system'     => $this->buildSystemWithBooks($message, $this->systemPrompt),
@@ -169,5 +169,5 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'thinking'; }
-    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-8'); }
 }

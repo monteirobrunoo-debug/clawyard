@@ -238,7 +238,7 @@ SPECIALTY;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $sys,
@@ -273,7 +273,7 @@ SPECIALTY;
         // Note: mantém thinking mode (Luís é Opus + 5k thinking budget).
         $full = $this->streamAnthropicWithRetries(
             config: [
-                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-5'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $sys,
@@ -295,5 +295,5 @@ SPECIALTY;
     }
 
     public function getName(): string  { return 'finance'; }
-    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-5'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-8'); }
 }
