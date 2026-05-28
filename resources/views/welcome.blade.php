@@ -961,6 +961,13 @@
     <button id="mobile-menu-btn" title="Menu" aria-label="Abrir menu">☰</button>
     <div class="hdr-right" style="margin-left:8px;">
         <span id="model-badge">pronto</span>
+        {{-- 2026-05-28 Fase B1: budget indicator. Frontend pinga /api/user-budget
+             cada 60s; mostra €X/€Y + barra verde/amber/red. Admin → "∞". --}}
+        <span id="budget-indicator" title="Limite diário Anthropic"
+              style="display:none;font-size:11px;color:var(--muted);background:var(--bg3);padding:3px 10px;border-radius:20px;border:1px solid var(--border);align-items:center;gap:6px;">
+            <span id="budget-dot" style="width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;"></span>
+            <span id="budget-text">—</span>
+        </span>
         <a href="/discoveries" title="Descobertas" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🔬 Descobertas</a>
         <a href="/patents/library" title="Biblioteca de Patentes" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">🏛️ Patentes</a>
         <a href="/reports" title="Relatórios" style="background:var(--bg3);border:1px solid var(--border2);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:flex;align-items:center;gap:5px;">📋 Reports</a>
@@ -4850,6 +4857,18 @@ async function sendMessage() {
                 let detail = '';
                 try { const j = JSON.parse(raw); detail = j.detail || ''; } catch (e) {}
                 errMsg = '❌ ' + (detail || 'Ficheiros demasiado grandes para o servidor. Divide em batches mais pequenos ou pede ao admin para aumentar o client_max_body_size do Nginx.');
+            } else if (res.status === 429) {
+                // 2026-05-28 Fase B1: budget diário esgotado. Backend devolve
+                // JSON com {error:'budget_exceeded', spent, cap, message}.
+                let body = {};
+                try { body = JSON.parse(raw); } catch (_) {}
+                if (body.error === 'budget_exceeded') {
+                    errMsg = `💸 ${body.message || 'Limite diário Anthropic atingido. Tenta amanhã.'}`;
+                    // Force-refresh do indicator para reflectir o block.
+                    if (typeof refreshBudgetIndicator === 'function') refreshBudgetIndicator();
+                } else {
+                    errMsg = '🐌 Demasiados pedidos. Espera 30s e tenta de novo.';
+                }
             } else if (res.status === 422) {
                 errMsg = '❌ Dados inválidos: ' + (raw.replace(/<[^>]+>/g,'').trim().substring(0,200) || 'Verifica o tamanho do ficheiro.');
             } else {
@@ -5433,6 +5452,56 @@ async function sendMessage() {
         input.focus();
     }
 }
+
+// ═══════════════════════════════════════════════════════
+//  BUDGET INDICATOR (Fase B1 2026-05-28)
+//  Pinga /api/user-budget cada 60s e mostra €X/€Y + dot
+//  verde/amber/red consoante % do cap usado.
+// ═══════════════════════════════════════════════════════
+async function refreshBudgetIndicator() {
+    try {
+        const r = await fetch('/api/user-budget', { credentials: 'same-origin' });
+        if (!r.ok) return;
+        const data = await r.json();
+        const wrap = document.getElementById('budget-indicator');
+        const dot  = document.getElementById('budget-dot');
+        const text = document.getElementById('budget-text');
+        if (!wrap || !dot || !text) return;
+
+        if (data.level === 'unlimited' || data.is_admin) {
+            wrap.style.display = 'inline-flex';
+            dot.style.background = '#9333ea'; // purple para admin
+            text.textContent = `€${(data.spent ?? 0).toFixed(2)} (admin)`;
+            wrap.title = `Admin: sem cap. Gasto hoje €${(data.spent ?? 0).toFixed(4)}`;
+            return;
+        }
+
+        const colors = { green: '#10b981', amber: '#f59e0b', red: '#ef4444', over: '#7f1d1d' };
+        dot.style.background = colors[data.level] || '#10b981';
+        const cap   = (data.cap ?? 0).toFixed(2);
+        const spent = (data.spent ?? 0).toFixed(2);
+        text.textContent = `€${spent} / €${cap}`;
+        wrap.title = `Gasto Anthropic hoje: ${data.percentage}% (€${spent} de €${cap}). Renova à meia-noite UTC.`;
+        wrap.style.display = 'inline-flex';
+
+        // Quando entra em red/over, animação pulse para chamar atenção.
+        if (data.level === 'red' || data.level === 'over') {
+            wrap.style.animation = 'budget-pulse 1.5s ease-in-out infinite';
+        } else {
+            wrap.style.animation = '';
+        }
+    } catch (_) { /* silent fail */ }
+}
+// Injecta keyframe para pulse só uma vez.
+if (!document.getElementById('budget-pulse-kf')) {
+    const s = document.createElement('style');
+    s.id = 'budget-pulse-kf';
+    s.textContent = '@keyframes budget-pulse { 0%,100% { box-shadow:0 0 0 0 rgba(239,68,68,0.5); } 50% { box-shadow:0 0 0 6px rgba(239,68,68,0); } }';
+    document.head.appendChild(s);
+}
+// Primeiro fetch quando a página carrega; depois cada 60s.
+refreshBudgetIndicator();
+setInterval(refreshBudgetIndicator, 60000);
 
 // ═══════════════════════════════════════════════════════
 //  HISTORY RESTORE

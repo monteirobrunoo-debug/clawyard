@@ -60,7 +60,15 @@ Route::post('/whatsapp/webhook', [WhatsAppController::class, 'webhook'])
 Route::middleware(['auth:web', 'throttle:60,1'])->group(function () {
 
     // Chat API — SSE streaming (fixes Cloudflare 504 timeouts)
-    Route::post('/chat', [NvidiaController::class, 'chatStream']);
+    // 2026-05-28: budget middleware bloqueia se user passou cap diário.
+    Route::post('/chat', [NvidiaController::class, 'chatStream'])->middleware('budget');
+
+    // Budget status — frontend pinga isto cada 30s para actualizar a barra
+    // de % usado no header do chat. Devolve {cap, spent, percentage, level}.
+    Route::get('/user-budget', function () {
+        $svc  = app(\App\Services\UserBudgetService::class);
+        return response()->json($svc->status(auth()->user()));
+    });
 
     // Agent list
     Route::get('/agents', [NvidiaController::class, 'agents']);

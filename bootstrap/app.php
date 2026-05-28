@@ -13,8 +13,11 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'admin'       => \App\Http\Middleware\AdminMiddleware::class,
-            'verified.ip' => \App\Http\Middleware\RequireIpVerification::class,
+            'admin'         => \App\Http\Middleware\AdminMiddleware::class,
+            'verified.ip'   => \App\Http\Middleware\RequireIpVerification::class,
+            // 2026-05-28 Fase B1: bloqueia /api/chat quando user passa cap
+            // diário Anthropic. Admins skip. Default €10/dia.
+            'budget'        => \App\Http\Middleware\CheckUserBudget::class,
         ]);
         // Security headers on all web responses
         $middleware->web(append: [

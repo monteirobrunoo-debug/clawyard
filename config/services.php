@@ -347,6 +347,14 @@ return [
         'auto_analysis' => env('AUTO_ANALYSIS_ENABLED', false),
     ],
 
+    // ── Per-user daily budget cap (Fase B1 2026-05-28) ─────────────────────
+    // Limite diário Anthropic por user (EUR). Admins skip. Configurável por
+    // user via users.daily_budget_eur column (override). Cap global default:
+    // €10/dia. Para mudar em prod sem deploy: USER_DAILY_BUDGET_EUR=15.
+    'budget' => [
+        'daily_eur' => (float) env('USER_DAILY_BUDGET_EUR', 10.0),
+    ],
+
     // ── Token budget (Anthropic) ───────────────────────────────────────────
     // Pedido directo 2026-05-22: pool de €150/mês partilhado entre os users.
     // O que um user não gasta fica disponível para outro. Ranking com preços
