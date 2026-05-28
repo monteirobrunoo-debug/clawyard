@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\ShippingSkillTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
@@ -18,6 +19,7 @@ class EmailAgent implements AgentInterface
     use WebSearchTrait;
     use NsnLookupTrait;
     use AnthropicKeyTrait;
+    use HandlesAnthropicStream;
     use SharedContextTrait;
     use ShippingSkillTrait;
     use LogisticsSkillTrait;
@@ -298,64 +300,29 @@ SPECIALTY;
             ['role' => 'user', 'content' => $message],
         ]);
 
-        $response = $this->client->post('/v1/messages', [
-            // Daniel always produces outbound business emails (B2B
-            // outreach to suppliers, customer replies). The supplier
-            // email + signature phone need to flow through unredacted
-            // so mailto: links work end-to-end.
-            'headers' => $this->headersForMessage($message, true),
-            'stream'  => true,
-            'json'    => [
+        // 2026-05-28 refactor: stream loop → trait helper.
+        // Daniel constrói JSON silenciosamente; passamos no-op como onChunk
+        // ao trait para acumular sem emitir nada — só publicamos no fim
+        // (após parseEmailJson) via $onChunk($result) lá em baixo.
+        $silentSink = function (string $_) { /* no-op: accumulate only */ };
+        $full = $this->streamAnthropicWithRetries(
+            config: [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
                 'max_tokens' => 8192,
                 'system'     => $sys,
                 'messages'   => $messages,
                 'stream'     => true,
             ],
-        ]);
-
-        $body          = $response->getBody();
-        $full          = '';
-        $buf           = '';
-        $jsonStarted   = false;
-        $progressSent  = false;
-        $lastBeat      = time();
-
-        while (!$body->eof()) {
-            try {
-                $buf .= $body->read(1024);
-            } catch (\Throwable $readErr) {
-                if ($full === '') throw $readErr;
-                \Log::info('stream read graceful end after partial response', ['msg' => $readErr->getMessage(), 'len' => strlen($full)]);
-                break;
-            }
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $chunk = $evt['delta']['text'] ?? '';
-                    if ($chunk === '') continue;
-
-                    $full .= $chunk;
-
-                    // While Claude builds the JSON silently, send heartbeats so
-                    // Nginx / SSE connection stays alive (avoids "stuck" appearance).
-                    // We do NOT stream raw JSON chunks — we wait for the complete
-                    // JSON, parse it, then push the result in one shot below.
-                    if ($heartbeat && (time() - $lastBeat >= 1)) {
-                        $heartbeat('a escrever');
-                        $lastBeat = time();
-                    }
-                }
-            }
-        }
+            // Daniel produz emails B2B; supplier email + signature flow unredacted.
+            headers:          $this->headersForMessage($message, true),
+            onChunk:          $silentSink,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Daniel a escrever email',
+            retries:          [0, 2, 5],
+            emergencyMessage: "⚠️ Daniel temporariamente indisponível. Tenta novamente em 30s.",
+            agentLabel:       'EmailAgent',
+            heartbeatEvery:   1,
+        );
 
         // Post-process: parse the completed JSON and push the email to the browser
         $parsed = $this->parseEmailJson($full);
