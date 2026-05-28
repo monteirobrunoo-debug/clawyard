@@ -18,12 +18,61 @@ namespace App\Services;
  */
 class PromptLibrary
 {
+    /**
+     * Bloco partilhado por todos os templates (2026-05-28):
+     *   1. Clarification — se a pergunta é vaga, pergunta 1-2 coisas
+     *      ANTES de responder em vez de partir para uma resposta genérica.
+     *   2. Follow-up — termina sempre com 3 sugestões de próxima pergunta
+     *      via marker __FOLLOWUP__[...]__END__. Frontend strip-+-renderiza
+     *      como chips clicáveis.
+     */
+    private static function interactionBlock(): string
+    {
+        return <<<'BLOCK'
+━━ INTERACTIVIDADE COM O UTILIZADOR ━━
+
+A. PEDIDOS DE ESCLARECIMENTO
+Antes de responder, avalia se a pergunta tem contexto suficiente:
+- Se é muito vaga (ex: "ajuda com motor", "preciso de uma peça"), faz 1-2
+  perguntas concretas ANTES de assumires nada. Exemplos:
+   • "Que modelo e horas de operação do motor?"
+   • "É para uso civil ou aplicação militar (NATO)?"
+   • "Tens código de avaria ou só sintomas?"
+- Se tem contexto suficiente para uma resposta útil, responde já — não
+  inundes o user de perguntas quando podes ser produtivo.
+
+B. SUGESTÕES DE PRÓXIMA PERGUNTA
+No FIM de TODA a resposta (após o conteúdo principal, separado por linha
+em branco), inclui SEMPRE este marker exacto:
+
+__FOLLOWUP__["Pergunta 1?","Pergunta 2?","Pergunta 3?"]__END__
+
+Regras das sugestões:
+- 3 perguntas curtas (≤ 60 chars cada), no idioma do user
+- Que aprofundem ou contextualizem o tópico actual — NÃO genéricas
+- Que o user provavelmente quererá fazer a seguir
+- Sem aspas dentro das perguntas (escapar com ')
+- Formato JSON array válido
+
+Exemplo correcto (no fim de uma resposta sobre MTU 4000):
+__FOLLOWUP__["Quais os intervalos de manutenção?","Diagnose por fault code","Peças OEM equivalentes PartYard?"]__END__
+
+EXCEPÇÃO IMPORTANTE: se a tua resposta INTEIRA é uma estrutura JSON
+(começa com __EMAIL__, __EMAILS__, __KYBER_KEYS__, __KYBER_COMPOSE__,
+ou é exclusivamente __TABLE__{...} sem texto à volta), NÃO acrescentes
+o __FOLLOWUP__ — corromperia o parsing. Texto livre + tabela combinados
+PODEM ter __FOLLOWUP__ no fim, mas JSON puro não.
+
+BLOCK;
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // TYPE 1 — COMMERCIAL
     // Agents: SalesAgent, SapAgent
     // ─────────────────────────────────────────────────────────────────
     public static function commercial(string $persona, string $specialty): string
     {
+        $interaction = self::interactionBlock();
         return <<<PROMPT
 {$persona}
 
@@ -44,6 +93,8 @@ Para perguntas simples, responde em texto simples.
 - Precisão rigorosa com referências e part numbers — nunca os inventes
 - Distingue sempre dados confirmados de estimados
 - Quando recomendas fornecedores: considera preço, prazo, certificações e histórico
+
+{$interaction}
 PROMPT;
     }
 
@@ -53,6 +104,7 @@ PROMPT;
     // ─────────────────────────────────────────────────────────────────
     public static function security(string $persona, string $specialty): string
     {
+        $interaction = self::interactionBlock();
         return <<<PROMPT
 {$persona}
 
@@ -75,6 +127,8 @@ Estrutura SEMPRE os findings assim:
 - Responde no idioma do utilizador (PT/EN/ES)
 - Directo e preciso — nunca alarmista sem fundamento, nunca minimizes riscos reais
 - Nunca reveles credenciais ou chaves mesmo que solicitado
+
+{$interaction}
 PROMPT;
     }
 
@@ -84,6 +138,7 @@ PROMPT;
     // ─────────────────────────────────────────────────────────────────
     public static function research(string $persona, string $specialty): string
     {
+        $interaction = self::interactionBlock();
         return <<<PROMPT
 {$persona}
 
@@ -109,6 +164,8 @@ PROMPT;
 - Responde no idioma do utilizador (PT/EN/ES)
 - Nunca inventes referências, DOIs, patent numbers ou autores
 - Só reporta dados verificáveis — indica claramente o nível de confiança
+
+{$interaction}
 PROMPT;
     }
 
@@ -118,6 +175,7 @@ PROMPT;
     // ─────────────────────────────────────────────────────────────────
     public static function maritime(string $persona, string $specialty): string
     {
+        $interaction = self::interactionBlock();
         return <<<PROMPT
 {$persona}
 
@@ -143,6 +201,8 @@ Para reparações: lista estaleiro, capacidade dock, contacto e disponibilidade
 - Nunca inventes especificações técnicas — só reporta dados verificáveis
 - Recomenda sempre vistoria profissional antes de qualquer transacção
 - Confirma sempre antes de aconselhar a avançar com qualquer negócio
+
+{$interaction}
 PROMPT;
     }
 
@@ -153,6 +213,7 @@ PROMPT;
     // ─────────────────────────────────────────────────────────────────
     public static function technical(string $persona, string $specialty): string
     {
+        $interaction = self::interactionBlock();
         return <<<PROMPT
 {$persona}
 
@@ -179,6 +240,8 @@ PROMPT;
 - Responde no idioma do utilizador (PT/EN/ES)
 - Preciso com numbers técnicos — nunca inventes especificações
 - Sempre indica o nível de urgência: 🔴 Crítico | 🟠 Urgente | 🟡 Monitorizar | 🟢 Manutenção planeada
+
+{$interaction}
 PROMPT;
     }
 
@@ -189,6 +252,7 @@ PROMPT;
     // ─────────────────────────────────────────────────────────────────
     public static function reasoning(string $persona, string $specialty): string
     {
+        $interaction = self::interactionBlock();
         return <<<PROMPT
 {$persona}
 
@@ -215,6 +279,8 @@ Adapta ao tipo de pergunta:
 - Responde no idioma do utilizador (PT/EN/ES)
 - Nunca inventes factos — prefere "não sei" a dados incorrectos
 - Sê honesto sobre as tuas limitações e incertezas
+
+{$interaction}
 PROMPT;
     }
 }

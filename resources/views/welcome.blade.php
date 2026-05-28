@@ -2318,6 +2318,73 @@ function playLevelUpOverlay(level, levelName) {
     }, 2600);
 }
 
+// ═══════════════════════════════════════════════════════
+//  FOLLOW-UP CHIPS (2026-05-28)
+//  Cada agente termina a resposta com:
+//    __FOLLOWUP__["Q1?","Q2?","Q3?"]__END__
+//  → 3 chips clicáveis abaixo da mensagem; clicar envia
+//    a pergunta como nova mensagem ao mesmo agente.
+// ═══════════════════════════════════════════════════════
+function renderFollowupChips(msgEl, fullText) {
+    if (!msgEl || !fullText) return;
+    // Match marker — opcionalmente terminado por __END__ ou final-de-texto
+    // (alguns agentes podem cortar o marker se a resposta for cropada).
+    const m = fullText.match(/__FOLLOWUP__\s*(\[[\s\S]*?\])\s*(?:__END__|$)/);
+    if (!m) return;
+    let suggestions;
+    try {
+        suggestions = JSON.parse(m[1]);
+    } catch (_) { return; }
+    if (!Array.isArray(suggestions) || suggestions.length === 0) return;
+
+    // Sanitize: strings, ≤ 80 chars, max 3
+    suggestions = suggestions
+        .filter(s => typeof s === 'string' && s.trim().length > 0)
+        .map(s => s.trim().slice(0, 80))
+        .slice(0, 3);
+    if (suggestions.length === 0) return;
+
+    // Já tem chips? Evita duplicação em re-renders.
+    if (msgEl.querySelector('.followup-chips')) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'followup-chips';
+    wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.08);';
+
+    const hint = document.createElement('span');
+    hint.textContent = '💡 Próxima pergunta:';
+    hint.style.cssText = 'font-size:11px;color:#888;align-self:center;margin-right:4px;';
+    wrap.appendChild(hint);
+
+    suggestions.forEach(q => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'followup-chip';
+        chip.textContent = q;
+        chip.style.cssText = 'background:rgba(118,185,0,0.10);border:1px solid rgba(118,185,0,0.30);color:#cfd8dc;padding:5px 11px;border-radius:14px;font-size:11.5px;cursor:pointer;transition:all .15s ease;line-height:1.3;';
+        chip.onmouseover = () => { chip.style.background = 'rgba(118,185,0,0.20)'; chip.style.borderColor = 'rgba(118,185,0,0.60)'; };
+        chip.onmouseout  = () => { chip.style.background = 'rgba(118,185,0,0.10)'; chip.style.borderColor = 'rgba(118,185,0,0.30)'; };
+        chip.onclick = () => {
+            if (isStreaming) return; // não interromper resposta em curso
+            const input = document.getElementById('message-input');
+            if (!input) return;
+            input.value = q;
+            input.dispatchEvent(new Event('input', { bubbles: true })); // trigger autosize
+            // Submete via o flow normal
+            if (typeof sendMessage === 'function') {
+                sendMessage();
+            } else {
+                document.getElementById('send-btn')?.click();
+            }
+        };
+        wrap.appendChild(chip);
+    });
+
+    // Append a seguir à msg-meta / feedback bar para ficar mesmo no fim do bubble
+    const msgCol = msgEl.querySelector('.msg-col') || msgEl;
+    msgCol.appendChild(wrap);
+}
+
 // ═══════════════════════════════
 //  FEEDBACK 👍/👎 BAR (acoplada a assistant messages)
 // ═══════════════════════════════
@@ -2417,6 +2484,23 @@ function clearAgentActive() {
 // ═══════════════════════════════
 function addMessage(role, text, agentName = '') {
     document.getElementById('empty-state')?.remove();
+
+    // 2026-05-28: extrair __FOLLOWUP__ ANTES de qualquer renderização para
+    // (a) esconder o JSON raw e (b) re-renderizar como chips no fim.
+    // Aplica-se ao histórico restaurado e mensagens inline.
+    let followupSuggestions = null;
+    if (role === 'ai' && typeof text === 'string') {
+        const fum = text.match(/__FOLLOWUP__\s*(\[[\s\S]*?\])\s*(?:__END__|$)/);
+        if (fum) {
+            try {
+                const parsed = JSON.parse(fum[1]);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    followupSuggestions = parsed.filter(s => typeof s === 'string').slice(0, 3);
+                }
+            } catch (_) { /* malformed — ignore */ }
+            text = text.replace(/\n*__FOLLOWUP__[\s\S]*$/, '').trim();
+        }
+    }
 
     const msg  = document.createElement('div');
     msg.className = `message ${role}`;
@@ -2721,6 +2805,15 @@ function addMessage(role, text, agentName = '') {
     // Outlook" para o user disparar uma única composição em vez de
     // ter de clicar email a email. Activado apenas em mensagens AI.
     if (role === 'ai') attachOutlookRoundup(msg, agentName);
+
+    // 2026-05-28: chips de follow-up nas mensagens AI restauradas
+    // do histórico. Para mensagens live, o caller (sendMessage) já
+    // chama renderFollowupChips com o accumulated completo.
+    if (role === 'ai' && followupSuggestions) {
+        // Reconstrói o marker para reaproveitar a função canônica.
+        const synthetic = '__FOLLOWUP__' + JSON.stringify(followupSuggestions) + '__END__';
+        renderFollowupChips(msg, synthetic);
+    }
 
     chat.scrollTop = chat.scrollHeight;
     return msg;
@@ -4911,9 +5004,14 @@ async function sendMessage() {
                 }
 
                 // Strip hidden DISCOVERIES_JSON block before rendering
-                const displayText = accumulated.replace(
-                    /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
-                );
+                // 2026-05-28: também esconde __FOLLOWUP__ marker durante o
+                // streaming — o JSON cru ficava visível segundos antes do
+                // [DONE] o transformar em chips clicáveis. Strip do prefixo
+                // em diante (mesmo se o marker estiver incompleto) evita
+                // flash do JSON cru.
+                const displayText = accumulated
+                    .replace(/<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, '')
+                    .replace(/\n*__FOLLOWUP__[\s\S]*$/, '');
 
                 // 2026-05-17: assim que detectamos um structured token, mostrar
                 // placeholder em vez do JSON cru — o final DONE substitui pela
@@ -5064,10 +5162,13 @@ async function sendMessage() {
                                 streamBubble.innerHTML = renderMarkdown(accumulated.replace('__EMAILS__', ''));
                             }
                         } else {
-                            // Final render — strip hidden QuantumAgent JSON block first.
-                            const finalDisplay = accumulated.replace(
-                                /<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, ''
-                            ).trim();
+                            // Final render — strip hidden QuantumAgent JSON block
+                            // AND __FOLLOWUP__[...]__END__ marker (renderizado a
+                            // seguir como chips clicáveis via renderFollowupChips).
+                            const finalDisplay = accumulated
+                                .replace(/<!--\s*DISCOVERIES_JSON[\s\S]*?(DISCOVERIES_JSON\s*-->|$)/g, '')
+                                .replace(/\n*__FOLLOWUP__[\s\S]*$/, '')
+                                .trim();
 
                             // ── STRUCTURED TOKEN RENDERER (2026-05-17 fix) ──
                             // Bug: o streaming path acabava em renderMarkdown(),
@@ -5159,6 +5260,12 @@ async function sendMessage() {
                         // dashboard "Saúde dos agentes" a detectar prompts
                         // maus e premeia o utilizador por feedback honesto.
                         attachFeedbackBar(streamMsg);
+
+                        // 2026-05-28: Follow-up chips — agentes terminam
+                        // a resposta com __FOLLOWUP__["Q1","Q2","Q3"]__END__.
+                        // Parse, valida JSON, renderiza 3 chips clicáveis
+                        // que enviam a pergunta ao mesmo agente.
+                        renderFollowupChips(streamMsg, accumulated);
 
                         chat.scrollTop = chat.scrollHeight;
                     }

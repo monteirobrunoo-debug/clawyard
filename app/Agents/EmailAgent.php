@@ -324,7 +324,12 @@ SPECIALTY;
             heartbeatEvery:   1,
         );
 
-        // Post-process: parse the completed JSON and push the email to the browser
+        // Post-process: parse the completed JSON and push the email to the browser.
+        // 2026-05-28: defensive strip do __FOLLOWUP__ marker que o trait
+        // global pode acrescentar — se Daniel produzir __EMAIL__{...} +
+        // __FOLLOWUP__[...], parseEmailJson partia. O prompt já instrui a
+        // omitir o marker em JSON puro, mas vale a pena ser defensivo.
+        $full   = preg_replace('/\s*__FOLLOWUP__\s*\[.*?\]\s*(__END__)?\s*$/s', '', $full) ?? $full;
         $parsed = $this->parseEmailJson($full);
         $result = $parsed ?? $full;
 
