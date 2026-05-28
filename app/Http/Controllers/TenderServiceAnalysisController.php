@@ -27,6 +27,13 @@ class TenderServiceAnalysisController extends Controller
      */
     public function generate(Request $request, Tender $tender, TenderServiceAnalysisService $svc): JsonResponse|\Illuminate\Http\Response
     {
+        // Multi-agente pode demorar 60-90s. Bump timeouts agressivamente
+        // (PHP-level — Nginx/Octane também têm limits separados).
+        // Pedido directo Bruno 2026-05-28: HTTP 408 em "Análise do serviço".
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+        @ini_set('default_socket_timeout', '300');
+
         try {
             $this->authorizeTender($tender);
         } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
