@@ -90,7 +90,22 @@ class RunTenderAnalysisJob implements ShouldQueue
             Log::error('RunTenderAnalysisJob: failed', [
                 'tender_id' => $this->tenderId,
                 'error'     => $e->getMessage(),
+                'exception' => get_class($e),
             ]);
+            // 2026-05-28: defensive — analyse() já marca status='failed' +
+            // fail_reason no seu catch, mas se a exception vier ANTES do
+            // primeiro save (ex: Tender::find race condition, kill-switch
+            // toggled mid-call), nenhuma row é actualizada e o polling fica
+            // preso em ⏳. Garantimos aqui que fica failed com mensagem real.
+            try {
+                \App\Models\TenderServiceAnalysis::where('tender_id', $this->tenderId)
+                    ->where('status', 'running')
+                    ->update([
+                        'status'      => 'failed',
+                        'fail_reason' => mb_substr($e->getMessage() ?: get_class($e), 0, 500),
+                        'failed_at'   => now(),
+                    ]);
+            } catch (\Throwable) { /* legacy schema sem fail_reason — best effort */ }
         }
     }
 

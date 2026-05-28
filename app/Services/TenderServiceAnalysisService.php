@@ -206,11 +206,21 @@ class TenderServiceAnalysisService
                 'cost'      => $analysis->total_cost_usd,
             ]);
         } catch (\Throwable $e) {
+            // 2026-05-28: grava fail_reason também (não só status). Sem isto, o
+            // polling fallback caía no genérico "worker timeout" mesmo quando
+            // o erro real era totalmente diferente (529 overloaded, JSON
+            // inválido, etc). User reportou final do dia 2026-05-28.
             $analysis->status = 'failed';
+            try {
+                // Schema pode não ter as colunas — try/catch para não bloquear.
+                $analysis->fail_reason = mb_substr($e->getMessage() ?: get_class($e), 0, 500);
+                $analysis->failed_at   = now();
+            } catch (\Throwable) { /* legacy schema */ }
             $analysis->save();
             Log::error('TenderServiceAnalysis: failed', [
                 'tender_id' => $tender->id,
                 'error'     => $e->getMessage(),
+                'exception' => get_class($e),
             ]);
             throw $e;
         }

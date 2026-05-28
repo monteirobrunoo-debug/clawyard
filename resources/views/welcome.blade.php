@@ -5315,8 +5315,24 @@ async function sendMessage() {
             }
         } else {
             const errMsg = err?.message || String(err);
-            addMessage('ai', '❌ Erro: ' + errMsg);
-            logActivity('❌', 'Erro: ' + errMsg, 'done');
+
+            // 2026-05-28: stream cuts (network error, Failed to fetch,
+            // ERR_CONNECTION_RESET) DURANTE conteúdo já streamado são
+            // tipicamente Octane reload mid-deploy — não são erros do
+            // agente, e o conteúdo parcial é válido. Em vez de red error,
+            // preservamos o markdown + nota subtil "ligação cortada".
+            const isNetworkCut = /network error|failed to fetch|connection reset|err_connection|load failed|fetch failed/i.test(errMsg);
+            if (isNetworkCut && streamBubble && accumulated.trim() !== '') {
+                streamBubble.innerHTML = renderMarkdown(accumulated) +
+                    '<div style="margin-top:10px;padding:8px 12px;background:#fff7ed;border-left:3px solid #f97316;border-radius:4px;font-size:11.5px;color:#9a3412;">' +
+                    '⚠️ Ligação cortada durante streaming (provável Octane reload ou rede instável). Conteúdo parcial preservado acima — re-envia a pergunta para a versão completa.' +
+                    '</div>';
+                attachFeedbackBar(streamMsg);
+                logActivity('⚠️', 'Stream cortado mid-response — conteúdo parcial preservado', 'done');
+            } else {
+                addMessage('ai', '❌ Erro: ' + errMsg);
+                logActivity('❌', 'Erro: ' + errMsg, 'done');
+            }
             console.error('sendMessage error:', err);
         }
     } finally {
