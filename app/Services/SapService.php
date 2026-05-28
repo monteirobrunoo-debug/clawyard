@@ -1177,9 +1177,16 @@ class SapService
             // o campo "Proprietário" ficava em branco no SAP. Política: o
             // proprietário é sempre o vendedor da OP. OwnerCode → OHEM.empID,
             // SalesPerson → OSLP.SlpCode. EmployeesInfo faz a ponte (cached 24h).
-            $ownerEmpId = $this->resolveOwnerCodeForSalesPerson((int) $data['SalesPerson']);
-            if ($ownerEmpId !== null) {
-                $payload['OwnerCode'] = $ownerEmpId;
+            //
+            // 2026-05-28: este SAP B1 instance rejeita OwnerCode em
+            // SalesOpportunities ("Property 'OwnerCode' is invalid"). Quando
+            // detectado, cacheamos 24h para não tentar mais — economiza
+            // 1 round-trip + remove noise do log.
+            if (!\Cache::has('sap:sales_opp:no_owner_code')) {
+                $ownerEmpId = $this->resolveOwnerCodeForSalesPerson((int) $data['SalesPerson']);
+                if ($ownerEmpId !== null) {
+                    $payload['OwnerCode'] = $ownerEmpId;
+                }
             }
         }
 
@@ -1281,6 +1288,11 @@ class SapService
             $originalError = $this->lastError;
             Log::warning("CRM: retrying without OwnerCode (SAP: {$originalError})");
             unset($filtered['OwnerCode']);
+
+            // Cache 24h — esta instância SAP claramente não aceita OwnerCode
+            // em SalesOpportunities. Próximas calls não vão tentar.
+            \Cache::put('sap:sales_opp:no_owner_code', true, now()->addHours(24));
+
             $result = $this->post('SalesOpportunities', $filtered);
             if ($result)  $this->lastError = '';
             elseif ($this->lastError === '') $this->lastError = $originalError;
