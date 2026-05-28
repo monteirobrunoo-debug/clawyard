@@ -933,17 +933,30 @@
                                     throw new Error('Servidor: ' + summary + '. Vê storage/logs/laravel.log para o stack.');
                                 }
                                 if (!res.ok) throw new Error(data.detail || data.message || 'HTTP ' + res.status);
-                                status.className = 'mt-3 text-xs text-emerald-700';
-                                status.textContent = (data.cached ? '✓ Análise pronta (cached). ' : '✓ Análise gerada. ') + 'A renderizar inline…';
 
-                                // 2026-05-18: render INLINE em vez de nova tab.
-                                // Pedido directo: "quando estou no dashboard do
-                                // concurso queria não sair, analisar os emails
-                                // para enviar logo, pedidos e analise dos
-                                // agentes logo ali". Faz fetch da página da
-                                // análise e injecta o conteúdo num panel logo
-                                // por baixo do botão.
-                                renderAnalysisInline(data.view_url);
+                                // 2026-05-28: análise agora é async (job em queue).
+                                // Se devolveu cached → render imediato.
+                                // Se devolveu queued → poll endpoint até done.
+                                if (data.cached && data.view_url) {
+                                    status.className = 'mt-3 text-xs text-emerald-700';
+                                    status.textContent = '✓ Análise pronta (cached). A renderizar inline…';
+                                    renderAnalysisInline(data.view_url);
+                                    return;
+                                }
+
+                                if (data.queued && data.poll_url) {
+                                    status.className = 'mt-3 text-xs text-blue-700';
+                                    status.textContent = '⏳ 5 agentes a analisar em background (~75s). A actualizar automaticamente…';
+                                    await pollAnalysisUntilDone(data.poll_url, data.view_url, status);
+                                    return;
+                                }
+
+                                // Fallback antigo (sync return) — manter compat
+                                if (data.view_url) {
+                                    status.className = 'mt-3 text-xs text-emerald-700';
+                                    status.textContent = '✓ Análise gerada. A renderizar inline…';
+                                    renderAnalysisInline(data.view_url);
+                                }
                             } catch (e) {
                                 status.className = 'mt-3 text-xs text-red-700';
                                 status.textContent = 'Erro: ' + e.message;
@@ -952,6 +965,44 @@
                                 btn.textContent = orig;
                             }
                         });
+
+                        // 2026-05-28: poll endpoint /service-analysis?json=1 até status='done'.
+                        // Máximo 5 min (60× 5s) — depois desiste e mostra refresh manual.
+                        async function pollAnalysisUntilDone(pollUrl, viewUrl, statusEl) {
+                            const MAX_ATTEMPTS = 60;        // 5min @ 5s
+                            const INTERVAL_MS  = 5000;
+                            const startedAt    = Date.now();
+
+                            for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+                                await new Promise(r => setTimeout(r, INTERVAL_MS));
+                                try {
+                                    const pollRes = await fetch(pollUrl, {
+                                        headers: { 'Accept': 'application/json' },
+                                        credentials: 'same-origin',
+                                    });
+                                    if (!pollRes.ok) continue;
+                                    const pollData = await pollRes.json();
+                                    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+
+                                    if (pollData.is_done && pollData.view_url) {
+                                        statusEl.className = 'mt-3 text-xs text-emerald-700';
+                                        statusEl.textContent = `✓ Análise gerada em ${elapsed}s. A renderizar…`;
+                                        renderAnalysisInline(pollData.view_url);
+                                        return;
+                                    }
+
+                                    // Update visual feedback
+                                    statusEl.textContent = `⏳ A analisar… ${elapsed}s elapsed (agentes a correr em background)`;
+                                } catch (pollErr) {
+                                    // Network glitch — keep trying
+                                    console.warn('Poll attempt failed:', pollErr);
+                                }
+                            }
+
+                            // Timeout — refresh manual
+                            statusEl.className = 'mt-3 text-xs text-amber-700';
+                            statusEl.textContent = '⏰ Análise demora mais que esperado. Refresca a página para ver resultado quando estiver pronto.';
+                        }
 
                         // 2026-05-18: helper para render inline da análise multi-agente.
                         // Faz fetch ao GET /tenders/{id}/service-analysis e injecta

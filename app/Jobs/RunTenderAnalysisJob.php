@@ -39,6 +39,7 @@ class RunTenderAnalysisJob implements ShouldQueue
     public function __construct(
         public int $tenderId,
         public ?int $userId = null,
+        public bool $bypassKillSwitch = false,
     ) {
         // 2026-05-20 FIX CRÍTICO: a trait Queueable já define
         // ?string $queue protegido — declarar "public string $queue
@@ -58,9 +59,12 @@ class RunTenderAnalysisJob implements ShouldQueue
         // se esqueça da flag, o job dropa-se silenciosamente. Para activar:
         // AUTO_ANALYSIS_ENABLED=true no .env.
         //
-        // O botão manual no UI continua a funcionar porque o controller chama
-        // ->analyse() DIRECTAMENTE (sync), não passa por este job.
-        if (!config('services.tenders.auto_analysis', false)) {
+        // 2026-05-28: o botão manual no UI agora também passa por este job
+        // (era sync, dava HTTP 408 com 5 agentes × 15s = 75s+ ≥ Cloudflare 100s).
+        // Quando o controller dispatch com $bypassKillSwitch=true, ignoramos
+        // a flag — o user clicou explicitamente, queremos correr.
+        if (!$this->bypassKillSwitch
+            && !config('services.tenders.auto_analysis', false)) {
             Log::info('RunTenderAnalysisJob: dropped — auto-analysis disabled', [
                 'tender_id' => $this->tenderId,
             ]);

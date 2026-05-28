@@ -57,25 +57,52 @@ class TenderServiceAnalysisController extends Controller
         $existing = TenderServiceAnalysis::where('tender_id', $tender->id)->first();
         if ($existing && $existing->status === 'done' && $existing->isFresh(24) && !$force) {
             return response()->json([
-                'cached'  => true,
+                'cached'   => true,
+                'queued'   => false,
+                'status'   => 'done',
                 'view_url' => route('tenders.service-analysis.show', $tender),
                 'analysis' => $existing,
             ]);
         }
 
-        try {
-            $analysis = $svc->analyse($tender, Auth::id());
-        } catch (\Throwable $e) {
-            return response()->json([
-                'error'  => 'analysis_failed',
-                'detail' => $e->getMessage(),
-            ], 502);
+        // Job já em curso?
+        if ($existing && $existing->status === 'running') {
+            $startedAt = $existing->updated_at;
+            // Se está running há mais de 10min, é zombie — re-dispatch
+            $stale = $startedAt && $startedAt->lt(now()->subMinutes(10));
+            if (!$stale) {
+                return response()->json([
+                    'cached'   => false,
+                    'queued'   => true,
+                    'status'   => 'running',
+                    'poll_url' => route('tenders.service-analysis.show', ['tender' => $tender, 'json' => 1]),
+                    'view_url' => route('tenders.service-analysis.show', $tender),
+                    'detail'   => 'Análise multi-agente em curso — refresca em 30-60s ou poll automático.',
+                ]);
+            }
         }
 
-        return $this->jsonSafe([
+        // Mark as running + dispatch async job. Antes era sync (5 agentes ×
+        // ~15s = 75s+) → ultrapassava Cloudflare 100s → HTTP 408.
+        // 2026-05-28 — pedido directo Bruno: "está a dar erro a analise".
+        $analysis = $existing ?: new TenderServiceAnalysis(['tender_id' => $tender->id]);
+        $analysis->status = 'running';
+        $analysis->generated_by_user_id = Auth::id();
+        $analysis->save();
+
+        \App\Jobs\RunTenderAnalysisJob::dispatch(
+            $tender->id,
+            Auth::id(),
+            true, // bypassKillSwitch — user clicou explicitamente
+        )->onQueue('default');
+
+        return response()->json([
             'cached'   => false,
+            'queued'   => true,
+            'status'   => 'running',
+            'poll_url' => route('tenders.service-analysis.show', ['tender' => $tender, 'json' => 1]),
             'view_url' => route('tenders.service-analysis.show', $tender),
-            'analysis' => $analysis,
+            'detail'   => 'Análise multi-agente iniciada em background. 5 agentes × ~15s = ~75s total.',
         ]);
     }
 
@@ -108,9 +135,25 @@ class TenderServiceAnalysisController extends Controller
     }
 
     /** GET /tenders/{tender}/service-analysis — full view (printable). */
-    public function show(Tender $tender): View
+    public function show(Request $request, Tender $tender): View|JsonResponse
     {
         $this->authorizeTender($tender);
+
+        // JSON mode: polling endpoint para frontend saber quando o job
+        // async terminou. Adicionado 2026-05-28 com conversão sync→async
+        // da análise multi-agente.
+        if ($request->boolean('json')) {
+            $analysis = TenderServiceAnalysis::where('tender_id', $tender->id)->first();
+            return response()->json([
+                'status'    => $analysis?->status ?? 'not_started',
+                'is_done'   => $analysis && $analysis->status === 'done',
+                'view_url'  => $analysis && $analysis->status === 'done'
+                    ? route('tenders.service-analysis.show', $tender)
+                    : null,
+                'updated_at' => $analysis?->updated_at?->toIso8601String(),
+            ]);
+        }
+
         $analysis = TenderServiceAnalysis::where('tender_id', $tender->id)
             ->where('status', 'done')
             ->firstOrFail();
