@@ -391,7 +391,7 @@ SPECIALTY;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($message),
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -421,7 +421,7 @@ SPECIALTY;
         // 'thinking' config preserved; trait skips thinking_delta events.
         $full = $this->streamAnthropicWithRetries(
             config: [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 5000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -442,5 +442,5 @@ SPECIALTY;
     }
 
     public function getName(): string { return 'aria'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-8'); }
 }

@@ -680,7 +680,7 @@ MSG;
         $response = $this->client->post('/v1/messages', [
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 7000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -762,7 +762,7 @@ MSG;
         // handles message_stop + graceful read errors internally.
         $full = $this->streamAnthropicWithRetries(
             config: [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
                 'max_tokens' => 16000,
                 'thinking'   => ['type' => 'enabled', 'budget_tokens' => 7000],
                 'system'     => $this->enrichSystemPrompt($this->systemPrompt),
@@ -888,5 +888,5 @@ MSG;
     }
 
     public function getName(): string { return 'quantum'; }
-    public function getModel(): string { return config('services.anthropic.model', 'claude-sonnet-4-6'); }
+    public function getModel(): string { return config('services.anthropic.model_opus', 'claude-opus-4-8'); }
 }
