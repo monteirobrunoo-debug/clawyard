@@ -554,24 +554,10 @@ class NvidiaController extends Controller
                 $safeMessage = $this->sanitizeForApi($resolvedMessage);
                 $safeHistory = array_map(fn($m) => $this->sanitizeForApi($m), $resolvedHistory);
 
-                // 2026-05-28 (Bruno fix): auto-pulse keep-alive cada 15s.
-                // Bruno reportou "Erro: network error" no Quantum digest porque
-                // o path faz arXiv+PeerJ+EPO+TechLink (50-90s) antes do 1º
-                // Anthropic chunk — Cloudflare cap 100s, nginx 60s. Sem dados
-                // a fluir → corta. Este timer emite ": heartbeat" (SSE comment,
-                // browser ignora) automaticamente independente do que o agent
-                // está a fazer. Funciona em OpenSwoole/Swoole (Octane).
-                $pulseTimerId = null;
-                if (class_exists("OpenSwoole\\Timer")) {
-                    $pulseTimerId = \OpenSwoole\Timer::tick(15000, function () use ($heartbeat) {
-                        try { $heartbeat("keep-alive"); } catch (\Throwable $_) {}
-                    });
-                } elseif (class_exists("Swoole\\Timer")) {
-                    $pulseTimerId = \Swoole\Timer::tick(15000, function () use ($heartbeat) {
-                        try { $heartbeat("keep-alive"); } catch (\Throwable $_) {}
-                    });
-                }
-
+                // 2026-05-29 REVERT: o timer pulse rebenta em production
+                // (OpenSwoole\\Timer::tick async-io must be PHP CLI mode).
+                // Em vez disso, agents devem emit heartbeat mais frequentemente
+                // durante operações longas (ver QuantumAgent fetchArxivPapers).
                 $fullReply = $resolvedAgent->stream(
                     $safeMessage,
                     $safeHistory,
@@ -602,21 +588,7 @@ class NvidiaController extends Controller
                     $heartbeat
                 );
 
-                // 2026-05-28: cancelar auto-pulse depois do stream terminar.
-                if ($pulseTimerId !== null) {
-                    try {
-                        if (class_exists("OpenSwoole\\Timer")) \OpenSwoole\Timer::clear($pulseTimerId);
-                        elseif (class_exists("Swoole\\Timer")) \Swoole\Timer::clear($pulseTimerId);
-                    } catch (\Throwable $_) {}
-                }
             } catch (\Throwable $e) {
-                // Defensive: cancelar timer mesmo em erro
-                if (isset($pulseTimerId) && $pulseTimerId !== null) {
-                    try {
-                        if (class_exists("OpenSwoole\\Timer")) \OpenSwoole\Timer::clear($pulseTimerId);
-                        elseif (class_exists("Swoole\\Timer")) \Swoole\Timer::clear($pulseTimerId);
-                    } catch (\Throwable $_) {}
-                }
                 \Log::error('ClawYard stream error', [
                     'agent'     => $agentName_final,
                     'exception' => $e->getMessage(),
