@@ -74,6 +74,14 @@ class SendTenderDeadlineAlertsCommand extends Command
                 continue;
             }
 
+            // 2026-05-28: respeita opt-out per-user via /profile (Bruno fix).
+            // Se o collaborator tem User linkado E ele desligou alertas → skip.
+            if ($collab?->user && $collab->user->deadline_alerts_enabled === false) {
+                $this->line("  · {$t->reference}: skipped (user opt-out de deadline alerts)");
+                $skipped++;
+                continue;
+            }
+
             // Respect the per-collaborator visibility whitelists. A
             // historical assignment may exist for a tender whose source
             // (or status) the collaborator is no longer authorised to

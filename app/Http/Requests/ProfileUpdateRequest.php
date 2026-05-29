@@ -28,4 +28,19 @@ class ProfileUpdateRequest extends FormRequest
             ],
         ];
     }
+
+    /**
+     * Checkboxes HTML não enviam o campo quando UN-checked. Sem isto, o
+     * validated() não inclui as keys e o user permanece com o valor
+     * actual em vez de ficar false. Force-merge boolean para garantir
+     * que destigar funciona.
+     */
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            weekly_digest_enabled   => $this->boolean(weekly_digest_enabled),
+            daily_digest_enabled    => $this->boolean(daily_digest_enabled),
+            deadline_alerts_enabled => $this->boolean(deadline_alerts_enabled),
+        ]);
+    }
 }

@@ -11,7 +11,7 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents', 'allowed_nav', 'extra_permissions', 'last_verified_ip', 'last_otp_at', 'weekly_digest_enabled'];
+    protected $fillable = ['name', 'email', 'password', 'role', 'is_active', 'last_login_at', 'allowed_agents', 'allowed_nav', 'extra_permissions', 'last_verified_ip', 'last_otp_at', 'weekly_digest_enabled', 'daily_digest_enabled', 'deadline_alerts_enabled'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -39,6 +39,8 @@ class User extends Authenticatable
             'last_otp_at'           => 'datetime',
             // Weekly Friday digest opt-in. Default true (set in migration).
             'weekly_digest_enabled' => 'boolean',
+            'daily_digest_enabled' => 'boolean',
+            'deadline_alerts_enabled' => 'boolean',
         ];
     }
 

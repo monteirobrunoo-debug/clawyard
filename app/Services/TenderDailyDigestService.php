@@ -56,6 +56,8 @@ class TenderDailyDigestService
             ->where('is_active', true)
             ->whereIn('role', ['admin', 'manager', 'user'])    // skip 'guest'
             ->whereNotNull('email')
+            // 2026-05-28: opt-out per-user via /profile (Bruno fix)
+            ->where('daily_digest_enabled', true)
             ->get();
 
         foreach ($users as $u) {
