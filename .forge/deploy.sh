@@ -128,20 +128,32 @@ fi
 # também limpa opcache no boot dos workers novos.
 $FORGE_PHP artisan tinker --execute='function_exists("opcache_reset") ? opcache_reset() : null; echo "opcache_reset:" . (function_exists("opcache_reset") ? "ok" : "skipped") . "\n";' 2>&1 | tail -1
 
-# ─── 5. Octane reload com verificação ───────────────────────────────────────
-# octane:reload manda SIGUSR1. Swoole espera que cada worker termine a request
-# actual (graceful) antes de o reiniciar com código novo.
+# ─── 5. Octane RESTART (Bruno fix 2026-05-29 "tem de ser rectificado") ───────
+# MUDANÇA CRÍTICA: trocámos `octane:reload` por `systemctl restart`.
 #
-# 2026-05-28 Fase A4: BUMP 8→30s. User reportou "Erro: network error" mid-
-# stream depois de deploys. Streams SSE Opus (15-60s) eram cortadas porque o
-# wait de 8s era curto demais — workers velhos killed antes da stream
-# completar. 30s cobre a maioria dos casos sem atrasar deploys excessivamente.
-# Trade-off: deploys ~22s mais lentos = zero cortes em streams.
-log "5/8 octane:reload (graceful drain, espera 30s)"
-$FORGE_PHP artisan octane:reload 2>&1 || err "octane:reload sinal falhou — vou tentar hard restart"
+# PORQUÊ: o octane:reload (SIGUSR1 graceful) FALHA SILENCIOSAMENTE de forma
+# recorrente — os workers continuam a executar o código ANTIGO durante horas
+# sem qualquer erro visível. Hoje (2026-05-29) isto partiu 3 deploys:
+#   - b96873e (timer pulse) — reload não tomou, código velho
+#   - 5a690d1 (quantum digest cache) — reload não tomou, workers c/ 2h14m
+#     uptime serviam o fetch-inline antigo → "Erro: network error"
+#   - dc24152 (css fix) — idem
+# Em cada caso, só `systemctl restart` resolveu.
+#
+# TRADE-OFF: o restart mata workers in-flight (~5s downtime + streams SSE
+# activos cortam). MAS:
+#   - Deploys são esporádicos (não há users 24/7 a meio de stream)
+#   - O frontend já trata "ligação cortada — re-envia" (commit 034898f)
+#   - 5s de downtime determinístico >>> horas de código antigo silencioso
+#
+# A garantia de que o código novo ESTÁ activo vale mais que o graceful drain.
+log "5/8 octane RESTART (systemctl — garante código novo nos workers)"
+sudo -n systemctl restart "$OCTANE_SVC" 2>&1 | tail -2 || \
+    err "systemctl restart falhou — fallback octane:reload"; \
+    $FORGE_PHP artisan octane:reload 2>&1 || true
 
-# Wait for workers to actually rotate + drain in-flight streams.
-sleep 30
+# Wait for Swoole master + workers a arrancar (boot ~5-8s).
+sleep 10
 
 # Health check com 3 tentativas (5s entre cada)
 log "6/8 health check"
