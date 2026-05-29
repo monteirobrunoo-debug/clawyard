@@ -1,0 +1,173 @@
+name: CI — lint + tests
+
+# Bruno fix 2026-05-29: "temos de melhorar e muito". Hoje vimos bugs
+# que teriam sido apanhados pre-deploy se houvesse CI:
+#   - Quantum/Aria com Sonnet+thinking deadlock
+#   - Sintaxe PHP partida no NvidiaController (parse error)
+#   - Cor. Rodrigues 404 URLs do NSN
+#
+# Este workflow corre em cada push/PR para main e bloqueia se:
+#   1. Qualquer .php em app/ tem syntax error
+#   2. Os tests unit em tests/Unit/Services/ falham
+#   3. Algum agente tem 'thinking' config combinado com Sonnet (deadlock)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Concurrency: cancel runs antigos quando há push novo no mesmo branch.
+# Evita gastar minutos de CI em commits que vão ser substituídos.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: PHP syntax lint (app/, routes/, config/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_pgsql, redis, gd, zip, xml
+          coverage: none
+
+      - name: Lint app/, routes/, config/, database/
+        run: |
+          set -e
+          FAILED=0
+          for dir in app routes config database; do
+            echo "── linting $dir/ ──"
+            while IFS= read -r f; do
+              if ! php -l "$f" > /dev/null 2>&1; then
+                echo "✗ $f"
+                php -l "$f"
+                FAILED=$((FAILED + 1))
+              fi
+            done < <(find "$dir" -name '*.php' -not -path '*/vendor/*')
+          done
+          if [[ $FAILED -gt 0 ]]; then
+            echo "::error::$FAILED PHP files with syntax errors"
+            exit 1
+          fi
+          echo "✓ all PHP files clean"
+
+  agent-config-check:
+    name: Agents com 'thinking' devem usar Opus (anti-deadlock)
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify thinking-enabled agents use Opus
+        run: |
+          set -e
+          FAILED=0
+          # Para cada agente com 'thinking' config, o model TEM de apontar
+          # para model_opus OR usar 'claude-opus' explícito. Sonnet+thinking
+          # causa deadlock silencioso (bug do Quantum/Aria 2026-05-28).
+          for f in app/Agents/*.php; do
+            HAS_THINKING=$(grep -c "'thinking'.*=>.*\['type'.*=>.*'enabled'" "$f" || true)
+            if [[ "$HAS_THINKING" -gt 0 ]]; then
+              SONNET_REFS=$(grep -cE "config\('services\.anthropic\.model'," "$f" || true)
+              OPUS_REFS=$(grep -cE "config\('services\.anthropic\.model_opus'," "$f" || true)
+              AGENT=$(basename "$f" .php)
+              if [[ "$SONNET_REFS" -gt 0 ]] && [[ "$OPUS_REFS" -eq 0 ]]; then
+                echo "::error file=$f::Agent $AGENT has 'thinking' config but uses Sonnet model — Anthropic API deadlocks silently. Use config('services.anthropic.model_opus', 'claude-opus-4-8')."
+                FAILED=$((FAILED + 1))
+              else
+                echo "✓ $AGENT — opus refs:$OPUS_REFS sonnet refs:$SONNET_REFS"
+              fi
+            fi
+          done
+          if [[ $FAILED -gt 0 ]]; then
+            echo "::error::$FAILED agents with Sonnet+thinking deadlock risk"
+            exit 1
+          fi
+
+  unit-tests:
+    name: Unit tests (tests/Unit/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clawyard_ci
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: clawyard_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_pgsql, redis, gd, zip, xml, bcmath, intl
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-progress --prefer-dist --optimize-autoloader
+
+      - name: Copy .env for tests
+        run: |
+          cp .env.example .env || echo "APP_NAME=ClawYard" > .env
+          # Override para CI services (postgres + redis containers)
+          {
+            echo "APP_ENV=testing"
+            echo "APP_KEY=base64:$(php -r 'echo base64_encode(random_bytes(32));')"
+            echo "DB_CONNECTION=pgsql"
+            echo "DB_HOST=127.0.0.1"
+            echo "DB_PORT=5432"
+            echo "DB_DATABASE=clawyard_ci"
+            echo "DB_USERNAME=clawyard_ci"
+            echo "DB_PASSWORD=ci_password"
+            echo "CACHE_STORE=redis"
+            echo "REDIS_HOST=127.0.0.1"
+            echo "REDIS_PORT=6379"
+            echo "SESSION_DRIVER=array"
+            echo "QUEUE_CONNECTION=sync"
+            echo "ANTHROPIC_API_KEY=ci-stub-key"
+          } >> .env
+
+      - name: Run migrations
+        run: php artisan migrate --force --no-interaction
+
+      - name: Run unit tests (tests/Unit/)
+        run: |
+          if [[ -f vendor/bin/phpunit ]]; then
+            vendor/bin/phpunit --testsuite=Unit --no-coverage
+          else
+            php artisan test --testsuite=Unit --no-coverage
+          fi
