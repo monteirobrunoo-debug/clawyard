@@ -61,30 +61,21 @@ class TenderDailyDigestService
         foreach ($users as $u) {
             $bucket = $this->actionableForUser($u->id);
 
-            // Manager / admin extra: tenders without an assignee. They
-            // don't belong to anyone yet, so they wouldn't surface via
-            // forUser; the supervisor needs to know about them so the
-            // triage queue doesn't fester.
-            $orphans = collect();
-            if (in_array($u->role, ['admin', 'manager'], true)) {
-                $orphans = $this->actionableUnassigned();
-            }
-
-            if ($bucket->isEmpty() && $orphans->isEmpty()) continue;
+            // 2026-05-28 (pedido directo Bruno): user só recebe digest
+            // dos tenders ONDE ELE está atribuído. Removida a secção
+            // 'unassigned_for_review' que mandava orphans para TODOS os
+            // managers+admins — Bruno: "emails da nspa estão a ser
+            // enviados para as pessoas todas". Quem quer ver orphans
+            // abre o dashboard /tenders directamente.
+            if ($bucket->isEmpty()) continue;
 
             $groups = $this->groupByUrgency($bucket);
-            if ($orphans->isNotEmpty()) {
-                // Render orphans as a dedicated section after the
-                // urgency bands. The email template iterates the
-                // groups array in insertion order.
-                $groups['unassigned_for_review'] = $orphans;
-            }
 
             $out[] = [
                 'user'   => $u,
                 'role'   => in_array($u->role, ['admin', 'manager'], true) ? 'manager' : 'user',
                 'groups' => $groups,
-                'total'  => $bucket->count() + $orphans->count(),
+                'total'  => $bucket->count(),
             ];
         }
 
