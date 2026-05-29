@@ -15,13 +15,35 @@
 # próprio erro e continua quando seguro.
 # ─────────────────────────────────────────────────────────────────────────────
 
-DEPLOY_LOCK="/tmp/clawyard-deploy.lock"
-APP_DIR="/home/forge/clawyard.partyard.eu"
-HEALTH_URL="http://127.0.0.1:8000/health"
+# 2026-05-29 (Bruno fix "temos de melhorar e muito"): suporte staging+prod.
+# Forge corre este script no working dir do site. Detectamos qual ambiente
+# pelo basename do dir actual — staging.partyard.eu vs clawyard.partyard.eu.
+# Lock + URL + port mudam por ambiente para que ambos possam fazer deploy
+# em paralelo sem race conditions.
+SITE_DIR=$(pwd)
+SITE_NAME=$(basename "$SITE_DIR")
+case "$SITE_NAME" in
+    staging.partyard.eu)
+        DEPLOY_LOCK="/tmp/clawyard-staging-deploy.lock"
+        APP_DIR="/home/forge/staging.partyard.eu"
+        HEALTH_URL="http://127.0.0.1:8001/health"
+        DEPLOY_BRANCH="staging"
+        OCTANE_SVC="clawyard-staging-octane.service"  # opcional — pode não existir
+        IS_STAGING=true
+        ;;
+    *)
+        DEPLOY_LOCK="/tmp/clawyard-deploy.lock"
+        APP_DIR="/home/forge/clawyard.partyard.eu"
+        HEALTH_URL="http://127.0.0.1:8000/health"
+        DEPLOY_BRANCH="main"
+        OCTANE_SVC="clawyard-octane.service"
+        IS_STAGING=false
+        ;;
+esac
 
 ts() { date +'%H:%M:%S'; }
-log() { echo "[$(ts)] $*"; }
-err() { echo "[$(ts)] ✗ $*" >&2; }
+log() { echo "[$(ts)] [$SITE_NAME] $*"; }
+err() { echo "[$(ts)] [$SITE_NAME] ✗ $*" >&2; }
 
 # ─── 0. Mutex global ────────────────────────────────────────────────────────
 # Só 1 deploy de cada vez. Se outro estiver a correr, espera até 60s
@@ -36,8 +58,9 @@ log "═══ DEPLOY START ═══"
 cd "$APP_DIR" || { err "cd $APP_DIR falhou"; exit 1; }
 
 # ─── 1. Pull código ─────────────────────────────────────────────────────────
-log "1/8 git pull"
-git pull origin main 2>&1 | tail -3
+# 2026-05-29: branch dinâmico (main para prod, staging para staging.partyard.eu).
+log "1/8 git pull (branch $DEPLOY_BRANCH)"
+git pull origin "$DEPLOY_BRANCH" 2>&1 | tail -3
 
 # ─── 2. Composer install + dump ─────────────────────────────────────────────
 log "2/8 composer install + dump-autoload"
@@ -137,7 +160,7 @@ done
 # ─── 7. Fallback: hard restart se health falhou ─────────────────────────────
 if [[ "$HEALTH_OK" == "false" ]]; then
     err "Health failed após reload — hard restart"
-    sudo -n systemctl restart clawyard-octane.service 2>&1 || \
+    sudo -n systemctl restart "$OCTANE_SVC" 2>&1 || \
         err "systemctl restart falhou — investigação manual necessária"
 
     # 5× verificação (era 1×). Octane swoole boot ~5-8s.
@@ -170,7 +193,7 @@ if [[ "$HEALTH_OK" == "false" ]]; then
             log "  ↩ rollback: $CURRENT_REL → $PREV_REL"
             ln -sfn "$RELEASES_DIR/$PREV_REL" "$APP_DIR/current.new"
             mv -Tf "$APP_DIR/current.new" "$APP_DIR/current"
-            sudo -n systemctl restart clawyard-octane.service 2>&1 | tail -2
+            sudo -n systemctl restart "$OCTANE_SVC" 2>&1 | tail -2
             sleep 8
 
             code=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
