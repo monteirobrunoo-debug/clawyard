@@ -140,14 +140,55 @@ if [[ "$HEALTH_OK" == "false" ]]; then
     sudo -n systemctl restart clawyard-octane.service 2>&1 || \
         err "systemctl restart falhou — investigação manual necessária"
 
-    # Mais 8s + nova verificação
+    # 5× verificação (era 1×). Octane swoole boot ~5-8s.
     sleep 8
-    code=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
-    if [[ "$code" == "200" ]]; then
-        log "  ✓ recovered after hard restart"
-    else
-        err "  ✗ STILL DOWN after restart — ALERTAR ADMIN"
-        # Não exit — pelo menos queue:restart corre
+    RESTART_OK=false
+    for attempt in 1 2 3 4 5; do
+        code=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+        if [[ "$code" == "200" ]]; then
+            log "  ✓ recovered after hard restart (attempt $attempt)"
+            RESTART_OK=true
+            break
+        fi
+        log "  restart attempt $attempt → HTTP $code — retry em 3s"
+        sleep 3
+    done
+
+    # ─── 7.1 ROLLBACK AUTOMÁTICO (Bruno fix 2026-05-29) ──────────────────────
+    # Bruno: "temos de melhorar e muito" depois de 500 pós-deploy.
+    # Se nem restart resolve, release novo tem bug fatal — switch symlink
+    # para release ANTERIOR e reload. Limita downtime a ~60-90s vs Bruno
+    # descobrir + fix manual.
+    if [[ "$RESTART_OK" == "false" ]]; then
+        err "  ✗ STILL DOWN after restart — INICIAR ROLLBACK AUTOMÁTICO"
+
+        RELEASES_DIR=$(dirname $(realpath "$APP_DIR/current"))
+        CURRENT_REL=$(basename $(realpath "$APP_DIR/current"))
+        PREV_REL=$(ls -t "$RELEASES_DIR" 2>/dev/null | grep -v "^$CURRENT_REL$" | head -1)
+
+        if [[ -n "$PREV_REL" ]] && [[ -d "$RELEASES_DIR/$PREV_REL" ]]; then
+            log "  ↩ rollback: $CURRENT_REL → $PREV_REL"
+            ln -sfn "$RELEASES_DIR/$PREV_REL" "$APP_DIR/current.new"
+            mv -Tf "$APP_DIR/current.new" "$APP_DIR/current"
+            sudo -n systemctl restart clawyard-octane.service 2>&1 | tail -2
+            sleep 8
+
+            code=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+            if [[ "$code" == "200" ]]; then
+                log "  ✅ ROLLBACK SUCCEDED — release $PREV_REL active"
+                exit 3  # special: deploy failed, rollback worked
+            else
+                err "  ✗ ROLLBACK FAILED — manual intervention required NOW"
+                if command -v mail >/dev/null 2>&1; then
+                    echo "ClawYard deploy failed + rollback failed at $(date). Site DOWN. Check journalctl -u clawyard-octane.service NOW." | \
+                        mail -s "🚨🚨 ClawYard DOWN — deploy + rollback failed" "${ADMIN_EMAIL:-bruno.monteiro@hp-group.org}" 2>/dev/null || true
+                fi
+                exit 4
+            fi
+        else
+            err "  ✗ no previous release found — cannot rollback. Manual NOW."
+            exit 4
+        fi
     fi
 fi
 
