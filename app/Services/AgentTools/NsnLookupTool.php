@@ -352,6 +352,23 @@ PROMPT;
      * Estrutura é diferente do Tavily (temos manufacturer completo), portanto
      * tem o seu próprio formatter — mais rico em dados oficiais.
      */
+    /**
+     * 2026-05-28: extrai apenas o domínio do URL para evitar 404 quando
+     * páginas específicas de produto dos distribuidores são removidas.
+     * Pedido directo Bruno: "Cor. Rodrigues mostra WBParts (US) — wbparts.com,
+     * sem link directo, user procura manualmente — mais conservador, sem
+     * promessas que partem".
+     *   https://www.wbparts.com/rfq/1560-00-806-5287.html → wbparts.com
+     *   https://aerospaceunlimited.com/path                → aerospaceunlimited.com
+     */
+    private function domainOnly(string $url): string
+    {
+        if (!preg_match("#^https?://#i", $url)) return $url;
+        $host = parse_url($url, PHP_URL_HOST) ?: $url;
+        // Remove www. prefix por consistência visual.
+        return preg_replace("/^www\\./i", "", strtolower($host));
+    }
+
     private function formatLocalResult(array $local, ?array $distIntel = null): string
     {
         $nsn = (string) ($local['nsn'] ?? '');
@@ -391,7 +408,7 @@ PROMPT;
             if (!empty($mfg['postcode'])) $out .= "\n  • CP: " . $mfg['postcode'];
             if (!empty($mfg['phone']))    $out .= "\n  • Tel: " . $mfg['phone'];
             if (!empty($mfg['email']))    $out .= "\n  • Email: " . $mfg['email'];
-            if (!empty($mfg['website']))  $out .= "\n  • Web: " . $mfg['website'];
+            if (!empty($mfg['website']))  $out .= "\n  • Web: " . $this->domainOnly((string) $mfg['website']);  // 2026-05-28: só domínio
             if (!empty($mfg['status']))   $out .= "\n  • Estado: " . $mfg['status'];
         }
 
@@ -403,7 +420,7 @@ PROMPT;
                     $line = "  • {$d['name']}";
                     if (!empty($d['country'])) $line .= " ({$d['country']})";
                     if (!empty($d['role']))    $line .= " [{$d['role']}]";
-                    if (!empty($d['url']))     $line .= " — {$d['url']}";
+                    if (!empty($d['url']))     $line .= " — " . $this->domainOnly((string) $d['url']);
                     $out .= "\n" . $line;
                 }
             }
@@ -418,7 +435,7 @@ PROMPT;
             if (!empty($distIntel['evidence_urls'])) {
                 $out .= "\n\nEvidence:";
                 foreach ($distIntel['evidence_urls'] as $u) {
-                    $out .= "\n  - {$u}";
+                    $out .= "\n  - " . $this->domainOnly((string) $u);  // 2026-05-28: só domínio
                 }
             }
 
@@ -626,7 +643,7 @@ PROMPT;
                 $line = "  • {$d['name']}";
                 if (!empty($d['country'])) $line .= " ({$d['country']})";
                 if (!empty($d['role']))    $line .= " [{$d['role']}]";
-                if (!empty($d['url']))     $line .= " — {$d['url']}";
+                if (!empty($d['url']))     $line .= " — " . $this->domainOnly((string) $d['url']);
                 $out .= "\n" . $line;
             }
         }
@@ -641,7 +658,7 @@ PROMPT;
         if (!empty($intel['evidence_urls'])) {
             $out .= "\n\nEvidence:";
             foreach ($intel['evidence_urls'] as $u) {
-                $out .= "\n  - {$u}";
+                $out .= "\n  - " . $this->domainOnly((string) $u);  // 2026-05-28: só domínio
             }
         }
 
