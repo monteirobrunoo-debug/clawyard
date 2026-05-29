@@ -11,6 +11,17 @@ Artisan::command('inspire', function () {
 // ── PSI Intelligence Bus — prune expired entries every hour ──────────────────
 Schedule::command('shared-context:prune')->hourly();
 
+// ── Quantum digest pre-warm (Bruno fix 2026-05-29) ───────────────────────────
+// Gera o digest científico do Prof. Quantum Leap às 06:00 e cacheia em Redis
+// (RunQuantumDigestJob, TTL 25h). Quando o user clica "Digest de hoje" durante
+// o dia, o QuantumAgent::stream() serve do cache instantaneamente em vez de
+// fazer 4 fetches + Anthropic inline (~165s) que cortavam no Cloudflare 100s.
+// withoutOverlapping evita 2 jobs simultâneos; runInBackground não bloqueia
+// o scheduler tick.
+Schedule::call(function () {
+    \App\Jobs\RunQuantumDigestJob::dispatch(null);
+})->dailyAt('06:00')->name('quantum-digest-prewarm')->withoutOverlapping();
+
 // ── Queue worker via scheduler (fallback enquanto não há supervisor daemon) ──
 // 2026-05-19 — pedido directo do operador para fazer as recomendações ASAP.
 // Sem Forge API token não posso criar daemon Supervisor; entretanto o

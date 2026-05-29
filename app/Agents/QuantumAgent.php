@@ -621,6 +621,54 @@ SPECIALTY;
         return $this->buildDigestMessageFromData($userMessage, $arxiv, $peerj, $epo, $techlink);
     }
 
+    /**
+     * 2026-05-29: gera o digest COMPLETO (4 fetches + Anthropic non-stream) e
+     * devolve o markdown final. Chamado por RunQuantumDigestJob no queue worker
+     * (sem constraint Cloudflare). NÃO chamar do SSE path — demora ~165s.
+     *
+     * Cache-first async (Bruno fix "tem de ser rectificado"): o digest síncrono
+     * cortava no Cloudflare 100s cap. Agora corre em background, cacheia, e o
+     * stream() serve do cache instantaneamente.
+     */
+    public function generateDigestContent(): string
+    {
+        $arxiv    = $this->fetchArxivPapers();
+        $peerj    = $this->fetchPeerJPapers();
+        $epo      = $this->fetchEpoPatents();
+        $techlink = $this->fetchTechLinkPatents();
+        $finalMessage = $this->buildDigestMessageFromData('Digest científico de hoje', $arxiv, $peerj, $epo, $techlink);
+
+        $messages = [['role' => 'user', 'content' => $finalMessage]];
+
+        // Anthropic non-stream (queue worker — não há SSE). Opus + thinking.
+        $response = $this->client->post('/v1/messages', [
+            'headers' => $this->headersForMessage($finalMessage),
+            'json'    => [
+                'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),
+                'max_tokens' => 16000,
+                'thinking'   => ['type' => 'enabled', 'budget_tokens' => 7000],
+                'system'     => $this->enrichSystemPrompt($this->systemPrompt),
+                'messages'   => $messages,
+            ],
+        ]);
+        $data = json_decode($response->getBody()->getContents(), true);
+        $text = '';
+        foreach ($data['content'] ?? [] as $block) {
+            if (($block['type'] ?? '') === 'text') $text .= $block['text'];
+        }
+
+        // Persiste discoveries + report (best-effort).
+        try { $this->saveDiscoveriesFromResponse($text); } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent generateDigestContent: discoveries — ' . $e->getMessage());
+        }
+        try { $this->saveDigestReport($text); } catch (\Throwable $e) {
+            \Log::warning('QuantumAgent generateDigestContent: report — ' . $e->getMessage());
+        }
+
+        // Strip DISCOVERIES_JSON HTML comment antes de devolver ao user.
+        return trim(preg_replace('/<!--\s*DISCOVERIES_JSON[\s\S]*?DISCOVERIES_JSON\s*-->/m', '', $text));
+    }
+
     protected function buildDigestMessageFromData(
         string|array $userMessage,
         string $arxiv,
@@ -712,19 +760,44 @@ MSG;
         $isDigest = $this->isDigestRequest($message);
 
         if ($isDigest) {
-            // Send keep-alive heartbeats before/during each slow HTTP fetch
-            // to prevent Nginx fastcgi_read_timeout (60s default) from killing the SSE
-            if ($heartbeat) $heartbeat('a pesquisar arXiv');
-            $arxiv    = $this->fetchArxivPapers();
-            if ($heartbeat) $heartbeat('a pesquisar PeerJ / CrossRef');
-            $peerj    = $this->fetchPeerJPapers();
-            if ($heartbeat) $heartbeat('a pesquisar patentes EPO');
-            $epo      = $this->fetchEpoPatents();
-            if ($heartbeat) $heartbeat('a pesquisar TechLink Center (DoD tech transfer)');
-            $techlink = $this->fetchTechLinkPatents($heartbeat);
-            if ($heartbeat) $heartbeat('a construir análise');
-            $finalMessage = $this->buildDigestMessageFromData($message, $arxiv, $peerj, $epo, $techlink);
-        } else {
+            // 2026-05-29 CACHE-FIRST ASYNC (Bruno fix "tem de ser rectificado").
+            // O digest síncrono (4 fetches + Anthropic = ~165s) cortava no
+            // Cloudflare 100s cap → "Erro: network error". Agora:
+            //   • Cache HIT  → stream o conteúdo cached instantaneamente.
+            //   • Cache MISS → dispatch RunQuantumDigestJob (background) +
+            //     mensagem "a gerar, recarrega em 2min". Zero fetch inline.
+            // O cron 06:00 pre-warm o cache, por isso quase sempre é HIT.
+            $cached = \Cache::get(\App\Jobs\RunQuantumDigestJob::CACHE_KEY);
+            if (is_array($cached) && !empty($cached['content'])) {
+                $content = (string) $cached['content'];
+                $genAt   = $cached['generated_at'] ?? null;
+                $stamp   = $genAt
+                    ? "\n\n---\n_Digest gerado " . \Illuminate\Support\Carbon::parse($genAt)->diffForHumans() . "._"
+                    : '';
+                // Stream em chunks de 400 chars para a UI render progressiva.
+                foreach (str_split($content . $stamp, 400) as $chunk) {
+                    $onChunk($chunk);
+                }
+                $this->publishSharedContext($content);
+                return $content . $stamp;
+            }
+
+            // MISS — dispatch job + devolve mensagem amigável (sem fetch inline).
+            \App\Jobs\RunQuantumDigestJob::dispatch(auth()->id());
+            $waitMsg = "🔬 **Digest científico a ser preparado**\n\n"
+                . "Estou a pesquisar **arXiv**, **PeerJ/CrossRef**, **patentes EPO** "
+                . "e **TechLink Center** (~2 minutos). Corre em background para não "
+                . "cortar a ligação.\n\n"
+                . "👉 **Recarrega esta conversa daqui a ~2 minutos** e pede o digest "
+                . "de novo — aparece instantaneamente.\n\n"
+                . "_Dica: o digest é gerado automaticamente todas as manhãs às 06:00, "
+                . "por isso normalmente já está pronto quando chegas._";
+            $onChunk($waitMsg);
+            return $waitMsg;
+        }
+
+        // ── Query NÃO-digest (chat normal do Quantum) ──────────────────────
+        {
             $finalMessage = $message;
             // Detect direct TechLink queries even outside digest mode.
             // Extrai texto plano de message (string OR Anthropic multi-block array).
