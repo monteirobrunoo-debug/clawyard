@@ -33,7 +33,10 @@ services:
       - clawyard
 
   pgsql:
-    image: postgres:17-alpine
+    # pgvector/pgvector:pg17 = Postgres 17 + extensão vector pré-instalada.
+    # A migration add_embedding_to_book_chunks precisa de pgvector (prod
+    # tem). Com postgres:17-alpine puro a migration falhava com aviso.
+    image: pgvector/pgvector:pg17
     container_name: clawyard-pgsql
     environment:
       POSTGRES_DB: clawyard

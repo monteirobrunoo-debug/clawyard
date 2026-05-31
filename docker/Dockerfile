@@ -21,8 +21,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" \
         pdo_pgsql pgsql gd zip bcmath intl mbstring opcache \
+        pcntl sockets \
     && pecl install redis \
     && docker-php-ext-enable redis
+# pcntl + sockets: OBRIGATÓRIOS para o Octane/OpenSwoole arrancar.
+# Sem pcntl: "Signals are not supported" → octane:start crasha (exit 1).
+# Apanhado no dev local 2026-05-31 antes de chegar a prod.
 
 # ── OpenSwoole (igual a prod — para Octane) ─────────────────────────────────
 # Se a compilação falhar no teu Mac (ARM/x86), o fallback é `php artisan serve`
