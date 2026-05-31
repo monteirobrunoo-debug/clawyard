@@ -4,6 +4,7 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Agents\Traits\TechnicalBookSkillTrait;
 use App\Agents\Traits\WebSearchTrait;
@@ -25,6 +26,7 @@ class EngineerAgent implements AgentInterface
     use WebSearchTrait;
     use NsnLookupTrait;
     use AnthropicKeyTrait;
+    use HandlesAnthropicStream;
     use SharedContextTrait;
     use LogisticsSkillTrait;
     use TechnicalBookSkillTrait;
@@ -356,134 +358,40 @@ SPECIALTY;
             'stream'     => true,
         ];
 
-        $delays = [0, 1, 3, 7];  // 1ª = imediato, depois 1s, 3s, 7s
-        $lastErr = null;
-
-        foreach ($delays as $attempt => $delaySeconds) {
-            if ($delaySeconds > 0) {
-                if ($heartbeat) $heartbeat("⚠️ retry " . $attempt . " (Anthropic instável, aguarda " . $delaySeconds . "s)");
-                sleep($delaySeconds);
-            }
-
-            try {
-                $full = $this->callAnthropicStream(
-                    config:         $opusConfig,
-                    headers:        $this->headersForMessage($augmented),
-                    onChunk:        $onChunk,
-                    heartbeat:      $heartbeat,
-                    heartbeatLabel: $attempt === 0 ? 'Eng. Victor a planear' : 'Eng. Victor (retry ' . $attempt . ')',
-                    augmented:      $augmented,
-                    messages:       $messages,
-                );
-
-                if ($attempt > 0) {
-                    \Log::info('EngineerAgent: succeeded on retry ' . $attempt, [
-                        'previous_errors' => $lastErr ? $lastErr->getMessage() : null,
-                    ]);
-                }
-
-                $this->publishSharedContext($full);
-                return $full;
-            } catch (\Throwable $err) {
-                $lastErr = $err;
-                \Log::warning('EngineerAgent: attempt ' . $attempt . ' failed', [
-                    'error'     => $err->getMessage(),
-                    'exception' => get_class($err),
-                    'next_delay' => $delays[$attempt + 1] ?? 'none',
-                ]);
-            }
-        }
-
-        // Todas as tentativas falharam. Emergency message (não-empty).
-        \Log::error('EngineerAgent: ALL retries failed, sending emergency message', [
-            'attempts'   => count($delays),
-            'last_error' => $lastErr ? $lastErr->getMessage() : 'unknown',
-        ]);
-
+        // 2026-05-31 refactor: foreach-retry + callAnthropicStream inline →
+        // trait streamAnthropicWithRetries (testado por 27 agentes). Preserva
+        // TUDO o que era custom no Eng. Victor:
+        //   - 4 tentativas com delays [0,1,3,7]s (era foreach $delays)
+        //   - Opus 4-8 + thinking 5000 (no $opusConfig acima)
+        //   - heartbeat a cada 3s (heartbeatEvery: 3 — era mais frequente
+        //     que o default 5s do trait, mantido)
+        //   - emergency message detalhada se todas falham (via emergencyMessage)
+        //   - publishSharedContext após sucesso
+        // O trait faz o graceful read handling + logging estruturado por
+        // tentativa internamente. Eng. Victor SEMPRE com thinking (pedido
+        // directo Bruno "eu quero ele com thinking").
         $emergency = "⚠️ Eng. Victor temporariamente indisponível.\n\n"
-                   . "Tentei " . count($delays) . " vezes com Opus+thinking e a Anthropic API "
-                   . "está a rejeitar a request. Causa provável: rate limit ou overload "
+                   . "Tentei 4 vezes com Opus+thinking e a Anthropic API está a "
+                   . "rejeitar a request. Causa provável: rate limit ou overload "
                    . "(Anthropic 529 / network glitch).\n\n"
                    . "**O que fazer:**\n"
                    . "1. Aguarda 1-2 minutos\n"
                    . "2. Tenta novamente\n"
-                   . "3. Se persistir, contacta o Bruno\n\n"
-                   . "Erro técnico: " . mb_substr($lastErr ? $lastErr->getMessage() : 'unknown', 0, 200);
-        $onChunk($emergency);
-        return $emergency;
-    }
+                   . "3. Se persistir, contacta o Bruno";
 
-    /**
-     * Helper para chamada Anthropic com stream + leitura defensiva.
-     * Usado pela primary E fallback paths do stream().
-     */
-    private function callAnthropicStream(
-        array $config,
-        array $headers,
-        callable $onChunk,
-        ?callable $heartbeat,
-        string $heartbeatLabel,
-        $augmented,
-        array $messages,
-    ): string {
-        $response = $this->client->post('/v1/messages', [
-            'headers' => $headers,
-            'stream'  => true,
-            'json'    => $config,
-        ]);
+        $full = $this->streamAnthropicWithRetries(
+            config:           $opusConfig,
+            headers:          $this->headersForMessage($augmented),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Eng. Victor a planear',
+            retries:          [0, 1, 3, 7],
+            emergencyMessage: $emergency,
+            agentLabel:       'EngineerAgent',
+            heartbeatEvery:   3,
+        );
 
-        $body     = $response->getBody();
-        $full     = '';
-        $buf      = '';
-        $lastBeat = time();
-
-        while (!$body->eof()) {
-            try {
-                $buf .= $body->read(1024);
-            } catch (\Throwable $readErr) {
-                if ($full === '') {
-                    \Log::error('EngineerAgent: stream read failed BEFORE any content', [
-                        'msg'              => $readErr->getMessage(),
-                        'exception'        => get_class($readErr),
-                        'model'            => $config['model'] ?? 'unknown',
-                        'response_code'    => method_exists($response, 'getStatusCode') ? $response->getStatusCode() : 'unknown',
-                        'response_headers' => method_exists($response, 'getHeaders') ? array_map(fn($v) => is_array($v) ? implode(',', $v) : (string)$v, $response->getHeaders()) : [],
-                        'user_id'          => auth()->id() ?? 'guest',
-                        'augmented_len'    => is_string($augmented) ? strlen($augmented) : 'array',
-                        'messages_count'   => count($messages),
-                    ]);
-                    throw $readErr;
-                }
-                \Log::info('EngineerAgent: stream graceful end after partial response', [
-                    'msg' => $readErr->getMessage(), 'len' => strlen($full),
-                ]);
-                break;
-            }
-            while (($pos = strpos($buf, "\n")) !== false) {
-                $line = substr($buf, 0, $pos);
-                $buf  = substr($buf, $pos + 1);
-                $line = trim($line);
-                if (!str_starts_with($line, 'data: ')) continue;
-                $json = substr($line, 6);
-                if ($json === '[DONE]') break 2;
-                $evt = json_decode($json, true);
-                if (!is_array($evt)) continue;
-                if (($evt['type'] ?? '') === 'message_stop') break 2;
-                if (($evt['type'] ?? '') === 'content_block_delta'
-                    && ($evt['delta']['type'] ?? '') === 'text_delta') {
-                    $text = $evt['delta']['text'] ?? '';
-                    if ($text !== '') {
-                        $full .= $text;
-                        $onChunk($text);
-                    }
-                }
-            }
-            if ($heartbeat && (time() - $lastBeat) >= 3) {
-                $heartbeat($heartbeatLabel);
-                $lastBeat = time();
-            }
-        }
-
+        $this->publishSharedContext($full);
         return $full;
     }
 
