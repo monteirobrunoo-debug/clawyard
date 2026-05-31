@@ -88,11 +88,45 @@ class NspaImporter implements TenderImporterInterface
         $reader = IOFactory::createReaderForFile($filePath);
         $reader->setReadDataOnly(true);
         $reader->setReadFilter(new NspaReadFilter(self::COLUMNS, self::MAX_ROWS));
+
+        // 2026-05-29 FIX (Mónica: import falhou sexta 17:00 com "out of bounds
+        // index: 0. number of sheets is 0"). Causa: setLoadSheetsOnly(['NSPA'])
+        // filtrava TUDO quando o ficheiro NSPA tinha a sheet com nome != 'NSPA'
+        // (a NSPA muda o nome da sheet entre exports). Resultado: 0 sheets →
+        // getActiveSheet() rebenta.
+        //
+        // FIX: listar os nomes ANTES de filtrar. Usar 'NSPA' se existir
+        // (memory-efficient), senão cair para a 1ª sheet disponível. Erro
+        // claro se o ficheiro não tiver sheets de todo.
+        $sheetNames = [];
+        try {
+            $sheetNames = $reader->listWorksheetNames($filePath);
+        } catch (\Throwable $e) {
+            \Log::warning('NspaImporter: listWorksheetNames falhou — ' . $e->getMessage());
+        }
+        if (empty($sheetNames)) {
+            throw new \RuntimeException(
+                'O ficheiro Excel não tem folhas legíveis. Verifica que é um .xlsx '
+                . 'válido exportado do portal NSPA (não um HTML ou CSV renomeado).'
+            );
+        }
+        // Match case-insensitive de 'NSPA'; senão 1ª folha.
+        $targetSheet = null;
+        foreach ($sheetNames as $name) {
+            if (strcasecmp(trim($name), self::SHEET_NAME) === 0) { $targetSheet = $name; break; }
+        }
+        if ($targetSheet === null) {
+            $targetSheet = $sheetNames[0];
+            \Log::info('NspaImporter: sheet "NSPA" não encontrada, a usar 1ª folha', [
+                'available' => $sheetNames,
+                'using'     => $targetSheet,
+            ]);
+        }
         if (method_exists($reader, 'setLoadSheetsOnly')) {
-            $reader->setLoadSheetsOnly([self::SHEET_NAME]);
+            $reader->setLoadSheetsOnly([$targetSheet]);
         }
         $spreadsheet = $reader->load($filePath);
-        $sheet       = $spreadsheet->getSheetByName(self::SHEET_NAME)
+        $sheet       = $spreadsheet->getSheetByName($targetSheet)
             ?? $spreadsheet->getActiveSheet();
 
         $headers          = [];
