@@ -22,6 +22,17 @@ Schedule::call(function () {
     \App\Jobs\RunQuantumDigestJob::dispatch(null);
 })->dailyAt('06:00')->name('quantum-digest-prewarm')->withoutOverlapping();
 
+// ── Acingov concursos pre-warm (cada 4h) ─────────────────────────────────────
+// Os 6 fetches (Acingov + TED + UNGM + base.gov.pt + SAM.gov + EU Funding) +
+// análise Anthropic demoravam >180s e o Octane matava o worker
+// (OCTANE_MAX_EXECUTION_TIME=180) → "Error in input stream". RunAcingovSearchJob
+// corre no queue worker e cacheia em Redis (TTL 4h); o AcingovAgent::stream()
+// serve do cache instantaneamente. Cada 4h porque concursos públicos mudam mais
+// que o digest diário do Quantum.
+Schedule::call(function () {
+    \App\Jobs\RunAcingovSearchJob::dispatch(null);
+})->cron('0 */4 * * *')->name('acingov-prewarm')->withoutOverlapping();
+
 // ── Queue worker via scheduler (fallback enquanto não há supervisor daemon) ──
 // 2026-05-19 — pedido directo do operador para fazer as recomendações ASAP.
 // Sem Forge API token não posso criar daemon Supervisor; entretanto o

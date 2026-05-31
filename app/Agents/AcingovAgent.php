@@ -1376,108 +1376,29 @@ MSG;
         return $result;
     }
 
-    // ─── streamClaudeOnce() — single Claude streaming call ─────────────────
-    protected function streamClaudeOnce(string $prompt, array $history, callable $onChunk, ?callable $heartbeat = null, string $beatLabel = 'a analisar'): string
-    {
-        $messages = array_merge($history, [
-            ['role' => 'user', 'content' => $prompt],
-        ]);
-
-        // 2026-05-28 refactor: stream loop → trait helper.
-        // Bug fix 2026-05-14 preserved: usa $prompt (não $message) em buildSystemWithBooks.
-        $full = $this->streamAnthropicWithRetries(
-            config: [
-                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
-                'max_tokens' => 8192,
-                'system'     => $this->buildSystemWithBooks($prompt, $this->systemPrompt),
-                'messages'   => $messages,
-                'stream'     => true,
-            ],
-            headers:          $this->headersForMessage($prompt),
-            onChunk:          $onChunk,
-            heartbeat:        $heartbeat,
-            heartbeatLabel:   $beatLabel ?: 'Acingov a pesquisar concursos',
-            retries:          [0, 2, 5],
-            emergencyMessage: "⚠️ Acingov temporariamente indisponível. Tenta novamente em 30s.",
-            agentLabel:       'AcingovAgent',
-        );
-
-        return $full;
-    }
-
-    // ─── stream() ──────────────────────────────────────────────────────────
     /**
-     * Detect if the user wants a portal search or just a direct question answer.
+     * 2026-05-31: recolhe os concursos COMPLETOS (6 fetches + Anthropic
+     * non-stream) e devolve o markdown final. Chamado por RunAcingovSearchJob
+     * no queue worker (sem constraint do Octane). NÃO chamar do SSE path —
+     * demora >180s e o Octane mata o worker (OCTANE_MAX_EXECUTION_TIME=180).
+     *
+     * Cache-first async (mesmo padrão de QuantumAgent::generateDigestContent):
+     * os 6 fetches inline cortavam no Octane. Agora corre em background,
+     * cacheia, e o stream() serve do cache instantaneamente.
+     *
+     * Sem $emit/onChunk/heartbeat (não há SSE no worker). Fetches directos.
      */
-    protected function needsPortalSearch(string $userText): bool
+    public function generateContractsContent(): string
     {
-        $lower = mb_strtolower($userText);
-        $portalKeywords = [
-            'concurso', 'concursos', 'portal', 'portais', 'pesquisa', 'pesquisar',
-            'procura', 'procurar', 'novos', 'hoje', 'semana', 'últimos', 'ultimos',
-            'acingov', 'vortal', 'base.gov', 'sam.gov', 'ungm', 'ted',
-            'tender', 'tenders', 'oportunidade', 'oportunidades', 'licitação', 'licitacao',
-            'adjudicação', 'adjudicacao', 'ajuste directo', 'ajuste direto', 'contratação pública',
-            'relatório', 'relatorio', 'report', 'scan', 'scanning',
-            'força aérea', 'marinha', 'exército', 'emgfa', 'nato',
-        ];
-        foreach ($portalKeywords as $kw) {
-            if (str_contains($lower, $kw)) return true;
-        }
-        return false;
-    }
-
-    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
-    {
-        // 2026-05-25: REMOVIDO ob_end_flush() — Octane Swoole gere buffers.
-        // Manualmente fechar causa SwooleClient ob_end_clean() falhar →
-        // worker crash mid-stream. Ver NvidiaController para causa raiz.
-
-        $today = now()->format('Y-m-d H:i');
-        $full  = '';
-
-        // $emit sends text AND forces a buffer flush via heartbeat comment
-        $emit = function (string $text) use (&$full, $onChunk, &$heartbeat) {
-            $full .= $text;
-            $onChunk($text);
-            if ($heartbeat) $heartbeat('');
-        };
-
-        $userText = is_array($message)
-            ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
-            : $message;
-
-        // ── Direct question — skip portal search, answer immediately ─────────
-        if (!$this->needsPortalSearch($userText)) {
-            return $this->streamClaudeOnce($userText, $history, $onChunk, $heartbeat, 'a analisar');
-        }
-
-        $dateFrom = now()->subDays(5)->format('d/m/Y');
-        $dateTo   = now()->format('d/m/Y');
-
-        // ── Header ───────────────────────────────────────────────────────────
-        $emit("## 📋 Dra. Ana Contratos — Relatório {$today}\n");
-        $emit("Período: **{$dateFrom}** → **{$dateTo}** · Portais: Acingov · **TED Europa (API oficial)** · base.gov.pt · UNGM · SAM.gov · **EU Funding (ec.europa.eu — EDF/Horizon/Digital/CEF/EIC)**\n\n");
-
-        $emit("⏳ A recolher dados dos portais...\n\n");
-
-        // Tavily `days` filter — últimos 7 dias (mais tolerante do que 5 para apanhar mais resultados)
+        $dateTo  = now()->format('d/m/Y');
+        $today2m = now()->addMonths(2)->format('d/m/Y');
         $tavilyDays = 7;
 
-        // Portal 1: Acingov — HTTP direto (login autenticado + fallback zona pública)
-        $emit("  `1/6` 🇵🇹 Acingov...\n");
-        if ($heartbeat) $heartbeat('a pesquisar Acingov');
+        // ── Os 6 fetches (directos, sem progresso UX) ──────────────────────
         $acingovData = $this->fetchAcingov();
-
-        // Portal 2: TED Europa — Official API v3 (direct, no auth needed)
-        $emit("  `2/6` 🇪🇺 TED Europa (API oficial)...\n");
-        $vortalData = $this->fetchTEDEuropa($heartbeat);
-
-        // Portal 3: UNGM — direct public API
-        $emit("  `3/6` 🌍 UNGM...\n");
-        if ($heartbeat) $heartbeat('a pesquisar UNGM');
-        $ungmData = $this->fetchUNGM();
-        // Tavily fallback if direct API returns nothing
+        $vortalData  = $this->fetchTEDEuropa();
+        $ungmData    = $this->fetchUNGM();
+        // Tavily fallback if direct UNGM API returns nothing (igual ao stream()).
         if (strlen($ungmData) < 80 && $this->searcher->isAvailable()) {
             try {
                 $ungmData = $this->searcher->search(
@@ -1494,29 +1415,9 @@ MSG;
                 Log::info('AcingovAgent [UNGM Tavily fallback]: ' . $e->getMessage());
             }
         }
-
-        // Portal 4: base.gov.pt — direct public API (no auth needed)
-        $emit("  `4/6` 🇵🇹 base.gov.pt (adjudicados)...\n");
-        if ($heartbeat) $heartbeat('a pesquisar base.gov.pt');
-        $baseGovData = $this->fetchBaseGovPt();
-
-        // Portal 5: SAM.gov
-        $emit("  `5/6` 🇺🇸 SAM.gov...\n");
-        if ($heartbeat) $heartbeat('a pesquisar SAM.gov');
-        $samData = $this->fetchSamGov();
-
-        // Portal 6: EU Funding & Tenders — ec.europa.eu (EDF/Horizon/Digital/CEF/EIC)
-        $emit("  `6/6` 🇪🇺 EU Funding (EDF · Horizon · Digital Europe · CEF · EIC)...\n\n");
-        if ($heartbeat) $heartbeat('a pesquisar EU Funding portal');
-        $euFundingData = $this->fetchEuFunding($heartbeat);
-
-        $emit("✅ **Recolha concluída. A filtrar e ordenar por prazo...**\n\n");
-
-        // ── Análise Claude — agrupado por portal, filtrado por prazo ──────────
-        $emit("---\n### 🧠 Dra. Ana Contratos — Relatório por Fonte\n\n");
-        if ($heartbeat) $heartbeat('Dra. Ana a filtrar por prazo');
-
-        $today2m = now()->addMonths(2)->format('d/m/Y');
+        $baseGovData   = $this->fetchBaseGovPt();
+        $samData       = $this->fetchSamGov();
+        $euFundingData = $this->fetchEuFunding();
 
         $allData = implode("\n\n", array_filter(
             [
@@ -1531,7 +1432,7 @@ MSG;
         ));
 
         $analysisPrompt = <<<MSG
-{$userText}
+Concursos públicos e fundos UE de hoje
 
 Data de hoje: {$dateTo}
 Prazo máximo a considerar: {$today2m} (2 meses a partir de hoje)
@@ -1609,11 +1510,129 @@ Para as 3 calls EU mais relevantes:
 --- FIM ---
 MSG;
 
-        $analysis = $this->streamClaudeOnce($analysisPrompt, $history, $onChunk, $heartbeat, 'Dra. Ana a analisar');
-        $full .= $analysis;
+        // Anthropic NON-STREAM (queue worker — não há SSE). Mesmo model/config
+        // que o streamClaudeOnce usa (Sonnet, 8192 tokens, system com books).
+        $messages = [['role' => 'user', 'content' => $analysisPrompt]];
+        $response = $this->client->post('/v1/messages', [
+            'headers' => $this->headersForMessage($analysisPrompt),
+            'json'    => [
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'max_tokens' => 8192,
+                'system'     => $this->buildSystemWithBooks($analysisPrompt, $this->systemPrompt),
+                'messages'   => $messages,
+            ],
+        ]);
+        $data = json_decode($response->getBody()->getContents(), true);
+        $analysis = '';
+        foreach ($data['content'] ?? [] as $block) {
+            if (($block['type'] ?? '') === 'text') $analysis .= $block['text'];
+        }
 
-        $this->publishSharedContext($full);
+        $header = "## 📋 Dra. Ana Contratos — Relatório\n\n";
+        $content = $header . trim($analysis);
+
+        try { $this->publishSharedContext($content); } catch (\Throwable $e) {
+            Log::warning('AcingovAgent generateContractsContent: publishSharedContext — ' . $e->getMessage());
+        }
+
+        return $content;
+    }
+
+    // ─── streamClaudeOnce() — single Claude streaming call ─────────────────
+    protected function streamClaudeOnce(string $prompt, array $history, callable $onChunk, ?callable $heartbeat = null, string $beatLabel = 'a analisar'): string
+    {
+        $messages = array_merge($history, [
+            ['role' => 'user', 'content' => $prompt],
+        ]);
+
+        // 2026-05-28 refactor: stream loop → trait helper.
+        // Bug fix 2026-05-14 preserved: usa $prompt (não $message) em buildSystemWithBooks.
+        $full = $this->streamAnthropicWithRetries(
+            config: [
+                'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
+                'max_tokens' => 8192,
+                'system'     => $this->buildSystemWithBooks($prompt, $this->systemPrompt),
+                'messages'   => $messages,
+                'stream'     => true,
+            ],
+            headers:          $this->headersForMessage($prompt),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   $beatLabel ?: 'Acingov a pesquisar concursos',
+            retries:          [0, 2, 5],
+            emergencyMessage: "⚠️ Acingov temporariamente indisponível. Tenta novamente em 30s.",
+            agentLabel:       'AcingovAgent',
+        );
+
         return $full;
+    }
+
+    // ─── stream() ──────────────────────────────────────────────────────────
+    /**
+     * Detect if the user wants a portal search or just a direct question answer.
+     */
+    protected function needsPortalSearch(string $userText): bool
+    {
+        $lower = mb_strtolower($userText);
+        $portalKeywords = [
+            'concurso', 'concursos', 'portal', 'portais', 'pesquisa', 'pesquisar',
+            'procura', 'procurar', 'novos', 'hoje', 'semana', 'últimos', 'ultimos',
+            'acingov', 'vortal', 'base.gov', 'sam.gov', 'ungm', 'ted',
+            'tender', 'tenders', 'oportunidade', 'oportunidades', 'licitação', 'licitacao',
+            'adjudicação', 'adjudicacao', 'ajuste directo', 'ajuste direto', 'contratação pública',
+            'relatório', 'relatorio', 'report', 'scan', 'scanning',
+            'força aérea', 'marinha', 'exército', 'emgfa', 'nato',
+        ];
+        foreach ($portalKeywords as $kw) {
+            if (str_contains($lower, $kw)) return true;
+        }
+        return false;
+    }
+
+    public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
+    {
+        // 2026-05-25: REMOVIDO ob_end_flush() — Octane Swoole gere buffers.
+        // Manualmente fechar causa SwooleClient ob_end_clean() falhar →
+        // worker crash mid-stream. Ver NvidiaController para causa raiz.
+
+        $userText = is_array($message)
+            ? implode(' ', array_map(fn($c) => $c['text'] ?? '', $message))
+            : $message;
+
+        // ── Direct question — skip portal search, answer immediately ─────────
+        if (!$this->needsPortalSearch($userText)) {
+            return $this->streamClaudeOnce($userText, $history, $onChunk, $heartbeat, 'a analisar');
+        }
+
+        // ── Cache-first async (2026-05-31) ───────────────────────────────────
+        // Os 6 fetches + análise demoravam >180s e o Octane matava o worker
+        // (OCTANE_MAX_EXECUTION_TIME=180) → "Error in input stream". Agora
+        // servimos do cache (cron pre-warm cada 4h); MISS dispatch o job.
+        $cached = \Cache::get(\App\Jobs\RunAcingovSearchJob::CACHE_KEY);
+        if (is_array($cached) && !empty($cached['content'])) {
+            $content = (string) $cached['content'];
+            $genAt   = $cached['generated_at'] ?? null;
+            $stamp   = $genAt
+                ? "\n\n---\n_Concursos recolhidos " . \Illuminate\Support\Carbon::parse($genAt)->diffForHumans() . "._"
+                : '';
+            // Stream em chunks de 400 chars para a UI render progressiva.
+            foreach (str_split($content . $stamp, 400) as $chunk) {
+                $onChunk($chunk);
+            }
+            $this->publishSharedContext($content);
+            return $content . $stamp;
+        }
+
+        // MISS — dispatch job (background) + mensagem amigável (sem fetch inline).
+        \App\Jobs\RunAcingovSearchJob::dispatch(auth()->id());
+        $waitMsg = "🔍 **Dra. Ana a recolher concursos dos 6 portais**\n\n"
+            . "Estou a pesquisar Acingov, TED Europa, UNGM, base.gov.pt, SAM.gov e "
+            . "EU Funding (~2-3 min). Corre em background para não cortar a ligação.\n\n"
+            . "👉 **Recarrega daqui a ~3 minutos** e pede os concursos de novo — "
+            . "aparecem instantaneamente.\n\n"
+            . "_Dica: a recolha é automática a cada 4h, por isso normalmente já está pronta._";
+        $onChunk($waitMsg);
+        return $waitMsg;
     }
 
     public function getName(): string  { return 'acingov'; }
