@@ -219,10 +219,17 @@ return [
     |
     */
 
-    // 2026-05-28 Fase A4: env-configurable. Default 30s suficiente para chat
-    // sync, mas streaming SSE de Opus + extended thinking pode exceder. Em
-    // .env: OCTANE_MAX_EXECUTION_TIME=120 para dar buffer. Valor 0 = sem
-    // limite (cuidado: memory leaks acumulam em workers long-lived).
-    'max_execution_time' => (int) env('OCTANE_MAX_EXECUTION_TIME', 30),
+    // 2026-05-31 CAUSA RAIZ dos "Error in input stream" / streams cortados:
+    // o default 30s MATAVA o worker a meio de respostas longas. Medido:
+    // ARIA security audit = 76s (1º chunk aos 20.8s de thinking), Quantum
+    // digest = 165s. Octane matava aos 30s → user via "Error in input stream"
+    // (Safari) / "network error" a meio. NÃO era Cloudflare (não há CF neste
+    // domínio — nginx directo, proxy_read_timeout 240s). Era ISTO.
+    //
+    // Default agora 180s: cobre qualquer resposta Opus+thinking+16k tokens
+    // com folga. .env override OCTANE_MAX_EXECUTION_TIME para ajustar sem
+    // deploy. Valor 0 = sem limite (NÃO usar — memory leaks acumulam em
+    // workers long-lived). O watchdog v2 protege contra workers presos.
+    'max_execution_time' => (int) env('OCTANE_MAX_EXECUTION_TIME', 180),
 
 ];
