@@ -12,16 +12,16 @@ if [ ! -f vendor/autoload.php ]; then
     composer install --no-interaction --prefer-dist
 fi
 
-# 2. .env existe? (copiado de .env.docker pelo compose env_file, mas o Laravel
-#    precisa de um .env file físico para algumas operações).
-if [ ! -f .env ]; then
-    cp .env.docker .env 2>/dev/null || true
-fi
+# 2. .env — SEMPRE sincronizar com .env.docker em dev (idempotente).
+#    Antes só copiava se .env não existisse, mas um .env stale sem APP_KEY
+#    causava MissingAppKeyException. Em dev, .env.docker é a fonte de verdade.
+cp .env.docker .env
 
-# 3. APP_KEY — gerar se não existir.
+# 3. APP_KEY — o .env.docker já tem uma fixa. Se por algum motivo faltar,
+#    gerar (belt-and-suspenders).
 if ! grep -q "^APP_KEY=base64:" .env 2>/dev/null; then
-    echo "  a gerar APP_KEY…"
-    php artisan key:generate --force || true
+    echo "  APP_KEY em falta — a gerar…"
+    php artisan key:generate --force
 fi
 
 # 4. Esperar Postgres (o healthcheck do compose já garante, mas double-check).

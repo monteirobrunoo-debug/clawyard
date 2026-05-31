@@ -14,8 +14,10 @@ FROM php:8.4-cli-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git unzip libzip-dev libpq-dev libpng-dev libjpeg-dev libfreetype6-dev \
         libssl-dev libcurl4-openssl-dev libpcre3-dev libicu-dev \
-        libonig-dev \
+        libonig-dev procps \
     && rm -rf /var/lib/apt/lists/*
+# procps → dá o `pgrep` que o Octane usa internamente ("pgrep: not found"
+# no 1º run). Apanhado no dev local 2026-05-31.
 
 # ── Extensões PHP (mesmas de produção) ──────────────────────────────────────
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
