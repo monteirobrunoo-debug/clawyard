@@ -1,0 +1,72 @@
+# ClawYard — dev environment local (Bruno fix 2026-05-31)
+# Réplica de produção: PHP 8.4 + Octane + Postgres 17 + Redis 7.
+#
+# Arrancar:  docker compose up -d --build
+# Logs:      docker compose logs -f app
+# Shell:     docker compose exec app bash
+# Parar:     docker compose down   (dados Postgres/Redis persistem em volumes)
+#
+# Aceder:    http://localhost:8000
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: clawyard-app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Bind-mount do código → mudanças no Mac reflectem no container sem rebuild.
+      - .:/var/www/html
+      # Excluir vendor/node_modules do bind (performance + evitar conflitos arch).
+      - /var/www/html/vendor
+      - /var/www/html/node_modules
+    env_file:
+      - .env.docker
+    depends_on:
+      pgsql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - clawyard
+
+  pgsql:
+    image: postgres:17-alpine
+    container_name: clawyard-pgsql
+    environment:
+      POSTGRES_DB: clawyard
+      POSTGRES_USER: clawyard
+      POSTGRES_PASSWORD: clawyard_local
+    ports:
+      - "5432:5432"
+    volumes:
+      - clawyard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clawyard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - clawyard
+
+  redis:
+    image: redis:7-alpine
+    container_name: clawyard-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - clawyard
+
+volumes:
+  clawyard-pgdata:
+
+networks:
+  clawyard:
+    driver: bridge
