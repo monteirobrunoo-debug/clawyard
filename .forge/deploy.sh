@@ -148,9 +148,19 @@ $FORGE_PHP artisan tinker --execute='function_exists("opcache_reset") ? opcache_
 #
 # A garantia de que o código novo ESTÁ activo vale mais que o graceful drain.
 log "5/8 octane RESTART (systemctl — garante código novo nos workers)"
-sudo -n systemctl restart "$OCTANE_SVC" 2>&1 | tail -2 || \
-    err "systemctl restart falhou — fallback octane:reload"; \
+# Fix 2026-06-01: o "| tail -2 || err; reload" mascarava a falha — o exit code
+# era do `tail` (sempre 0), por isso o `err` NUNCA disparava e o octane:reload
+# corria SEMPRE a seguir (mesmo quando o restart "falhava" por falta de sudo).
+# Resultado: dependíamos do reload (o flaky) e nunca soubemos do problema.
+# Agora detectamos a sério. Com o sudoers no sítio (NOPASSWD systemctl restart
+# clawyard-octane.service) isto faz RESTART REAL garantido; só cai no reload se
+# o restart genuinamente falhar.
+if sudo -n systemctl restart "$OCTANE_SVC" 2>&1; then
+    log "  ✓ systemctl restart OK (código novo garantido nos workers)"
+else
+    err "systemctl restart FALHOU (falta o sudoers NOPASSWD?) — fallback octane:reload"
     $FORGE_PHP artisan octane:reload 2>&1 || true
+fi
 
 # Wait for Swoole master + workers a arrancar (boot ~5-8s).
 sleep 10
