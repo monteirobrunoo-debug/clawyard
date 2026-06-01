@@ -641,7 +641,11 @@ SPECIALTY;
         $messages = [['role' => 'user', 'content' => $finalMessage]];
 
         // Anthropic non-stream (queue worker — não há SSE). Opus + thinking.
+        // Opus 16k + thinking demora bem >120s → o timeout=120 default do client
+        // cortava o prewarm com "cURL 28 — 0 bytes" e a cache nunca enchia.
+        // timeout=300 alinha com o proxy_read_timeout (300s) do nginx do llm-proxy.
         $response = $this->client->post('/v1/messages', [
+            'timeout' => 300,
             'headers' => $this->headersForMessage($finalMessage),
             'json'    => [
                 'model'      => config('services.anthropic.model_opus', 'claude-opus-4-8'),

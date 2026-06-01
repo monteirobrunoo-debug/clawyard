@@ -1514,6 +1514,12 @@ MSG;
         // que o streamClaudeOnce usa (Sonnet, 8192 tokens, system com books).
         $messages = [['role' => 'user', 'content' => $analysisPrompt]];
         $response = $this->client->post('/v1/messages', [
+            // Prewarm job (queue worker, sem SSE): a análise pesada (Sonnet 8192 +
+            // system com 180 livros + 6 portais) demora >120s. O timeout=120 do
+            // $this->client cortava com "cURL 28 — 0 bytes received" e a cache
+            // nunca enchia. 300s alinha com o proxy_read_timeout (300s) do nginx
+            // do llm-proxy. Override SÓ desta chamada — o chat interactivo fica 120.
+            'timeout' => 300,
             'headers' => $this->headersForMessage($analysisPrompt),
             'json'    => [
                 'model'      => config('services.anthropic.model', 'claude-sonnet-4-6'),
