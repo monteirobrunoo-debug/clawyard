@@ -11,6 +11,7 @@ class AgentManager
     {
         $this->agents = [
             'nvidia'    => new NvidiaAgent(),
+            'grok'      => new GrokAgent(),
             'claude'    => new ClaudeAgent(),
             'sales'     => new SalesAgent(),
             'support'   => new SupportAgent(),

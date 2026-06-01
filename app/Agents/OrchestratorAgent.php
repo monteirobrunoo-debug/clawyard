@@ -63,6 +63,7 @@ SECURITY / ENCRYPTION
 GENERAL / REASONING / AUTOMATION
 - claude:   complex reasoning, analysis, strategy, general questions, default fallback
 - nvidia:   fast answers for simple short queries
+- grok:     direct analysis and sharp reasoning — xAI Grok, alternative fast analytical tier
 - thinking: extended thinking — multi-step reasoning, deep analysis, trade-off decisions
 - batch:    bulk/batch processing — multiple items, lists, parallel tasks
 - computer: web/desktop automation — browser control, form filling, portal navigation (RoboDesk)
@@ -360,6 +361,7 @@ SPECIALTY;
             'capitao'      => '⚓ Capitão Porto',
             'claude'       => '🧠 Bruno AI',
             'nvidia'       => '⚡ Carlos NVIDIA',
+            'grok'         => '🔥 Alex Grok',
             'quantum'      => '⚛️ Prof. Quantum Leap',
             'aria'         => '🔐 ARIA — Security',
             'briefing'     => '📋 Renato — Briefing',

@@ -41,6 +41,12 @@ return [
         'model'    => env('NVIDIA_MODEL', 'meta/llama-3.1-8b-instruct'),
     ],
 
+    'grok' => [
+        'api_key'  => env('GROK_API_KEY'),
+        'base_url' => env('GROK_BASE_URL', 'https://api.x.ai/v1'),
+        'model'    => env('GROK_MODEL', 'grok-3-fast'),
+    ],
+
     'anthropic' => [
         'api_key' => env('ANTHROPIC_API_KEY'),
         // Default (fast, high-volume agents: Sales, Support, Email, CRM, Claude chat…)

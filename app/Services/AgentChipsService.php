@@ -83,6 +83,15 @@ class AgentChipsService
                 '🧠 Megatendências da indústria naval até 2030 e oportunidades para a PartYard',
                 '🧠 Como posicionar a PartYard Defense face à concorrência NATO e americana?',
             ],
+            // ── Alex Grok ─────────────────────────────────────────────────
+            'grok' => [
+                '🔥 Analisa os 3 principais riscos desta proposta comercial e como mitigá-los',
+                '🔥 Compara as ofertas de motores MTU 4000 vs CAT 3516 — decisão directa',
+                '🔥 Resume este contrato em 5 bullet points críticos para aprovação',
+                '🔥 Avalia a viabilidade de exportar peças navais para o mercado brasileiro',
+                '🔥 Lista as 3 acções de maior impacto para aumentar a margem da PartYard',
+                '🔥 Identifica inconsistências neste relatório técnico de reparação naval',
+            ],
             // ── Carlos NVIDIA ─────────────────────────────────────────────
             'nvidia' => [
                 '⚡ Gera 10 subject lines de alta conversão para cold email a armadores gregos',

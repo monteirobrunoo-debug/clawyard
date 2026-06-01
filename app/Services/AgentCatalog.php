@@ -26,6 +26,7 @@ class AgentCatalog
             ['key' => 'thinking',    'category' => 'strategic',  'name' => 'Prof. Deep Thought',     'emoji' => '🧠', 'role' => 'Extended thinking — complex multi-step reasoning and deep analysis',                      'color' => '#a855f7'],
             ['key' => 'claude',      'category' => 'strategic',  'name' => 'Bruno AI',               'emoji' => '🧠', 'role' => 'Claude — advanced reasoning and complex analysis',                                        'color' => '#a855f7'],
             ['key' => 'nvidia',      'category' => 'strategic',  'name' => 'Carlos NVIDIA',          'emoji' => '⚡', 'role' => 'NVIDIA NeMo — maximum speed and efficiency',                                              'color' => '#76b900'],
+            ['key' => 'grok',        'category' => 'strategic',  'name' => 'Alex Grok',               'emoji' => '🔥', 'role' => 'xAI Grok — direct analysis, fast reasoning, sharp answers',                                'color' => '#ff6b35'],
 
             ['key' => 'sales',       'category' => 'commercial', 'name' => 'Marco Sales',            'emoji' => '💼', 'role' => 'Sales MTU · CAT · MAK · Jenbacher · SKF · Schottel',                                     'color' => '#3b82f6'],
             ['key' => 'support',     'category' => 'commercial', 'name' => 'Marcus Support',         'emoji' => '🔧', 'role' => 'Technical Support — engine and system fault diagnosis',                                   'color' => '#f59e0b'],
@@ -160,6 +161,7 @@ class AgentCatalog
             'thinking'  => ['Analisa profundamente esta decisão estratégica', 'Raciocínio multi-step para este problema técnico', 'Pros e contras detalhados da opção A vs B'],
             'claude'    => ['Explica este conceito complexo', 'Escreve um texto persuasivo para shipowner', 'Revê este contrato em detalhe'],
             'nvidia'    => ['Resposta rápida a FAQ', 'Classifica este email em 1 segundo', 'Resumo instantâneo deste parágrafo'],
+            'grok'      => ['Analisa os riscos desta proposta', 'Compara estas duas opções e decide', 'Identifica inconsistências neste documento'],
             'orchestrator' => ['Briefing combinado de Sales + SAP + CRM', 'Plano de ação com todos os agentes', 'Orquestra resposta multi-agente a este pedido complexo'],
         ];
 
