@@ -192,6 +192,11 @@ trait WebSearchTrait
             $searcher = new WebSearchService();
             $query    = $this->extractSearchQuery($textPart);
             $results  = $searcher->search($query, 5);
+            // #138 (hardening de raiz): resultados de web search (portais raspados —
+            // EPO/USPTO/Google Patents, etc.) podem trazer bytes UTF-8 inválidos que
+            // rebentam o json_encode do request Anthropic. Sanitiza NA ORIGEM →
+            // protege todos os agentes que pesquisam (patent, research, vessel, …).
+            $results  = \App\Support\Utf8::clean($results);
 
             if (str_starts_with($results, '(')) {
                 // Error or unavailable — return original unchanged

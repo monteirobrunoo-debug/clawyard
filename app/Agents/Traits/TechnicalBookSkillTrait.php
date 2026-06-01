@@ -306,13 +306,7 @@ trait TechnicalBookSkillTrait
      */
     protected function ensureValidUtf8(string $s): string
     {
-        if ($s === '' || mb_check_encoding($s, 'UTF-8')) {
-            return $s;
-        }
-        $prev = mb_substitute_character();
-        mb_substitute_character(0xFFFD);
-        $clean = mb_convert_encoding($s, 'UTF-8', 'UTF-8');
-        mb_substitute_character($prev);
-        return $clean;
+        // Delega no helper canónico — fonte única (ver App\Support\Utf8).
+        return \App\Support\Utf8::clean($s);
     }
 }
