@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Agents\AgentManager;
 use App\Models\MultiAgentDebate;
 use App\Models\Tender;
+use App\Services\AgentSwarm\AgentDispatcher;
 use Illuminate\Support\Facades\Log;
 
 /**
