@@ -841,6 +841,7 @@ Route::middleware(['auth'])->group(function () {
     // 2026-05-25: trigger multi-agent debate (Bornet pattern) — 3 agentes
     // independent + critique + Haiku synthesis. Dispatched to queue (background).
     Route::post('/tenders/{tender}/debate', [TenderController::class, 'launchDebate'])->name('tenders.debate');
+    Route::post('/tenders/{tender}/review-chain', [TenderController::class, 'launchReviewChain'])->name('tenders.review_chain');
     // 2026-05-18: gera Inquiry PartYard PDF (mimica MOD_072_V3) com items
     // do SoR + termos NATO/NSPA, anexa automaticamente ao concurso
     Route::get ('/tenders/{tender}/inquiry-pdf',     [\App\Http\Controllers\TenderInquiryController::class, 'generate'])->name('tenders.inquiry-pdf');

@@ -442,6 +442,16 @@
                                     🧠 Debate multi-agente
                                 </button>
                             </form>
+                            <form method="POST" action="{{ route('tenders.review_chain', $tender) }}"
+                                  class="inline"
+                                  onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').textContent='⏳ A iniciar revisão…';">
+                                @csrf
+                                <button type="submit"
+                                        class="rounded-md bg-teal-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-600"
+                                        title="Cadeia de revisão: Marco → Dr. Luís → ARIA → Cor. Rodrigues. Gate logic — para ao primeiro rejeito. ~30-60s (~$0.05).">
+                                    📋 Revisão por comité
+                                </button>
+                            </form>
                         @endunless
                     </div>
 
@@ -487,6 +497,66 @@
                                         <div class="text-xs text-gray-800 whitespace-pre-wrap">{{ mb_strimwidth($d->synthesis, 0, 800, '…') }}</div>
                                     @elseif($d->status === 'failed')
                                         <div class="text-xs text-red-700">{{ mb_strimwidth($d->synthesis ?? 'sem detalhe', 0, 300, '…') }}</div>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    @endif
+
+                    {{-- 📋 Histórico de revisões por comité (ReviewChain). --}}
+                    @php
+                        $recentReviews = collect();
+                        try {
+                            if (\Schema::hasTable('review_chain_runs')) {
+                                $recentReviews = \App\Models\ReviewChainRun::where('tender_id', $tender->id)
+                                    ->orderByDesc('created_at')
+                                    ->limit(3)
+                                    ->get();
+                            }
+                        } catch (\Throwable $e) {
+                            \Log::warning('show.blade recentReviews query failed: ' . $e->getMessage());
+                        }
+                    @endphp
+                    @if($recentReviews->isNotEmpty())
+                        <div class="mt-3 space-y-2">
+                            @foreach($recentReviews as $rv)
+                                <div class="rounded-md border p-3 {{ $rv->overall_approved ? 'border-teal-200 bg-teal-50' : 'border-red-200 bg-red-50' }}">
+                                    <div class="flex items-center justify-between gap-2 mb-2">
+                                        <span class="text-xs font-semibold {{ $rv->overall_approved ? 'text-teal-800' : 'text-red-800' }}">
+                                            📋 Revisão #{{ $rv->id }}
+                                            @if($rv->status === 'pending')   <span class="text-amber-700">⏳ pendente</span>
+                                            @elseif($rv->status === 'running') <span class="text-blue-700">▶ a correr…</span>
+                                            @elseif($rv->status === 'done' && $rv->overall_approved) <span class="text-teal-700">✓ Aprovado por todos</span>
+                                            @elseif($rv->status === 'done') <span class="text-red-700">✗ Rejeitado</span>
+                                            @else <span class="text-red-700">✗ falhou</span>
+                                            @endif
+                                        </span>
+                                        @if($rv->cost_usd > 0)
+                                            <span class="text-xs text-gray-400">${{ number_format($rv->cost_usd, 4) }}</span>
+                                        @endif
+                                    </div>
+                                    @if($rv->status === 'done' && $rv->steps)
+                                        <div class="space-y-1">
+                                            @foreach($rv->steps as $step)
+                                                <div class="flex items-start gap-2 text-xs">
+                                                    <span class="shrink-0 w-5">{{ $step['emoji'] ?? '•' }}</span>
+                                                    <span class="font-medium shrink-0 w-36 {{ ($step['approved'] ?? false) ? 'text-teal-700' : 'text-red-700' }}">
+                                                        {{ $step['approved'] ?? false ? '✓' : '✗' }} {{ $step['name'] ?? '' }}
+                                                    </span>
+                                                    <span class="text-gray-600">
+                                                        <span class="font-semibold">{{ $step['verdict'] ?? '' }}</span>
+                                                        @if(!empty($step['notes'])) — {{ $step['notes'] }}@endif
+                                                    </span>
+                                                </div>
+                                                @if(!empty($step['flags']))
+                                                    <div class="ml-7 flex flex-wrap gap-1 mt-0.5">
+                                                        @foreach($step['flags'] as $flag)
+                                                            <span class="rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">⚠ {{ $flag }}</span>
+                                                        @endforeach
+                                                    </div>
+                                                @endif
+                                            @endforeach
+                                        </div>
                                     @endif
                                 </div>
                             @endforeach
