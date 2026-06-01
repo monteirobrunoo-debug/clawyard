@@ -373,7 +373,7 @@ SPECIALTY;
 
         $today = now()->format('d/m/Y');
 
-        return <<<MSG
+        $msg = <<<MSG
 {$userText}
 
 --- CONTEXTO INTERNO HP-GROUP ({$today}) ---
@@ -391,6 +391,11 @@ Com base nos dados acima:
 
 Usa o formato estruturado do teu sistema de relatórios.
 MSG;
+
+        // #138: o prior art vem de web search (EPO/USPTO/Google Patents) e pode
+        // trazer bytes UTF-8 inválidos que rebentavam o json_encode do request
+        // ('messages'). Sanitiza a mensagem completa — cobre chat() E stream().
+        return $this->ensureValidUtf8($msg);
     }
 
     // ─── chat() ────────────────────────────────────────────────────────────
