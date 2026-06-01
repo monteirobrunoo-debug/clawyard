@@ -1020,16 +1020,22 @@ class TenderController extends Controller
         }
 
         try {
-            // Topic opcional via form
+            // Topic opcional via form. Se vazio, usa o default do service.
+            // BUG (Pedro 2026-06-01): topic E agent_keys são NOT NULL na tabela.
+            // O controller criava o pending com topic=null (sem texto no form) e
+            // agent_keys=null hardcoded → SQLSTATE 23502. Agora preenchemos ambos
+            // aqui (o job passa-os ao service, que os usa directamente).
+            $svc   = app(\App\Services\MultiAgentDebateService::class);
             $topic = trim((string) $request->input('topic', ''));
-            $topic = $topic !== '' ? mb_substr($topic, 0, 500) : null;
+            $topic = $topic !== '' ? mb_substr($topic, 0, 500) : $svc->defaultTopicFor($tender);
+            $agentKeys = $svc->pickAgentsFor($tender);
 
             // Cria record pending — service vai actualizar para running/done.
             $debate = \App\Models\MultiAgentDebate::create([
                 'tender_id'            => $tender->id,
                 'initiated_by_user_id' => $user->id,
                 'topic'                => $topic,
-                'agent_keys'           => null,
+                'agent_keys'           => $agentKeys,
                 'status'               => \App\Models\MultiAgentDebate::STATUS_PENDING,
                 'rounds'               => null,
                 'synthesis'            => null,

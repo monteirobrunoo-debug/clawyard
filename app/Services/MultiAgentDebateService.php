@@ -127,7 +127,7 @@ class MultiAgentDebateService
         }
     }
 
-    private function pickAgentsFor(Tender $tender): array
+    public function pickAgentsFor(Tender $tender): array
     {
         if (($tender->source ?? '') === 'marine') {
             return self::DEFAULT_AGENTS_MARINE;
@@ -135,7 +135,7 @@ class MultiAgentDebateService
         return self::DEFAULT_AGENTS_MILDEF;
     }
 
-    private function defaultTopicFor(Tender $tender): string
+    public function defaultTopicFor(Tender $tender): string
     {
         $title = mb_substr((string) $tender->title, 0, 200);
         return "Tender #{$tender->id} ({$title}) — devemos avançar com esta oportunidade? Identifica riscos, oportunidades, e fornecedores prováveis.";
