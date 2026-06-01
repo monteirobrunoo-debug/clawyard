@@ -320,16 +320,11 @@ class LeadOpportunityController extends Controller implements HasMiddleware
         $subject  = $lead->outreach_draft_subject;
         $bodyText = $lead->outreach_draft_body;
 
-        // Render plain-text body as <p>-wrapped HTML — the LLM uses \n
-        // for paragraph breaks, so split on double-newline and wrap.
-        // Single newlines become <br> for inline breaks.
-        $paragraphs = preg_split('/\n{2,}/', $bodyText) ?: [$bodyText];
-        $html = '';
-        foreach ($paragraphs as $p) {
-            $p = e(trim($p));
-            $p = nl2br($p);                      // single \n → <br>
-            $html .= "<p style=\"margin:0 0 12px;\">{$p}</p>";
-        }
+        // Render do draft (markdown) de outreach para HTML formatado. O draft vem
+        // de um agente (LLM) e pode ter **negrito**, listas, etc. — antes saía cru
+        // (nl2br(e(...))). bodyHtml mantém o ar PESSOAL (sem template de marca
+        // pesado, é uma cold email) mas com formatação + estilos inline. (Projecto emails)
+        $html = \App\Support\EmailHtml::bodyHtml($bodyText);
 
         try {
             Mail::html($html, function ($mail) use ($to, $subject, $lead) {
