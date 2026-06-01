@@ -4,15 +4,18 @@ namespace App\Agents;
 
 use GuzzleHttp\Client;
 use App\Agents\Traits\AnthropicKeyTrait;
+use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
+use App\Services\SharedContextService;
 use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Promise\PromiseInterface;
 
 class OrchestratorAgent implements AgentInterface
 {
     use AnthropicKeyTrait;
+    use HandlesAnthropicStream;
     use SharedContextTrait;
     protected string $systemPrompt = '';
 
@@ -20,6 +23,10 @@ class OrchestratorAgent implements AgentInterface
     protected string $searchPolicy = 'never';
     protected Client $client;
     protected array $agents;
+
+    // F3: Maestro publica a síntese no bus de contexto partilhado
+    protected string $contextKey  = 'maestro_intel';
+    protected array  $contextTags = ['maestro','síntese','multi-agente','cross-domain'];
 
     public function __construct(array $agents = [])
     {
@@ -225,7 +232,18 @@ SPECIALTY;
             }
         }
 
-        return $this->combineResults(is_array($message) ? ($message[0]['text'] ?? '') : $message, $results);
+        $messageText = is_array($message) ? ($message[0]['text'] ?? '') : $message;
+
+        // F3: publicar respostas dos sub-agentes no bus de contexto partilhado
+        foreach ($results as $r) {
+            if (($r['reply'] ?? '') !== '') {
+                $this->publishAgentFinding($r['agent'], $r['reply']);
+            }
+        }
+
+        $combined = $this->combineResults($messageText, $results);
+        $this->publishSharedContext($combined);
+        return $combined;
     }
 
     /**
@@ -260,11 +278,12 @@ SPECIALTY;
     }
 
     /**
-     * Stream sub-agents progressively so the user sees each agent's
-     * response as soon as it starts producing text. Much better UX than
-     * waiting 60-90 s for all three agents to complete before any bytes
-     * appear on the screen — and it prevents Cloudflare from cutting
-     * the connection on slow multi-agent requests.
+     * Maestro F2 — stream com síntese unificada quando há múltiplos agentes.
+     *
+     * Single agent  → stream directo (comportamento F1, zero overhead).
+     * Multi-agent   → recolhe respostas em paralelo via Fibers + chat(),
+     *                 depois stream da síntese Haiku numa resposta coesa.
+     *                 O user vê UMA resposta integrada, não N secções separadas.
      */
     public function stream(string|array $message, array $history, callable $onChunk, ?callable $heartbeat = null): string
     {
@@ -273,44 +292,26 @@ SPECIALTY;
         if ($heartbeat) $heartbeat('a escolher os agentes certos');
         $agentNames = $this->decideAgents($messageText);
 
-        // Filter to agents we actually have registered.
-        $agentNames = array_values(array_filter(
-            $agentNames,
-            fn($n) => isset($this->agents[$n])
-        ));
+        $agentNames = array_values(array_filter($agentNames, fn($n) => isset($this->agents[$n])));
 
         if (empty($agentNames)) {
             $onChunk("⚠️ Não consegui identificar o agente certo para este pedido.\n");
             return '';
         }
 
-        // Announce routing decision to the user so they know what's happening.
-        $labels  = $this->agentLabels();
-        $routed  = array_map(fn($n) => $labels[$n] ?? $n, $agentNames);
-        $header  = count($agentNames) === 1
-            ? "🔀 **A activar:** " . $routed[0] . "\n\n"
-            : "🔀 **A activar:** " . implode(' · ', $routed) . "\n\n";
-        $onChunk($header);
+        $labels = $this->agentLabels();
 
-        $combined = $header;
+        // ── Single agent: stream directo, sem síntese ──────────────────────
+        if (count($agentNames) === 1) {
+            $name   = $agentNames[0];
+            $header = "🔀 **A activar:** " . ($labels[$name] ?? $name) . "\n\n";
+            $onChunk($header);
+            $combined = $header;
 
-        foreach ($agentNames as $idx => $name) {
-            if (!isset($this->agents[$name])) continue;
+            if ($heartbeat) $heartbeat("a consultar {$name}");
             $agent = $this->agents[$name];
-            $label = $labels[$name] ?? ucfirst($name);
-
-            // Per-agent section header (only when we have >1 agent)
-            if (count($agentNames) > 1) {
-                $sectionHeader = "\n## {$label}\n\n";
-                $onChunk($sectionHeader);
-                $combined .= $sectionHeader;
-            }
 
             try {
-                if ($heartbeat) $heartbeat("a consultar {$name}");
-
-                // Delegate to the sub-agent's own streaming implementation so
-                // tokens are relayed to the browser as they arrive.
                 $text = $agent->stream(
                     $message,
                     $history,
@@ -318,31 +319,156 @@ SPECIALTY;
                         $combined .= $chunk;
                         $onChunk($chunk);
                     },
-                    $heartbeat
+                    $heartbeat,
                 );
-
-                // Defensive: some agents return the full text but never
-                // invoked the $onChunk callback (e.g. when they detected
-                // a special marker). Emit the returned text if the stream
-                // callback didn't already cover it.
                 if (is_string($text) && $text !== '' && !str_contains($combined, $text)) {
                     $onChunk($text);
                     $combined .= $text;
                 }
             } catch (\Throwable $e) {
-                $msg = "\n❌ Erro em {$label}: " . $e->getMessage() . "\n";
+                $msg = "\n❌ Erro: " . $e->getMessage() . "\n";
                 $onChunk($msg);
                 $combined .= $msg;
             }
+            return $combined;
+        }
 
-            // Separator between agents
-            if (count($agentNames) > 1 && $idx < count($agentNames) - 1) {
-                $onChunk("\n\n---\n");
-                $combined .= "\n\n---\n";
+        // ── Multi-agent F2: recolha paralela + síntese ─────────────────────
+        $routed = array_map(fn($n) => $labels[$n] ?? $n, $agentNames);
+        $header = "🎼 **Maestro a coordenar:** " . implode(' · ', $routed) . "…\n\n";
+        $onChunk($header);
+
+        if ($heartbeat) $heartbeat('a recolher análises dos especialistas…');
+
+        $agentResponses = $this->collectAgentsParallel($message, $history, $agentNames);
+
+        if ($heartbeat) $heartbeat('a sintetizar resposta…');
+
+        $synthesis = $this->streamSynthesis($messageText, $agentResponses, $onChunk, $heartbeat);
+
+        // F3: publicar síntese no bus → próximos turnos e agentes vêem o que foi discutido
+        $this->publishSharedContext($synthesis);
+
+        return $header . $synthesis;
+    }
+
+    /**
+     * Recolhe respostas de múltiplos agentes usando Fibers (melhor esforço paralelo).
+     */
+    private function collectAgentsParallel(string|array $message, array $history, array $agentNames): array
+    {
+        $results = [];
+        $fibers  = [];
+
+        foreach ($agentNames as $name) {
+            if (!isset($this->agents[$name])) continue;
+            $fiber = new \Fiber(function () use ($name, $message, $history) {
+                try {
+                    return ['agent' => $name, 'reply' => $this->agents[$name]->chat($message, $history)];
+                } catch (\Throwable $e) {
+                    return ['agent' => $name, 'reply' => ''];
+                }
+            });
+            $fibers[$name] = $fiber;
+            $fiber->start();
+        }
+
+        foreach ($fibers as $name => $fiber) {
+            if ($fiber->isTerminated()) {
+                $results[] = $fiber->getReturn();
             }
         }
 
-        return $combined;
+        // Fallback para fibras que não terminaram
+        foreach ($agentNames as $name) {
+            if (!isset($this->agents[$name])) continue;
+            if (!empty(array_filter($results, fn($r) => $r['agent'] === $name))) continue;
+            try {
+                $results[] = ['agent' => $name, 'reply' => $this->agents[$name]->chat($message, $history)];
+            } catch (\Throwable $e) {
+                $results[] = ['agent' => $name, 'reply' => ''];
+            }
+        }
+
+        // F3: publicar cada resposta no bus — agentes sem auto-publicação ficam registados
+        foreach ($results as $r) {
+            if (($r['reply'] ?? '') !== '') {
+                $this->publishAgentFinding($r['agent'], $r['reply']);
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * F3: Publica a resposta de um sub-agente no bus de contexto partilhado,
+     * sob a chave e nome próprios do agente. Permite que agentes sem
+     * auto-publicação (contextKey vazio) deixem memória de sessão.
+     */
+    private function publishAgentFinding(string $agentKey, string $text): void
+    {
+        $labels = $this->agentLabels();
+        // Remove o emoji do início: "💼 Marco — Sales" → "Marco — Sales"
+        $name = preg_replace('/^[^\s\w]+\s*/u', '', $labels[$agentKey] ?? ucfirst($agentKey));
+        (new SharedContextService())->publish(
+            $agentKey,
+            $name,
+            $agentKey . '_intel',
+            $text,
+            [],
+            $this->sharedContextUserId(),
+        );
+    }
+
+    /**
+     * Envia as respostas dos especialistas a Haiku e stream a síntese unificada.
+     */
+    private function streamSynthesis(string $question, array $agentResponses, callable $onChunk, ?callable $heartbeat): string
+    {
+        $labels = $this->agentLabels();
+
+        $blocks = [];
+        foreach ($agentResponses as $r) {
+            if (($r['reply'] ?? '') === '') continue;
+            $label    = $labels[$r['agent']] ?? ucfirst($r['agent']);
+            $blocks[] = "### {$label}\n{$r['reply']}";
+        }
+
+        if (empty($blocks)) {
+            $msg = "⚠️ Nenhum especialista conseguiu responder.\n";
+            $onChunk($msg);
+            return $msg;
+        }
+
+        $expertsBlock = implode("\n\n", $blocks);
+
+        $systemPrompt = <<<MAESTRO
+És o Maestro ClawYard — o coordenador sénior de uma equipa de especialistas de IA.
+Recebeste as análises independentes de vários especialistas sobre a pergunta do utilizador.
+Produz UMA resposta coesa, directa e completa que integre o melhor de cada perspectiva.
+Não uses introduções como "De acordo com Marco..." ou "O especialista X diz...".
+Escreve como um único consultor sénior experiente, em português de Portugal.
+Usa markdown (negrito, listas, tabelas) quando adequado. Sê conciso mas completo.
+MAESTRO;
+
+        $userPrompt = "Pergunta original: {$question}\n\nAnálises dos especialistas:\n{$expertsBlock}\n\nSintetiza uma resposta unificada.";
+
+        return $this->streamAnthropicWithRetries(
+            config: [
+                'model'      => 'claude-haiku-4-6',
+                'max_tokens' => 2048,
+                'stream'     => true,
+                'system'     => $systemPrompt,
+                'messages'   => [['role' => 'user', 'content' => $userPrompt]],
+            ],
+            headers:          $this->apiHeaders(),
+            onChunk:          $onChunk,
+            heartbeat:        $heartbeat,
+            heartbeatLabel:   'Maestro a sintetizar…',
+            retries:          [0, 2, 5],
+            emergencyMessage: "\n⚠️ Maestro: erro na síntese. Tenta reformular a pergunta.\n",
+            agentLabel:       'Maestro',
+        );
     }
 
     /**

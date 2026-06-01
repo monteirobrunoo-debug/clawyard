@@ -1066,6 +1066,37 @@ class TenderController extends Controller
         }
     }
 
+    /**
+     * Trigger cadeia de revisão por comité (Marco → Dr. Luís → ARIA → Rodrigues).
+     */
+    public function launchReviewChain(Request $request, Tender $tender)
+    {
+        $user = Auth::user();
+        $this->enforceVisibility($tender, $user);
+
+        try {
+            $run = \App\Models\ReviewChainRun::create([
+                'tender_id'            => $tender->id,
+                'initiated_by_user_id' => $user->id,
+                'status'               => \App\Models\ReviewChainRun::STATUS_PENDING,
+            ]);
+
+            \App\Jobs\RunReviewChainJob::dispatch($run->id)->onQueue('default');
+
+            return back()->with('status',
+                "📋 Cadeia de revisão #{$run->id} iniciada. Demora ~30-60s. Faz refresh para ver o resultado."
+            );
+        } catch (\Throwable $e) {
+            Log::error('launchReviewChain failed', [
+                'tender_id' => $tender->id,
+                'error'     => $e->getMessage(),
+            ]);
+            return back()->with('error',
+                'Não foi possível iniciar a cadeia de revisão: ' . mb_substr($e->getMessage(), 0, 200)
+            );
+        }
+    }
+
     public function createSapOpp(Tender $tender, SapService $sap)
     {
         $user = Auth::user();
