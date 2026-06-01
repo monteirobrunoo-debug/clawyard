@@ -28,6 +28,15 @@
             background: #eff6ff; border-left: 3px solid #4f46e5;
             padding: 12px 14px; margin-bottom: 18px; font-size: 11px;
         }
+        .exec h1, .exec h2, .exec h3 { color: #0f172a; margin: 8px 0 5px; line-height: 1.3; border: 0; padding: 0; }
+        .exec h1 { font-size: 13px; } .exec h2 { font-size: 12px; } .exec h3 { font-size: 11px; }
+        .exec p { margin: 0 0 7px; }
+        .exec ul, .exec ol { margin: 0 0 7px; padding-left: 16px; }
+        .exec li { margin-bottom: 3px; }
+        .exec table { border-collapse: collapse; width: 100%; margin: 6px 0; }
+        .exec th, .exec td { border: 1px solid #c7d2fe; padding: 4px 7px; text-align: left; font-size: 10px; }
+        .exec th { background: #e0e7ff; }
+        .exec code { background: #e0e7ff; padding: 1px 3px; font-size: 10px; }
         h2 {
             font-size: 13px; margin: 22px 0 10px 0; padding-bottom: 4px;
             border-bottom: 2px solid #e5e7eb; color: #0f172a;
@@ -105,8 +114,8 @@
 
 @if($analysis->executive_summary)
     <div class="exec">
-        <strong>Resumo executivo:</strong><br>
-        {!! nl2br(e($analysis->executive_summary)) !!}
+        <strong>Resumo executivo:</strong>
+        {!! \App\Support\Markdown::toHtml($analysis->executive_summary) !!}
     </div>
 @endif
 

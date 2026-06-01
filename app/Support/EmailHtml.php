@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use League\CommonMark\GithubFlavoredMarkdownConverter;
 use TijsVerkoyen\CssToInlineStyles\CssToInlineStyles;
 
 /**
@@ -47,11 +46,9 @@ CSS;
     /** Markdown → HTML seguro (GFM). Fragmento sem estilos. */
     public static function markdownToHtml(string $markdown): string
     {
-        $converter = new GithubFlavoredMarkdownConverter([
-            'html_input'         => 'strip',
-            'allow_unsafe_links' => false,
-        ]);
-        return (string) $converter->convert($markdown);
+        // Delega no helper genérico (mesma namespace App\Support) — fonte única
+        // do markdown→HTML, partilhada com as views de análise (dashboard/PDF).
+        return Markdown::toHtml($markdown);
     }
 
     /**

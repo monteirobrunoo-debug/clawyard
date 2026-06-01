@@ -46,6 +46,17 @@
             font-size: 13px; line-height: 1.65;
         }
         .exec-summary strong { color: #0f172a; }
+        .exec-summary h1, .exec-summary h2, .exec-summary h3 { color: #0f172a; margin: 14px 0 7px; line-height: 1.3; }
+        .exec-summary h1 { font-size: 17px; } .exec-summary h2 { font-size: 15px; } .exec-summary h3 { font-size: 14px; }
+        .exec-summary p { margin: 0 0 10px; }
+        .exec-summary ul, .exec-summary ol { margin: 0 0 10px; padding-left: 20px; }
+        .exec-summary li { margin-bottom: 4px; }
+        .exec-summary a { color: #4f46e5; }
+        .exec-summary blockquote { margin: 0 0 10px; padding: 6px 12px; border-left: 3px solid #76b900; color: #475569; }
+        .exec-summary code { background: #e0e7ff; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+        .exec-summary table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+        .exec-summary th, .exec-summary td { border: 1px solid #c7d2fe; padding: 6px 10px; text-align: left; font-size: 12px; }
+        .exec-summary th { background: #e0e7ff; }
 
         h2.section-title {
             font-size: 18px; font-weight: 700; margin: 36px 0 14px;
@@ -184,7 +195,7 @@
 
     @if($analysis->executive_summary)
     <div class="exec-summary">
-        {!! nl2br(e($analysis->executive_summary)) !!}
+        {!! \App\Support\Markdown::toHtml($analysis->executive_summary) !!}
     </div>
     @endif
 
