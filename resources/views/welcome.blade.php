@@ -927,7 +927,7 @@
     <span class="badge">AI</span>
     <select id="agent-select">
         <option value="auto">🤖 Auto Route</option>
-        <option value="orchestrator">🌐 All Agents</option>
+        <option value="orchestrator">🎼 Maestro</option>
         <option value="sales">💼 Marco Sales</option>
         <option value="support">🔧 Marcus Suporte</option>
         <option value="email">📧 Daniel Email</option>
@@ -1200,7 +1200,7 @@ let selectedAgent = agentSelect.value || 'auto';
 let SESSION_ID    = getSessionId(selectedAgent);
 
 const AGENT_EMOJIS = {
-    auto:'🤖', orchestrator:'🌐', sales:'💼', support:'🔧',
+    auto:'🤖', orchestrator:'🎼', sales:'💼', support:'🔧',
     email:'📧', sap:'📊', crm:'🎯', document:'📄', claude:'🧠', nvidia:'⚡',
     aria:'🔐', quantum:'⚛️', finance:'💰', hr:'👥', marketing:'🎨', research:'🔍',
     capitao:'⚓', acingov:'🏛️', engineer:'🔩', patent:'🏛️', energy:'⚡', kyber:'🔒', qnap:'🗄️',
@@ -1235,7 +1235,7 @@ const AGENT_PHOTOS = {
 };
 
 const AGENT_NAMES = {
-    auto:'Auto', orchestrator:'All Agents', sales:'Marco Sales', support:'Marcus Suporte',
+    auto:'Auto', orchestrator:'Maestro', sales:'Marco Sales', support:'Marcus Suporte',
     email:'Daniel Email', sap:'Richard SAP', crm:'Marta CRM', document:'Comandante Doc', claude:'Bruno AI', nvidia:'Carlos NVIDIA',
     aria:'ARIA Security', quantum:'Prof. Quantum Leap', finance:'Dr. Luís Financeiro', hr:'Dr.ª Ana Sobral RH', marketing:'Ana Monteiro Marketing', research:'Marina Research',
     capitao:'Capitão Porto',
@@ -1277,7 +1277,7 @@ const AGENT_COLORS = {
 
 const AGENT_DESCRIPTIONS = {
     auto: 'Routing inteligente — vai ao agente certo automaticamente',
-    orchestrator: 'Colaboração entre todos os agentes em simultâneo',
+    orchestrator: 'Escreve o que precisas — eu reúno os agentes certos e respondo numa só resposta',
     sales: 'Comparação de preços, análise de fornecedores e códigos de fabricante — exporta Excel',
     support: 'Diagnóstico técnico, avarias, manutenção e reparação',
     email: 'Emails profissionais em PT/EN/ES prontos a enviar',
@@ -1668,6 +1668,29 @@ function updateEmptyState(agent) {
         link.onmouseout  = () => { link.style.background=''; link.style.borderColor='rgba(6,182,212,.3)'; };
         document.getElementById('empty-state')?.querySelector('.empty-state-hero')?.appendChild(link);
     }
+
+    // 🎼 Maestro CTA — porta de entrada central. Só no modo 'auto' (o landing):
+    // um clique entra em modo orchestrator (decide + reúne os agentes certos).
+    const existingMaestro = document.getElementById('maestro-cta');
+    if (existingMaestro) existingMaestro.remove();
+    if (agent === 'auto') {
+        const m = document.createElement('button');
+        m.id = 'maestro-cta'; m.type = 'button';
+        m.innerHTML = '🎼 Falar com o Maestro — reúno a equipa de agentes certa';
+        m.style.cssText = 'display:inline-flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;font-weight:700;color:#76b900;background:rgba(118,185,0,.08);border:1px solid rgba(118,185,0,.35);padding:10px 20px;border-radius:24px;cursor:pointer;transition:all .15s;';
+        m.onmouseover = () => { m.style.background='rgba(118,185,0,.18)'; m.style.borderColor='#76b900'; };
+        m.onmouseout  = () => { m.style.background='rgba(118,185,0,.08)'; m.style.borderColor='rgba(118,185,0,.35)'; };
+        m.onclick = () => askMaestro();
+        document.getElementById('empty-state')?.querySelector('.empty-state-hero')?.appendChild(m);
+    }
+}
+
+// 🎼 Maestro = modo orchestrator (decide com Haiku + reúne os melhores agentes).
+function askMaestro() {
+    agentSelect.value = 'orchestrator';
+    agentSelect.dispatchEvent(new Event('change'));
+    const mi = document.getElementById('message-input');
+    if (mi) mi.focus();
 }
 
 let isRecording  = false;
