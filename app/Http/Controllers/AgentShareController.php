@@ -364,7 +364,7 @@ HTMLCARD;
             $welcome = $share->welcome_message
                 ? '<div style="margin:16px 0;padding:14px 18px;background:#f0f9ff;border-left:3px solid #0ea5e9;border-radius:4px;">'
                     . '<div style="font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:#0369a1;font-weight:700;margin-bottom:4px;">Mensagem de boas-vindas</div>'
-                    . '<div style="font-size:14px;color:#0c4a6e;">' . nl2br(htmlspecialchars($share->welcome_message)) . '</div>'
+                    . '<div style="font-size:14px;color:#0c4a6e;">' . \App\Support\EmailHtml::bodyHtml($share->welcome_message) . '</div>'
                     . '</div>'
                 : '';
 

@@ -31,7 +31,7 @@
     </div>
     <div class="divider"></div>
     <div class="body">
-        <p>{{ $emailBody }}</p>
+        {!! \App\Support\EmailHtml::bodyHtml($emailBody) !!}
     </div>
     <div class="footer">
         <div class="footer-logo">🐾 ClawYard — IT Partyard</div>
