@@ -289,6 +289,30 @@ trait TechnicalBookSkillTrait
         ?string $domain = null
     ): string {
         $book = $this->augmentWithTechnicalBooks($message, $limit, $domain);
-        return $this->enrichSystemPrompt($basePrompt) . ($book ? "\n\n" . $book : '');
+        $system = $this->enrichSystemPrompt($basePrompt) . ($book ? "\n\n" . $book : '');
+
+        // #138 (2026-06-01): chunks de livros extraídos de PDF podem conter bytes
+        // UTF-8 inválidos. Vão para o 'system' do request Anthropic, cujo Guzzle
+        // 'json' faz json_encode → rebenta com "Malformed UTF-8 characters" e o
+        // agente falha (era o caso da Dra. Sofia/PatentAgent). Sanitizar aqui, na
+        // origem, protege TODOS os agentes (chat + stream).
+        return $this->ensureValidUtf8($system);
+    }
+
+    /**
+     * Garante UTF-8 válido. Caminho rápido: se a string já é válida (a esmagadora
+     * maioria dos casos), devolve tal e qual — custo ~0. Só quando há bytes
+     * inválidos é que re-codifica, substituindo as sequências partidas por U+FFFD (�).
+     */
+    protected function ensureValidUtf8(string $s): string
+    {
+        if ($s === '' || mb_check_encoding($s, 'UTF-8')) {
+            return $s;
+        }
+        $prev = mb_substitute_character();
+        mb_substitute_character(0xFFFD);
+        $clean = mb_convert_encoding($s, 'UTF-8', 'UTF-8');
+        mb_substitute_character($prev);
+        return $clean;
     }
 }
