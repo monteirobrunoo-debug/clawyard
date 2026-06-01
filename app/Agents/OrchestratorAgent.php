@@ -8,6 +8,7 @@ use App\Agents\Traits\HandlesAnthropicStream;
 use App\Agents\Traits\SharedContextTrait;
 use App\Services\PartYardProfileService;
 use App\Services\PromptLibrary;
+use App\Services\SharedContextService;
 use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Promise\PromiseInterface;
 
@@ -22,6 +23,10 @@ class OrchestratorAgent implements AgentInterface
     protected string $searchPolicy = 'never';
     protected Client $client;
     protected array $agents;
+
+    // F3: Maestro publica a síntese no bus de contexto partilhado
+    protected string $contextKey  = 'maestro_intel';
+    protected array  $contextTags = ['maestro','síntese','multi-agente','cross-domain'];
 
     public function __construct(array $agents = [])
     {
@@ -227,7 +232,18 @@ SPECIALTY;
             }
         }
 
-        return $this->combineResults(is_array($message) ? ($message[0]['text'] ?? '') : $message, $results);
+        $messageText = is_array($message) ? ($message[0]['text'] ?? '') : $message;
+
+        // F3: publicar respostas dos sub-agentes no bus de contexto partilhado
+        foreach ($results as $r) {
+            if (($r['reply'] ?? '') !== '') {
+                $this->publishAgentFinding($r['agent'], $r['reply']);
+            }
+        }
+
+        $combined = $this->combineResults($messageText, $results);
+        $this->publishSharedContext($combined);
+        return $combined;
     }
 
     /**
@@ -330,6 +346,9 @@ SPECIALTY;
 
         $synthesis = $this->streamSynthesis($messageText, $agentResponses, $onChunk, $heartbeat);
 
+        // F3: publicar síntese no bus → próximos turnos e agentes vêem o que foi discutido
+        $this->publishSharedContext($synthesis);
+
         return $header . $synthesis;
     }
 
@@ -371,7 +390,34 @@ SPECIALTY;
             }
         }
 
+        // F3: publicar cada resposta no bus — agentes sem auto-publicação ficam registados
+        foreach ($results as $r) {
+            if (($r['reply'] ?? '') !== '') {
+                $this->publishAgentFinding($r['agent'], $r['reply']);
+            }
+        }
+
         return $results;
+    }
+
+    /**
+     * F3: Publica a resposta de um sub-agente no bus de contexto partilhado,
+     * sob a chave e nome próprios do agente. Permite que agentes sem
+     * auto-publicação (contextKey vazio) deixem memória de sessão.
+     */
+    private function publishAgentFinding(string $agentKey, string $text): void
+    {
+        $labels = $this->agentLabels();
+        // Remove o emoji do início: "💼 Marco — Sales" → "Marco — Sales"
+        $name = preg_replace('/^[^\s\w]+\s*/u', '', $labels[$agentKey] ?? ucfirst($agentKey));
+        (new SharedContextService())->publish(
+            $agentKey,
+            $name,
+            $agentKey . '_intel',
+            $text,
+            [],
+            $this->sharedContextUserId(),
+        );
     }
 
     /**
